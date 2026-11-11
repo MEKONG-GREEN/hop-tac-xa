@@ -42,6 +42,11 @@ func checkBase(root, base string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Nhánh đích chưa có migration nào (lần nhập đầu của repo): chưa DB nào áp gì nên không có tệp "xếp trước" để
+	// bảo vệ; tệp số tuần tự thừa kế từ repo gốc được nhận nguyên. Từ lần sau base có tệp và quy tắc áp như cũ.
+	if len(onBase) == 0 {
+		return nil, nil
+	}
 	maxV := map[string]int64{}
 	maxName := map[string]string{}
 	for k := range onBase {
