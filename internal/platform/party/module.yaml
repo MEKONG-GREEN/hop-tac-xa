@@ -1,0 +1,76 @@
+# Tệp khai báo module — ADR-0027, kiến trúc v4.1 §7.1, docs/dev/modules.md.
+# Trường SINH (go run ./tools/modgen): depends (khóa), provides, consumes, permissions, owns_schema.
+# Trường TAY: name, aka, kind, zones, version, ràng buộc trong depends, shares, enable.
+name: pf/party
+aka: [k/orgtree, k/access]
+hosts: [cap/import]
+kind: kernel
+zones: [pf]
+version: 2.0.0
+depends:
+  pf/kref: ">=1.0 <2"
+  pf/sync: ">=1.0 <2"
+  vault/identity: ">=1.0 <2"
+provides:
+  ports:
+    - APIReadLog
+    - ActorNames
+    - AdminUnitTree
+    - AdminUnits
+    - ConsentChecker
+    - ConsentStates
+    - ContextEpochs
+    - CoopMachineCounts
+    - CoopMarkers
+    - CoopProfiles
+    - CooperativeRegistrar
+    - DepartmentAdmin
+    - DepartmentUsage
+    - Departments
+    - FormAvailability
+    - FourEyes
+    - GrantLookup
+    - Households
+    - ModuleEnablement
+    - OrgCodes
+    - OrgDirectory
+    - OrgImpactSource
+    - Orgs
+    - PartnerAccess
+    - PlotStats
+    - Regions
+    - ScopeResolver
+    - SeasonActivity
+    - SessionContext
+    - TenantTransfers
+    - TransferTokenVerifier
+    - ValveGrants
+    - grantlookup.CoopLocations
+  events:
+    - pf.party.consent.recorded/v1
+    - pf.party.context_epoch.bumped/v1
+    - pf.party.org.created/v1
+    - pf.party.org.deactivated/v1
+    - pf.party.org.moved/v1
+    - pf.party.org.reactivated/v1
+    - pf.party.share_grant.approved/v1
+    - pf.party.share_grant.revoked/v1
+    - pf.party.share_read.recorded/v1
+  internal_events: []
+  publications: [pf_party_pub.org_tree/v1]
+  data_products: []
+consumes:
+  events: []
+permissions:
+    - cgh_viewer
+    - consent_reader
+    - consent_writer
+    - coop_manager
+    - kn_national_admin
+    - kn_officer
+    - kn_province_admin
+    - mkg_sync
+    - registry_admin
+shares: []
+owns_schema: [pf_party, pf_party_pub]
+enable: always

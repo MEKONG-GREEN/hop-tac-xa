@@ -1,0 +1,43 @@
+# Tệp khai báo module — ADR-0027, kiến trúc v4.1 §7.1, docs/dev/modules.md.
+# Trường SINH (go run ./tools/modgen): depends (khóa), provides, consumes, permissions, owns_schema.
+# Trường TAY: name, aka, kind, zones, version, ràng buộc trong depends, shares, enable.
+name: pf/notify
+aka: [cap/notify]
+kind: capability
+zones: [pf]
+version: 1.0.0
+depends:
+  pf/party: ">=2.0 <3"
+  pf/sync: ">=1.0 <2"
+provides:
+  ports: [AreaFarmers, EmailDirectory, StaffDirectory]
+  events:
+    - pf.notify.email.requested/v1
+    - pf.notify.notification.created/v1
+    - pf.notify.push.requested/v1
+  internal_events: []
+  publications: []
+  data_products: []
+consumes:
+  events:
+    - pf.accounts.user.dormant_warning/v1
+    - pf.content.alert.published/v1
+    - pf.content.document.published/v1
+    - pf.cropcycle.collection_schedule.received/v1
+    - pf.cropcycle.collection_statement.received/v1
+    - pf.cropcycle.farm_log.recorded/v1
+    - pf.cropcycle.farm_log.reviewed/v1
+    - pf.cropcycle.season.opened/v1
+    - pf.mechanization.area_feed.stale/v1
+    - pf.metering.egress.anomaly_detected/v1
+    - pf.mrv.alert.raised/v1
+    - pf.party.household.membership_changed/v1
+    - pf.party.household.registered/v1
+    - pf.party.org.deactivated/v1
+    - pf.sync.conflict.opened/v1
+    - pf.sync.device.revoked/v1
+    - pf.sync.integration.dead_lettered/v1
+permissions: []
+shares: []
+owns_schema: [pf_notify]
+enable: per_tenant

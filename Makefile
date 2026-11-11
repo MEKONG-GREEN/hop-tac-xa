@@ -1,0 +1,49 @@
+# Lệnh thường dùng (Linux/macOS/CI). Trên Windows: xem docs/dev-setup.md.
+.PHONY: all fmt vet lint gates gates-base test test-unit build compose-up compose-down verify-db docsql
+
+all: fmt vet gates test
+
+fmt:
+	gofmt -w $$(git ls-files '*.go' | grep -v /testdata/)
+
+vet:
+	go vet ./...
+
+lint:
+	golangci-lint run ./...
+
+# Cổng kiến trúc (mục 20). agmodgraph (đồ thị module.yaml, W1.2) chạy trong archlint.
+gates:
+	go run ./tools/modgen -check
+	go run ./tools/archlint ./...
+	go run ./tools/migratecheck migrations
+	go run ./tools/contractcheck
+	go run ./tools/docscheck
+
+# Trước khi gộp vào dev (WH-B): tệp migration mới phải dạng mốc UTC và xếp sau mọi tệp trên origin/dev.
+gates-base:
+	git fetch origin +refs/heads/dev:refs/remotes/origin/dev
+	go run ./tools/migratecheck -base origin/dev migrations
+
+# Cần AG_TEST_PG_ADMIN_URL và AG_DB_APP_PASSWORD; thêm AG_TEST_PGBOUNCER_URL để chạy R-32 qua PgBouncer.
+test:
+	go test -race -count=1 ./...
+
+test-unit:
+	go test -short ./...
+
+build:
+	for c in $$(ls cmd); do CGO_ENABLED=0 go build -trimpath -o bin/$$c ./cmd/$$c; done
+
+compose-up:
+	docker compose -f deploy/compose/docker-compose.yml up -d --build
+
+compose-down:
+	docker compose -f deploy/compose/docker-compose.yml down
+
+verify-db:
+	go run ./cmd/migrate verify
+
+# R-OPS-04: DDL trong tài liệu kiến trúc chạy trên PostgreSQL thật. Cần AG_TEST_PG_ADMIN_URL. Xem docs/dev/docsql.md.
+docsql:
+	go run ./tools/docsql docs/kien-truc/AgriGreen-Thiet-ke-kien-truc-he-thong-v4_1.md

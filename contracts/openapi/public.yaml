@@ -1,0 +1,1042 @@
+openapi: 3.1.0
+info:
+  title: AgriGreen Public API (đối tác)
+  version: "1"
+  description: |
+    Bề mặt Public (partner.<domain>) cho bên thứ ba — tiến trình riêng `cmd/api-public` (ADR-0022).
+    **Tắt ở ĐTK 1**; Phase K bật bằng cấu hình (ADR-0025). KHUNG G5-0: route và lược đồ đóng băng,
+    hiện thực ở đợt G5-1 (pf/apiclient, pf/metering).
+
+    - Xác thực: khóa API ở header `X-API-Key` (`agk_<prefix>_<secret>`, lưu băm HMAC có pepper — ADR-0022
+      mục 4). Tùy chọn cho đơn vị thẩm định: OAuth 2.0 client credentials (ADR-0022 mục 5).
+    - Scope: `dp:<sản phẩm>:read`, `dp:<sản phẩm>:export`, `usage:read`. Truy cập hiệu lực = khóa hiệu lực
+      ∧ scope ∧ cấp quyền chia sẻ `dp_<sản phẩm>` đang hiệu lực của chủ dữ liệu (tham số `grantor`) ∧ sản
+      phẩm phục vụ được. Tenant của bên gọi lấy từ bản ghi khóa, không bao giờ từ path/query/body.
+    - Mỗi lời gọi đã xác thực ghi một dòng sổ đo lường (`pf/metering`, ADR-0023) TRƯỚC khi trả dữ liệu;
+      không ghi được → 503 `metering.unavailable`. Mỗi lần đọc / tải dữ liệu thành công còn ghi một dòng
+      sổ đọc `partner_read_log` ở tenant chủ dữ liệu (K-05); không ghi được → 503
+      `party.partner_audit_unavailable`, không có dữ liệu.
+    - Mỗi phần tử trả về qua hợp đồng dữ liệu `contracts/dataproduct/<sản phẩm>.json` (mặc định từ chối);
+      header `AG-Data-Contract: <sản phẩm>.v<N>`. Không có dữ liệu cá nhân (RB-3).
+    - Giới hạn: `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset` (giây), `AG-Quota-Remaining`;
+      429 kèm `Retry-After`.
+    - R-50 đường dẫn `/v1`; R-51 POST bắt buộc `Idempotency-Key`; R-52 việc > 2 giây → 202 + `Location:
+      /v1/jobs/{id}`; R-53 cursor; lỗi RFC 9457 kèm `trace_id` (docs/errors.md).
+    - Mỗi tag sản phẩm trùng tên hợp đồng ở `contracts/dataproduct/` (`tools/contractcheck` kiểm).
+servers:
+  - url: https://partner.agrigreen.vn
+security:
+  - apiKey: []
+tags:
+  - name: catalog
+    description: Danh mục sản phẩm dữ liệu khách hàng được dùng
+  - name: collection_volume
+    description: |
+      Số cuộn rơm và diện tích đã gom theo xã × vụ × tháng, ngưỡng gom nhóm k nông hộ (C-3). DỰ THẢO — chờ
+      khách chốt bên thứ ba đầu tiên. Hợp đồng `contracts/dataproduct/collection_volume.json`.
+  - name: hub_capacity
+    description: |
+      Hub/kho MKG đã công bố (qua van), sức chứa danh định, bậc sử dụng. DỰ THẢO — chờ khách và MKG đồng ý.
+      Hợp đồng `contracts/dataproduct/hub_capacity.json`.
+  - name: mrv_package_status
+    description: |
+      Trạng thái gói xuất MRV cho đơn vị thẩm định (chỉ xem — KN US-MRV-05). Tải gói CHƯA BẬT (C-1 + DPA).
+      DỰ THẢO. Hợp đồng `contracts/dataproduct/mrv_package_status.json`.
+  - name: integration_feeds
+    description: |
+      Cổng tích hợp (W5.3, ADR-0033 §2, ADR-0035): feed theo cursor của tập dữ liệu dựng sẵn — hợp đồng
+      `contracts/integration/feeds/<tên>.v<N>.json`, phong bì `contracts/integration/envelope/feed_page.v1.json`. Scope
+      `feed:<tên>:read` (đăng ký sản phẩm tên = tên feed). Giữ 30 ngày; cursor quá hạn → 410 kèm ảnh chụp. Hợp đồng
+      chưa `approved` không phục vụ ở production (ngoài production cần `AG_GATEWAY_FEED_ALLOW_PROPOSED=1`).
+  - name: webhooks
+    description: |
+      Webhook MỎNG của cổng tích hợp (W5.7, ADR-0033 §4, R-INT-07/09): thân chỉ `{feed, cursor, occurred_at}` (xem mục
+      `webhooks` → `feedCursorAdvanced`), ký HMAC-SHA256 (`AG-Webhook-Signature: t=<giây>,v1=<hex>`), không bao giờ có
+      dữ liệu nghiệp vụ. Đăng ký / xoay bí mật / tắt / đóng mạch ở Admin API (api-platform, MFA). N lần lỗi liên tiếp
+      (mặc định 5) → ngắt mạch; thử half-open sau thời gian chờ. Đối tác xem trạng thái qua `GET /v1/webhooks`.
+  - name: jobs
+    description: Việc xuất bất đồng bộ (R-52) và tải tệp kết quả qua API (không URL có chữ ký)
+  - name: usage
+    description: Sử dụng của chính khách hàng (sổ đo lường, ADR-0023)
+  - name: batches
+    description: |
+      Nạp theo lô của cổng tích hợp (W5.4, ADR-0033 §3): hợp đồng `contracts/integration/ingest/`, scope
+      `ingest:<hợp đồng>:write`, 202 + mã lô, hàng đợi + DLQ riêng từng đối tác, kết quả từng bản ghi.
+  - name: files
+    description: |
+      Kênh tệp cùng lược đồ (W5.8, R-INT-11): đối tác không có đội IT tải một tệp NDJSON/CSV theo lược đồ bản ghi của
+      hợp đồng nạp; cổng đổi thành các lô `ingest_batch.v1` qua CHÍNH đường ống `batches` (cùng scope
+      `ingest:<hợp đồng>:write`, cùng kiểm hợp đồng, cùng kết quả từng bản ghi), idempotent theo SHA-256 của tệp; tải tệp
+      kết quả cùng định dạng. Chỉ hợp đồng có `ingest.channels` chứa `file`. Môi trường thử của đối tác (R-INT-08):
+      khóa `agks_…`, mọi phản hồi có `AG-Environment: sandbox`; khóa thử không dùng được ở production và ngược lại.
+paths:
+  /v1/data-products:
+    get:
+      tags: [catalog]
+      summary: Sản phẩm dữ liệu khách hàng có scope và đang phục vụ được, kèm bên cấp đã cấp quyền
+      operationId: listDataProducts
+      responses:
+        "200":
+          description: Danh sách
+          headers:
+            RateLimit-Limit: {$ref: "#/components/headers/RateLimitLimit"}
+            RateLimit-Remaining: {$ref: "#/components/headers/RateLimitRemaining"}
+            RateLimit-Reset: {$ref: "#/components/headers/RateLimitReset"}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: "#/components/schemas/DataProduct"}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/TooManyRequests"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /v1/data/collection-volumes:
+    get:
+      tags: [collection_volume]
+      summary: Ô tổng hợp xã × vụ × tháng (chỉ ô có ≥ k nông hộ phân biệt; ô dưới k bị bỏ)
+      operationId: listCollectionVolumes
+      parameters:
+        - $ref: "#/components/parameters/Grantor"
+        - {name: season_code, in: query, schema: {type: string, pattern: "^[A-Za-z0-9_.-]{1,40}$"}}
+        - {name: province_code, in: query, schema: {type: string, pattern: "^[0-9]{2}$"}}
+        - {name: from_month, in: query, schema: {type: string, pattern: "^[0-9]{4}-(0[1-9]|1[0-2])$"}}
+        - {name: to_month, in: query, schema: {type: string, pattern: "^[0-9]{4}-(0[1-9]|1[0-2])$"}}
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Một trang
+          headers:
+            AG-Data-Contract: {$ref: "#/components/headers/DataContract"}
+            RateLimit-Limit: {$ref: "#/components/headers/RateLimitLimit"}
+            RateLimit-Remaining: {$ref: "#/components/headers/RateLimitRemaining"}
+            RateLimit-Reset: {$ref: "#/components/headers/RateLimitReset"}
+            AG-Quota-Remaining: {$ref: "#/components/headers/QuotaRemaining"}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor, meta]
+                properties:
+                  items: {type: array, items: {$ref: "#/components/schemas/CollectionVolume"}}
+                  next_cursor: {type: [string, "null"]}
+                  meta: {$ref: "#/components/schemas/AggregateMeta"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/TooManyRequests"}
+        "500": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /v1/data/collection-volumes/exports:
+    post:
+      tags: [collection_volume]
+      summary: Yêu cầu xuất toàn bộ ô theo bộ lọc (202 + job, scope dp:collection_volume:export)
+      operationId: exportCollectionVolumes
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/Grantor"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [format]
+              properties:
+                format: {type: string, enum: [csv, json]}
+                season_code: {type: string, pattern: "^[A-Za-z0-9_.-]{1,40}$"}
+                province_code: {type: string, pattern: "^[0-9]{2}$"}
+                from_month: {type: string, pattern: "^[0-9]{4}-(0[1-9]|1[0-2])$"}
+                to_month: {type: string, pattern: "^[0-9]{4}-(0[1-9]|1[0-2])$"}
+      responses:
+        "202": {$ref: "#/components/responses/JobAccepted"}
+        "422":
+          description: "Dữ liệu không hợp lệ, hoặc Idempotency-Key đã dùng cho thân khác (idempotency_key_reused)"
+          content:
+            application/problem+json:
+              schema: {$ref: "#/components/schemas/Problem"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/TooManyRequests"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /v1/data/hub-capacities:
+    get:
+      tags: [hub_capacity]
+      summary: Hub/kho MKG đã công bố của bên cấp, sức chứa danh định, bậc sử dụng (không tấn tồn)
+      operationId: listHubCapacities
+      parameters:
+        - $ref: "#/components/parameters/Grantor"
+        - {name: province_code, in: query, schema: {type: string, pattern: "^[0-9]{2}$"}}
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Một trang
+          headers:
+            AG-Data-Contract: {$ref: "#/components/headers/DataContract"}
+            RateLimit-Limit: {$ref: "#/components/headers/RateLimitLimit"}
+            RateLimit-Remaining: {$ref: "#/components/headers/RateLimitRemaining"}
+            RateLimit-Reset: {$ref: "#/components/headers/RateLimitReset"}
+            AG-Quota-Remaining: {$ref: "#/components/headers/QuotaRemaining"}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items: {type: array, items: {$ref: "#/components/schemas/HubCapacity"}}
+                  next_cursor: {type: [string, "null"]}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/TooManyRequests"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /v1/data/mrv-packages:
+    get:
+      tags: [mrv_package_status]
+      summary: Gói xuất MRV của bên cấp (trạng thái, băm, kết quả kiểm lại) — chỉ xem
+      operationId: listMRVPackages
+      parameters:
+        - $ref: "#/components/parameters/Grantor"
+        - {name: status, in: query, schema: {type: string, enum: [queued, completed, failed]}}
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Một trang
+          headers:
+            AG-Data-Contract: {$ref: "#/components/headers/DataContract"}
+            RateLimit-Limit: {$ref: "#/components/headers/RateLimitLimit"}
+            RateLimit-Remaining: {$ref: "#/components/headers/RateLimitRemaining"}
+            RateLimit-Reset: {$ref: "#/components/headers/RateLimitReset"}
+            AG-Quota-Remaining: {$ref: "#/components/headers/QuotaRemaining"}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items: {type: array, items: {$ref: "#/components/schemas/MRVPackageStatus"}}
+                  next_cursor: {type: [string, "null"]}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/TooManyRequests"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /v1/data/mrv-packages/{export_id}:
+    get:
+      tags: [mrv_package_status]
+      summary: Một gói xuất MRV của bên cấp
+      operationId: getMRVPackage
+      parameters:
+        - $ref: "#/components/parameters/Grantor"
+        - {name: export_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Gói
+          headers:
+            AG-Data-Contract: {$ref: "#/components/headers/DataContract"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MRVPackageStatus"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/TooManyRequests"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /v1/feeds/{feed}:
+    get:
+      tags: [integration_feeds]
+      summary: Một trang feed theo cursor (R-INT-06)
+      description: |
+        Giao ít nhất một lần, theo `seq` tăng (có thứ tự theo `entity_key` trong mỗi phiên bản); bên nhận idempotent
+        theo `event_id`. `op: retract` = thực thể không còn được phát (vd ô tổng hợp xuống dưới k), `record = null`.
+        Mỗi bản ghi đã kiểm theo hợp đồng tích hợp trước khi trả (mặc định từ chối). `snapshot.href` chỉ là đường dẫn
+        tới `GET /v1/snapshots/{dataset}/{version}` — không bao giờ chứa URL ký. Feed W5.3: `harvest_progress_by_commune`,
+        `collection_volume_by_commune` (tổng hợp ngưỡng k), `admin_units` (tham chiếu). Feed lớp partner W5.5
+        (`cooperative_directory`, `plot_directory` — thay `/v1/partner/cooperatives`, `/plots`): tập theo bên cấp, thêm
+        điều kiện cấp quyền loại `grant_kind` của hợp đồng đang hiệu lực bên cấp → tenant khách hàng (kiểm ở MỖI lời gọi:
+        thu hồi → 403 `party.share_grant_missing`), mỗi trang một dòng sổ đọc ở tenant bên cấp; không theo phiên bản,
+        không ảnh chụp — mọi bản ghi còn hiệu lực được phát lại ≤ 7 ngày nên đọc từ đầu (hoặc sau 410) là trạng thái đầy đủ.
+        Feed của cặp song phương W5.6 (`feed = bilateral`, ADR-0034, hợp đồng proposed — chỉ ngoài production với cờ): bắt
+        buộc `pair` = `htx_ref`; cặp (tenant khách hàng, HTX) phải đang hiệu lực ở sổ song phương — chưa lập / đã chấm dứt →
+        403 `integration.pair_missing`; trang gồm bản ghi của cả hai bên (mỗi mục có `contract` = `<tên>.v<N>`), chỉ hợp
+        đồng mà khách hàng có scope `ingest:<tên>:write` hoặc `feed:<tên>:read`; `recorded_at` = thời điểm sổ song phương
+        nhận (ngày của tổng kiểm `bilateral_day.v1`).
+      operationId: getFeedPage
+      parameters:
+        - {name: feed, in: path, required: true, schema: {type: string, pattern: "^[a-z][a-z0-9_]{2,47}$"}}
+        - {name: pair, in: query, description: "Feed của cặp (W5.6, feed = bilateral, bắt buộc): htx_ref của HTX trong cặp với tenant khách hàng. Feed khác bỏ qua.", schema: {type: string, format: uuid}}
+        - {name: grantor, in: query, description: "Feed lớp partner (W5.5): tenant bên cấp — chỉ CHỌN bên cấp, luôn kiểm cấp quyền loại grant_kind. Rỗng → chỉ nhận khi đúng một bên cấp (ADR-0020). Feed khác bỏ qua.", schema: {type: string, format: uuid}}
+        - {name: cursor, in: query, description: "Cursor mờ của trang trước (next_cursor); bỏ trống = từ đầu phần còn giữ", schema: {type: string, pattern: "^[A-Za-z0-9_-]{1,200}$"}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 1000, default: 500}}
+        - {name: contract_version, in: query, description: "Phiên bản hợp đồng (mặc định: cao nhất còn hiệu lực)", schema: {type: integer, minimum: 1}}
+      responses:
+        "200":
+          description: Trang feed (phong bì feed_page.v1)
+          headers:
+            AG-Data-Contract: {$ref: "#/components/headers/DataContract"}
+            AG-Contract-Status: {description: "Chỉ khi phục vụ hợp đồng chưa approved (ngoài production)", schema: {type: string}}
+            AG-Quota-Remaining: {$ref: "#/components/headers/QuotaRemaining"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/FeedPage"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "410":
+          description: "integration.cursor_expired — thân problem có `snapshot` {dataset, version, href}"
+          content:
+            application/problem+json:
+              schema: {$ref: "#/components/schemas/Problem"}
+        "429": {$ref: "#/components/responses/TooManyRequests"}
+        "500": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /v1/snapshots/{dataset}/{version}:
+    get:
+      tags: [integration_feeds]
+      summary: URL ký có hạn (≤ 15 phút) của ảnh chụp một phiên bản tập dữ liệu
+      description: |
+        Cấp lúc yêu cầu, SAU khi ghi sổ đo lường theo kích thước ảnh chụp và qua điểm kiểm soát xuất (sửa ADR-0022 §8 —
+        ADR-0033 §2). Ảnh chụp NDJSON: mỗi dòng `{"entity_key", "record"}` theo `entity_key`; `checksum.sha256` = băm
+        của chính tệp (R-INT-10). Không lưu, không ghi log URL.
+      operationId: getSnapshotLink
+      parameters:
+        - {name: dataset, in: path, required: true, schema: {type: string, pattern: "^[a-z][a-z0-9_]{2,47}$"}}
+        - {name: version, in: path, required: true, schema: {type: integer, minimum: 1}}
+      responses:
+        "200":
+          description: URL ký
+          headers:
+            AG-Data-Contract: {$ref: "#/components/headers/DataContract"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SnapshotLink"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/TooManyRequests"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /v1/feeds/{feed}/checksums:
+    get:
+      tags: [integration_feeds]
+      summary: Tổng kiểm đối soát (R-INT-10) — theo phiên bản tập dữ liệu hoặc theo ngày của luồng song phương
+      description: |
+        W5.7 (ADR-0033 §4, ADR-0034). Hai dạng theo `{feed}`:
+          - feed tập dữ liệu (tổng hợp, tham chiếu — cùng điều kiện truy cập như `GET /v1/feeds/{feed}`): `kind:
+            dataset_version`, mỗi phiên bản `{version, record_count, sha256}` = tổng kiểm ghi lúc dựng (SHA-256 của ảnh
+            chụp NDJSON, bất biến); `?from_version=&limit=`.
+          - hợp đồng song phương (`collection_schedule`, `roll_count_statement`, `htx_roll_confirmation`; scope
+            `ingest:<hợp đồng>:write` hoặc `feed:<hợp đồng>:read`): `kind: bilateral_day`, mỗi NGÀY nghiệp vụ (giờ VN, ngày
+            cổng nhận lô) `{date, record_count, sha256}` theo `bilateral_day.v1`: SHA-256 của các dòng
+            `<business_key>TAB<contract_version>TAB<payload_sha256>LF` sắp theo (business_key theo byte, contract_version)
+            — bên kia của cặp tính cùng công thức. TẠM trên sổ đệm của bên gọi tới khi W5.6 có sổ song phương + feed
+            cặp. `?from=&to=` (YYYY-MM-DD, tối đa 31 ngày; mặc định 7 ngày tới hôm nay).
+      operationId: getFeedChecksums
+      parameters:
+        - {name: feed, in: path, required: true, schema: {type: string, pattern: "^[a-z][a-z0-9_]{2,47}$"}}
+        - {name: from_version, in: query, schema: {type: integer, minimum: 1, default: 1}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 100}}
+        - {name: from, in: query, description: "Song phương: ngày đầu (YYYY-MM-DD)", schema: {type: string, format: date}}
+        - {name: to, in: query, description: "Song phương: ngày cuối (YYYY-MM-DD)", schema: {type: string, format: date}}
+        - {name: pair, in: query, description: "Song phương (W5.6): htx_ref — chỉ tổng kiểm của một cặp của tenant khách hàng (không có cặp → 403 integration.pair_missing); bỏ trống = mọi cặp", schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Tổng kiểm
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/FeedChecksums"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/TooManyRequests"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /v1/webhooks:
+    get:
+      tags: [webhooks]
+      summary: Webhook của chính khách hàng, trạng thái ngắt mạch và cursor đã báo
+      operationId: listWebhooks
+      responses:
+        "200":
+          description: Danh sách (không bao giờ có bí mật)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: "#/components/schemas/WebhookStatus"}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/TooManyRequests"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /v1/jobs/{id}:
+    get:
+      tags: [jobs]
+      summary: Trạng thái việc xuất của chính khách hàng
+      operationId: getJob
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Việc xuất
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Job"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/TooManyRequests"}
+  /v1/jobs/{id}/file:
+    get:
+      tags: [jobs]
+      summary: Tải tệp kết quả (phát luồng qua api-public — đo byte, đi qua điểm kiểm soát xuất)
+      operationId: downloadJobFile
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Tệp tất định; băm SHA-256 ở header Digest
+          headers:
+            AG-Data-Contract: {$ref: "#/components/headers/DataContract"}
+            Digest: {schema: {type: string}, description: "sha-256=<base64>"}
+          content:
+            text/csv: {schema: {type: string}}
+            application/json: {schema: {type: string}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/TooManyRequests"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /v1/usage:
+    get:
+      tags: [usage]
+      summary: Tổng sử dụng theo ngày × sản phẩm của chính khách hàng (scope usage:read)
+      operationId: getUsage
+      parameters:
+        - {name: from, in: query, required: true, schema: {type: string, format: date}}
+        - {name: to, in: query, required: true, schema: {type: string, format: date}}
+      responses:
+        "200":
+          description: Tổng sử dụng
+          headers:
+            AG-Quota-Remaining: {$ref: "#/components/headers/QuotaRemaining"}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: "#/components/schemas/UsageDay"}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/TooManyRequests"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /v1/batches/{contract}:
+    post:
+      tags: [batches]
+      summary: Nạp một lô theo hợp đồng contracts/integration/ingest (202 + mã lô, scope ingest:<hợp đồng>:write)
+      description: |
+        W5.4 (R-INT-03, ADR-0033 §3, v4.1 §41.3). Thân = phong bì `contracts/integration/envelope/ingest_batch.v1.json`
+        (`contract` trùng path, `batch_ref` = header `Idempotency-Key`, `items[]` ≤ `ingest.max_batch` của hợp đồng). Cổng chỉ
+        kiểm phong bì đồng bộ rồi trả 202; từng bản ghi được kiểm hợp đồng (mặc định từ chối) và gửi port của module chủ
+        ở bộ xử lý hàng đợi RIÊNG của đối tác (inbox). Bản ghi lỗi không làm hỏng lô — tra `GET /v1/batches/{id}`.
+        Hợp đồng `proposed`/`draft` không phục vụ ở production (403 `integration.contract_not_servable`). Hàng đợi của
+        chính đối tác đầy → 429 `integration.queue_saturated` + `Retry-After`. Gọi lặp cùng khóa + cùng thân → cùng lô
+        (`Idempotent-Replayed: true`); cùng khóa khác thân → 422 `idempotency_key_reused`.
+      operationId: submitBatch
+      parameters:
+        - {name: contract, in: path, required: true, schema: {type: string, pattern: "^[a-z][a-z0-9_]{2,47}$"}}
+        - {name: Idempotency-Key, in: header, required: true, description: "= batch_ref của phong bì (UUIDv7)", schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/IngestBatchEnvelope"}
+      responses:
+        "202":
+          description: Đã nhận lô. Gọi lặp cùng Idempotency-Key trả cùng mã lô (0 đơn vị).
+          headers:
+            Location: {schema: {type: string}, description: "/v1/batches/{id}"}
+            AG-Data-Contract: {$ref: "#/components/headers/DataContract"}
+            Idempotent-Replayed: {schema: {type: string, enum: ["true"]}, description: "Có khi là phát lại"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/IngestBatch"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "413": {$ref: "#/components/responses/Problem"}
+        "422":
+          description: "Idempotency-Key đã dùng cho thân khác (idempotency_key_reused)"
+          content:
+            application/problem+json:
+              schema: {$ref: "#/components/schemas/Problem"}
+        "429": {$ref: "#/components/responses/TooManyRequests"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /v1/batches/{id}:
+    get:
+      tags: [batches]
+      summary: Trạng thái lô của chính khách hàng + kết quả từng bản ghi khi xong
+      operationId: getBatch
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Lô nạp
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/IngestBatch"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/TooManyRequests"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /v1/files/{contract}:
+    post:
+      tags: [files]
+      summary: Tải một tệp NDJSON/CSV theo hợp đồng nạp (202 + mã tệp; tệp → lô ingest_batch.v1)
+      description: |
+        W5.8 (R-INT-11, ADR-0033 §3). Thân = TỆP (không phải JSON phong bì): `application/x-ndjson` (mỗi dòng một bản ghi
+        JSON object) hoặc `text/csv` (UTF-8, có thể có BOM; dòng tiêu đề = tên trường của lược đồ bản ghi; dấu `,` hoặc `;`;
+        ô rỗng = null nếu trường cho phép null, ngược lại bỏ trường). Cổng chỉ TÁCH tệp thành bản ghi rồi chia theo
+        `ingest.max_batch` thành các lô gửi qua đường ống `POST /v1/batches/{contract}` — mọi kiểm nội dung bản ghi (khóa lạ,
+        kiểu, bắt buộc, entity_key) là của đường ống lô, kết quả từng bản ghi ở tệp kết quả. Tệp không tách được (dòng
+        không phải JSON object, CSV lệch cột/tiêu đề trùng, không UTF-8) → 400 `integration.file_invalid` cả tệp.
+        **Idempotent theo SHA-256 của tệp** (thay `Idempotency-Key`, R-51 thỏa bằng khóa tự nhiên): tải lại cùng tệp trả
+        cùng mã tệp (`Idempotent-Replayed: true`) và gửi tiếp lô còn thiếu (vd sau 429 `integration.queue_saturated`).
+        Kênh không mở cho hợp đồng → 403 `integration.file_channel_not_allowed`; vượt kích thước/số bản ghi → 413
+        `integration.file_too_large`.
+      operationId: submitFile
+      parameters:
+        - {name: contract, in: path, required: true, schema: {type: string, pattern: "^[a-z][a-z0-9_]{2,47}$"}}
+        - {name: contract_version, in: query, required: true, schema: {type: integer, minimum: 1}}
+      requestBody:
+        required: true
+        content:
+          application/x-ndjson:
+            schema: {type: string, description: "Mỗi dòng một bản ghi JSON object theo lược đồ hợp đồng nạp"}
+          text/csv:
+            schema: {type: string, description: "Dòng tiêu đề = tên trường; mỗi dòng sau một bản ghi"}
+      responses:
+        "202":
+          description: Đã nhận tệp và gửi đủ các lô. Tải lại cùng tệp trả cùng mã tệp (0 đơn vị).
+          headers:
+            Location: {schema: {type: string}, description: "/v1/files/{id}"}
+            AG-Data-Contract: {$ref: "#/components/headers/DataContract"}
+            Idempotent-Replayed: {schema: {type: string, enum: ["true"]}, description: "Có khi cùng tệp đã nhận trước đó"}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/IngestFile"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "413": {$ref: "#/components/responses/Problem"}
+        "415": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/TooManyRequests"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /v1/files/{id}:
+    get:
+      tags: [files]
+      summary: Trạng thái tệp của chính khách hàng (gộp từ các lô của tệp)
+      operationId: getFile
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Tệp nạp
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/IngestFile"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/TooManyRequests"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /v1/files/{id}/results:
+    get:
+      tags: [files]
+      summary: Tải tệp kết quả từng bản ghi (CSV/NDJSON) khi tệp đã xử lý xong
+      description: |
+        Mỗi dòng: `record` (thứ tự bản ghi trong tệp, từ 1 — CSV không tính dòng tiêu đề), `entity_key`, `outcome`
+        (accepted | rejected), `problem_code`, `detail`. Không có giá trị bản ghi. Lô `dead_lettered` → mọi bản ghi của lô
+        rejected với mã của kết cục lô. Ô CSV bắt đầu bằng = + - @ được thêm dấu nháy đơn (chặn chèn công thức).
+        Chưa xong → 409 `integration.file_results_pending` + `Retry-After`.
+      operationId: downloadFileResults
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: format, in: query, description: "Mặc định = định dạng tệp tải lên", schema: {type: string, enum: [csv, ndjson]}}
+      responses:
+        "200":
+          description: Tệp kết quả (Content-Disposition attachment)
+          headers:
+            AG-Data-Contract: {$ref: "#/components/headers/DataContract"}
+          content:
+            text/csv: {schema: {type: string}}
+            application/x-ndjson: {schema: {type: string}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409":
+          description: Tệp chưa xử lý xong (integration.file_results_pending)
+          headers:
+            Retry-After: {$ref: "#/components/headers/RetryAfter"}
+          content:
+            application/problem+json:
+              schema: {$ref: "#/components/schemas/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/TooManyRequests"}
+        "503": {$ref: "#/components/responses/Problem"}
+webhooks:
+  feedCursorAdvanced:
+    post:
+      tags: [webhooks]
+      summary: Chỉ báo feed có mục mới (gửi tới URL đối tác đã đăng ký)
+      description: |
+        Thân CHỈ là chỉ báo cursor — đối tác gọi `GET /v1/feeds/{feed}?cursor=<cursor của mình>` để lấy dữ liệu (giao lại,
+        mất chỉ báo hay ngắt mạch đều không mất dữ liệu). Xác minh: `HMAC-SHA256(bí mật, "<t>.<thân thô>")` so với từng
+        `v1` (trong 24 giờ sau khi xoay có hai `v1`), từ chối khi |now − t| > 5 phút; idempotent theo `AG-Webhook-Id`.
+        2xx = đã nhận; 3xx (không theo chuyển hướng), 4xx, 5xx, lỗi mạng = lỗi → thử lại lùi hàm mũ có nhiễu.
+      parameters:
+        - {name: AG-Webhook-Id, in: header, required: true, schema: {type: string, format: uuid}}
+        - {name: AG-Webhook-Timestamp, in: header, required: true, schema: {type: string, pattern: "^[0-9]+$"}}
+        - {name: AG-Webhook-Signature, in: header, required: true, schema: {type: string, pattern: "^t=[0-9]+(,v1=[0-9a-f]{64})+$"}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/WebhookHint"}
+      responses:
+        "2XX": {description: Đã nhận}
+components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: "agk_<prefix 12 ký tự base32>_<bí mật 43 ký tự base64url> (môi trường thử của đối tác: agks_…, W5.8). Chỉ hiện một lần lúc phát hành."
+    verifierClientCredentials:
+      type: oauth2
+      description: Tùy chọn cho đơn vị thẩm định (auth_methods có oauth_client_credentials). JWT kiểm issuer, audience, chữ ký (R-54).
+      flows:
+        clientCredentials:
+          tokenUrl: https://id.agrigreen.vn/realms/agrigreen/protocol/openid-connect/token
+          scopes: {}
+  parameters:
+    Grantor:
+      name: grantor
+      in: query
+      description: Tenant chủ dữ liệu (bên cấp) — chỉ CHỌN bên cấp, luôn kiểm cấp quyền dp_<sản phẩm>. Rỗng → chỉ nhận khi đúng một bên cấp (ADR-0020).
+      schema: {type: string, format: uuid}
+    Cursor:
+      name: cursor
+      in: query
+      schema: {type: string}
+    Limit:
+      name: limit
+      in: query
+      schema: {type: integer, minimum: 1, maximum: 500, default: 100}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Bắt buộc với POST (R-51); lưu 48 giờ theo (tenant bên thứ ba, khóa); gọi lặp trả đúng phản hồi đầu, 0 đơn vị.
+      schema: {type: string, minLength: 8, maxLength: 128}
+  headers:
+    DataContract:
+      description: "Hợp đồng dữ liệu đã áp: <sản phẩm>.v<N>"
+      schema: {type: string, examples: ["collection_volume.v1"]}
+    RateLimitLimit:
+      description: Số lời gọi tối đa mỗi phút của gói
+      schema: {type: integer}
+    RateLimitRemaining:
+      description: Số lời gọi còn lại trong cửa sổ phút
+      schema: {type: integer}
+    RateLimitReset:
+      description: Số giây tới khi cửa sổ đặt lại
+      schema: {type: integer}
+    QuotaRemaining:
+      description: Đơn vị còn lại trong tháng (sổ đo lường — thẩm quyền)
+      schema: {type: integer}
+    RetryAfter:
+      description: Số giây nên chờ
+      schema: {type: integer}
+  responses:
+    Problem:
+      description: RFC 9457
+      content:
+        application/problem+json:
+          schema: {$ref: "#/components/schemas/Problem"}
+    TooManyRequests:
+      description: "Vượt giới hạn tần suất (apiclient.rate_limited) hoặc hạn mức (metering.quota_exceeded)"
+      headers:
+        Retry-After: {$ref: "#/components/headers/RetryAfter"}
+        RateLimit-Limit: {$ref: "#/components/headers/RateLimitLimit"}
+        RateLimit-Remaining: {$ref: "#/components/headers/RateLimitRemaining"}
+        RateLimit-Reset: {$ref: "#/components/headers/RateLimitReset"}
+      content:
+        application/problem+json:
+          schema: {$ref: "#/components/schemas/Problem"}
+    JobAccepted:
+      description: Đã nhận (R-52). Gọi lặp cùng Idempotency-Key trả lại đúng phản hồi này (0 đơn vị).
+      headers:
+        Location: {schema: {type: string}, description: "/v1/jobs/{id}"}
+        Idempotent-Replayed: {schema: {type: string, enum: ["true"]}, description: "Có khi là phát lại"}
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Job"}
+  schemas:
+    IngestBatchEnvelope:
+      type: object
+      description: Phong bì contracts/integration/envelope/ingest_batch.v1.json (mặc định từ chối khóa lạ).
+      additionalProperties: false
+      required: [contract, contract_version, batch_ref, sent_at, items]
+      properties:
+        contract: {type: string, pattern: "^[a-z][a-z0-9_]{2,47}$"}
+        contract_version: {type: integer, minimum: 1}
+        batch_ref: {type: string, format: uuid}
+        sent_at: {type: string, format: date-time}
+        as_of: {type: [string, "null"], format: date-time}
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            additionalProperties: false
+            required: [entity_key, record]
+            properties:
+              entity_key: {type: string, description: "Giá trị các trường entity_key của hợp đồng nối bằng ':'"}
+              record: {type: object, description: "Một bản ghi theo lược đồ của hợp đồng nạp"}
+    IngestBatch:
+      type: object
+      required: [id, contract, contract_version, batch_ref, status, items, accepted, rejected, received_at]
+      properties:
+        id: {type: string, format: uuid}
+        contract: {type: string}
+        contract_version: {type: integer}
+        batch_ref: {type: string, format: uuid}
+        status: {type: string, enum: [queued, completed, dead_lettered]}
+        items: {type: integer}
+        accepted: {type: integer}
+        rejected: {type: integer}
+        problem_code: {type: [string, "null"], description: "Khi dead_lettered, vd integration.owner_unavailable"}
+        received_at: {type: string, format: date-time}
+        completed_at: {type: [string, "null"], format: date-time}
+        results:
+          type: array
+          description: Chỉ ở GET khi completed — theo thứ tự phần tử của lô
+          items: {$ref: "#/components/schemas/IngestRecordResult"}
+    IngestFile:
+      type: object
+      required: [id, contract, contract_version, format, sha256, bytes, records, status, accepted, rejected, received_at, results_url, batches]
+      properties:
+        id: {type: string, format: uuid}
+        contract: {type: string}
+        contract_version: {type: integer}
+        format: {type: string, enum: [ndjson, csv]}
+        sha256: {type: string, pattern: "^[0-9a-f]{64}$", description: "Tổng kiểm tệp — khóa idempotent"}
+        bytes: {type: integer}
+        records: {type: integer}
+        status:
+          type: string
+          enum: [incomplete, queued, completed, dead_lettered]
+          description: "incomplete = còn lô chưa gửi (tải lại cùng tệp); dead_lettered = có lô vào DLQ"
+        accepted: {type: integer}
+        rejected: {type: integer}
+        received_at: {type: string, format: date-time}
+        results_url: {type: string, description: "/v1/files/{id}/results"}
+        batches:
+          type: array
+          items: {$ref: "#/components/schemas/IngestFileBatch"}
+    IngestFileBatch:
+      type: object
+      required: [index, batch_ref, id, status, items, accepted, rejected]
+      properties:
+        index: {type: integer}
+        batch_ref: {type: string, format: uuid, description: "UUIDv5 tất định từ (mã tệp, index)"}
+        id: {type: [string, "null"], format: uuid, description: "Mã lô (GET /v1/batches/{id}); null khi chưa gửi"}
+        status: {type: string, enum: [incomplete, queued, completed, dead_lettered]}
+        items: {type: integer}
+        accepted: {type: integer}
+        rejected: {type: integer}
+        problem_code: {type: [string, "null"]}
+    IngestRecordResult:
+      type: object
+      required: [index, entity_key, outcome]
+      properties:
+        index: {type: integer}
+        entity_key: {type: string}
+        outcome: {type: string, enum: [accepted, rejected]}
+        problem_code: {type: string, description: "Khi rejected, vd integration.record_invalid (docs/errors.md)"}
+        detail: {type: string, description: "Đường dẫn trường lỗi — không có giá trị bản ghi"}
+    Problem:
+      type: object
+      required: [type, title, status, code]
+      properties:
+        type: {type: string, format: uri}
+        title: {type: string}
+        status: {type: integer}
+        code: {type: string}
+        detail: {type: string}
+        instance: {type: string}
+        trace_id: {type: string}
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              field: {type: string}
+              reason: {type: string}
+    DataProduct:
+      type: object
+      required: [name, version, route, scopes, status, grantors]
+      properties:
+        name: {type: string}
+        version: {type: integer}
+        route: {type: string}
+        scopes: {type: array, items: {type: string}}
+        status: {type: string, enum: [draft, approved]}
+        grantors:
+          type: array
+          description: Tenant bên cấp đang có cấp quyền dp_<name> cho khách hàng
+          items: {type: string, format: uuid}
+    AggregateMeta:
+      type: object
+      required: [k_applied, suppressed_cells]
+      properties:
+        k_applied: {type: integer, description: "Ngưỡng k đã áp (publicdata.k_min)"}
+        suppressed_cells: {type: integer, description: "Số ô bị bỏ vì dưới k"}
+    CollectionVolume:
+      description: Một phần tử — khớp contracts/dataproduct/collection_volume.json v1
+      type: object
+      additionalProperties: false
+      required: [province_code, commune_code, season_code, period_month, rolls_collected, area_ha_collected, k_applied, as_of]
+      properties:
+        province_code: {type: string, pattern: "^[0-9]{2}$"}
+        commune_code: {type: string, pattern: "^[0-9]{5}$"}
+        season_code: {type: string}
+        period_month: {type: string, pattern: "^[0-9]{4}-(0[1-9]|1[0-2])$"}
+        rolls_collected: {type: integer}
+        area_ha_collected: {type: string, pattern: "^[0-9]+\\.[0-9]{2}$"}
+        k_applied: {type: integer}
+        as_of: {type: string, format: date-time}
+    HubCapacity:
+      description: Một phần tử — khớp contracts/dataproduct/hub_capacity.json v1
+      type: object
+      additionalProperties: false
+      required: [hub_ref, code, name, kind, province_code, location, status, capacity_tons, utilization_band, as_of]
+      properties:
+        hub_ref: {type: string, format: uuid}
+        code: {type: string}
+        name: {type: string}
+        kind: {type: string, enum: [hub, warehouse, yard]}
+        province_code: {type: string, pattern: "^[0-9]{2}$"}
+        commune_code: {type: [string, "null"]}
+        location:
+          type: object
+          required: [lat, lng]
+          properties:
+            lat: {type: number}
+            lng: {type: number}
+        status: {type: string, enum: [active, inactive]}
+        capacity_tons: {type: [string, "null"]}
+        utilization_band: {type: string, enum: [unknown, normal, warning, full]}
+        as_of: {type: string, format: date-time}
+    MRVPackageStatus:
+      description: Một phần tử — khớp contracts/dataproduct/mrv_package_status.json v1
+      type: object
+      additionalProperties: false
+      required: [export_id, status, requested_at, evidence_count, catalog_version]
+      properties:
+        export_id: {type: string, format: uuid}
+        status: {type: string, enum: [queued, completed, failed]}
+        requested_at: {type: string, format: date-time}
+        completed_at: {type: [string, "null"], format: date-time}
+        season_code: {type: [string, "null"]}
+        province_code: {type: [string, "null"]}
+        evidence_count: {type: integer}
+        catalog_version: {type: string}
+        package_sha256: {type: [string, "null"]}
+        snapshot_sha256: {type: [string, "null"]}
+        last_verify_match: {type: [boolean, "null"]}
+    Job:
+      type: object
+      required: [id, product, status, requested_at]
+      properties:
+        id: {type: string, format: uuid}
+        product: {type: string}
+        status: {type: string, enum: [queued, completed, failed]}
+        format: {type: string, enum: [csv, json]}
+        requested_at: {type: string, format: date-time}
+        completed_at: {type: [string, "null"], format: date-time}
+        rows: {type: [integer, "null"]}
+        sha256: {type: [string, "null"]}
+        file_url: {type: [string, "null"], description: "/v1/jobs/{id}/file khi completed"}
+        error_code: {type: string, description: "Khi failed, vd apiclient.export_too_large"}
+    FeedPage:
+      description: Phong bì contracts/integration/envelope/feed_page.v1.json (nguồn sự thật; tools/contractcheck kiểm mẫu).
+      type: object
+      required: [feed, contract_version, cursor, next_cursor, has_more, as_of, max_age, items]
+      properties:
+        feed: {type: string}
+        contract_version: {type: integer}
+        cursor: {type: [string, "null"]}
+        next_cursor: {type: string}
+        has_more: {type: boolean}
+        as_of: {type: string, format: date-time}
+        max_age: {type: string, description: "ISO 8601 (vd PT15M)"}
+        dataset:
+          type: [object, "null"]
+          properties:
+            version: {type: integer}
+            built_at: {type: string, format: date-time}
+            admin_unit_as_of: {type: [string, "null"], format: date}
+            k_used: {type: [integer, "null"]}
+            contributors: {type: [integer, "null"]}
+            checksum:
+              type: object
+              properties:
+                record_count: {type: integer}
+                sha256: {type: string}
+        snapshot:
+          type: [object, "null"]
+          properties:
+            dataset: {type: string}
+            version: {type: integer}
+            href: {type: string}
+        items:
+          type: array
+          items:
+            type: object
+            required: [seq, event_id, entity_key, op, recorded_at, record]
+            properties:
+              seq: {type: integer}
+              event_id: {type: string, format: uuid}
+              entity_key: {type: string}
+              op: {type: string, enum: [upsert, retract]}
+              contract: {type: [string, "null"], pattern: "^[a-z][a-z0-9_]{2,47}[.]v[0-9]+$", description: "Chỉ feed của cặp (bilateral, W5.6): hợp đồng của bản ghi"}
+              recorded_at: {type: string, format: date-time}
+              record: {type: [object, "null"], description: "Một bản ghi theo hợp đồng contracts/integration/feeds/<feed>.v<N>.json"}
+    FeedChecksums:
+      type: object
+      required: [feed, kind]
+      properties:
+        feed: {type: string}
+        kind: {type: string, enum: [dataset_version, bilateral_day]}
+        versions:
+          type: array
+          items:
+            type: object
+            required: [version, contract_version, built_at, as_of, record_count, sha256]
+            properties:
+              version: {type: integer}
+              contract_version: {type: integer}
+              built_at: {type: string, format: date-time}
+              as_of: {type: string, format: date-time}
+              record_count: {type: integer}
+              sha256: {type: string, pattern: "^[0-9a-f]{64}$"}
+              snapshot: {type: [object, "null"], description: "{dataset, version, href} — chỉ đường dẫn, không URL ký"}
+        next_from_version: {type: [integer, "null"]}
+        algorithm: {type: string, enum: [bilateral_day.v1]}
+        from: {type: string, format: date}
+        to: {type: string, format: date}
+        days:
+          type: array
+          items:
+            type: object
+            required: [date, record_count, sha256]
+            properties:
+              date: {type: string, format: date}
+              record_count: {type: integer}
+              sha256: {type: string, pattern: "^[0-9a-f]{64}$"}
+    WebhookHint:
+      type: object
+      additionalProperties: false
+      required: [feed, cursor, occurred_at]
+      properties:
+        feed: {type: string, pattern: "^[a-z][a-z0-9_]{2,47}$"}
+        cursor: {type: string, description: "Cursor mờ của mục mới nhất (như next_cursor)"}
+        occurred_at: {type: string, format: date-time}
+    WebhookStatus:
+      type: object
+      required: [id, url, feeds, status, failure_threshold, secret_version, breaker, cursors]
+      properties:
+        id: {type: string, format: uuid}
+        url: {type: string, format: uri}
+        feeds: {type: array, items: {type: string}}
+        status: {type: string, enum: [active, disabled]}
+        status_reason: {type: string}
+        failure_threshold: {type: integer, minimum: 1, maximum: 100}
+        secret_version: {type: integer}
+        previous_secret_valid_until: {type: [string, "null"], format: date-time}
+        created_at: {type: string, format: date-time}
+        breaker:
+          type: object
+          required: [state, consecutive_failures]
+          properties:
+            state: {type: string, enum: [closed, open, half_open]}
+            consecutive_failures: {type: integer}
+            opened_at: {type: [string, "null"], format: date-time}
+            next_probe_at: {type: [string, "null"], format: date-time}
+            last_success_at: {type: [string, "null"], format: date-time}
+            last_failure_at: {type: [string, "null"], format: date-time}
+            last_error:
+              type: [string, "null"]
+              description: "http_status | redirect | timeout | dns | tls | connect | blocked_address | url_rejected"
+        cursors:
+          type: array
+          items:
+            type: object
+            properties:
+              feed: {type: string}
+              notified_cursor: {type: [string, "null"]}
+              pending_attempts: {type: integer}
+              next_attempt_at: {type: [string, "null"], format: date-time}
+              last_attempt_at: {type: [string, "null"], format: date-time}
+        recent_deliveries:
+          type: array
+          description: Chỉ ở Admin API — 10 lần giao gần nhất
+          items:
+            type: object
+            properties:
+              id: {type: string, format: uuid}
+              feed: {type: string}
+              cursor: {type: string}
+              attempt: {type: integer}
+              probe: {type: boolean}
+              outcome: {type: string, enum: [delivered, failed, blocked]}
+              http_status: {type: [integer, "null"]}
+              error_class: {type: [string, "null"]}
+              breaker_state: {type: string, enum: [closed, open, half_open]}
+              at: {type: string, format: date-time}
+        secret: {type: string, pattern: "^whsec_", description: "CHỈ trong phản hồi đăng ký / xoay bí mật (Admin API), một lần"}
+    SnapshotLink:
+      type: object
+      required: [dataset, version, contract_version, url, expires_at, content_type, checksum]
+      properties:
+        dataset: {type: string}
+        version: {type: integer}
+        contract_version: {type: integer}
+        url: {type: string, format: uri, description: "URL ký — chỉ dùng một lần trong hạn, không chia sẻ"}
+        expires_at: {type: string, format: date-time}
+        content_type: {type: string, examples: ["application/x-ndjson"]}
+        size: {type: [integer, "null"]}
+        checksum:
+          type: object
+          properties:
+            record_count: {type: integer}
+            sha256: {type: string}
+    UsageDay:
+      type: object
+      required: [date, product, calls, units]
+      properties:
+        date: {type: string, format: date}
+        product: {type: string}
+        calls: {type: integer}
+        units: {type: integer}

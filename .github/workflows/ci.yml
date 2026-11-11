@@ -1,0 +1,178 @@
+# CI của repo hop-tac-xa: cổng tĩnh Go → kiểm thử trên PostgreSQL thật → web-htx → lõi di động → App HTX.
+# Rút gọn từ pipeline của Agrigreen_demo_v2; mọi cổng hỏng build — không có ngoại lệ.
+name: ci
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Cổng tĩnh (ranh giới, float, PII, migration, hợp đồng)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with: { go-version-file: go.mod }
+      - name: gofmt
+        run: test -z "$(gofmt -l $(git ls-files '*.go' | grep -v /testdata/))"
+      - name: go vet
+        run: go vet ./...
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
+        with: { version: v2.14.0 }
+      - name: modgen -check — module.yaml khớp mã và migration (W1.1, ADR-0027)
+        run: go run ./tools/modgen -check
+      - name: archlint — R-02/R-03/R-04, R-10, R-12, R-14, agmodgraph (W1.2, R-MOD-05)
+        run: go run ./tools/archlint ./...
+      - name: migratecheck — R-23/R-25, tên tệp mốc UTC + không xếp trước nhánh đích (WH-B)
+        run: |
+          # Quy tắc tên mốc UTC (WH-B) áp ở cửa vào dev. PR vào main đi qua dev nên so với origin/dev — số tuần tự
+          # đã được dev chấp nhận không bị coi là tệp mới.
+          BASE=""
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            REF="${{ github.base_ref }}"
+            if [ "$REF" = "main" ]; then REF=dev; fi
+            BASE="-base origin/$REF"
+          fi
+          go run ./tools/migratecheck $BASE migrations
+      - name: docscheck — số ADR, giả định/roadmap/mã lỗi theo gói (WH-B)
+        run: go run ./tools/docscheck
+      - name: mfaflagcheck — cờ demo tắt MFA Admin API chỉ được bật trong tệp triển khai demo
+        run: go run ./tools/mfaflagcheck
+      - name: contractcheck — R-64, van công bố
+        run: |
+          BASE=""
+          if [ "${{ github.event_name }}" = "pull_request" ]; then BASE="origin/${{ github.base_ref }}"; fi
+          go run ./tools/contractcheck -base "$BASE"
+
+  test:
+    name: Kiểm thử (sổ, RLS qua PgBouncer, idempotency)
+    runs-on: ubuntu-latest
+    env:
+      CI: "true"
+      AG_TEST_PG_ADMIN_URL: postgres://postgres:ci-superuser@localhost:5432/postgres?sslmode=disable
+      AG_TEST_PGBOUNCER_URL: postgres://localhost:6432/?sslmode=disable
+      AG_DB_APP_PASSWORD: ci-app-password
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with: { go-version-file: go.mod }
+      # Image riêng (PostGIS + pgRouting, deploy/compose/postgres) — service container không build được.
+      - name: PostgreSQL 17 + PostGIS + pgRouting
+        run: |
+          docker build -q -t agrigreen/postgres:ci deploy/compose/postgres
+          # max_connections: các gói kiểm thử chạy song song, mỗi gói DB riêng + pool theo vai qua PgBouncer (10 kết nối
+          # máy chủ mỗi cặp DB/vai) — mặc định 100 cạn ("remaining connection slots are reserved", SQLSTATE 53300).
+          docker run -d --name pg -p 5432:5432 -e POSTGRES_PASSWORD=ci-superuser agrigreen/postgres:ci -c max_locks_per_transaction=256 -c max_connections=400
+          for i in $(seq 1 60); do
+            docker exec pg pg_isready -h 127.0.0.1 -U postgres > /dev/null 2>&1 && break
+            sleep 2
+          done
+          docker exec pg pg_isready -h 127.0.0.1 -U postgres
+      - name: PgBouncer transaction mode (R-32)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq pgbouncer
+          sudo systemctl stop pgbouncer || true
+          sudo mkdir -p /etc/pgbouncer-ci
+          : | sudo tee /etc/pgbouncer-ci/userlist.txt > /dev/null
+          for r in platform_api worker_platform party_app masterdata_app geo_app extension_app content_app mechanization_app mrv_app sync_app accounts_app notify_app reports_app cropcycle_app waterway_app simulation_app fieldops_app hub_app mkg_api measurement_app ingest_mkg worker_internal ingest_ts ts_reader metrics_app logistics_app orders_app costing_app acctbridge_app apiclient_app metering_app public_api mkg_monitor ts_monitor vault_app ag_outbox_publisher ag_ops_jobs ag_migrator app_platform app_worker app_public app_sync app_internal app_worker_internal app_ingest app_vault app_agg; do
+            printf '"%s" "%s"\n' "$r" "$AG_DB_APP_PASSWORD" | sudo tee -a /etc/pgbouncer-ci/userlist.txt > /dev/null
+          done
+          sudo tee /etc/pgbouncer-ci/pgbouncer.ini > /dev/null <<'INI'
+          [databases]
+          * = host=127.0.0.1 port=5432
+          [pgbouncer]
+          listen_addr = 127.0.0.1
+          listen_port = 6432
+          auth_type = scram-sha-256
+          auth_file = /etc/pgbouncer-ci/userlist.txt
+          pool_mode = transaction
+          max_client_conn = 500
+          default_pool_size = 10
+          server_reset_query =
+          ignore_startup_parameters = extra_float_digits,application_name,timezone
+          max_prepared_statements = 0
+          pidfile = /tmp/pgbouncer-ci.pid
+          logfile = /tmp/pgbouncer-ci.log
+          INI
+          sudo -u postgres pgbouncer -d /etc/pgbouncer-ci/pgbouncer.ini
+          sleep 1 && pg_isready -h 127.0.0.1 -p 6432
+      - name: go test -race
+        run: go test -race -count=1 -timeout 40m ./...
+
+  web-htx:
+    name: Web HTX (Next.js)
+    runs-on: ubuntu-latest
+    defaults:
+      run: { working-directory: apps/web-htx }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: { node-version: "24", cache: npm, cache-dependency-path: apps/web-htx/package-lock.json }
+      - run: npm ci --no-audit --no-fund
+      - run: npm run check:api
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      # Bản build production thật (next.config.ts chặn khi thiếu NEXT_PUBLIC_* https) — URL giữ chỗ, không gọi tới.
+      - name: npm run build (production, URL giữ chỗ)
+        run: npm run build
+        env:
+          NEXT_PUBLIC_DEPLOY_ENV: production
+          NEXT_PUBLIC_API_BASE_URL: https://api.ci.invalid
+          NEXT_PUBLIC_ADMIN_API_BASE: https://admin.ci.invalid
+          NEXT_PUBLIC_OIDC_ISSUER: https://auth.ci.invalid/realms/agrigreen
+      - name: Giấy phép npm (RB-4)
+        run: npx --yes license-checker-rseidelsohn --production --excludePrivatePackages --excludePackages "sharp;@img/sharp-libvips-linux-x64;@img/sharp-libvips-linuxmusl-x64" --onlyAllow "MIT;BSD-2-Clause;BSD-3-Clause;Apache-2.0;ISC;MPL-2.0;0BSD;BlueOak-1.0.0;CC0-1.0;Python-2.0;CC-BY-4.0"
+
+  agrigreen-mobile:
+    name: Lõi di động (packages/agrigreen_mobile)
+    runs-on: ubuntu-latest
+    defaults:
+      run: { working-directory: packages/agrigreen_mobile }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with: { flutter-version: "3.47.5", channel: stable, cache: true }
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq libsqlite3-dev
+      - run: flutter pub get --enforce-lockfile
+      - run: dart format --output=none --set-exit-if-changed lib test
+      - run: flutter analyze --fatal-infos
+      - name: flutter test (gồm bộ vector phong bì chung với Go)
+        run: flutter test
+
+  htx-app:
+    name: App Hợp tác xã (Flutter)
+    needs: agrigreen-mobile
+    runs-on: ubuntu-latest
+    defaults:
+      run: { working-directory: apps/htx-app }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with: { flutter-version: "3.47.5", channel: stable, cache: true }
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq libsqlite3-dev
+      - run: flutter pub get --enforce-lockfile
+      - run: dart format --output=none --set-exit-if-changed lib test integration_test
+      - run: flutter analyze --fatal-infos
+      - run: flutter test
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with: { distribution: temurin, java-version: "17" }
+      - name: flutter build apk --debug
+        run: flutter build apk --debug
+
+  # Kiểm thử tích hợp trên emulator Android (integration_test): SQLCipher,
+  # Keystore, giao diện thật; máy chủ API giả chạy trong tiến trình kiểm thử.
+  # Chậm (~15–25 phút) nên chỉ chạy khi push lên main hoặc chạy tay.

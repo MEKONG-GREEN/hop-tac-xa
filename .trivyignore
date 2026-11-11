@@ -1,0 +1,3 @@
+# Không có ngoại lệ CVE hoạt động.
+# P0-SEC-CI: excelize đã nâng khỏi v2.11.0 lên bản vá 611b222fd8f7.
+# CRITICAL/HIGH có bản vá vẫn làm CI thất bại; không thêm suppress để vượt cổng.

@@ -1,0 +1,477 @@
+// Package app: use case quản trị tài khoản cán bộ (KN US-ADM-01..03, HTX
+// US-ACC-01/02, US-HTXSTATUS-01..03, CGH FN-01).
+//
+// Thứ tự một thao tác ghi: kiểm vai, phạm vi và ma trận cấp vai → gọi Keycloak →
+// ghi sổ account_event + bảng account + outbox trong MỘT giao dịch tenant. Tạo
+// tài khoản mà giao dịch thất bại thì xóa người dùng vừa tạo ở Keycloak (bù). Các
+// thao tác khác lặp lại được: sổ chống trùng theo idem_key.
+package app
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"net/http"
+	"slices"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/domain"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/port"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/store"
+	partyport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/party/port"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/authz"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/clock"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/ids"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/ledger"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/modreg"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/outbox"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/params"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/problem"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/telemetry"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/tenant"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/vault/identity/client"
+)
+
+// Mã lỗi của module (docs/errors.md).
+var (
+	ErrDependency    = problem.New(http.StatusServiceUnavailable, "accounts.dependency_unavailable", "Keycloak hoặc pf/party chưa sẵn sàng")
+	ErrUserNotFound  = problem.New(http.StatusNotFound, "accounts.user_not_found", "Không tìm thấy tài khoản")
+	ErrOutOfScope    = problem.New(http.StatusForbidden, "accounts.out_of_scope", "Đơn vị ngoài phạm vi phụ trách")
+	ErrNotGrantable  = problem.New(http.StatusForbidden, "accounts.role_not_grantable", "Không được cấp hoặc thao tác trên vai này")
+	ErrSelfAction    = problem.New(http.StatusForbidden, "accounts.self_action", "Không được tự khóa, mở khóa hoặc đổi vai của chính mình")
+	ErrUserExists    = problem.New(http.StatusConflict, "accounts.user_exists", "Tên đăng nhập hoặc email đã được dùng")
+	ErrPhoneTaken    = problem.New(http.StatusConflict, "accounts.phone_taken", "Số điện thoại này đã được đăng ký cho một tài khoản khác.")
+	ErrState         = problem.New(http.StatusConflict, "accounts.state_conflict", "Trạng thái tài khoản không cho phép thao tác này")
+	ErrOrgInactive   = problem.New(http.StatusConflict, "accounts.org_inactive", "Tổ chức đang bị vô hiệu hóa")
+	ErrOrgInvalid    = problem.New(http.StatusUnprocessableEntity, "accounts.org_invalid", "Không có tổ chức với org_ref này")
+	ErrEmailFailed   = problem.New(http.StatusBadGateway, "accounts.email_failed", "Keycloak không gửi được email kích hoạt")
+	ErrImportInvalid = problem.New(http.StatusUnprocessableEntity, "accounts.import_invalid", "Tệp nhập không đúng mẫu quy định")
+	// W1.4 (R-MOD-08): quyền của module chưa bật cho đơn vị không cấp được.
+	ErrRoleModuleDisabled = problem.New(http.StatusConflict, "accounts.role_module_not_enabled", "Vai thuộc module chưa bật cho đơn vị")
+	errNoDirectoryYet     = errors.New("accounts: chưa cấu hình Keycloak Admin (AG_KC_*)")
+)
+
+// Producer ghi vào phong bì sự kiện.
+const Producer = "pf/accounts"
+
+// DefaultActionsLifespan: hạn liên kết kích hoạt (72 giờ).
+const DefaultActionsLifespan = 72 * time.Hour
+
+// Service là use case của module.
+type Service struct {
+	AuditRegistry *port.AuditRegistry
+	AuditAccess   port.AuditAccess
+	// Attributes is trusted immutable application-owned catalog data. Nil is the
+	// temporary legacy bridge; a nonnil invalid snapshot never falls back.
+	Attributes *port.AttributeCatalog `json:"-"`
+	// Roles is an immutable server-configured realm-role catalog. Nil keeps the legacy bridge.
+	Roles           *port.RoleCatalog
+	Navigation      partyport.Navigation // final resolver errors never fall back
+	SessionPolicies port.SessionPolicies // instance configuration; no owner payload decoding here
+	// AssignmentRules is optional trusted owner policy; configured errors never fall back.
+	AssignmentRules port.AssignmentRules `json:"-"`
+	// UnitDelegations owns selected-session decisions and unit/delegation definitions.
+	// Nil keeps compatibility; configured decisions and errors are final.
+	UnitDelegations port.UnitDelegationPolicy `json:"-"`
+	DB              tenant.Beginner           // pool vai accounts_app
+	Clock           clock.Clock
+	Dir             port.Directory          // nil → ErrDependency
+	Scope           partyport.ScopeResolver // nil → ErrDependency
+	Orgs            partyport.Orgs          // nil → ErrDependency
+	// ActionsLifespan: hạn liên kết kích hoạt; 0 → DefaultActionsLifespan.
+	ActionsLifespan time.Duration
+	// Households, Vault, Params: tài khoản nông dân (G2) — thành viên HTX của nông hộ
+	// (pf/party), tra nông hộ theo SĐT (kho định danh), hạn lượt kích hoạt (pf/masterdata).
+	Households partyport.Households
+	Vault      client.Client
+	Params     params.Params
+	// KN v7.7 gói P1: phòng ban của đơn vị (pf/party P2), tên xã (pf/masterdata), danh bạ tên dự phòng
+	// cho khung Log (pf/extension). Nil Departments → route KN trả 503.
+	Departments partyport.Departments
+	Units       partyport.AdminUnits
+	Names       partyport.ActorNames
+	// W1.4 (R-MOD-08): trạng thái bật module theo đơn vị (pf/party) — chặn cấp vai của module đã tắt.
+	Modules partyport.ModuleEnablement
+	// Facilities (tùy chọn, W11.41): danh mục cơ sở giết mổ CNTS (pf/masterdata CNTSCatalogs) — kiểm phạm vi Cấp
+	// Xã theo cơ sở (facility_refs). Nil → chỉ kiểm dạng UUID như W11.07.
+	Facilities FacilityCatalog
+	// DormantDryRun (D24): job accounts_dormant chỉ đếm tài khoản sẽ báo trước / khóa, không ghi gì (chạy thử lần đầu
+	// ở môi trường thật — docs/runbooks/keycloak-mfa-d24.md).
+	DormantDryRun bool
+	// ResetMailer, ResetURL (#255, ADR-0057): kênh email và URL trang đặt lại mật khẩu (AG_WEB_OPS_URL) của consumer
+	// port.PasswordResetConsumer (cmd/worker). Thiếu → consumer lỗi, sự kiện giao lại rồi vào DLQ.
+	ResetMailer ResetMailer
+	ResetURL    string
+	// Log: nhật ký vận hành (không PII, không mã/mật khẩu). Nil → slog.Default().
+	Log *slog.Logger
+}
+
+func (s *Service) log() *slog.Logger {
+	if s.Log != nil {
+		return s.Log
+	}
+	return slog.Default()
+}
+
+// FacilityCatalog là phần cổng danh mục CNTS pf/accounts cần (masterdata/port.CNTSCatalogs thỏa mãn): ref không
+// phải cơ sở giết mổ đang dùng; mã xã của cơ sở (W11.42 — cơ sở của lần gán Cấp Xã phải thuộc xã phụ trách).
+type FacilityCatalog interface {
+	UnknownFacilities(ctx context.Context, refs []uuid.UUID) ([]uuid.UUID, error)
+	FacilityCommunes(ctx context.Context, refs []uuid.UUID, on time.Time) (map[uuid.UUID]string, error)
+}
+
+// KNModule là module sở hữu nghiệp vụ của vai trò KN (kn_tw, kn_tinh, kn_xa).
+const KNModule = "pf/extension"
+
+func (s *Service) now() time.Time { return s.Clock.Now().UTC() }
+
+func (s *Service) lifespan() time.Duration {
+	if s.ActionsLifespan > 0 {
+		return s.ActionsLifespan
+	}
+	return DefaultActionsLifespan
+}
+
+// dirErr quy lỗi Keycloak về problem.
+func dirErr(err error) error {
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, port.ErrUserNotFound):
+		return ErrUserNotFound
+	case errors.Is(err, port.ErrUserExists):
+		return ErrUserExists
+	case errors.Is(err, port.ErrRoleNotFound):
+		return ErrNotGrantable.WithDetail("vai không có trong realm Keycloak").WithCause(err)
+	case errors.Is(err, port.ErrEmailFailed):
+		return ErrEmailFailed.WithCause(err)
+	case errors.Is(err, port.ErrUnavailable):
+		return ErrDependency.WithCause(err)
+	}
+	return err
+}
+
+func fieldProblem(err error) error {
+	var fe domain.FieldError
+	if errors.As(err, &fe) {
+		return problem.Validation.WithField(fe.Field, fe.Msg)
+	}
+	var rule port.AssignmentRuleError
+	if errors.As(err, &rule) {
+		return problem.Validation.WithField(rule.Field, rule.Msg)
+	}
+	var rulePtr *port.AssignmentRuleError
+	if errors.As(err, &rulePtr) {
+		if rulePtr == nil {
+			// A typed nil error is a broken configured provider, not validation.
+			// Do not attach it as a cause: its value-receiver Error method panics.
+			return ErrDependency.WithDetail("cấu hình quy tắc gán không hợp lệ")
+		}
+		return problem.Validation.WithField(rulePtr.Field, rulePtr.Msg)
+	}
+	return err
+}
+
+// actor là người gọi Admin API đã kiểm vai.
+type actor struct {
+	p         authz.Principal
+	sc        authz.Scope
+	grantable []string
+	orgs      map[uuid.UUID]*partyport.Org // bộ nhớ đệm tra tổ chức trong một request
+}
+
+func (s *Service) caller(ctx context.Context) (*actor, error) {
+	p, err := authz.Require(ctx, port.AdminRoles...)
+	if err != nil {
+		return nil, err
+	}
+	if !s.RoleCatalog().Valid() {
+		return nil, ErrDependency.WithDetail("chưa cấu hình danh mục vai hợp lệ")
+	}
+	if s.Dir == nil {
+		return nil, ErrDependency.WithCause(errNoDirectoryYet)
+	}
+	if s.Scope == nil || s.Orgs == nil {
+		return nil, ErrDependency.WithDetail("chưa nối pf/party")
+	}
+	sc, err := s.Scope.Scope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &actor{p: p, sc: sc, grantable: s.RoleCatalog().Grantable(p.Roles), orgs: map[uuid.UUID]*partyport.Org{}}, nil
+}
+
+// org tra tổ chức (có đệm); nil nếu không có.
+func (s *Service) org(ctx context.Context, a *actor, ref uuid.UUID) (*partyport.Org, error) {
+	if o, ok := a.orgs[ref]; ok {
+		return o, nil
+	}
+	o, err := s.Orgs.Get(ctx, ref)
+	if errors.Is(err, partyport.ErrOrgNotFound) {
+		a.orgs[ref] = nil
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	a.orgs[ref] = &o
+	return &o, nil
+}
+
+func (a *actor) allowsOrg(o *partyport.Org) bool {
+	if o == nil {
+		return a.sc.All
+	}
+	if o.AdminUnitCode == "" {
+		return a.sc.All
+	}
+	return a.sc.Allows(o.AdminUnitCode)
+}
+
+// checkOrg kiểm tổ chức đích khi gán: tồn tại, đang hoạt động, trong phạm vi.
+func (s *Service) checkOrg(ctx context.Context, a *actor, ref uuid.UUID) (*partyport.Org, error) {
+	if ref == uuid.Nil {
+		return nil, problem.Validation.WithField("org_ref", "bắt buộc, phải là UUID")
+	}
+	o, err := s.org(ctx, a, ref)
+	if err != nil {
+		return nil, err
+	}
+	if o == nil {
+		return nil, ErrOrgInvalid
+	}
+	if !a.allowsOrg(o) {
+		return nil, ErrOutOfScope
+	}
+	if !o.Active {
+		return nil, ErrOrgInactive.WithDetail("Không gán tài khoản vào tổ chức đã bị vô hiệu hóa.")
+	}
+	return o, nil
+}
+
+// checkModules (W1.4, R-MOD-08): vai mà mọi module khai nó (module.yaml permissions) đều đã tắt cho
+// tenant người gọi thì không cấp được. Modules nil → không kiểm (gốc lắp ráp cũ, kiểm thử).
+func (s *Service) checkModules(ctx context.Context, a *actor, roles []string) error {
+	if s.Modules == nil || len(roles) == 0 {
+		return nil
+	}
+	disabled, err := s.Modules.DisabledModules(ctx, a.p.TenantID)
+	if err != nil || len(disabled) == 0 {
+		return err
+	}
+	for _, r := range roles {
+		if blocked, mods := modreg.RoleBlocked(r, func(m string) bool { return disabled[m] }); blocked {
+			return ErrRoleModuleDisabled.WithDetail("Vai "+r+" thuộc module chưa bật cho đơn vị.").With("role", r).With("modules", mods)
+		}
+	}
+	return nil
+}
+
+// checkKNModule (W1.4): vai trò KN (kn_tw/kn_tinh/kn_xa) là chức năng của pf/extension — không gán khi
+// module đã tắt cho tenant.
+func (s *Service) checkKNModule(ctx context.Context, a *actor, role string) error {
+	if s.Modules == nil {
+		return nil
+	}
+	on, err := s.Modules.ModuleEnabled(ctx, a.p.TenantID, KNModule)
+	if err != nil || on {
+		return err
+	}
+	return ErrRoleModuleDisabled.WithDetail("Vai trò "+role+" thuộc module "+KNModule+" chưa bật cho đơn vị.").
+		With("role", role).With("modules", []string{KNModule})
+}
+
+// checkGrant: mọi vai trong roles phải nằm trong tập người gọi được cấp.
+func (a *actor) checkGrant(roles []string) error {
+	for _, r := range roles {
+		if !slices.Contains(a.grantable, r) {
+			return ErrNotGrantable.WithDetail("Bạn không được cấp hoặc thao tác trên vai " + r + ".")
+		}
+	}
+	return nil
+}
+
+// target là tài khoản đích đã kiểm tenant, phạm vi và quyền thao tác.
+type target struct {
+	user  port.User
+	roles []string // vai do module quản lý, đang có ở Keycloak
+	acc   *domain.Account
+}
+
+func (s *Service) target(ctx context.Context, a *actor, id uuid.UUID) (*target, error) {
+	u, err := s.Dir.GetUser(ctx, id)
+	if err != nil {
+		return nil, dirErr(err)
+	}
+	// Tenant chỉ lấy từ token (R-16): người dùng của tenant khác coi như không có.
+	if u.TenantID != a.p.TenantID {
+		return nil, ErrUserNotFound
+	}
+	o, err := s.org(ctx, a, u.OrgRef)
+	if err != nil {
+		return nil, err
+	}
+	if !a.allowsOrg(o) {
+		return nil, ErrOutOfScope.WithDetail("Tài khoản thuộc đơn vị ngoài phạm vi phụ trách.")
+	}
+	all, err := s.Dir.RealmRoles(ctx, id)
+	if err != nil {
+		return nil, dirErr(err)
+	}
+	if slices.Contains(all, authz.RolePlatformAdmin) && !a.p.Has(authz.RolePlatformAdmin) {
+		return nil, ErrNotGrantable.WithDetail("Tài khoản quản trị nền tảng chỉ quản trị nền tảng thao tác.")
+	}
+	managed := domain.ManagedOfWithCatalog(all, s.RoleCatalog())
+	if err := a.checkGrant(managed); err != nil {
+		return nil, err
+	}
+	t := &target{user: u, roles: managed}
+	err = tenant.WithTenantTx(ctx, s.DB, a.p.TenantID, func(tx pgx.Tx) error {
+		var e error
+		t.acc, e = store.Account(ctx, tx, id, false)
+		return e
+	})
+	return t, err
+}
+
+// state là trạng thái hiện tại ở pf (hoặc dựng từ Keycloak nếu tài khoản tạo ngoài nền tảng).
+func (t *target) state() domain.Account {
+	if t.acc != nil {
+		a := *t.acc
+		a.Roles = t.roles
+		a.OrgRef = t.user.OrgRef
+		return a
+	}
+	a := domain.Account{UserRef: t.user.ID, OrgRef: t.user.OrgRef, Roles: t.roles, Enabled: t.user.Enabled}
+	if !t.user.Enabled {
+		a.LockCause = port.LockManual
+	}
+	return a
+}
+
+// Result là kết quả một thao tác ghi.
+type Result struct {
+	Account  domain.Account
+	Event    domain.Event
+	User     port.User
+	Replayed bool
+	// ActivationSent: đã gửi email liên kết kích hoạt (chỉ khi tạo tài khoản).
+	ActivationSent bool
+}
+
+func newEvent(tid, actorRef uuid.UUID, acc domain.Account, action domain.Action, now time.Time, key, reason string) domain.Event {
+	return domain.Event{
+		ID: ids.New(), TenantID: tid, Account: acc, Action: action, Reason: reason,
+		EventTime: now, ActorRef: actorRef, IdemKey: key,
+	}
+}
+
+// record ghi sổ + bảng hiện tại + sự kiện (nếu có) trong tx.
+func record(ctx context.Context, tx pgx.Tx, e *domain.Event) error {
+	if err := store.InsertEvent(ctx, tx, e); err != nil {
+		return err
+	}
+	if err := store.SaveAccount(ctx, tx, *e); err != nil {
+		return err
+	}
+	return enqueue(ctx, tx, *e)
+}
+
+func enqueue(ctx context.Context, tx pgx.Tx, e domain.Event) error {
+	ev := outbox.Event{
+		ID: ids.New(), TenantID: e.TenantID, SchemaVersion: 1, OccurredAt: e.EventTime,
+		TraceID: telemetry.TraceID(ctx), Producer: Producer,
+	}
+	at := e.EventTime.UTC().Format(time.RFC3339Nano)
+	switch e.Action {
+	case domain.ActionCreated:
+		ev.Type = port.EventUserCreated
+		ev.Payload = port.UserCreatedV1{UserRef: e.Account.UserRef, OrgRef: e.Account.OrgRef, Roles: e.Account.Roles, ActorRef: e.ActorRef, EventTime: at, Seq: e.Seq}
+	case domain.ActionLocked:
+		ev.Type = port.EventUserLocked
+		ev.Payload = port.UserLockedV1{UserRef: e.Account.UserRef, OrgRef: e.Account.OrgRef, Cause: string(e.Account.LockCause), ActorRef: e.ActorRef, EventTime: at, Seq: e.Seq}
+	case domain.ActionUnlocked:
+		prev, _ := e.Details["prev_cause"].(string)
+		ev.Type = port.EventUserUnlocked
+		ev.Payload = port.UserUnlockedV1{UserRef: e.Account.UserRef, OrgRef: e.Account.OrgRef, PrevCause: prev, ActorRef: e.ActorRef, EventTime: at, Seq: e.Seq}
+	case domain.ActionDormantWarned:
+		last, _ := e.Details["last_activity_at"].(string)
+		disableAt, _ := e.Details["disable_at"].(string)
+		idle, _ := e.Details["idle_days"].(int)
+		ev.Type = port.EventUserDormantWarning
+		ev.Payload = port.DormantWarningV1{UserRef: e.Account.UserRef, OrgRef: e.Account.OrgRef, LastActivityAt: last, DisableAt: disableAt,
+			IdleDays: idle, EventTime: at, Seq: e.Seq}
+	default:
+		return nil
+	}
+	return outbox.Enqueue(ctx, tx, ev)
+}
+
+// replay tìm bản ghi sổ của lần gọi trước cùng idem_key.
+func (s *Service) replay(ctx context.Context, tid uuid.UUID, key string) (*domain.Event, error) {
+	if key == "" {
+		return nil, nil
+	}
+	var ev *domain.Event
+	err := tenant.WithTenantTx(ctx, s.DB, tid, func(tx pgx.Tx) error {
+		var e error
+		ev, e = store.EventByIdemKey(ctx, tx, key)
+		return e
+	})
+	return ev, err
+}
+
+// replayFor là phát lại bền theo sổ account_event cho thao tác Admin API (BF-ACC-REPLAY-SCOPE #154).
+// Dòng cache shared.idempotency_key (gắn actor/org/vai) có hạn và bị xóa khi hết hạn, còn sổ thì giữ
+// mãi — nên phát lại theo sổ không được tin kết quả đã lưu: khóa phải thuộc đúng thao tác, đúng người
+// gọi và đúng tài khoản đích (không thì 422 idempotency_key_reused), và tài khoản đích phải còn trong
+// phạm vi/quyền HIỆN HÀNH của người gọi (s.target, lỗi thì đóng). user = uuid.Nil khi chưa biết đích (tạo).
+func (s *Service) replayFor(ctx context.Context, a *actor, key string, action domain.Action, user uuid.UUID) (*domain.Event, error) {
+	prev, err := s.replay(ctx, a.p.TenantID, key)
+	if err != nil || prev == nil {
+		return nil, err
+	}
+	if !sameRequest(*prev, action, a.p.ActorRef, user) {
+		return nil, problem.IdempotencyConflict
+	}
+	if _, err := s.target(ctx, a, prev.Account.UserRef); err != nil {
+		return nil, err
+	}
+	return prev, nil
+}
+
+// sameRequest: dòng sổ prev do cùng người gọi ghi cho cùng thao tác trên cùng tài khoản (user Nil = không so).
+func sameRequest(prev domain.Event, action domain.Action, actorRef, user uuid.UUID) bool {
+	return prev.Action == action && prev.ActorRef == actorRef && (user == uuid.Nil || prev.Account.UserRef == user)
+}
+
+// write ghi một dòng sổ; trùng idem_key (gọi song song) → đọc lại bản đã ghi, chỉ khi bản đó cùng thao
+// tác/người gọi/tài khoản (tạo tài khoản: đích mới sinh nên không so) — khác thì 422 (#154).
+func (s *Service) write(ctx context.Context, tid uuid.UUID, e *domain.Event) (replayed bool, err error) {
+	err = tenant.WithTenantTx(ctx, s.DB, tid, func(tx pgx.Tx) error { return record(ctx, tx, e) })
+	if errors.Is(ledger.Classify(err), ledger.ErrDuplicate) {
+		prev, rerr := s.replay(ctx, tid, e.IdemKey)
+		if rerr == nil && prev != nil {
+			user := e.Account.UserRef
+			if e.Action == domain.ActionCreated {
+				user = uuid.Nil
+			}
+			if !sameRequest(*prev, e.Action, e.ActorRef, user) {
+				return false, problem.IdempotencyConflict
+			}
+			*e = *prev
+			return true, nil
+		}
+	}
+	return false, ledger.Classify(err)
+}
+
+func requireKey(key string) error {
+	if key == "" {
+		return problem.IdempotencyRequired
+	}
+	return nil
+}

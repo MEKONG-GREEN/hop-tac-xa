@@ -1,0 +1,82 @@
+# Ngoại lệ của agmodgraph (W1.2, ADR-0027 mục 5) — vi phạm ĐANG CÓ được chấp nhận tạm, đã rà soát.
+#
+# Quy tắc: tools/archlint/modgraph.go; quy trình: docs/dev/modules.md mục "Đồ thị module".
+#   - Vi phạm mới (không có trong tệp này) làm hỏng `go run ./tools/archlint ./...`.
+#   - Mục lỗi thời (vi phạm không còn xảy ra) cũng làm hỏng cổng: xóa mục trong cùng PR đã gỡ nó.
+#   - Danh sách chỉ được co lại. Thêm mục mới cần review như thay đổi hợp đồng (ADR-0027) và
+#     phải có rule, from, to, reason, owner (gói kế hoạch W<n>.<m> sẽ gỡ), until.
+#   - Quy tắc `depends` không có ngoại lệ: chạy `go run ./tools/modgen`.
+#
+# Khóa: (rule, from, to). cycle/tier/version: from, to là module. schema: from là migration (hoặc
+# module với owns_schema thừa), to là schema.
+
+# Schema vận hành/dbadmin, không thuộc module nào (được phép lâu dài; phải còn được migration tạo).
+ops_schemas: []
+
+exceptions:
+  - rule: cycle
+    from: pf/party
+    to: pf/sync
+    owner: W7.2
+    until: khi đóng W7.2
+    reason: "W3.3 đã chuyển HTX/hộ sang pf/cooperative; cạnh còn lại là đồng bộ đồng ý (party ConsentSink → syncport, sync → partyport.ConsentChecker/ScopeResolver) — W7.2 hợp nhất k/access và tách cổng đồng bộ đồng ý"
+  - rule: cycle
+    from: pf/sync
+    to: pf/party
+    owner: W7.2
+    until: khi đóng W7.2
+    reason: "W3.3 đã chuyển HTX/hộ sang pf/cooperative; cạnh còn lại là đồng bộ đồng ý (party ConsentSink → syncport, sync → partyport.ConsentChecker/ScopeResolver) — W7.2 hợp nhất k/access và tách cổng đồng bộ đồng ý"
+  - rule: cycle
+    from: pf/accounts
+    to: pf/party
+    owner: W7.2
+    until: khi đóng W7.2
+    reason: "pf/accounts gọi port nghiệp vụ để dựng ngữ cảnh; W7.2 hợp nhất k/access (thay ScopeResolver + ngữ cảnh KN)"
+  - rule: cycle
+    from: pf/sync
+    to: pf/accounts
+    owner: W7.2
+    until: khi đóng W7.2
+    reason: "pf/accounts gọi port nghiệp vụ để dựng ngữ cảnh; W7.2 hợp nhất k/access (thay ScopeResolver + ngữ cảnh KN)"
+  - rule: schema
+    from: migrations/pf/000034_pf_sync_integration_monitor.up.sql
+    to: pf_notify
+    owner: W7.1
+    until: khi đóng W7.1
+    reason: "migration của module khác mở rộng CHECK pf_notify.notification.kind (đã áp, bất biến theo R-23); W7.1 chuyển sang migration theo schema. Loại thông báo mới từ nay thêm trong migration pf_notify"
+  - rule: schema
+    from: migrations/pf/000045_pf_mrv_alerts.up.sql
+    to: pf_notify
+    owner: W7.1
+    until: khi đóng W7.1
+    reason: "migration của module khác mở rộng CHECK pf_notify.notification.kind (đã áp, bất biến theo R-23); W7.1 chuyển sang migration theo schema. Loại thông báo mới từ nay thêm trong migration pf_notify"
+  - rule: schema
+    from: migrations/pf/000078_pf_mechanization_party_kn_collection.up.sql
+    to: pf_party
+    owner: W7.1
+    until: khi đóng W7.1
+    reason: "migration KN P7 của pf/mechanization thêm đối tượng vào pf_party (đã áp, bất biến theo R-23); W7.1 chuyển sang migration theo schema"
+  - rule: schema
+    from: migrations/pf/000080_pf_g5_public_api_foundation.up.sql
+    to: pf_apiclient
+    owner: W7.1
+    until: khi đóng W7.1
+    reason: "migration tích hợp G3/G4/G5 viết cho nhiều schema module (đã áp, bất biến theo R-23); W7.1 chuyển sang migration theo schema/thư mục module"
+  - rule: schema
+    from: migrations/pf/000080_pf_g5_public_api_foundation.up.sql
+    to: pf_metering
+    owner: W7.1
+    until: khi đóng W7.1
+    reason: "migration tích hợp G3/G4/G5 viết cho nhiều schema module (đã áp, bất biến theo R-23); W7.1 chuyển sang migration theo schema/thư mục module"
+  - rule: schema
+    from: migrations/pf/000080_pf_g5_public_api_foundation.up.sql
+    to: pf_party
+    owner: W7.1
+    until: khi đóng W7.1
+    reason: "migration tích hợp G3/G4/G5 viết cho nhiều schema module (đã áp, bất biến theo R-23); W7.1 chuyển sang migration theo schema/thư mục module"
+  - rule: tier
+    from: pf/party
+    to: pf/sync
+    owner: W7.2
+    until: khi đóng W7.2
+    reason: "W3.3 đã chuyển HTX/hộ sang pf/cooperative; cạnh còn lại là đồng bộ đồng ý (party ConsentSink → syncport, sync → partyport.ConsentChecker/ScopeResolver) — W7.2 hợp nhất k/access và tách cổng đồng bộ đồng ý"

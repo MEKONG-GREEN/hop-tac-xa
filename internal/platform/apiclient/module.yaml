@@ -1,0 +1,34 @@
+# Tệp khai báo module — ADR-0027, kiến trúc v4.1 §7.1, docs/dev/modules.md.
+# Trường SINH (go run ./tools/modgen): depends (khóa), provides, consumes, permissions, owns_schema.
+# Trường TAY: name, aka, kind, zones, version, ràng buộc trong depends, shares, enable.
+name: pf/apiclient
+aka: [k/access]
+kind: kernel
+zones: [pf]
+version: 1.0.0
+depends:
+  pf/party: ">=2.0 <3"
+provides:
+  ports:
+    - AggregateSource
+    - Authenticator
+    - BilateralLedger
+    - CollectionVolumeSource
+    - Contributors
+    - HubCapacitySource
+    - MRVPackageSource
+    - PartnerGrantors
+    - PartnerSource
+    - Plans
+    - PublishedSource
+    - TokenAuthenticator
+  events: [pf.apiclient.export.requested/v1]
+  internal_events: []
+  publications: []
+  data_products: [collection_volume, hub_capacity, mrv_package_status]
+consumes:
+  events: []
+permissions: [api_client_admin, api_client_approver]
+shares: []
+owns_schema: [pf_apiclient]
+enable: always

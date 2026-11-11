@@ -1,0 +1,405 @@
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
+import { knMenuFor } from "@/api/mock/kn";
+import { KN_ACCOUNTS } from "@/api/mock/kn-accounts";
+import type { MenuTree } from "@/kn/contract";
+import type { KnSessionState } from "@/auth/AuthProvider";
+import { buildPrincipal } from "@/auth/principal";
+import { activeMenu, isAllowed, isBareRoute, isKnRemovedTool } from "@/components/AppShell";
+import { AccountMenu } from "./AccountMenu";
+import { Breadcrumb } from "./Breadcrumb";
+import { LoginCard } from "./LoginCard";
+import { badgeOf, crumbsFor, findActive, legacyMenu, menuAllows, menuLinks } from "./menu";
+import { RoleContextPicker } from "./RoleContextPicker";
+import { Sidebar } from "./Sidebar";
+
+vi.mock("next/navigation", () => ({ usePathname: () => "/", useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }));
+
+const xa = knMenuFor("kn_xa", "trong_trot");
+const tinh = knMenuFor("kn_tinh", "trong_trot");
+const tw = knMenuFor("kn_tw", "trong_trot");
+const admin = knMenuFor("admin", null);
+const labels = (t: MenuTree) => menuLinks(t).map((l) => l.node.label);
+
+describe("menu theo vai trò (BRD v7.7 §6, Hình 3c–3f)", () => {
+  it("nhóm Điều hành / Báo cáo / Dữ liệu + Dùng chung (kn.menu/v3); Admin: Điều hành / Phòng ban / Quản trị hệ thống / Dùng chung", () => {
+    expect(xa.groups.map((g) => g.label)).toEqual(["Điều hành", "Báo cáo", "Dữ liệu", "Dùng chung"]);
+    // BF-MENU (#98, UP-02): Cấp Tỉnh Trồng trọt có nhóm Dữ liệu (Thu thập dữ liệu).
+    expect(tinh.groups.map((g) => g.label)).toEqual(["Điều hành", "Báo cáo", "Dữ liệu", "Dùng chung"]);
+    expect(tw.groups.map((g) => g.label)).toEqual(["Điều hành", "Báo cáo", "Dùng chung"]);
+    expect(admin.groups.map((g) => g.label)).toEqual(["Điều hành", "Phòng ban", "Quản trị hệ thống", "Dùng chung"]);
+  });
+
+  it("Cấp Xã không có Dashboard (chốt v7.4); Cấp Quốc gia có Báo cáo năm, không có Nhiệm vụ", () => {
+    expect(labels(xa)).not.toContain("Dashboard");
+    expect(labels(xa)).toEqual(expect.arrayContaining(["Công việc cần làm", "Lịch công tác", "Báo cáo của xã", "Danh sách HTX", "Vật tư"]));
+    // W11.23: "Dùng chung > Contact" là liên kết thường của mọi vai (pf/contact).
+    expect(labels(tw)).toEqual(["Dashboard", "Báo cáo tuần", "Báo cáo tháng", "Báo cáo hàng vụ", "Báo cáo năm", "Contact"]);
+    expect(labels(xa)).toContain("Contact");
+    expect(labels(tinh)).toEqual(
+      expect.arrayContaining(["Dashboard", "Phát hành biểu mẫu", "Trạng thái nộp", "Rà soát & chốt kỳ", "Lịch công tác", "Báo cáo tháng", "Báo cáo năm", "Báo cáo Chi cục", "Thửa ruộng"]),
+    );
+  });
+
+  it("Báo cáo đột xuất chỉ hiện khi phòng ban có mẫu loại này (mặc định tắt)", () => {
+    expect(labels(xa)).not.toContain("Báo cáo đột xuất");
+    expect(labels(tinh)).not.toContain("Báo cáo đột xuất");
+  });
+
+  it("Admin: phòng ban chưa mở hiện mờ, gộp 'n phòng khác'; màn hiện có giữ đường dẫn cũ", () => {
+    const pb = admin.groups.find((g) => g.key === "phong_ban")!;
+    expect(pb.items.map((i) => [i.label, i.status ?? "active"])).toEqual([
+      ["Phòng Trồng trọt", "active"],
+      ["Chăn nuôi - TS", "not_open"],
+      ["Kế hoạch - TC", "not_open"],
+      ["2 phòng khác", "not_open"],
+    ]);
+    const hrefs = menuLinks(admin).map((l) => l.node.href);
+    expect(hrefs).toEqual(expect.arrayContaining(["/kn/tong-quan", "/kn/quan-tri/co-cau-to-chuc", "/kn/quan-tri/nguoi-dung", "/kn/phong-ban/trong_trot/danh-muc"]));
+    // KN-STANDALONE-1-ADMIN-TOOLS (#264): bỏ nhóm "Công cụ nền tảng (tạm)" (BRD 2.0 không có FN); Cơ cấu tổ chức chỉ còn /kn.
+    expect(hrefs.filter((h) => h !== undefined && isKnRemovedTool(h))).toEqual([]);
+    expect(menuLinks(admin).map((l) => l.node.label)).not.toContain("Công cụ nền tảng (tạm)");
+    // BF-ACC-KN-MENU (#120, TT-13): Admin KN quản lý người dùng qua /kn/quan-tri/nguoi-dung; bỏ liên kết native cũ.
+    expect(hrefs).not.toContain("/quan-tri/tai-khoan");
+    expect(menuLinks(admin).map((l) => l.node.label)).not.toContain("Tài khoản cán bộ (G1)");
+    expect(menuAllows(admin, "/kn/quan-tri/nguoi-dung")).toBe(true);
+    expect(menuAllows(admin, "/quan-tri/tai-khoan")).toBe(false);
+  });
+
+  it("khớp tiền tố dài nhất, breadcrumb mục cha / mục, kiểm đường dẫn theo menu", () => {
+    expect(findActive(xa, "/kn/du-lieu/htx/htx-01")?.node.label).toBe("Danh sách HTX");
+    expect(crumbsFor(xa, "/kn/nhiem-vu/cong-viec")).toEqual(["Nhiệm vụ", "Công việc cần làm"]);
+    expect(crumbsFor(tw, "/kn/dashboard")).toEqual(["Điều hành", "Dashboard"]);
+    expect(menuAllows(tw, "/kn/nhiem-vu/phat-hanh")).toBe(false);
+    expect(menuAllows(tinh, "/kn/nhiem-vu/phat-hanh")).toBe(true);
+  });
+
+  it("phiếu/rà soát KHTC dùng đúng mục cha đang mở, không cho phép cả prefix hoặc menu bị tắt", () => {
+    const id = "01963011-1234-7123-8123-123456789abc";
+    const form = "/kn/khtc/phieu/" + id, review = "/kn/khtc/ra-soat/" + id;
+    const only = (href: string, status?: "not_open" | "coming_soon"): MenuTree => ({
+      ...tinh, groups: [{ key: "test", label: "Báo cáo", items: [{ key: "entry", label: "Phiếu", icon: "file", href, status }] }],
+    });
+    const own = only("/kn/bao-cao-khtc"), manager = only("/kn/khtc/ky-bao-cao"), adhoc = only("/kn/khtc/bao-cao-phat-sinh");
+    expect(menuAllows(own, form)).toBe(true);
+    expect(menuAllows(own, review)).toBe(false);
+    for (const tree of [manager, adhoc]) {
+      expect(menuAllows(tree, form)).toBe(true);
+      expect(menuAllows(tree, review)).toBe(true);
+      expect(crumbsFor(tree, review)).toEqual(["Báo cáo", "Phiếu"]);
+    }
+    for (const tree of [tw, only("/kn/bao-cao-khtc", "not_open"), only("/kn/khtc/bao-cao-phat-sinh", "coming_soon")]) {
+      expect(menuAllows(tree, form)).toBe(false);
+      expect(menuAllows(tree, review)).toBe(false);
+    }
+    for (const route of ["/kn/khtc/phieu/other", form + "/sua", "/kn/khtc/ra-soat", "/kn/khtc/quan-tri/" + id]) {
+      expect(menuAllows(adhoc, route)).toBe(false);
+    }
+  });
+
+  it("lịch sử KHTC chỉ dùng hai dạng đường dẫn và mục cha reviewer được phép", () => {
+    const id = "01963011-1234-7123-8123-123456789abc";
+    const sub = "01963011-1234-7123-8123-abcdef123456";
+    const review = "/kn/khtc/ra-soat/" + id;
+    const history = review + "/lan-gui";
+    const only = (href: string, status?: "not_open" | "coming_soon"): MenuTree => ({
+      ...tinh, groups: [{ key: "test", label: "Báo cáo", items: [{ key: "entry", label: "Phiếu", icon: "file", href, status }] }],
+    });
+    const manager = only("/kn/khtc/ky-bao-cao"), adhoc = only("/kn/khtc/bao-cao-phat-sinh");
+    for (const tree of [manager, adhoc]) for (const path of [history, history + "/" + sub]) {
+      expect(menuAllows(tree, path)).toBe(true);
+      expect(crumbsFor(tree, path)).toEqual(["Báo cáo", "Phiếu"]);
+    }
+    for (const tree of [tw, xa, only("/kn/bao-cao-khtc"), only("/kn/khtc/ky-bao-cao", "not_open"), only("/kn/khtc/bao-cao-phat-sinh", "coming_soon")]) {
+      expect(menuAllows(tree, history)).toBe(false);
+      expect(menuAllows(tree, history + "/" + sub)).toBe(false);
+    }
+    const badIDs = ["other", "1e100000", "1e-100000", "9".repeat(10_000)];
+    const invalid = ["/kn/khtc/phieu/" + id + "/lan-gui", history + "/" + sub + "/sua", history + "/other", history + "-khac",
+      ...badIDs.map(bad => history + "/" + bad), ...badIDs.map(bad => "/kn/khtc/ra-soat/" + bad + "/lan-gui")];
+    for (const path of invalid) expect(menuAllows(manager, path)).toBe(false);
+  });
+
+  it("số đếm chỉ cho việc cần xử lý, ẩn khi bằng 0", () => {
+    const node = menuLinks(tinh).find((l) => l.node.label === "Trạng thái nộp")!.node;
+    expect(badgeOf(node, { counts: { "extension.report_status.not_submitted": 15 } })).toBe(15);
+    expect(badgeOf(node, { counts: { "extension.report_status.not_submitted": 0 } })).toBe(0);
+    const dash = menuLinks(tinh).find((l) => l.node.label === "Dashboard")!.node;
+    expect(badgeOf(dash, { counts: { anything: 5 } })).toBe(0);
+  });
+});
+
+describe("<Sidebar> (Design Sample)", () => {
+  it("mục cha tự mở khi con active, một mục active, số đếm hiện/ẩn, footer sản phẩm", () => {
+    render(<Sidebar menu={xa} pathname="/kn/nhiem-vu/cong-viec" badges={{ counts: { "extension.report_tasks.todo": 6 } }} />);
+    const nav = screen.getByRole("navigation", { name: "Menu chức năng" });
+    expect(within(nav).getByRole("button", { name: /Nhiệm vụ/ })).toHaveAttribute("aria-expanded", "true");
+    expect(within(nav).getByRole("button", { name: /Thu thập dữ liệu/ })).toHaveAttribute("aria-expanded", "false");
+    const active = within(nav).getAllByRole("link").filter((a) => a.getAttribute("aria-current") === "page");
+    expect(active).toHaveLength(1);
+    expect(active[0]).toHaveTextContent("Công việc cần làm");
+    expect(active[0]).toHaveTextContent("6");
+    expect(within(nav).getByRole("link", { name: /Lịch công tác/ })).not.toHaveTextContent(/\d/);
+    expect(screen.getByText("© 2026 TTKN Quốc gia")).toBeInTheDocument();
+  });
+
+  it("mở/đóng mục cha bằng mũi tên", async () => {
+    const user = userEvent.setup();
+    render(<Sidebar menu={xa} pathname="/kn/nhiem-vu/cong-viec" />);
+    const btn = screen.getByRole("button", { name: /Thu thập dữ liệu/ });
+    await user.click(btn);
+    expect(btn).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("link", { name: /Máy móc HTX/ })).toBeVisible();
+    await user.click(btn);
+    expect(btn).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("thu gọn: chỉ icon, tên vẫn đọc được; mục cha mở flyout chứa menu con", async () => {
+    const user = userEvent.setup();
+    const onToggle = vi.fn();
+    render(<Sidebar menu={xa} pathname="/kn/bao-cao/thang" collapsed onToggleCollapse={onToggle} />);
+    expect(screen.getByRole("complementary", { name: "Điều hướng chính" })).toHaveAttribute("data-collapsed", "true");
+    expect(screen.getByRole("link", { name: "Báo cáo tháng" })).toHaveAttribute("aria-current", "page");
+    const parent = screen.getByRole("button", { name: /Thu thập dữ liệu/ });
+    const flyEl = document.getElementById(parent.getAttribute("aria-controls")!);
+    expect(flyEl).toHaveAttribute("hidden");
+    await user.hover(parent.closest("li")!);
+    const fly = screen.getByRole("group", { name: "Thu thập dữ liệu" });
+    expect(within(fly).getByRole("link", { name: "Vẽ thửa ruộng" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Mở rộng menu" }));
+    expect(onToggle).toHaveBeenCalled();
+  });
+
+  it("menu 3 cấp (TT tỉnh, UP-02): mọi mục cha của mục active tự mở; breadcrumb đủ chuỗi; flyout có tiêu đề cấp giữa", async () => {
+    const deep: MenuTree = {
+      version: "t",
+      role: "kn_tinh",
+      department_code: "trong_trot",
+      groups: [
+        {
+          key: "bao_cao",
+          label: "Báo cáo",
+          items: [
+            {
+              key: "tong_hop",
+              label: "Báo cáo tổng hợp các xã",
+              icon: "report",
+              children: [
+                { key: "tuan", label: "Báo cáo tuần", icon: "report", children: [{ key: "t01", label: "T01 · Tiến độ XG", icon: "file", href: "/kn/bc/t01" }] },
+                { key: "thang", label: "Báo cáo tháng", icon: "report", href: "/kn/bc/thang" },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    expect(menuLinks(deep).map((l) => [l.node.label, l.ancestors.map((a) => a.key).join(">")])).toEqual([
+      ["T01 · Tiến độ XG", "tong_hop>tuan"],
+      ["Báo cáo tháng", "tong_hop"],
+    ]);
+    expect(crumbsFor(deep, "/kn/bc/t01")).toEqual(["Báo cáo tổng hợp các xã", "Báo cáo tuần", "T01 · Tiến độ XG"]);
+    const { unmount } = render(<Sidebar menu={deep} pathname="/kn/bc/t01" />);
+    expect(screen.getByRole("button", { name: /Báo cáo tổng hợp/ })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: /Báo cáo tuần/ })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("link", { name: "T01 · Tiến độ XG" })).toHaveAttribute("aria-current", "page");
+    unmount();
+    const user = userEvent.setup();
+    render(<Sidebar menu={deep} pathname="/kn/bc/thang" collapsed />);
+    await user.hover(screen.getByRole("button", { name: /Báo cáo tổng hợp/ }).closest("li")!);
+    const fly = screen.getByRole("group", { name: "Báo cáo tổng hợp các xã" });
+    expect(within(fly).getByText("Báo cáo tuần")).toBeVisible();
+    expect(within(fly).getByRole("link", { name: "T01 · Tiến độ XG" })).toBeVisible();
+  });
+
+  it("Admin: phòng ban chưa mở không bấm được, nhãn Chưa mở", () => {
+    render(<Sidebar menu={admin} pathname="/kn/tong-quan" />);
+    const closed = screen.getByText("Chăn nuôi - TS").closest(".nav-item")!;
+    expect(closed).toHaveAttribute("aria-disabled", "true");
+    expect(closed).toHaveTextContent("Chưa mở");
+    expect(screen.queryByRole("link", { name: /Chăn nuôi/ })).toBeNull();
+  });
+
+  it("menu cũ (nav.ts) dùng cùng khung", () => {
+    render(<Sidebar menu={legacyMenu([{ label: "1. Điều hành", items: [{ href: "/", label: "Tổng quan", icon: "dashboard" }] }])} pathname="/" />);
+    expect(screen.getByRole("link", { name: "Tổng quan" })).toHaveAttribute("aria-current", "page");
+  });
+});
+
+describe("<AccountMenu>", () => {
+  it("Đang dùng, các cặp khác, Đổi mật khẩu, Đăng xuất", async () => {
+    const user = userEvent.setup();
+    const onSwitch = vi.fn();
+    const onLogout = vi.fn();
+    render(
+      <AccountMenu
+        displayName="Trần Thị Bình"
+        subtitle="Cấp Tỉnh · Trồng trọt"
+        current="Cấp Tỉnh · Phòng Trồng trọt"
+        others={[{ key: "asg-binh-xa|trong_trot", label: "Cấp Xã · Phòng Trồng trọt" }]}
+        onSwitch={onSwitch}
+        onChangePassword={() => undefined}
+        onLogout={onLogout}
+      />,
+    );
+    const btn = screen.getByRole("button", { name: /Tài khoản: Trần Thị Bình/ });
+    expect(btn).toHaveTextContent("TB");
+    await user.click(btn);
+    const menu = screen.getByRole("menu");
+    expect(within(menu).getByText("Cấp Tỉnh · Phòng Trồng trọt")).toBeInTheDocument();
+    await user.click(within(menu).getByRole("menuitem", { name: "Cấp Xã · Phòng Trồng trọt" }));
+    expect(onSwitch).toHaveBeenCalledWith("asg-binh-xa|trong_trot");
+    await user.click(btn);
+    await user.click(screen.getByRole("menuitem", { name: "Đăng xuất" }));
+    expect(onLogout).toHaveBeenCalled();
+  });
+
+  it("chỉ 1 vai trò, 1 phòng ban → ghi chú, Esc đóng menu", async () => {
+    const user = userEvent.setup();
+    render(<AccountMenu displayName="Lê Minh Quân" subtitle="x" current="x" others={[]} onSwitch={() => undefined} onChangePassword={() => undefined} onLogout={() => undefined} />);
+    await user.click(screen.getByRole("button", { name: /Lê Minh Quân/ }));
+    expect(screen.getByText("Tài khoản chỉ có 1 vai trò, 1 phòng ban")).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+});
+
+describe("<Breadcrumb>", () => {
+  it("mục cuối đậm, aria-current", () => {
+    render(<Breadcrumb items={[{ label: "Điều hành" }, { label: "Dashboard" }]} />);
+    const nav = screen.getByRole("navigation", { name: "Breadcrumb" });
+    expect(within(nav).getByText("Dashboard")).toHaveAttribute("aria-current", "page");
+  });
+});
+
+describe("<LoginCard> (Hình 3a)", () => {
+  it("Hiện/Ẩn mật khẩu, bắt buộc trường, gửi giá trị", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    render(<LoginCard mode="password" onSubmit={onSubmit} />);
+    await user.click(screen.getByRole("button", { name: "Đăng nhập" }));
+    expect(screen.getByText("Nhập email hoặc số điện thoại.")).toBeInTheDocument();
+    expect(onSubmit).not.toHaveBeenCalled();
+    await user.type(screen.getByLabelText(/Email hoặc số điện thoại/), "an.nv@angiang.gov.vn");
+    const pw = screen.getByLabelText(/^Mật khẩu/);
+    await user.type(pw, "abc");
+    expect(pw).toHaveAttribute("type", "password");
+    await user.click(screen.getByRole("button", { name: "Hiện" }));
+    expect(pw).toHaveAttribute("type", "text");
+    await user.click(screen.getByLabelText("Ghi nhớ đăng nhập"));
+    await user.click(screen.getByRole("button", { name: "Đăng nhập" }));
+    expect(onSubmit).toHaveBeenCalledWith({ identifier: "an.nv@angiang.gov.vn", password: "abc", remember: true });
+  });
+
+  it("banner lỗi ghi số lần thử còn lại; khóa tạm; Quên mật khẩu và Liên hệ quản trị viên", () => {
+    const { rerender } = render(<LoginCard mode="password" error={{ kind: "invalid", remaining: 4 }} onSubmit={() => undefined} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("Sai tài khoản hoặc mật khẩu.Kiểm tra lại thông tin. Còn 4 lần thử.");
+    rerender(<LoginCard mode="password" error={{ kind: "locked", minutes: 15 }} onSubmit={() => undefined} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("tạm khóa 15 phút");
+    expect(screen.getByRole("link", { name: "Quên mật khẩu?" })).toHaveAttribute("href", "/login/quen-mat-khau");
+    expect(screen.getByRole("link", { name: "Liên hệ quản trị viên" })).toHaveAttribute("href", "/login/lien-he");
+  });
+
+  it("chế độ OIDC: không có ô mật khẩu (mật khẩu nhập ở Keycloak)", () => {
+    render(<LoginCard mode="oidc" onSubmit={() => undefined} />);
+    expect(screen.queryByLabelText(/^Mật khẩu/)).toBeNull();
+    expect(screen.getByText(/nhập ở trang xác thực/)).toBeInTheDocument();
+  });
+});
+
+describe("<RoleContextPicker> (Hình 3b)", () => {
+  const an = KN_ACCOUNTS.find((a) => a.id === "kn-an")!;
+
+  it("thẻ vai trò → thẻ phòng ban; phòng ban chưa mở bị khóa; bấm thẻ là vào", async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    render(<RoleContextPicker assignments={an.assignments} onSelect={onSelect} />);
+    expect(screen.getByRole("button", { name: /Cấp Xã/ })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("2 · Phòng ban (của vai trò Cấp Xã)")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Phòng Chăn nuôi - Thủy sản — Chưa mở/ })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: /Phòng Trồng trọt — Vào hệ thống/ }));
+    expect(onSelect).toHaveBeenCalledWith({ assignment_id: "asg-an-xa", department_code: "trong_trot" });
+  });
+
+  it("Admin không chọn phòng ban: bấm thẻ vai trò là vào", async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    render(<RoleContextPicker assignments={an.assignments} onSelect={onSelect} />);
+    await user.click(screen.getByRole("button", { name: /Admin/ }));
+    expect(onSelect).toHaveBeenCalledWith({ assignment_id: "asg-an-admin", department_code: null });
+  });
+
+  it("không có phòng ban đang áp dụng → liên hệ Admin", () => {
+    const loc = KN_ACCOUNTS.find((a) => a.id === "kn-loc")!;
+    render(<RoleContextPicker assignments={loc.assignments} onSelect={() => undefined} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("liên hệ quản trị viên");
+  });
+});
+
+describe("AppShell: nguồn menu và kiểm hiển thị", () => {
+  const tinhPrincipal = buildPrincipal({ sub: "u", realm_access: { roles: ["kn_user", "kn_province_admin"] } }, null);
+  const active: KnSessionState = { status: "active", assignments: [], context: null, menu: tinh, badges: null };
+  const legacy: KnSessionState = { status: "legacy", assignments: [], context: null, menu: null, badges: null };
+
+  it("có ngữ cảnh KN → menu cấu hình; không có → menu cũ theo vai realm (giữ đăng nhập một vai)", () => {
+    expect(activeMenu(active, tinhPrincipal)).toBe(tinh);
+    expect(activeMenu(legacy, tinhPrincipal).version).toBe("legacy");
+  });
+
+  it("/kn/* theo menu của ngữ cảnh; màn hiện có ngoài /kn vẫn theo vai (không xóa tính năng)", () => {
+    expect(isAllowed("/kn/nhiem-vu/phat-hanh", active, tinh, tinhPrincipal)).toBe(true);
+    expect(isAllowed("/kn/nhiem-vu/cong-viec", active, tinh, tinhPrincipal)).toBe(false);
+    expect(isAllowed("/thong-bao", active, tinh, tinhPrincipal)).toBe(true);
+    expect(isAllowed("/quan-tri/tai-khoan", active, tinh, tinhPrincipal)).toBe(false);
+  });
+
+  it("KN-STANDALONE-1-ADMIN-TOOLS (#264): phiên KN không vào 10 công cụ nền tảng dù có vai realm quản trị; phiên nền tảng giữ nguyên", () => {
+    const adminPrincipal = buildPrincipal({ sub: "a", amr: ["pwd", "otp"], realm_access: { roles: ["platform_admin", "param_setter", "param_approver", "registry_admin", "reports_admin", "sync_conflict_resolver", "device_admin", "api_client_admin", "metering_viewer"] } }, null);
+    const knAdmin: KnSessionState = { status: "active", assignments: [], context: null, menu: admin, badges: null };
+    const tools = ["/quan-tri/tham-so", "/quan-tri/to-chuc", "/quan-tri/mau-bao-cao", "/quan-tri/xung-dot", "/quan-tri/giam-sat-dong-bo", "/dong-bo",
+      "/quan-tri/khach-hang-api", "/quan-tri/su-dung-api", "/quan-tri/bang-ke", "/quan-tri/nhat-ky-xuat"];
+    for (const path of tools) {
+      expect(isAllowed(path, knAdmin, admin, adminPrincipal)).toBe(false);
+      expect(isAllowed(`${path}/x`, knAdmin, admin, adminPrincipal)).toBe(false);
+      expect(isAllowed(path, legacy, activeMenu(legacy, adminPrincipal), adminPrincipal)).toBe(true);
+    }
+    expect(isKnRemovedTool("/dong-bo-x")).toBe(false);
+    expect(isAllowed("/kn/quan-tri/co-cau-to-chuc", knAdmin, admin, adminPrincipal)).toBe(true);
+  });
+
+  it("trang không khung: đăng nhập, chọn vai trò", () => {
+    expect(isBareRoute("/login/lien-he")).toBe(true);
+    expect(isBareRoute("/chon-vai-tro")).toBe(true);
+    expect(isBareRoute("/kn/dashboard")).toBe(false);
+  });
+});
+
+
+describe("HRM v4.0: gỡ tự đánh giá, giữ route lãnh đạo/HCTH",()=>{
+ const period="019abcde-0000-7000-8000-000000000001",staff="019abcde-0000-7000-8000-000000000002";
+ const canonical=`/kn/nhan-su/danh-gia/dot/${period}/phieu/${staff}`;
+ const center=():MenuTree=>({version:"test",role:"kn_tinh",department_code:"hanh_chinh_tong_hop",groups:[{key:"dieu_hanh",label:"Điều hành",items:[{key:"tinh.hcth.danh_gia",label:"Đánh giá",icon:"approve",href:"/kn/nhan-su/danh-gia",status:"active"}]}]});
+ it("chỉ ánh xạ URL UUID thực vào lá hiện có, giữ breadcrumb và các màn HCTH",()=>{
+  const tree=center();
+  expect(menuAllows(tree,canonical)).toBe(true);
+  expect(findActive(tree,canonical)?.node.href).toBe("/kn/nhan-su/danh-gia");
+  expect(crumbsFor(tree,canonical)).toEqual(["Điều hành","Đánh giá"]);
+  for(const tail of ["/dot/them-moi","/mau","/mau/them-moi"])expect(menuAllows(tree,"/kn/nhan-su/danh-gia"+tail)).toBe(true);
+  const admin=center();admin.role="admin";admin.department_code=null;expect(menuAllows(admin,canonical)).toBe(true);
+ });
+ it("URL cũ không được mở, kể cả menu cũ đã cache; Cấp Xã không dùng alias trung tâm",()=>{
+  const removed="/kn/nhan-su/danh-gia-cua-toi";
+  for(const role of ["kn_xa","kn_tinh","admin"] as const){
+   const tree=center();tree.role=role;tree.groups[0]!.items[0]!.href=removed;
+   for(const path of [removed,`${removed}/dot/${period}`,`${removed}/dot/${period}/phieu/${staff}`,canonical])expect(menuAllows(tree,path)).toBe(false);
+  }
+  const xa=center();xa.role="kn_xa";expect(menuAllows(xa,canonical)).toBe(false);
+ });
+ it("chặn vai/phòng sai, thiếu menu, URL hỏng và suffix ngoài trang hiện có",()=>{
+  for(const role of ["kn_tw",null] as const){const tree=center();tree.role=role;expect(menuAllows(tree,canonical)).toBe(false);}
+  const other=center();other.department_code="trong_trot";expect(menuAllows(other,canonical)).toBe(false);
+  const disabled=center();disabled.groups[0]!.items[0]!.status="coming_soon";expect(menuAllows(disabled,canonical)).toBe(false);
+  const absent=center();absent.groups[0]!.items=[];expect(menuAllows(absent,canonical)).toBe(false);
+  for(const path of [canonical+"/extra",canonical+"?x=1",canonical.replace(period,"not-a-uuid"),canonical.replace(staff,"%2F"),"/kn/nhan-su/danh-gia/unknown"])expect(menuAllows(center(),path)).toBe(false);
+ });
+});
