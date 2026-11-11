@@ -30,6 +30,10 @@ So với repo gốc:
 
 **Chưa kiểm** (môi trường tạo bản chụp không có PostgreSQL 17, Docker daemon và Flutter): `migrate up` trên cụm trống, mọi test tích hợp DB, khởi động `api-platform`/`worker` thật, Docker Compose, `flutter analyze`/`flutter test`, Playwright e2e. CI của repo (`.github/workflows/ci.yml`) chạy các phần này.
 
+Test đã chuyển đối tượng thử cho khớp phạm vi repo: test sổ append-only và job vận hành (`internal/shared/ledger`, `internal/shared/opsjobs`) chạy trên sổ `pf_party.consent` thay cho `mkg_fieldops.roll_count`; fixture chuyển tenant của `party/handler` dùng schema/vai của `pf/content` thay cho `pf/forms`.
+
+Đã bỏ vì chỉ thử cụm `mkg`/`ts`: test vai giám sát và `ts_weigh` trong `migrations/`, `TestLedgerAddColumnUpgradeMKG`, `TestKRefInMKGCluster_W25`, `TestOutboxKindRoutesToOwnBroker`.
+
 Đã bỏ vì khung kiểm thử dựng trên KN/MKG: `tests/e2e`, `tests/acceptance`, `tests/notify`, `tests/reports` và các test canh gác đếm đủ vai/module của hệ gốc. Cần viết lại kịch bản đầu–cuối cho HTX.
 
 ## Cấu trúc

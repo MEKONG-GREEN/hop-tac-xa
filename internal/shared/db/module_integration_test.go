@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"testing"
 
@@ -196,6 +197,9 @@ func TestLoginRoleAloneHasNoTablePrivileges(t *testing.T) {
 	}
 	admin := env.AdminPool(t, migrations.PF)
 	for _, u := range dbadmin.LoginUnits {
+		if !slices.Contains(u.Clusters, migrations.PF) { // vai của cụm không triển khai ở repo này (mkg, ts) không tồn tại trên pf
+			continue
+		}
 		var n int
 		err := admin.QueryRow(ctx, `
 			SELECT count(*) FROM pg_class c JOIN pg_namespace ns ON ns.oid = c.relnamespace

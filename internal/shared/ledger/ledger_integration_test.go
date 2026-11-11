@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -24,19 +25,22 @@ import (
 
 func TestMain(m *testing.M) { os.Exit(pgtest.Run(m)) }
 
-const rollCount = "mkg_fieldops.roll_count"
+// Sổ dùng làm đối tượng thử: pf_party.consent — sổ đầu tiên của cụm pf (pf 000001), dựng bằng shared.apply_ledger như mọi
+// sổ khác. Bản gốc thử trên mkg_fieldops.roll_count; repo này không triển khai cụm mkg. Cột text_version mang con số
+// "rolls" của ca thử (dạng chữ).
+const rollCount = "pf_party.consent"
 
 func insertRoll(ctx context.Context, tx pgx.Tx, tid uuid.UUID, stream, idem string, rolls int) (uuid.UUID, error) {
 	id := ids.New()
-	_, err := tx.Exec(ctx, `INSERT INTO mkg_fieldops.roll_count
-	  (id, tenant_id, stream_key, plot_ref, htx_ref, rolls, event_time, actor_ref, idem_key, rule_version)
-	  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'roll_count/v1')`,
-		id, tid, stream, ids.New(), ids.New(), rolls, time.Now().UTC().Add(-time.Hour), ids.New(), idem)
+	_, err := tx.Exec(ctx, `INSERT INTO pf_party.consent
+	  (id, tenant_id, stream_key, subject_ref, purpose, text_version, status, channel, event_time, actor_ref, idem_key, rule_version)
+	  VALUES ($1, $2, $3, $4, 'mrv.evidence', $5, 'granted', 'field_app', $6, $7, $8, 'consent/v1')`,
+		id, tid, stream, ids.New(), strconv.Itoa(rolls), time.Now().UTC().Add(-time.Hour), ids.New(), idem)
 	return id, ledger.Classify(err)
 }
 
 func appPool(t *testing.T) *pgxpool.Pool {
-	return pgtest.Get(t).Pool(t, migrations.MKG, "fieldops_app")
+	return pgtest.Get(t).Pool(t, migrations.PF, "party_app")
 }
 
 // R-20: UPDATE, DELETE, TRUNCATE bằng vai ứng dụng và bằng owner — cả sáu phải thất bại.
@@ -44,7 +48,7 @@ func TestAppendOnlySixWays(t *testing.T) {
 	ctx := context.Background()
 	env := pgtest.Get(t)
 	app := appPool(t)
-	owner := env.Pool(t, migrations.MKG, dbadmin.Migrator)
+	owner := env.Pool(t, migrations.PF, dbadmin.Migrator)
 	tid := ids.New()
 
 	var rowID uuid.UUID
@@ -57,14 +61,14 @@ func TestAppendOnlySixWays(t *testing.T) {
 	}
 
 	stmts := map[string]string{
-		"UPDATE":   "UPDATE mkg_fieldops.roll_count SET rolls = 999 WHERE id = $1",
-		"DELETE":   "DELETE FROM mkg_fieldops.roll_count WHERE id = $1",
-		"TRUNCATE": "TRUNCATE mkg_fieldops.roll_count",
+		"UPDATE":   "UPDATE pf_party.consent SET text_version = '999' WHERE id = $1",
+		"DELETE":   "DELETE FROM pf_party.consent WHERE id = $1",
+		"TRUNCATE": "TRUNCATE pf_party.consent",
 	}
 	for _, who := range []struct {
 		name string
 		pool *pgxpool.Pool
-	}{{"fieldops_app", app}, {"owner ag_migrator", owner}} {
+	}{{"party_app", app}, {"owner ag_migrator", owner}} {
 		for op, sql := range stmts {
 			t.Run(who.name+"/"+op, func(t *testing.T) {
 				// Đặt đúng tenant để dòng hiện ra dưới RLS — nếu không, UPDATE 0 dòng
@@ -90,7 +94,7 @@ func TestAppendOnlySixWays(t *testing.T) {
 
 	// Truy cập thẳng phân vùng: trigger TRUNCATE mức câu lệnh không tự nhân bản.
 	t.Run("owner/TRUNCATE partition", func(t *testing.T) {
-		_, err := owner.Exec(ctx, "TRUNCATE mkg_fieldops.roll_count_default")
+		_, err := owner.Exec(ctx, "TRUNCATE pf_party.consent_default")
 		if !errors.Is(ledger.Classify(err), ledger.ErrImmutable) {
 			t.Fatalf("TRUNCATE phân vùng phải thất bại, nhận %v", err)
 		}
@@ -99,7 +103,7 @@ func TestAppendOnlySixWays(t *testing.T) {
 	// Dòng vẫn còn nguyên.
 	if err := tenant.WithTenantTx(ctx, app, tid, func(tx pgx.Tx) error {
 		var rolls int
-		if err := tx.QueryRow(ctx, "SELECT rolls FROM mkg_fieldops.roll_count WHERE id = $1", rowID).Scan(&rolls); err != nil {
+		if err := tx.QueryRow(ctx, "SELECT text_version::int FROM pf_party.consent WHERE id = $1", rowID).Scan(&rolls); err != nil {
 			return err
 		}
 		if rolls != 12 {
@@ -136,21 +140,21 @@ func TestCatalogGates(t *testing.T) {
 // Kiểm thử ngược: view cổng phải BẮT được bảng sổ thiếu trigger và bảng nghiệp vụ thiếu RLS.
 func TestCatalogGatesDetectViolations(t *testing.T) {
 	ctx := context.Background()
-	owner := pgtest.Get(t).Pool(t, migrations.MKG, dbadmin.Migrator)
+	owner := pgtest.Get(t).Pool(t, migrations.PF, dbadmin.Migrator)
 	tx, err := owner.Begin(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
-	if _, err := tx.Exec(ctx, `CREATE SCHEMA mkg_gate_probe;
-	  CREATE TABLE mkg_gate_probe.bad_ledger (id uuid, tenant_id uuid, row_hash bytea, prev_hash bytea);
-	  CREATE TABLE mkg_gate_probe.no_rls (id uuid, tenant_id uuid);
-	  CREATE TABLE mkg_gate_probe.no_tenant (id uuid)`); err != nil {
+	if _, err := tx.Exec(ctx, `CREATE SCHEMA pf_gate_probe;
+	  CREATE TABLE pf_gate_probe.bad_ledger (id uuid, tenant_id uuid, row_hash bytea, prev_hash bytea);
+	  CREATE TABLE pf_gate_probe.no_rls (id uuid, tenant_id uuid);
+	  CREATE TABLE pf_gate_probe.no_tenant (id uuid)`); err != nil {
 		t.Fatal(err)
 	}
 	count := func(view string) int {
 		var n int
-		if err := tx.QueryRow(ctx, "SELECT count(*) FROM "+view+" WHERE schema_name = 'mkg_gate_probe'").Scan(&n); err != nil {
+		if err := tx.QueryRow(ctx, "SELECT count(*) FROM "+view+" WHERE schema_name = 'pf_gate_probe'").Scan(&n); err != nil {
 			t.Fatal(err)
 		}
 		return n
@@ -199,7 +203,7 @@ func TestChainSequenceAndTamperDetection(t *testing.T) {
 	}
 
 	// Kẻ có quyền superuser vượt trigger để sửa dữ liệu — chuỗi băm phải phát hiện.
-	admin := env.AdminPool(t, migrations.MKG)
+	admin := env.AdminPool(t, migrations.PF)
 	conn, err := admin.Acquire(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -208,7 +212,7 @@ func TestChainSequenceAndTamperDetection(t *testing.T) {
 	if _, err := conn.Exec(ctx, "SET session_replication_role = replica"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := conn.Exec(ctx, "UPDATE mkg_fieldops.roll_count SET rolls = 999 WHERE id = $1", target); err != nil {
+	if _, err := conn.Exec(ctx, "UPDATE pf_party.consent SET text_version = '999' WHERE id = $1", target); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := conn.Exec(ctx, "RESET session_replication_role"); err != nil {
@@ -252,7 +256,7 @@ func TestDuplicateIdemKey(t *testing.T) {
 // W2.1 (DB-11, ADR-0012): dòng đăng ký idem_key có hạn mặc định recorded_at + 30 ngày.
 func TestLedgerIdemExpiryDefault(t *testing.T) {
 	ctx := context.Background()
-	owner := pgtest.Get(t).Pool(t, migrations.MKG, dbadmin.Migrator)
+	owner := pgtest.Get(t).Pool(t, migrations.PF, dbadmin.Migrator)
 	tid := ids.New()
 	idem := ids.New().String()
 	if err := tenant.WithTenantTx(ctx, appPool(t), tid, func(tx pgx.Tx) error {
@@ -276,7 +280,7 @@ func TestLedgerIdemExpiryDefault(t *testing.T) {
 func TestDuplicateIdemKeyExpiresAfter30Days(t *testing.T) {
 	ctx := context.Background()
 	app := appPool(t)
-	owner := pgtest.Get(t).Pool(t, migrations.MKG, dbadmin.Migrator)
+	owner := pgtest.Get(t).Pool(t, migrations.PF, dbadmin.Migrator)
 	tid := ids.New()
 	idem := ids.New().String()
 	stream := "lot:" + ids.New().String()
@@ -326,7 +330,7 @@ func TestDuplicateIdemKeyExpiresAfter30Days(t *testing.T) {
 	}
 	if err := tenant.WithTenantTx(ctx, app, tid, func(tx pgx.Tx) error {
 		var n int
-		if err := tx.QueryRow(ctx, "SELECT count(*) FROM mkg_fieldops.roll_count WHERE idem_key = $1", idem).Scan(&n); err != nil {
+		if err := tx.QueryRow(ctx, "SELECT count(*) FROM pf_party.consent WHERE idem_key = $1", idem).Scan(&n); err != nil {
 			return err
 		}
 		if n != 2 {
@@ -350,10 +354,10 @@ func TestRecordedAtIsSystemOwned(t *testing.T) {
 	app := appPool(t)
 	tid := ids.New()
 	err := tenant.WithTenantTx(ctx, app, tid, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, `INSERT INTO mkg_fieldops.roll_count
-		  (id, tenant_id, stream_key, plot_ref, htx_ref, rolls, event_time, recorded_at, actor_ref, idem_key, rule_version)
-		  VALUES ($1, $2, 'lot:x', $3, $4, 1, now(), now() - interval '10 days', $5, $6, 'v1')`,
-			ids.New(), tid, ids.New(), ids.New(), ids.New(), ids.New().String())
+		_, err := tx.Exec(ctx, `INSERT INTO pf_party.consent
+		  (id, tenant_id, stream_key, subject_ref, purpose, text_version, status, channel, event_time, recorded_at, actor_ref, idem_key, rule_version)
+		  VALUES ($1, $2, 'lot:x', $3, 'mrv.evidence', '1', 'granted', 'field_app', now(), now() - interval '10 days', $4, $5, 'v1')`,
+			ids.New(), tid, ids.New(), ids.New(), ids.New().String())
 		return err
 	})
 	if err == nil || !strings.Contains(err.Error(), "recorded_at") {

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
@@ -95,6 +96,9 @@ func readWF(t *testing.T, pool *pgxpool.Pool, tid uuid.UUID, kind, subject strin
 // W6.1: gốc lắp ráp nối cap/workflow vào duyệt tham số (pf/masterdata) và duyệt cấp quyền chia sẻ (pf/party). Mã lỗi,
 // trạng thái HTTP không đổi; mỗi lần gửi duyệt/đề xuất có một yêu cầu, mỗi lần duyệt/từ chối/thu hồi đề xuất có một
 // quyết định cùng giao dịch; phiên bản gửi duyệt trước khi nối workflow được lập bù yêu cầu lúc duyệt.
+// TestMain: pgtest dựng cụm thử một lần cho cả gói (CI bắt buộc AG_TEST_PG_ADMIN_URL).
+func TestMain(m *testing.M) { os.Exit(pgtest.Run(m)) }
+
 func TestWorkflowWiredApprovals_W61(t *testing.T) {
 	env := pgtest.Get(t)
 	open := func(_ context.Context, role string) (*pgxpool.Pool, error) {

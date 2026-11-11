@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -26,19 +27,20 @@ import (
 
 func TestMain(m *testing.M) { os.Exit(pgtest.Run(m)) }
 
-// writeRolls ghi n dòng vào sổ mẫu mkg_fieldops.roll_count, trả id theo seq.
+// writeRolls ghi n dòng vào sổ mẫu pf_party.consent (sổ đầu tiên của cụm pf; bản gốc dùng mkg_fieldops.roll_count —
+// repo này không triển khai cụm mkg), trả id theo seq. Cột text_version mang con số của ca thử.
 func writeRolls(t *testing.T, tid uuid.UUID, stream string, n int) []uuid.UUID {
 	t.Helper()
 	ctx := context.Background()
-	app := pgtest.Get(t).Pool(t, migrations.MKG, "fieldops_app")
+	app := pgtest.Get(t).Pool(t, migrations.PF, "party_app")
 	var out []uuid.UUID
 	for i := 0; i < n; i++ {
 		id := ids.New()
 		if err := tenant.WithTenantTx(ctx, app, tid, func(tx pgx.Tx) error {
-			_, err := tx.Exec(ctx, `INSERT INTO mkg_fieldops.roll_count
-			  (id, tenant_id, stream_key, plot_ref, htx_ref, rolls, event_time, actor_ref, idem_key, rule_version)
-			  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'roll_count/v1')`,
-				id, tid, stream, ids.New(), ids.New(), 10+i, time.Now().UTC().Add(-time.Hour), ids.New(), ids.New().String())
+			_, err := tx.Exec(ctx, `INSERT INTO pf_party.consent
+			  (id, tenant_id, stream_key, subject_ref, purpose, text_version, status, channel, event_time, actor_ref, idem_key, rule_version)
+			  VALUES ($1, $2, $3, $4, 'mrv.evidence', $5, 'granted', 'field_app', $6, $7, $8, 'consent/v1')`,
+				id, tid, stream, ids.New(), strconv.Itoa(10+i), time.Now().UTC().Add(-time.Hour), ids.New(), ids.New().String())
 			return err
 		}); err != nil {
 			t.Fatal(err)
@@ -64,8 +66,8 @@ func testSigner(t *testing.T) *opsjobs.Signer {
 func TestAnchorDailyWritesRowsAndSignedManifest(t *testing.T) {
 	ctx := context.Background()
 	env := pgtest.Get(t)
-	pub := env.Pool(t, migrations.MKG, dbadmin.OpsJobs)
-	owner := env.Pool(t, migrations.MKG, dbadmin.Migrator)
+	pub := env.Pool(t, migrations.PF, dbadmin.OpsJobs)
+	owner := env.Pool(t, migrations.PF, dbadmin.Migrator)
 	tid, stream := ids.New(), "lot:"+ids.New().String()
 	writeRolls(t, tid, stream, 3)
 
@@ -75,11 +77,11 @@ func TestAnchorDailyWritesRowsAndSignedManifest(t *testing.T) {
 	}
 	signer := testSigner(t)
 	day := clock.Date{Year: 2026, Month: 9, Day: 26}
-	res, err := opsjobs.AnchorDaily(ctx, pub, store, signer, "mkg", day)
+	res, err := opsjobs.AnchorDaily(ctx, pub, store, signer, "pf", day)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Skipped || res.Inserted < 1 || res.Key != "anchors/mkg/2026-09-26.json" {
+	if res.Skipped || res.Inserted < 1 || res.Key != "anchors/pf/2026-09-26.json" {
 		t.Fatalf("kết quả neo: %+v", res)
 	}
 
@@ -108,7 +110,7 @@ func TestAnchorDailyWritesRowsAndSignedManifest(t *testing.T) {
 			found = e.LastSeq == 3 && e.LastHash == hex.EncodeToString(headHash)
 		}
 	}
-	if !found || m.Cluster != "mkg" || m.BusinessDate != "2026-09-26" || m.KeyID != signer.KeyID {
+	if !found || m.Cluster != "pf" || m.BusinessDate != "2026-09-26" || m.KeyID != signer.KeyID {
 		t.Fatalf("manifest thiếu/sai đầu chuỗi: %+v", m)
 	}
 
@@ -123,7 +125,7 @@ func TestAnchorDailyWritesRowsAndSignedManifest(t *testing.T) {
 	}
 
 	// Chạy lại: manifest đã có → bỏ qua, không đụng kho.
-	again, err := opsjobs.AnchorDaily(ctx, pub, store, signer, "mkg", day)
+	again, err := opsjobs.AnchorDaily(ctx, pub, store, signer, "pf", day)
 	if err != nil || !again.Skipped {
 		t.Fatalf("chạy lại phải bỏ qua: %+v %v", again, err)
 	}
@@ -132,7 +134,7 @@ func TestAnchorDailyWritesRowsAndSignedManifest(t *testing.T) {
 // Vai ứng dụng không được tự neo hay đọc neo.
 func TestAnchorFunctionsNotGrantedToAppRoles(t *testing.T) {
 	ctx := context.Background()
-	app := pgtest.Get(t).Pool(t, migrations.MKG, "fieldops_app")
+	app := pgtest.Get(t).Pool(t, migrations.PF, "party_app")
 	for _, q := range []string{"SELECT shared.anchor_chains('2026-01-01')", "SELECT count(*) FROM shared.chain_anchors_of('2026-01-01')", "SELECT shared.purge_expired_idempotency(1)"} {
 		if _, err := app.Exec(ctx, q); err == nil || !strings.Contains(err.Error(), "42501") {
 			t.Errorf("%s bằng vai ứng dụng phải bị từ chối (42501), nhận %v", q, err)
@@ -233,17 +235,17 @@ func TestPurgeLedgerIdemEveryCluster(t *testing.T) {
 func TestLedgerReplayAcceptedAfterPurge(t *testing.T) {
 	ctx := context.Background()
 	env := pgtest.Get(t)
-	owner := env.Pool(t, migrations.MKG, dbadmin.Migrator)
-	pub := env.Pool(t, migrations.MKG, dbadmin.OpsJobs)
-	app := env.Pool(t, migrations.MKG, "fieldops_app")
+	owner := env.Pool(t, migrations.PF, dbadmin.Migrator)
+	pub := env.Pool(t, migrations.PF, dbadmin.OpsJobs)
+	app := env.Pool(t, migrations.PF, "party_app")
 	tid := ids.New()
 	idem := ids.New().String()
 	write := func() error {
 		return tenant.WithTenantTx(ctx, app, tid, func(tx pgx.Tx) error {
-			_, err := tx.Exec(ctx, `INSERT INTO mkg_fieldops.roll_count
-			  (id, tenant_id, stream_key, plot_ref, htx_ref, rolls, event_time, actor_ref, idem_key, rule_version)
-			  VALUES ($1, $2, 'lot:replay', $3, $4, 1, $5, $6, $7, 'roll_count/v1')`,
-				ids.New(), tid, ids.New(), ids.New(), time.Now().UTC().Add(-time.Hour), ids.New(), idem)
+			_, err := tx.Exec(ctx, `INSERT INTO pf_party.consent
+			  (id, tenant_id, stream_key, subject_ref, purpose, text_version, status, channel, event_time, actor_ref, idem_key, rule_version)
+			  VALUES ($1, $2, 'lot:replay', $3, 'mrv.evidence', '1', 'granted', 'field_app', $4, $5, $6, 'consent/v1')`,
+				ids.New(), tid, ids.New(), time.Now().UTC().Add(-time.Hour), ids.New(), idem)
 			return err
 		})
 	}
@@ -271,7 +273,7 @@ func TestLedgerReplayAcceptedAfterPurge(t *testing.T) {
 // migrate maintain chạy lặp an toàn và tạo đúng phần thiếu.
 func TestEnsurePartitionsIdempotent(t *testing.T) {
 	ctx := context.Background()
-	owner := pgtest.Get(t).Pool(t, migrations.MKG, dbadmin.Migrator)
+	owner := pgtest.Get(t).Pool(t, migrations.PF, dbadmin.Migrator)
 	tables, err := opsjobs.LedgerTables(ctx, owner)
 	if err != nil || len(tables) == 0 {
 		t.Fatalf("phải tìm thấy bảng sổ: %v %v", tables, err)
@@ -321,7 +323,7 @@ func checkGates(t *testing.T, owner *pgxpool.Pool) {
 func TestVerifyAllChainsDetectsTampering(t *testing.T) {
 	ctx := context.Background()
 	env := pgtest.Get(t)
-	owner := env.Pool(t, migrations.MKG, dbadmin.Migrator)
+	owner := env.Pool(t, migrations.PF, dbadmin.Migrator)
 	good := ids.New()
 	goodStream := "lot:" + ids.New().String()
 	writeRolls(t, good, goodStream, 2)
@@ -346,12 +348,12 @@ func TestVerifyAllChainsDetectsTampering(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, tid := range []uuid.UUID{good, bad, cut} {
-		if c := find(cs, tid); !c.OK || c.Table != "mkg_fieldops.roll_count" {
+		if c := find(cs, tid); !c.OK || c.Table != "pf_party.consent" {
 			t.Fatalf("trước khi sửa mọi chuỗi phải hợp lệ: %+v", c)
 		}
 	}
 
-	admin := env.AdminPool(t, migrations.MKG)
+	admin := env.AdminPool(t, migrations.PF)
 	conn, err := admin.Acquire(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -361,8 +363,8 @@ func TestVerifyAllChainsDetectsTampering(t *testing.T) {
 		sql string
 		id  uuid.UUID
 	}{
-		{"UPDATE mkg_fieldops.roll_count SET rolls = 999 WHERE id = $1", badIDs[1]},
-		{"DELETE FROM mkg_fieldops.roll_count WHERE id = $1", cutIDs[2]},
+		{"UPDATE pf_party.consent SET text_version = '999' WHERE id = $1", badIDs[1]},
+		{"DELETE FROM pf_party.consent WHERE id = $1", cutIDs[2]},
 	} {
 		if _, err := conn.Exec(ctx, "SET session_replication_role = replica"); err != nil {
 			t.Fatal(err)
@@ -611,15 +613,4 @@ func TestOpsJobsRoleSplit_M8(t *testing.T) {
 	}
 	denied(t, pfOps, "SELECT * FROM pf_extension.task_current LIMIT 1")
 	denied(t, pfOps, "SELECT code FROM pf_price.unit LIMIT 1")
-	mkgPub, mkgOps := env.Pool(t, migrations.MKG, dbadmin.OutboxPublisher), env.Pool(t, migrations.MKG, dbadmin.OpsJobs)
-	for _, q := range []string{
-		"SELECT tenant_id, status FROM mkg_hub.facility_current LIMIT 1",
-		"SELECT tenant_id, status, next_retry_at FROM mkg_acctbridge.journal_current LIMIT 1",
-		"SELECT tenant_id, status FROM mkg_logistics.trip_current LIMIT 1",
-		"SELECT tenant_id, status FROM mkg_logistics.vessel_current LIMIT 1",
-	} {
-		allowed(t, mkgOps, q)
-		denied(t, mkgPub, q)
-	}
-	denied(t, mkgOps, "SELECT * FROM mkg_acctbridge.journal_current LIMIT 1")
 }

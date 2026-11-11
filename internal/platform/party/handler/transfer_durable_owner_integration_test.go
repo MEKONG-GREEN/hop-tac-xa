@@ -46,7 +46,7 @@ var errDurableOwnerInjected = errors.New("test owner interrupted")
 // No test calls t.Parallel: one private pgtest database, with tenant/node RLS on
 // every fixture table and shared.fn_chain on the actual owner event ledger.
 const durableOwnerDDL = `
-CREATE TABLE pf_forms.transfer55_fixture_event (
+CREATE TABLE pf_content.transfer55_fixture_event (
  id uuid NOT NULL, tenant_id uuid NOT NULL, scope_ref uuid NOT NULL,
  stream_key text NOT NULL, seq bigint NOT NULL, entity_ref uuid NOT NULL,
  namespace text NOT NULL, action text NOT NULL, value text NOT NULL,
@@ -59,29 +59,29 @@ CREATE TABLE pf_forms.transfer55_fixture_event (
  prev_hash bytea NOT NULL, row_hash bytea NOT NULL,
  PRIMARY KEY(id,recorded_at)
 ) PARTITION BY RANGE(recorded_at);
-SELECT shared.apply_ledger('pf_forms.transfer55_fixture_event','pf_forms.transfer55_fixture_event');
-CREATE POLICY p_scope ON pf_forms.transfer55_fixture_event AS RESTRICTIVE
+SELECT shared.apply_ledger('pf_content.transfer55_fixture_event','pf_content.transfer55_fixture_event');
+CREATE POLICY p_scope ON pf_content.transfer55_fixture_event AS RESTRICTIVE
  USING(scope_ref=k_ref.ctx_uuid('app.node_id')) WITH CHECK(scope_ref=k_ref.ctx_uuid('app.node_id'));
-CREATE TABLE pf_forms.transfer55_fixture_provenance (
+CREATE TABLE pf_content.transfer55_fixture_provenance (
  tenant_id uuid NOT NULL, scope_ref uuid NOT NULL, event_ref uuid NOT NULL,
  plan_id uuid NOT NULL, batch_id uuid NOT NULL, operation_id uuid NOT NULL,
  namespace text NOT NULL, source_tenant uuid NOT NULL, source_ref uuid NOT NULL,
  source_row_hash text NOT NULL, source_seq bigint NOT NULL, target_ref uuid NOT NULL,
  PRIMARY KEY(tenant_id,event_ref)
 );
-CREATE TABLE pf_forms.transfer55_fixture_receipt (
+CREATE TABLE pf_content.transfer55_fixture_receipt (
  tenant_id uuid NOT NULL, scope_ref uuid NOT NULL, plan_id uuid NOT NULL,
  batch_id uuid NOT NULL, operation_id uuid NOT NULL, phase text NOT NULL,
  request_hash text NOT NULL, document jsonb NOT NULL,
  PRIMARY KEY(tenant_id,plan_id,batch_id,phase,operation_id)
 );
-CREATE TABLE pf_forms.transfer55_fixture_artifact (
+CREATE TABLE pf_content.transfer55_fixture_artifact (
  tenant_id uuid NOT NULL, scope_ref uuid NOT NULL, plan_id uuid NOT NULL,
  batch_id uuid NOT NULL, request_hash text NOT NULL,
  artifact jsonb NOT NULL, payload jsonb NOT NULL,
  PRIMARY KEY(tenant_id,plan_id,batch_id)
 );
-CREATE TABLE pf_forms.transfer55_fixture_authority (
+CREATE TABLE pf_content.transfer55_fixture_authority (
  tenant_id uuid NOT NULL, scope_ref uuid NOT NULL, namespace text NOT NULL,
  actor_ref uuid NOT NULL, approval_ref uuid NOT NULL, epoch text NOT NULL,
  valid_until timestamptz NOT NULL, enabled boolean NOT NULL,
@@ -89,19 +89,19 @@ CREATE TABLE pf_forms.transfer55_fixture_authority (
  recovery_valid_until timestamptz NOT NULL, recovery_enabled boolean NOT NULL,
  PRIMARY KEY(tenant_id,scope_ref,namespace)
 );
-CREATE TABLE pf_forms.transfer55_fixture_fence (
+CREATE TABLE pf_content.transfer55_fixture_fence (
  tenant_id uuid NOT NULL, scope_ref uuid NOT NULL, namespace text NOT NULL,
  side text NOT NULL, holder uuid NOT NULL, document jsonb NOT NULL,
  active boolean NOT NULL, mode text NOT NULL DEFAULT 'forward',
  PRIMARY KEY(tenant_id,scope_ref,namespace,side)
 );
-CREATE TABLE pf_forms.transfer55_fixture_gate (
+CREATE TABLE pf_content.transfer55_fixture_gate (
  tenant_id uuid NOT NULL, scope_ref uuid NOT NULL, namespace text NOT NULL,
  side text NOT NULL, holder uuid NOT NULL, operation_id uuid NOT NULL,
  reason_ref uuid NOT NULL, document jsonb NOT NULL,
  PRIMARY KEY(tenant_id,holder,namespace,side)
 );
-CREATE TABLE pf_forms.transfer55_fixture_release (
+CREATE TABLE pf_content.transfer55_fixture_release (
  tenant_id uuid NOT NULL, scope_ref uuid NOT NULL, namespace text NOT NULL,
  side text NOT NULL, holder uuid NOT NULL, operation_id uuid NOT NULL,
  reason_ref uuid NOT NULL, document jsonb NOT NULL,
@@ -111,19 +111,19 @@ DO $fixture$
 DECLARE n text;
 BEGIN
  FOREACH n IN ARRAY ARRAY['provenance','receipt','artifact','authority','fence','gate','release'] LOOP
-  EXECUTE format('SELECT shared.apply_tenant_rls(%L::regclass)','pf_forms.transfer55_fixture_'||n);
-  EXECUTE format('CREATE POLICY p_scope ON pf_forms.transfer55_fixture_%I AS RESTRICTIVE USING(scope_ref=k_ref.ctx_uuid(''app.node_id'')) WITH CHECK(scope_ref=k_ref.ctx_uuid(''app.node_id''))',n);
+  EXECUTE format('SELECT shared.apply_tenant_rls(%L::regclass)','pf_content.transfer55_fixture_'||n);
+  EXECUTE format('CREATE POLICY p_scope ON pf_content.transfer55_fixture_%I AS RESTRICTIVE USING(scope_ref=k_ref.ctx_uuid(''app.node_id'')) WITH CHECK(scope_ref=k_ref.ctx_uuid(''app.node_id''))',n);
  END LOOP;
 END $fixture$;
-CREATE TRIGGER immutable BEFORE UPDATE OR DELETE ON pf_forms.transfer55_fixture_provenance FOR EACH ROW EXECUTE FUNCTION shared.fn_immutable();
-CREATE TRIGGER immutable BEFORE UPDATE OR DELETE ON pf_forms.transfer55_fixture_receipt FOR EACH ROW EXECUTE FUNCTION shared.fn_immutable();
-CREATE TRIGGER immutable BEFORE UPDATE OR DELETE ON pf_forms.transfer55_fixture_artifact FOR EACH ROW EXECUTE FUNCTION shared.fn_immutable();
-CREATE TRIGGER immutable BEFORE UPDATE OR DELETE ON pf_forms.transfer55_fixture_gate FOR EACH ROW EXECUTE FUNCTION shared.fn_immutable();
-CREATE TRIGGER immutable BEFORE UPDATE OR DELETE ON pf_forms.transfer55_fixture_release FOR EACH ROW EXECUTE FUNCTION shared.fn_immutable();
-GRANT SELECT,INSERT ON pf_forms.transfer55_fixture_event,pf_forms.transfer55_fixture_provenance,
- pf_forms.transfer55_fixture_receipt,pf_forms.transfer55_fixture_artifact,
- pf_forms.transfer55_fixture_gate,pf_forms.transfer55_fixture_release TO r_forms;
-GRANT SELECT,INSERT,UPDATE ON pf_forms.transfer55_fixture_authority,pf_forms.transfer55_fixture_fence TO r_forms;
+CREATE TRIGGER immutable BEFORE UPDATE OR DELETE ON pf_content.transfer55_fixture_provenance FOR EACH ROW EXECUTE FUNCTION shared.fn_immutable();
+CREATE TRIGGER immutable BEFORE UPDATE OR DELETE ON pf_content.transfer55_fixture_receipt FOR EACH ROW EXECUTE FUNCTION shared.fn_immutable();
+CREATE TRIGGER immutable BEFORE UPDATE OR DELETE ON pf_content.transfer55_fixture_artifact FOR EACH ROW EXECUTE FUNCTION shared.fn_immutable();
+CREATE TRIGGER immutable BEFORE UPDATE OR DELETE ON pf_content.transfer55_fixture_gate FOR EACH ROW EXECUTE FUNCTION shared.fn_immutable();
+CREATE TRIGGER immutable BEFORE UPDATE OR DELETE ON pf_content.transfer55_fixture_release FOR EACH ROW EXECUTE FUNCTION shared.fn_immutable();
+GRANT SELECT,INSERT ON pf_content.transfer55_fixture_event,pf_content.transfer55_fixture_provenance,
+ pf_content.transfer55_fixture_receipt,pf_content.transfer55_fixture_artifact,
+ pf_content.transfer55_fixture_gate,pf_content.transfer55_fixture_release TO r_content;
+GRANT SELECT,INSERT,UPDATE ON pf_content.transfer55_fixture_authority,pf_content.transfer55_fixture_fence TO r_content;
 `
 
 type durableOwnerValue struct {
@@ -207,12 +207,12 @@ func (o *durableOwner) tx(ctx context.Context, fn func(pgx.Tx) error) error {
 	if !ok || err != nil || tid != p.TenantID || p.OrgRef == uuid.Nil {
 		return port.ErrTransferAuthority
 	}
-	return db.WithContextTx(ctx, o.pool, db.Module("pf/forms"), func(tx pgx.Tx) error {
+	return db.WithContextTx(ctx, o.pool, db.Module("pf/content"), func(tx pgx.Tx) error {
 		var role, tenantText, nodeText, actorText string
 		if err := tx.QueryRow(ctx, `SELECT current_user,current_setting('app.tenant_id',true),current_setting('app.node_id',true),current_setting('app.actor_ref',true)`).Scan(&role, &tenantText, &nodeText, &actorText); err != nil {
 			return err
 		}
-		if role != "r_forms" || tenantText != tid.String() || nodeText != p.OrgRef.String() || actorText != p.ActorRef.String() {
+		if role != "r_content" || tenantText != tid.String() || nodeText != p.OrgRef.String() || actorText != p.ActorRef.String() {
 			return port.ErrTransferAuthority
 		}
 		return fn(tx)
@@ -236,7 +236,7 @@ func (o *durableOwner) authorityTx(ctx context.Context, tx pgx.Tx, namespace str
 	}
 	var a port.TransferApproval
 	var enabled bool
-	err := tx.QueryRow(ctx, `SELECT approval_ref,actor_ref,epoch,valid_until,enabled FROM pf_forms.transfer55_fixture_authority WHERE scope_ref=$1 AND namespace=$2 FOR SHARE`, p.OrgRef, namespace).Scan(&a.Ref, &a.ActorRef, &a.Epoch, &a.ValidUntil, &enabled)
+	err := tx.QueryRow(ctx, `SELECT approval_ref,actor_ref,epoch,valid_until,enabled FROM pf_content.transfer55_fixture_authority WHERE scope_ref=$1 AND namespace=$2 FOR SHARE`, p.OrgRef, namespace).Scan(&a.Ref, &a.ActorRef, &a.Epoch, &a.ValidUntil, &enabled)
 	if err != nil {
 		return a, err
 	}
@@ -260,7 +260,7 @@ func (o *durableOwner) recoveryAuthorityTx(ctx context.Context, tx pgx.Tx, names
 	}
 	var a port.TransferApproval
 	var enabled bool
-	err := tx.QueryRow(ctx, `SELECT recovery_ref,actor_ref,recovery_epoch,recovery_valid_until,recovery_enabled FROM pf_forms.transfer55_fixture_authority WHERE scope_ref=$1 AND namespace=$2 FOR SHARE`, p.OrgRef, namespace).Scan(&a.Ref, &a.ActorRef, &a.Epoch, &a.ValidUntil, &enabled)
+	err := tx.QueryRow(ctx, `SELECT recovery_ref,actor_ref,recovery_epoch,recovery_valid_until,recovery_enabled FROM pf_content.transfer55_fixture_authority WHERE scope_ref=$1 AND namespace=$2 FOR SHARE`, p.OrgRef, namespace).Scan(&a.Ref, &a.ActorRef, &a.Epoch, &a.ValidUntil, &enabled)
 	if err != nil {
 		return a, err
 	}
@@ -283,7 +283,7 @@ func (o *durableOwner) recoveryAuthority(ctx context.Context, req port.TransferA
 }
 func (o *durableOwner) headersTx(ctx context.Context, tx pgx.Tx, namespace string) ([]port.TransferHeader, error) {
 	p, _ := authz.FromContext(ctx)
-	rows, err := tx.Query(ctx, `SELECT entity_ref,encode(row_hash,'hex'),seq,value,parent_namespace,parent_ref FROM pf_forms.transfer55_fixture_event WHERE namespace=$1 AND action='source' ORDER BY entity_ref`, namespace)
+	rows, err := tx.Query(ctx, `SELECT entity_ref,encode(row_hash,'hex'),seq,value,parent_namespace,parent_ref FROM pf_content.transfer55_fixture_event WHERE namespace=$1 AND action='source' ORDER BY entity_ref`, namespace)
 	if err != nil {
 		return nil, err
 	}
@@ -325,7 +325,7 @@ func (o *durableOwner) fenceTx(ctx context.Context, tx pgx.Tx, req port.Transfer
 		// Historical same-holder tombstones forbid a late Freeze even after its
 		// active barrier was closed. Other holders cannot pass an unreleased gate.
 		var blocked bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pf_forms.transfer55_fixture_gate g WHERE g.scope_ref=$1 AND g.namespace=$2 AND g.side=$3 AND (g.holder=$4 OR NOT EXISTS(SELECT 1 FROM pf_forms.transfer55_fixture_release r WHERE r.tenant_id=g.tenant_id AND r.holder=g.holder AND r.namespace=g.namespace AND r.side=g.side)))`, node, req.Namespace, req.Side, holder).Scan(&blocked); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pf_content.transfer55_fixture_gate g WHERE g.scope_ref=$1 AND g.namespace=$2 AND g.side=$3 AND (g.holder=$4 OR NOT EXISTS(SELECT 1 FROM pf_content.transfer55_fixture_release r WHERE r.tenant_id=g.tenant_id AND r.holder=g.holder AND r.namespace=g.namespace AND r.side=g.side)))`, node, req.Namespace, req.Side, holder).Scan(&blocked); err != nil {
 			return port.TransferFence{}, err
 		}
 		if blocked {
@@ -337,7 +337,7 @@ func (o *durableOwner) fenceTx(ctx context.Context, tx pgx.Tx, req port.Transfer
 	var active bool
 	// Every forward writer holds this exact exclusive row lock through its owner
 	// commit. EnterRecoveryGate takes the same lock before acknowledging a gate.
-	err = tx.QueryRow(ctx, `SELECT holder,document,active FROM pf_forms.transfer55_fixture_fence WHERE scope_ref=$1 AND namespace=$2 AND side=$3 FOR UPDATE`, node, req.Namespace, req.Side).Scan(&currentHolder, &raw, &active)
+	err = tx.QueryRow(ctx, `SELECT holder,document,active FROM pf_content.transfer55_fixture_fence WHERE scope_ref=$1 AND namespace=$2 AND side=$3 FOR UPDATE`, node, req.Namespace, req.Side).Scan(&currentHolder, &raw, &active)
 	if err == nil {
 		var f port.TransferFence
 		if err = json.Unmarshal(raw, &f); err != nil {
@@ -370,7 +370,7 @@ func (o *durableOwner) fenceTx(ctx context.Context, tx pgx.Tx, req port.Transfer
 	if err != nil {
 		return f, err
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO pf_forms.transfer55_fixture_fence(tenant_id,scope_ref,namespace,side,holder,document,active)VALUES($1,$2,$3,$4,$5,$6,true)`, tid, node, req.Namespace, req.Side, holder, doc)
+	_, err = tx.Exec(ctx, `INSERT INTO pf_content.transfer55_fixture_fence(tenant_id,scope_ref,namespace,side,holder,document,active)VALUES($1,$2,$3,$4,$5,$6,true)`, tid, node, req.Namespace, req.Side, holder, doc)
 	return f, err
 }
 func (o *durableOwner) fence(ctx context.Context, req port.TransferFenceRequest) (port.TransferFence, error) {
@@ -403,7 +403,7 @@ func (o *durableOwner) checkFence(ctx context.Context, req port.TransferFenceReq
 }
 func (o *durableOwner) checkModeTx(ctx context.Context, tx pgx.Tx, req port.TransferFenceRequest, want string) error {
 	var mode string
-	if err := tx.QueryRow(ctx, `SELECT mode FROM pf_forms.transfer55_fixture_fence WHERE namespace=$1 AND side=$2`, req.Namespace, req.Side).Scan(&mode); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT mode FROM pf_content.transfer55_fixture_fence WHERE namespace=$1 AND side=$2`, req.Namespace, req.Side).Scan(&mode); err != nil {
 		return err
 	}
 	if mode != want {
@@ -436,7 +436,7 @@ func (o *durableOwner) currentFenceTx(ctx context.Context, tx pgx.Tx, req port.T
 	var raw []byte
 	var mode string
 	var active bool
-	err = tx.QueryRow(ctx, `SELECT holder,document,mode,active FROM pf_forms.transfer55_fixture_fence WHERE scope_ref=$1 AND namespace=$2 AND side=$3 FOR UPDATE`, node, req.Namespace, req.Side).Scan(&actualHolder, &raw, &mode, &active)
+	err = tx.QueryRow(ctx, `SELECT holder,document,mode,active FROM pf_content.transfer55_fixture_fence WHERE scope_ref=$1 AND namespace=$2 AND side=$3 FOR UPDATE`, node, req.Namespace, req.Side).Scan(&actualHolder, &raw, &mode, &active)
 	if errors.Is(err, pgx.ErrNoRows) && expected == (port.TransferFence{}) {
 		return holder, "absent", false, nil
 	}
@@ -480,7 +480,7 @@ func (o *durableOwner) readFenceForRecovery(ctx context.Context, recovery port.T
 		}
 		var actual uuid.UUID
 		var raw []byte
-		err = tx.QueryRow(ctx, `SELECT holder,document FROM pf_forms.transfer55_fixture_fence WHERE scope_ref=$1 AND namespace=$2 AND side=$3 FOR UPDATE`, node, req.Namespace, req.Side).Scan(&actual, &raw)
+		err = tx.QueryRow(ctx, `SELECT holder,document FROM pf_content.transfer55_fixture_fence WHERE scope_ref=$1 AND namespace=$2 AND side=$3 FOR UPDATE`, node, req.Namespace, req.Side).Scan(&actual, &raw)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return port.ErrTransferNotReady
 		}
@@ -507,7 +507,7 @@ func (o *durableOwner) gateTx(ctx context.Context, tx pgx.Tx, recovery port.Tran
 	}
 	var raw []byte
 	var out port.TransferRecoveryGate
-	err = tx.QueryRow(ctx, `SELECT document FROM pf_forms.transfer55_fixture_gate WHERE holder=$1 AND namespace=$2 AND side=$3`, holder, req.Namespace, req.Side).Scan(&raw)
+	err = tx.QueryRow(ctx, `SELECT document FROM pf_content.transfer55_fixture_gate WHERE holder=$1 AND namespace=$2 AND side=$3`, holder, req.Namespace, req.Side).Scan(&raw)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return out, port.ErrTransferNotReady
 	}
@@ -586,7 +586,7 @@ func (o *durableOwner) enterRecoveryGate(ctx context.Context, recovery port.Tran
 			return err
 		}
 		p, _ := authz.FromContext(ctx)
-		if _, err := tx.Exec(ctx, `INSERT INTO pf_forms.transfer55_fixture_gate(tenant_id,scope_ref,namespace,side,holder,operation_id,reason_ref,document)VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, p.TenantID, p.OrgRef, req.Namespace, req.Side, holder, recovery.OperationID, recovery.ReasonRef, raw); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO pf_content.transfer55_fixture_gate(tenant_id,scope_ref,namespace,side,holder,operation_id,reason_ref,document)VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, p.TenantID, p.OrgRef, req.Namespace, req.Side, holder, recovery.OperationID, recovery.ReasonRef, raw); err != nil {
 			return err
 		}
 		// No fake fence row is created for an absent acquisition. The immutable
@@ -594,7 +594,7 @@ func (o *durableOwner) enterRecoveryGate(ctx context.Context, recovery port.Tran
 		if mode == "absent" {
 			return nil
 		}
-		_, err = tx.Exec(ctx, `UPDATE pf_forms.transfer55_fixture_fence SET mode='recovery' WHERE namespace=$1 AND side=$2 AND holder=$3`, req.Namespace, req.Side, holder)
+		_, err = tx.Exec(ctx, `UPDATE pf_content.transfer55_fixture_fence SET mode='recovery' WHERE namespace=$1 AND side=$2 AND holder=$3`, req.Namespace, req.Side, holder)
 		return err
 	})
 	return out, err
@@ -608,7 +608,7 @@ func (o *durableOwner) releaseTx(ctx context.Context, tx pgx.Tx, recovery port.T
 	}
 	var raw []byte
 	var out port.TransferFenceRelease
-	err = tx.QueryRow(ctx, `SELECT document FROM pf_forms.transfer55_fixture_release WHERE holder=$1 AND namespace=$2 AND side=$3`, holder, req.Namespace, req.Side).Scan(&raw)
+	err = tx.QueryRow(ctx, `SELECT document FROM pf_content.transfer55_fixture_release WHERE holder=$1 AND namespace=$2 AND side=$3`, holder, req.Namespace, req.Side).Scan(&raw)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return out, port.ErrTransferNotReady
 	}
@@ -677,7 +677,7 @@ func (o *durableOwner) releaseFence(ctx context.Context, recovery port.TransferR
 		// The phase operation differs from the permanent gate operation. Validate
 		// the existing gate's holder/fence without pretending their op IDs match.
 		var gateRaw []byte
-		if err := tx.QueryRow(ctx, `SELECT document FROM pf_forms.transfer55_fixture_gate WHERE holder=$1 AND namespace=$2 AND side=$3`, holder, req.Namespace, req.Side).Scan(&gateRaw); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT document FROM pf_content.transfer55_fixture_gate WHERE holder=$1 AND namespace=$2 AND side=$3`, holder, req.Namespace, req.Side).Scan(&gateRaw); err != nil {
 			return err
 		}
 		var gate port.TransferRecoveryGate
@@ -693,13 +693,13 @@ func (o *durableOwner) releaseFence(ctx context.Context, recovery port.TransferR
 			return err
 		}
 		p, _ := authz.FromContext(ctx)
-		if _, err := tx.Exec(ctx, `INSERT INTO pf_forms.transfer55_fixture_release(tenant_id,scope_ref,namespace,side,holder,operation_id,reason_ref,document)VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, p.TenantID, p.OrgRef, req.Namespace, req.Side, holder, recovery.OperationID, recovery.ReasonRef, raw); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO pf_content.transfer55_fixture_release(tenant_id,scope_ref,namespace,side,holder,operation_id,reason_ref,document)VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, p.TenantID, p.OrgRef, req.Namespace, req.Side, holder, recovery.OperationID, recovery.ReasonRef, raw); err != nil {
 			return err
 		}
 		if mode == "absent" {
 			return nil
 		}
-		_, err = tx.Exec(ctx, `UPDATE pf_forms.transfer55_fixture_fence SET active=false,mode='released' WHERE namespace=$1 AND side=$2 AND holder=$3`, req.Namespace, req.Side, holder)
+		_, err = tx.Exec(ctx, `UPDATE pf_content.transfer55_fixture_fence SET active=false,mode='released' WHERE namespace=$1 AND side=$2 AND holder=$3`, req.Namespace, req.Side, holder)
 		return err
 	})
 	return out, err
@@ -771,7 +771,7 @@ func (o *durableOwner) readExport(ctx context.Context, req port.TransferBatchReq
 		}
 		var hash string
 		var raw []byte
-		err := tx.QueryRow(ctx, `SELECT request_hash,artifact FROM pf_forms.transfer55_fixture_artifact WHERE plan_id=$1 AND batch_id=$2`, req.Scope.PlanID, req.BatchID).Scan(&hash, &raw)
+		err := tx.QueryRow(ctx, `SELECT request_hash,artifact FROM pf_content.transfer55_fixture_artifact WHERE plan_id=$1 AND batch_id=$2`, req.Scope.PlanID, req.BatchID).Scan(&hash, &raw)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return port.ErrTransferNotReady
 		}
@@ -829,7 +829,7 @@ func (o *durableOwner) export(ctx context.Context, req port.TransferBatchRequest
 			var value string
 			var parentNS string
 			var parent *uuid.UUID
-			if err := tx.QueryRow(ctx, `SELECT value,parent_namespace,parent_ref FROM pf_forms.transfer55_fixture_event WHERE entity_ref=$1 AND namespace=$2 AND action='source'`, h.Key.Ref, h.Key.Namespace).Scan(&value, &parentNS, &parent); err != nil {
+			if err := tx.QueryRow(ctx, `SELECT value,parent_namespace,parent_ref FROM pf_content.transfer55_fixture_event WHERE entity_ref=$1 AND namespace=$2 AND action='source'`, h.Key.Ref, h.Key.Namespace).Scan(&value, &parentNS, &parent); err != nil {
 				return err
 			}
 			v := durableOwnerValue{Value: value, Active: true}
@@ -860,7 +860,7 @@ func (o *durableOwner) export(ctx context.Context, req port.TransferBatchRequest
 		if err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx, `INSERT INTO pf_forms.transfer55_fixture_artifact(tenant_id,scope_ref,plan_id,batch_id,request_hash,artifact,payload)VALUES($1,$2,$3,$4,$5,$6,$7)`, req.Scope.SourceTenant, req.Scope.SourceScopeRef, req.Scope.PlanID, req.BatchID, string(requestHash), art, body)
+		_, err = tx.Exec(ctx, `INSERT INTO pf_content.transfer55_fixture_artifact(tenant_id,scope_ref,plan_id,batch_id,request_hash,artifact,payload)VALUES($1,$2,$3,$4,$5,$6,$7)`, req.Scope.SourceTenant, req.Scope.SourceScopeRef, req.Scope.PlanID, req.BatchID, string(requestHash), art, body)
 		return err
 	})
 	return out, err
@@ -889,7 +889,7 @@ func (o *durableOwner) payload(req port.TransferApplyRequest) ([]durableOwnerExp
 			return err
 		}
 		var raw []byte
-		if err := tx.QueryRow(o.pair.Source(), `SELECT payload FROM pf_forms.transfer55_fixture_artifact WHERE plan_id=$1 AND batch_id=$2`, req.Scope.PlanID, req.BatchID).Scan(&raw); err != nil {
+		if err := tx.QueryRow(o.pair.Source(), `SELECT payload FROM pf_content.transfer55_fixture_artifact WHERE plan_id=$1 AND batch_id=$2`, req.Scope.PlanID, req.BatchID).Scan(&raw); err != nil {
 			return err
 		}
 		return json.Unmarshal(raw, &out)
@@ -907,7 +907,7 @@ func (o *durableOwner) receiptTx(ctx context.Context, tx pgx.Tx, req port.Transf
 	var hash string
 	var raw []byte
 	var out port.TransferReceipt
-	err := tx.QueryRow(ctx, `SELECT request_hash,document FROM pf_forms.transfer55_fixture_receipt WHERE plan_id=$1 AND batch_id=$2 AND phase=$3 AND operation_id=$4`, req.Scope.PlanID, req.BatchID, phase, operation).Scan(&hash, &raw)
+	err := tx.QueryRow(ctx, `SELECT request_hash,document FROM pf_content.transfer55_fixture_receipt WHERE plan_id=$1 AND batch_id=$2 AND phase=$3 AND operation_id=$4`, req.Scope.PlanID, req.BatchID, phase, operation).Scan(&hash, &raw)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return out, port.ErrTransferNotReady
 	}
@@ -954,7 +954,7 @@ func (o *durableOwner) insertReceipt(ctx context.Context, tx pgx.Tx, req port.Tr
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO pf_forms.transfer55_fixture_receipt(tenant_id,scope_ref,plan_id,batch_id,operation_id,phase,request_hash,document)VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, req.Scope.TargetTenant, req.Scope.TargetScopeRef, req.Scope.PlanID, req.BatchID, operation, phase, string(requestHash), raw)
+	_, err = tx.Exec(ctx, `INSERT INTO pf_content.transfer55_fixture_receipt(tenant_id,scope_ref,plan_id,batch_id,operation_id,phase,request_hash,document)VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, req.Scope.TargetTenant, req.Scope.TargetScopeRef, req.Scope.PlanID, req.BatchID, operation, phase, string(requestHash), raw)
 	return err
 }
 func durableReceipt(req port.TransferApplyRequest) (port.TransferReceipt, error) {
@@ -972,11 +972,11 @@ func (o *durableOwner) appendEvent(ctx context.Context, tx pgx.Tx, req port.Tran
 	if row.Value.Parent != nil {
 		parentNS = row.Value.Parent.Namespace
 	}
-	err := tx.QueryRow(ctx, `INSERT INTO pf_forms.transfer55_fixture_event(id,tenant_id,scope_ref,stream_key,entity_ref,namespace,action,value,parent_namespace,parent_ref,source_tenant,source_ref,source_row_hash,source_seq,operation_id,event_time,actor_ref,idem_key,rule_version)VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,now(),$16,$17,'fixture-v1')RETURNING encode(row_hash,'hex')`, event, p.TenantID, p.OrgRef, "fixture:"+target.String(), *target, row.Header.Key.Namespace, action, row.Value.Value, parentNS, parent, row.Header.SourceTenant, row.Header.Key.Ref, string(row.Header.SourceRowHash), row.Header.SourceSeq, operation, p.ActorRef, action+":"+req.BatchID.String()+":"+operation.String()+":"+row.Header.Key.Ref.String()).Scan(&rowHash)
+	err := tx.QueryRow(ctx, `INSERT INTO pf_content.transfer55_fixture_event(id,tenant_id,scope_ref,stream_key,entity_ref,namespace,action,value,parent_namespace,parent_ref,source_tenant,source_ref,source_row_hash,source_seq,operation_id,event_time,actor_ref,idem_key,rule_version)VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,now(),$16,$17,'fixture-v1')RETURNING encode(row_hash,'hex')`, event, p.TenantID, p.OrgRef, "fixture:"+target.String(), *target, row.Header.Key.Namespace, action, row.Value.Value, parentNS, parent, row.Header.SourceTenant, row.Header.Key.Ref, string(row.Header.SourceRowHash), row.Header.SourceSeq, operation, p.ActorRef, action+":"+req.BatchID.String()+":"+operation.String()+":"+row.Header.Key.Ref.String()).Scan(&rowHash)
 	if err != nil {
 		return port.TransferAppliedRef{}, err
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO pf_forms.transfer55_fixture_provenance(tenant_id,scope_ref,event_ref,plan_id,batch_id,operation_id,namespace,source_tenant,source_ref,source_row_hash,source_seq,target_ref)VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, p.TenantID, p.OrgRef, event, req.Scope.PlanID, req.BatchID, operation, row.Header.Key.Namespace, row.Header.SourceTenant, row.Header.Key.Ref, string(row.Header.SourceRowHash), row.Header.SourceSeq, *target)
+	_, err = tx.Exec(ctx, `INSERT INTO pf_content.transfer55_fixture_provenance(tenant_id,scope_ref,event_ref,plan_id,batch_id,operation_id,namespace,source_tenant,source_ref,source_row_hash,source_seq,target_ref)VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, p.TenantID, p.OrgRef, event, req.Scope.PlanID, req.BatchID, operation, row.Header.Key.Namespace, row.Header.SourceTenant, row.Header.Key.Ref, string(row.Header.SourceRowHash), row.Header.SourceSeq, *target)
 	logical, hashErr := durableHash(row.Value)
 	if err != nil {
 		return port.TransferAppliedRef{}, err
@@ -1060,7 +1060,7 @@ func (o *durableOwner) apply(ctx context.Context, req port.TransferApplyRequest)
 				}
 				parent = &ref
 				var exists bool
-				if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pf_forms.transfer55_fixture_provenance p JOIN pf_forms.transfer55_fixture_event e ON e.id=p.event_ref AND e.tenant_id=p.tenant_id WHERE p.target_ref=$1 AND p.source_ref=$2 AND p.namespace=$3 AND e.action='imported')`, ref, row.Value.Parent.Ref, row.Value.Parent.Namespace).Scan(&exists); err != nil {
+				if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pf_content.transfer55_fixture_provenance p JOIN pf_content.transfer55_fixture_event e ON e.id=p.event_ref AND e.tenant_id=p.tenant_id WHERE p.target_ref=$1 AND p.source_ref=$2 AND p.namespace=$3 AND e.action='imported')`, ref, row.Value.Parent.Ref, row.Value.Parent.Namespace).Scan(&exists); err != nil {
 					return err
 				}
 				if !exists {
@@ -1114,9 +1114,9 @@ func (o *durableOwner) verifyRowsAt(ctx context.Context, tx pgx.Tx, req port.Tra
 		var sourceSeq int64
 		latest := ""
 		if current {
-			latest = ` AND e.seq=(SELECT max(current_event.seq) FROM pf_forms.transfer55_fixture_event current_event WHERE current_event.tenant_id=e.tenant_id AND current_event.entity_ref=e.entity_ref AND current_event.namespace=e.namespace)`
+			latest = ` AND e.seq=(SELECT max(current_event.seq) FROM pf_content.transfer55_fixture_event current_event WHERE current_event.tenant_id=e.tenant_id AND current_event.entity_ref=e.entity_ref AND current_event.namespace=e.namespace)`
 		}
-		err := tx.QueryRow(ctx, `SELECT e.value,e.parent_namespace,e.parent_ref,encode(e.row_hash,'hex'),p.source_tenant,p.source_row_hash,p.source_seq FROM pf_forms.transfer55_fixture_event e JOIN pf_forms.transfer55_fixture_provenance p ON p.tenant_id=e.tenant_id AND p.event_ref=e.id WHERE p.plan_id=$1 AND p.batch_id=$2 AND p.operation_id=$3 AND p.namespace=$4 AND p.source_ref=$5 AND p.target_ref=$6 AND e.action=$7`+latest, req.Scope.PlanID, req.BatchID, operation, item.Key.Namespace, item.Key.Ref, item.TargetRef, action).Scan(&value, &parentNS, &parent, &rowHash, &source, &sourceHash, &sourceSeq)
+		err := tx.QueryRow(ctx, `SELECT e.value,e.parent_namespace,e.parent_ref,encode(e.row_hash,'hex'),p.source_tenant,p.source_row_hash,p.source_seq FROM pf_content.transfer55_fixture_event e JOIN pf_content.transfer55_fixture_provenance p ON p.tenant_id=e.tenant_id AND p.event_ref=e.id WHERE p.plan_id=$1 AND p.batch_id=$2 AND p.operation_id=$3 AND p.namespace=$4 AND p.source_ref=$5 AND p.target_ref=$6 AND e.action=$7`+latest, req.Scope.PlanID, req.BatchID, operation, item.Key.Namespace, item.Key.Ref, item.TargetRef, action).Scan(&value, &parentNS, &parent, &rowHash, &source, &sourceHash, &sourceSeq)
 		if err != nil {
 			return err
 		}
@@ -1127,7 +1127,7 @@ func (o *durableOwner) verifyRowsAt(ctx context.Context, tx pgx.Tx, req port.Tra
 		if parent != nil {
 			var key port.TransferKey
 			key.Namespace = parentNS
-			if err := tx.QueryRow(ctx, `SELECT source_ref FROM pf_forms.transfer55_fixture_provenance WHERE target_ref=$1 AND namespace=$2 AND operation_id=$3`, *parent, parentNS, uuid.Nil).Scan(&key.Ref); err != nil {
+			if err := tx.QueryRow(ctx, `SELECT source_ref FROM pf_content.transfer55_fixture_provenance WHERE target_ref=$1 AND namespace=$2 AND operation_id=$3`, *parent, parentNS, uuid.Nil).Scan(&key.Ref); err != nil {
 				return err
 			}
 			v.Parent = &key
@@ -1221,13 +1221,13 @@ func (o *durableOwner) recoveryPayloadTx(ctx context.Context, tx pgx.Tx, req por
 	for _, h := range req.Headers {
 		var value, parentNS string
 		var parent *uuid.UUID
-		if err := tx.QueryRow(ctx, `SELECT e.value,e.parent_namespace,e.parent_ref FROM pf_forms.transfer55_fixture_event e JOIN pf_forms.transfer55_fixture_provenance p ON p.tenant_id=e.tenant_id AND p.event_ref=e.id WHERE p.plan_id=$1 AND p.batch_id=$2 AND p.namespace=$3 AND p.source_ref=$4 AND p.operation_id=$5 AND e.action='imported'`, req.Scope.PlanID, req.BatchID, h.Key.Namespace, h.Key.Ref, uuid.Nil).Scan(&value, &parentNS, &parent); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT e.value,e.parent_namespace,e.parent_ref FROM pf_content.transfer55_fixture_event e JOIN pf_content.transfer55_fixture_provenance p ON p.tenant_id=e.tenant_id AND p.event_ref=e.id WHERE p.plan_id=$1 AND p.batch_id=$2 AND p.namespace=$3 AND p.source_ref=$4 AND p.operation_id=$5 AND e.action='imported'`, req.Scope.PlanID, req.BatchID, h.Key.Namespace, h.Key.Ref, uuid.Nil).Scan(&value, &parentNS, &parent); err != nil {
 			return nil, err
 		}
 		v := durableOwnerValue{Value: value, Active: true}
 		if parent != nil {
 			key := port.TransferKey{Namespace: parentNS}
-			if err := tx.QueryRow(ctx, `SELECT source_ref FROM pf_forms.transfer55_fixture_provenance WHERE target_ref=$1 AND namespace=$2 AND source_tenant=$3 AND operation_id=$4`, *parent, parentNS, req.Scope.SourceTenant, uuid.Nil).Scan(&key.Ref); err != nil {
+			if err := tx.QueryRow(ctx, `SELECT source_ref FROM pf_content.transfer55_fixture_provenance WHERE target_ref=$1 AND namespace=$2 AND source_tenant=$3 AND operation_id=$4`, *parent, parentNS, req.Scope.SourceTenant, uuid.Nil).Scan(&key.Ref); err != nil {
 				return nil, err
 			}
 			v.Parent = &key
@@ -1359,7 +1359,7 @@ func (o *durableOwner) verifyCompensation(ctx context.Context, req port.Transfer
 	})
 }
 func (o *durableOwner) adapter(namespace string) port.TransferAdapter {
-	a := port.TransferAdapter{Module: "pf/forms", Namespace: namespace, Version: durableOwnerVersion, MaxBatch: 1}
+	a := port.TransferAdapter{Module: "pf/content", Namespace: namespace, Version: durableOwnerVersion, MaxBatch: 1}
 	if namespace == durableChildNS {
 		a.DependsOn = []string{durableParentNS}
 	}
@@ -1398,7 +1398,7 @@ func newDurableOwner(t *testing.T) (*durableOwner, *authztest.FakeIssuer) {
 		durableRequire(t, o.tx(ctx, func(tx pgx.Tx) error {
 			p, _ := authz.FromContext(ctx)
 			for _, ns := range []string{durableParentNS, durableChildNS} {
-				if _, err := tx.Exec(ctx, `INSERT INTO pf_forms.transfer55_fixture_authority(tenant_id,scope_ref,namespace,actor_ref,approval_ref,epoch,valid_until,enabled,recovery_ref,recovery_epoch,recovery_valid_until,recovery_enabled)VALUES($1,$2,$3,$4,$5,'fixture-current-1',$6,true,$7,'fixture-recovery-1',$6,true)`, p.TenantID, p.OrgRef, ns, p.ActorRef, ids.New(), time.Now().Add(time.Hour), ids.New()); err != nil {
+				if _, err := tx.Exec(ctx, `INSERT INTO pf_content.transfer55_fixture_authority(tenant_id,scope_ref,namespace,actor_ref,approval_ref,epoch,valid_until,enabled,recovery_ref,recovery_epoch,recovery_valid_until,recovery_enabled)VALUES($1,$2,$3,$4,$5,'fixture-current-1',$6,true,$7,'fixture-recovery-1',$6,true)`, p.TenantID, p.OrgRef, ns, p.ActorRef, ids.New(), time.Now().Add(time.Hour), ids.New()); err != nil {
 					return err
 				}
 			}
@@ -1415,7 +1415,7 @@ func newDurableOwner(t *testing.T) (*durableOwner, *authztest.FakeIssuer) {
 				parentRef = &parent
 				parentNS = durableParentNS
 			}
-			_, err := tx.Exec(o.pair.Source(), `INSERT INTO pf_forms.transfer55_fixture_event(id,tenant_id,scope_ref,stream_key,entity_ref,namespace,action,value,parent_namespace,parent_ref,source_tenant,source_ref,source_row_hash,source_seq,operation_id,event_time,actor_ref,idem_key,rule_version)VALUES($1,$2,$3,$4,$5,$6,'source',$7,$8,$9,$2,$5,'',0,$10,now(),$11,$12,'fixture-v1')`, ids.New(), p.TenantID, p.OrgRef, "fixture:"+key.Ref.String(), key.Ref, key.Namespace, fmt.Sprintf("synthetic-value-%d", i), parentNS, parentRef, uuid.Nil, p.ActorRef, "seed:"+key.Ref.String())
+			_, err := tx.Exec(o.pair.Source(), `INSERT INTO pf_content.transfer55_fixture_event(id,tenant_id,scope_ref,stream_key,entity_ref,namespace,action,value,parent_namespace,parent_ref,source_tenant,source_ref,source_row_hash,source_seq,operation_id,event_time,actor_ref,idem_key,rule_version)VALUES($1,$2,$3,$4,$5,$6,'source',$7,$8,$9,$2,$5,'',0,$10,now(),$11,$12,'fixture-v1')`, ids.New(), p.TenantID, p.OrgRef, "fixture:"+key.Ref.String(), key.Ref, key.Namespace, fmt.Sprintf("synthetic-value-%d", i), parentNS, parentRef, uuid.Nil, p.ActorRef, "seed:"+key.Ref.String())
 			if err != nil {
 				return err
 			}
@@ -1459,7 +1459,7 @@ func durableReserveExport(t *testing.T, o *durableOwner, svc port.TenantTransfer
 func (o *durableOwner) count(ctx context.Context, action string) (int, error) {
 	var n int
 	err := o.tx(ctx, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `SELECT count(*) FROM pf_forms.transfer55_fixture_event WHERE action=$1`, action).Scan(&n)
+		return tx.QueryRow(ctx, `SELECT count(*) FROM pf_content.transfer55_fixture_event WHERE action=$1`, action).Scan(&n)
 	})
 	return n, err
 }
@@ -1554,7 +1554,7 @@ func TestTenantTransferDurableOwnerRollbackBeforeReceipt(t *testing.T) {
 	durableAssertCoreReceiptCount(t, o, batch, "apply", 0)
 	var provenance, receipts int
 	durableRequire(t, o.tx(o.pair.Target(), func(tx pgx.Tx) error {
-		return tx.QueryRow(o.pair.Target(), `SELECT (SELECT count(*) FROM pf_forms.transfer55_fixture_provenance),(SELECT count(*) FROM pf_forms.transfer55_fixture_receipt)`).Scan(&provenance, &receipts)
+		return tx.QueryRow(o.pair.Target(), `SELECT (SELECT count(*) FROM pf_content.transfer55_fixture_provenance),(SELECT count(*) FROM pf_content.transfer55_fixture_receipt)`).Scan(&provenance, &receipts)
 	}))
 	if provenance != 0 || receipts != 0 {
 		t.Fatal("owner rollback left provenance or receipt")
@@ -1591,11 +1591,11 @@ func TestTenantTransferDurableOwnerRechecksAuthorityAndFenceInsideApply(t *testi
 			o.beforeApply = func() error {
 				return o.tx(o.pair.Target(), func(tx pgx.Tx) error {
 					if change == "authority" {
-						_, err := tx.Exec(o.pair.Target(), `UPDATE pf_forms.transfer55_fixture_authority SET enabled=false WHERE namespace=$1`, batch.Namespace)
+						_, err := tx.Exec(o.pair.Target(), `UPDATE pf_content.transfer55_fixture_authority SET enabled=false WHERE namespace=$1`, batch.Namespace)
 						return err
 					}
 					var raw []byte
-					if err := tx.QueryRow(o.pair.Target(), `SELECT document FROM pf_forms.transfer55_fixture_fence WHERE namespace=$1 AND side='target'`, batch.Namespace).Scan(&raw); err != nil {
+					if err := tx.QueryRow(o.pair.Target(), `SELECT document FROM pf_content.transfer55_fixture_fence WHERE namespace=$1 AND side='target'`, batch.Namespace).Scan(&raw); err != nil {
 						return err
 					}
 					var f port.TransferFence
@@ -1608,7 +1608,7 @@ func TestTenantTransferDurableOwnerRechecksAuthorityAndFenceInsideApply(t *testi
 					if err != nil {
 						return err
 					}
-					_, err = tx.Exec(o.pair.Target(), `UPDATE pf_forms.transfer55_fixture_fence SET document=$1 WHERE namespace=$2 AND side='target'`, doc, batch.Namespace)
+					_, err = tx.Exec(o.pair.Target(), `UPDATE pf_content.transfer55_fixture_fence SET document=$1 WHERE namespace=$2 AND side='target'`, doc, batch.Namespace)
 					return err
 				})
 			}
@@ -1649,7 +1649,7 @@ func TestTenantTransferDurableOwnerCompensationCommitCrashResumesSameOperation(t
 	durableAssertCoreReceiptCount(t, o, batch, "compensate", 1)
 	var events, receipts, operations int
 	durableRequire(t, o.tx(o.pair.Target(), func(tx pgx.Tx) error {
-		return tx.QueryRow(o.pair.Target(), `SELECT (SELECT count(*) FROM pf_forms.transfer55_fixture_provenance WHERE operation_id=$1),(SELECT count(*) FROM pf_forms.transfer55_fixture_receipt WHERE phase='compensate'),(SELECT count(DISTINCT operation_id) FROM pf_forms.transfer55_fixture_receipt WHERE phase='compensate')`, compensated.OperationID).Scan(&events, &receipts, &operations)
+		return tx.QueryRow(o.pair.Target(), `SELECT (SELECT count(*) FROM pf_content.transfer55_fixture_provenance WHERE operation_id=$1),(SELECT count(*) FROM pf_content.transfer55_fixture_receipt WHERE phase='compensate'),(SELECT count(DISTINCT operation_id) FROM pf_content.transfer55_fixture_receipt WHERE phase='compensate')`, compensated.OperationID).Scan(&events, &receipts, &operations)
 	}))
 	if events != 1 || receipts != 1 || operations != 1 {
 		t.Fatal("compensation replay duplicated ledger/provenance/operation receipt")
@@ -1673,7 +1673,7 @@ func TestTenantTransferDurableOwnerRecoveryAfterNormalAuthorityRevoked(t *testin
 		durableRequire(t, o.tx(ctx, func(tx pgx.Tx) error {
 			// Fresh, separate recovery approval persists after normal transfer
 			// authority is revoked. No old approval is relabeled as recovery.
-			_, err := tx.Exec(ctx, `UPDATE pf_forms.transfer55_fixture_authority SET enabled=false,recovery_ref=$1,recovery_epoch='fresh-recovery-2',recovery_valid_until=$2`, ids.New(), time.Now().Add(time.Hour))
+			_, err := tx.Exec(ctx, `UPDATE pf_content.transfer55_fixture_authority SET enabled=false,recovery_ref=$1,recovery_epoch='fresh-recovery-2',recovery_valid_until=$2`, ids.New(), time.Now().Add(time.Hour))
 			return err
 		}))
 	}
@@ -1702,7 +1702,7 @@ func TestTenantTransferDurableOwnerRecoveryAfterNormalAuthorityRevoked(t *testin
 	durableAssertCount(t, o, "compensated", 1)
 	for _, ctx := range []context.Context{o.pair.Source(), o.pair.Target()} {
 		durableRequire(t, o.tx(ctx, func(tx pgx.Tx) error {
-			_, err := tx.Exec(ctx, `UPDATE pf_forms.transfer55_fixture_authority SET recovery_enabled=false`)
+			_, err := tx.Exec(ctx, `UPDATE pf_content.transfer55_fixture_authority SET recovery_enabled=false`)
 			return err
 		}))
 	}
@@ -1752,7 +1752,7 @@ func durableAssertTargetFence(t *testing.T, o *durableOwner, namespace string, w
 	var active bool
 	var mode string
 	durableRequire(t, o.tx(o.pair.Target(), func(tx pgx.Tx) error {
-		return tx.QueryRow(o.pair.Target(), `SELECT active,mode FROM pf_forms.transfer55_fixture_fence WHERE namespace=$1 AND side='target'`, namespace).Scan(&active, &mode)
+		return tx.QueryRow(o.pair.Target(), `SELECT active,mode FROM pf_content.transfer55_fixture_fence WHERE namespace=$1 AND side='target'`, namespace).Scan(&active, &mode)
 	}))
 	if active != wantActive || mode != wantMode {
 		t.Fatalf("target fence active=%t mode=%s, want active=%t mode=%s", active, mode, wantActive, wantMode)
@@ -1762,7 +1762,7 @@ func durableRevokeNormal(t *testing.T, o *durableOwner) {
 	t.Helper()
 	for _, ctx := range []context.Context{o.pair.Source(), o.pair.Target()} {
 		durableRequire(t, o.tx(ctx, func(tx pgx.Tx) error {
-			_, err := tx.Exec(ctx, `UPDATE pf_forms.transfer55_fixture_authority SET enabled=false`)
+			_, err := tx.Exec(ctx, `UPDATE pf_content.transfer55_fixture_authority SET enabled=false`)
 			return err
 		}))
 	}
@@ -1823,7 +1823,7 @@ func TestTenantTransferDurableOwnerTargetOnlyAbortReleaseBeforeProposal(t *testi
 		t.Fatal("target-only recovery fabricated an accepted transfer binding")
 	}
 	durableRequire(t, o.tx(o.pair.Target(), func(tx pgx.Tx) error {
-		rows, err := tx.Query(o.pair.Target(), `SELECT g.document,r.document FROM pf_forms.transfer55_fixture_gate g JOIN pf_forms.transfer55_fixture_release r ON r.tenant_id=g.tenant_id AND r.holder=g.holder AND r.namespace=g.namespace AND r.side=g.side`)
+		rows, err := tx.Query(o.pair.Target(), `SELECT g.document,r.document FROM pf_content.transfer55_fixture_gate g JOIN pf_content.transfer55_fixture_release r ON r.tenant_id=g.tenant_id AND r.holder=g.holder AND r.namespace=g.namespace AND r.side=g.side`)
 		if err != nil {
 			return err
 		}
@@ -1913,7 +1913,7 @@ func TestTenantTransferDurableOwnerOldReleaseCannotCloseReplacementHolder(t *tes
 	// Adversarial current-state replacement represents a later owner holder.
 	// No new accepted core binding or identity proof is fabricated by this test.
 	durableRequire(t, o.tx(o.pair.Target(), func(tx pgx.Tx) error {
-		_, err := tx.Exec(o.pair.Target(), `UPDATE pf_forms.transfer55_fixture_fence SET holder=$1,document=$2,active=true,mode='forward' WHERE namespace=$3 AND side='target'`, newHolder, doc, durableParentNS)
+		_, err := tx.Exec(o.pair.Target(), `UPDATE pf_content.transfer55_fixture_fence SET holder=$1,document=$2,active=true,mode='forward' WHERE namespace=$3 AND side='target'`, newHolder, doc, durableParentNS)
 		return err
 	}))
 	again, err := svc.ReleaseFences(o.pair, port.TransferRef{ID: intent.ID}, reason)
@@ -1927,7 +1927,7 @@ func TestTenantTransferDurableOwnerOldReleaseCannotCloseReplacementHolder(t *tes
 	durableAssertTargetFence(t, o, durableParentNS, true, "forward")
 	var current uuid.UUID
 	durableRequire(t, o.tx(o.pair.Target(), func(tx pgx.Tx) error {
-		return tx.QueryRow(o.pair.Target(), `SELECT holder FROM pf_forms.transfer55_fixture_fence WHERE namespace=$1 AND side='target'`, durableParentNS).Scan(&current)
+		return tx.QueryRow(o.pair.Target(), `SELECT holder FROM pf_content.transfer55_fixture_fence WHERE namespace=$1 AND side='target'`, durableParentNS).Scan(&current)
 	}))
 	if current != newHolder {
 		t.Fatal("replacement holder was changed by old recovery")
@@ -2023,7 +2023,7 @@ func TestTenantTransferDurableOwnerRecoveryGateDrainsInFlightApply(t *testing.T)
 	durableAssertCoreReceiptCount(t, o, batch, "apply", 0)
 	var receipts int
 	durableRequire(t, o.tx(o.pair.Target(), func(tx pgx.Tx) error {
-		return tx.QueryRow(o.pair.Target(), `SELECT count(*) FROM pf_forms.transfer55_fixture_receipt WHERE phase='apply'`).Scan(&receipts)
+		return tx.QueryRow(o.pair.Target(), `SELECT count(*) FROM pf_content.transfer55_fixture_receipt WHERE phase='apply'`).Scan(&receipts)
 	}))
 	if receipts != 1 {
 		t.Fatal("drained owner commit was lost")
@@ -2122,7 +2122,7 @@ func TestTenantTransferDurableOwnerRecoveryDiscoversUncheckpointedFreeze(t *test
 	durableRequire(t, o.tx(o.pair.Target(), func(tx pgx.Tx) error {
 		var raw []byte
 		var holder uuid.UUID
-		if err := tx.QueryRow(o.pair.Target(), `SELECT holder,document FROM pf_forms.transfer55_fixture_fence WHERE namespace=$1 AND side='target'`, durableParentNS).Scan(&holder, &raw); err != nil {
+		if err := tx.QueryRow(o.pair.Target(), `SELECT holder,document FROM pf_content.transfer55_fixture_fence WHERE namespace=$1 AND side='target'`, durableParentNS).Scan(&holder, &raw); err != nil {
 			return err
 		}
 		if holder != intent.ID {
@@ -2158,7 +2158,7 @@ func TestTenantTransferDurableOwnerRecoveryDiscoversUncheckpointedFreeze(t *test
 	durableAssertTargetFence(t, o, durableParentNS, false, "released")
 	durableRequire(t, o.tx(o.pair.Target(), func(tx pgx.Tx) error {
 		var raw []byte
-		if err := tx.QueryRow(o.pair.Target(), `SELECT document FROM pf_forms.transfer55_fixture_release WHERE namespace=$1 AND side='target'`, durableParentNS).Scan(&raw); err != nil {
+		if err := tx.QueryRow(o.pair.Target(), `SELECT document FROM pf_content.transfer55_fixture_release WHERE namespace=$1 AND side='target'`, durableParentNS).Scan(&raw); err != nil {
 			return err
 		}
 		var release port.TransferFenceRelease
@@ -2204,7 +2204,7 @@ func TestTenantTransferDurableOwnerAbsentGateBlocksLateFreezeAfterRelease(t *tes
 	for _, ctx := range []context.Context{o.pair.Source(), o.pair.Target()} {
 		durableRequire(t, o.tx(ctx, func(tx pgx.Tx) error {
 			var fences, gates, releases int
-			if err := tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM pf_forms.transfer55_fixture_fence),(SELECT count(*) FROM pf_forms.transfer55_fixture_gate),(SELECT count(*) FROM pf_forms.transfer55_fixture_release)`).Scan(&fences, &gates, &releases); err != nil {
+			if err := tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM pf_content.transfer55_fixture_fence),(SELECT count(*) FROM pf_content.transfer55_fixture_gate),(SELECT count(*) FROM pf_content.transfer55_fixture_release)`).Scan(&fences, &gates, &releases); err != nil {
 				return err
 			}
 			if fences != 0 || gates != 2 || releases != 2 {
@@ -2402,7 +2402,7 @@ func TestTenantTransferDurableOwnerConcurrentApplyCommitsOneReceipt(t *testing.T
 	durableAssertCoreReceiptCount(t, o, batch, "apply", 1)
 	var receipts, provenance int
 	durableRequire(t, o.tx(o.pair.Target(), func(tx pgx.Tx) error {
-		return tx.QueryRow(o.pair.Target(), `SELECT (SELECT count(*) FROM pf_forms.transfer55_fixture_receipt WHERE plan_id=$1 AND batch_id=$2 AND phase='apply'),(SELECT count(*) FROM pf_forms.transfer55_fixture_provenance WHERE plan_id=$1 AND batch_id=$2)`, plan.ID, batch.ID).Scan(&receipts, &provenance)
+		return tx.QueryRow(o.pair.Target(), `SELECT (SELECT count(*) FROM pf_content.transfer55_fixture_receipt WHERE plan_id=$1 AND batch_id=$2 AND phase='apply'),(SELECT count(*) FROM pf_content.transfer55_fixture_provenance WHERE plan_id=$1 AND batch_id=$2)`, plan.ID, batch.ID).Scan(&receipts, &provenance)
 	}))
 	if receipts != 1 || provenance != 1 {
 		t.Fatalf("owner committed receipts=%d provenance=%d, want one of each", receipts, provenance)

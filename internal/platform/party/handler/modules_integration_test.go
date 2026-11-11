@@ -77,8 +77,8 @@ func TestModuleEnablement(t *testing.T) {
 	// Lõi / module luôn bật: không tắt được, không có cổng.
 	wantCode(t, root.adminDo(http.MethodPost, "/v1/modules/pf/party/enablement", map[string]any{"enabled": false, "reason": "Thử tắt module lõi"}),
 		http.StatusConflict, "party.module_always_on", "tắt lõi")
-	wantCode(t, root.adminDo(http.MethodPost, "/v1/modules/mkg/hub/enablement", map[string]any{"enabled": false, "reason": "Thử tắt module mkg"}),
-		http.StatusConflict, "party.module_always_on", "tắt mkg")
+	wantCode(t, root.adminDo(http.MethodPost, "/v1/modules/pf/accounts/enablement", map[string]any{"enabled": false, "reason": "Thử tắt module luôn bật"}),
+		http.StatusConflict, "party.module_always_on", "tắt accounts")
 	if f.mod.ModuleGate("pf/party") != nil || f.mod.ModuleGate("pf/accounts") != nil {
 		t.Fatal("module luôn bật không được có cổng")
 	}

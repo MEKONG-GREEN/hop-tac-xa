@@ -6,63 +6,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/dbadmin"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/ids"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/outbox"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/pgtest"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/tenant"
 	"github.com/MEKONG-GREEN/hop-tac-xa/migrations"
 )
-
-// ADR-0018 (Q-MKG-01): outbox cụm mkg có hai loại; mỗi publisher chỉ quét loại
-// của nó và phát qua broker (vhost) của loại đó — sự kiện nội bộ MKG không bao
-// giờ lên vhost nền tảng, sự kiện van không lên vhost nội bộ.
-func TestOutboxKindRoutesToOwnBroker(t *testing.T) {
-	ctx := context.Background()
-	env := pgtest.Get(t)
-	app := env.Pool(t, migrations.MKG, "worker_internal")
-	pub := env.Pool(t, migrations.MKG, dbadmin.OutboxPublisher)
-	tid := ids.New()
-	mk := func(typ string, kind outbox.Kind) outbox.Event {
-		return outbox.Event{ID: ids.New(), TenantID: tid, Type: typ, SchemaVersion: 1, OccurredAt: time.Now(),
-			Producer: "mkg/test", Payload: map[string]string{"k": "v"}, Kind: kind}
-	}
-	platformEvt := mk("mkg.hub.capacity.published", "")
-	internalEvt := mk("mkg.measurement.weigh_ticket.recorded", outbox.KindInternal)
-	if err := tenant.WithTenantTx(ctx, app, tid, func(tx pgx.Tx) error {
-		if err := outbox.Enqueue(ctx, tx, platformEvt); err != nil {
-			return err
-		}
-		return outbox.Enqueue(ctx, tx, internalEvt)
-	}); err != nil {
-		t.Fatal(err)
-	}
-	sentIDs := func(b *fakeBroker) map[uuid.UUID]bool {
-		out := map[uuid.UUID]bool{}
-		for _, e := range b.sent {
-			out[e.EventID] = true
-		}
-		return out
-	}
-	platform, internal := &fakeBroker{}, &fakeBroker{}
-	if _, err := (&outbox.Publisher{Pool: pub, Broker: platform}).PublishBatch(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := (&outbox.Publisher{Pool: pub, Broker: internal, Kind: outbox.KindInternal}).PublishBatch(ctx); err != nil {
-		t.Fatal(err)
-	}
-	p, i := sentIDs(platform), sentIDs(internal)
-	if !p[platformEvt.ID] || p[internalEvt.ID] {
-		t.Fatalf("vhost nền tảng chỉ được nhận sự kiện platform: %v", p)
-	}
-	if !i[internalEvt.ID] || i[platformEvt.ID] {
-		t.Fatalf("vhost mkg.internal chỉ được nhận sự kiện internal: %v", i)
-	}
-}
 
 func pgCode(err error) string {
 	var pe *pgconn.PgError

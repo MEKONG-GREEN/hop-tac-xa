@@ -12,7 +12,6 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5" // driver pgx5://
 	"github.com/golang-migrate/migrate/v4/source/iofs"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -178,41 +177,6 @@ func TestLedgerAddColumnUpgradePF(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := verifyAll(t, pool); got["pf_geo.plot_boundary"] != 3 || got["pf_geo.plot_event"] != 3 {
-		t.Fatalf("sau nâng cấp: số dòng đã kiểm %v", got)
-	}
-}
-
-func TestLedgerAddColumnUpgradeMKG(t *testing.T) {
-	ctx := context.Background()
-	pool, dsn := upgradeEnv(t, migrations.MKG, 5) // mkg 000006 thêm cột vào roll_count
-	tid := ids.New()
-	stream := "lot:" + ids.New().String()
-	ins := func(tx pgx.Tx, order *uuid.UUID) error {
-		cols, vals, args := "", "", []any{ids.New(), tid, stream, ids.New(), ids.New(), time.Now().UTC().Add(-time.Hour), ids.New(), ids.New().String()}
-		if order != nil {
-			cols, vals, args = ", order_id, stage", ", $9, 'bale'", append(args, *order)
-		}
-		_, err := tx.Exec(ctx, `INSERT INTO mkg_fieldops.roll_count
-		    (id, tenant_id, stream_key, plot_ref, htx_ref, rolls, event_time, actor_ref, idem_key, rule_version`+cols+`)
-		  VALUES ($1, $2, $3, $4, $5, 7, $6, $7, $8, 'roll_count/v1'`+vals+`)`, args...)
-		return err
-	}
-	if err := tenant.WithTenantTx(ctx, pool, tid, func(tx pgx.Tx) error {
-		if err := ins(tx, nil); err != nil {
-			return err
-		}
-		return ins(tx, nil)
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	migrateDir(t, dsn, "mkg", 0)
-
-	order := ids.New()
-	if err := tenant.WithTenantTx(ctx, pool, tid, func(tx pgx.Tx) error { return ins(tx, &order) }); err != nil {
-		t.Fatal(err)
-	}
-	if got := verifyAll(t, pool); got["mkg_fieldops.roll_count"] != 3 {
 		t.Fatalf("sau nâng cấp: số dòng đã kiểm %v", got)
 	}
 }

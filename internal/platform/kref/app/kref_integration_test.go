@@ -348,32 +348,3 @@ func TestKRefRLSAndGrants_W25(t *testing.T) {
 		t.Fatalf("share_scope: %d %v", n, err)
 	}
 }
-
-// mkg 000022: k_ref cùng hình ở cụm mkg — rỗng, vai module mkg đọc được, không ghi được.
-func TestKRefInMKGCluster_W25(t *testing.T) {
-	env := pgtest.Get(t)
-	p := env.Pool(t, migrations.MKG, "hub_app")
-	ctx := context.Background()
-	err := tenant.WithTenantTx(ctx, p, ids.New(), func(tx pgx.Tx) error {
-		var n int
-		if err := tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM k_ref.org) + (SELECT count(*) FROM k_ref.node_closure)
-		  + (SELECT count(*) FROM k_ref.admin_unit) + (SELECT count(*) FROM k_ref.share_grant_active)
-		  + (SELECT count(*) FROM k_ref.share_scope WHERE viewer_tenant = k_ref.ctx_uuid('app.tenant_id'))`).Scan(&n); err != nil {
-			return err
-		}
-		if n != 0 {
-			t.Errorf("k_ref cụm mkg phải rỗng: %d", n)
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = tenant.WithTenantTx(ctx, p, ids.New(), func(tx pgx.Tx) error {
-		_, e := tx.Exec(ctx, "DELETE FROM k_ref.org")
-		return e
-	})
-	if pgCode(err) != "42501" {
-		t.Fatalf("hub_app ghi k_ref phải 42501: %v", err)
-	}
-}

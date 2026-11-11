@@ -25,7 +25,7 @@ var errRollback = errors.New("rollback")
 func TestLedgerAddColumnKeepsChainVerifiable(t *testing.T) {
 	ctx := context.Background()
 	env := pgtest.Get(t)
-	owner := env.Pool(t, migrations.MKG, dbadmin.Migrator)
+	owner := env.Pool(t, migrations.PF, dbadmin.Migrator)
 	app := appPool(t)
 	schema := "fxt_" + ids.New().String()[24:]
 	table := schema + ".l"
@@ -43,8 +43,8 @@ func TestLedgerAddColumnKeepsChainVerifiable(t *testing.T) {
 	    prev_hash bytea NOT NULL, row_hash bytea NOT NULL, PRIMARY KEY (id, recorded_at)
 	  ) PARTITION BY RANGE (recorded_at)`)
 	mustExec(`SELECT shared.apply_ledger($1::regclass, $1::text)`, table)
-	mustExec("GRANT USAGE ON SCHEMA " + schema + " TO fieldops_app")
-	mustExec("GRANT SELECT ON " + table + " TO fieldops_app")
+	mustExec("GRANT USAGE ON SCHEMA " + schema + " TO party_app")
+	mustExec("GRANT SELECT ON " + table + " TO party_app")
 
 	tid := ids.New()
 	stream := "s:" + ids.New().String()
@@ -139,7 +139,7 @@ func TestLedgerAddColumnKeepsChainVerifiable(t *testing.T) {
 	wantOK(5)
 
 	// Kẻ có quyền cao sửa vượt trigger: mọi thay đổi giá trị vẫn bị bắt.
-	admin := env.AdminPool(t, migrations.MKG)
+	admin := env.AdminPool(t, migrations.PF)
 	tamper := func(set string, payload int) {
 		t.Helper()
 		tx, err := admin.Begin(ctx)
