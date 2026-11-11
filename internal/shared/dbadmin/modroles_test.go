@@ -142,17 +142,6 @@ func TestEveryUnitHasLogin_ADR0028(t *testing.T) {
 
 var pairRe = regexp.MustCompile(`\['([a-z_]+)', '([a-z_]+)'(?:, '([a-z]+)')?\]`)
 
-// legacyGroups: vai nhóm của module có vai cũ <module>_app.
-func legacyGroups() []ModuleGroup {
-	var out []ModuleGroup
-	for _, g := range ModuleGroups() {
-		if g.Legacy != "" {
-			out = append(out, g)
-		}
-	}
-	return out
-}
-
 func legacyGroupsIn(c migrations.Cluster) []ModuleGroup {
 	var out []ModuleGroup
 	for _, g := range ClusterGroups(c) {
