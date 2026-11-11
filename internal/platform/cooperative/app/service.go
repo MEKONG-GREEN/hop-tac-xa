@@ -1,0 +1,386 @@
+// Package app là mặt tiền của pf/cooperative: hiện thực các cổng của cooperative/port trên store.
+// W3.3 store là store.Sources (store pf_coop của season/plot/member); mặt tiền thêm phần chung — nguồn
+// chưa nối → port.ErrUnavailable, khóa rỗng không gọi nguồn, chuẩn hóa giới hạn trang và phân giải
+// chủ thể (Resolve) từ các cổng đọc.
+package app
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
+
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/port"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/store"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/shareread"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/tenant"
+)
+
+// Khóa share_scope (modreg.ShareTable) của các bảng `shares` — nhật ký đọc qua cấp phép (W4.2, shareread).
+const (
+	ShareHousehold  = "pf_coop.household"
+	SharePlot       = "pf_coop.plot"
+	ShareSeason     = "pf_coop.season"
+	ShareDiaryEntry = "pf_coop.diary_entry"
+)
+
+// Giới hạn trang của Diary.BySeason.
+const (
+	DefaultDiaryLimit = 100
+	MaxDiaryLimit     = 500
+)
+
+// Service là mặt tiền. Store có thể nối dần (Use* của module) trước khi phục vụ.
+type Service struct {
+	Store store.Sources
+}
+
+var (
+	_ port.Cooperatives = (*Service)(nil)
+	_ port.Households   = (*Service)(nil)
+	_ port.Plots        = (*Service)(nil)
+	_ port.Seasons      = (*Service)(nil)
+	_ port.Diary        = Diary{}
+	_ port.Resolve      = (*Service)(nil)
+)
+
+func unavailable(what string) error { return fmt.Errorf("%w (%s)", port.ErrUnavailable, what) }
+
+// ---- Cooperatives ----
+
+// ByUnit thực hiện port.Cooperatives.
+func (s *Service) ByUnit(ctx context.Context, units []string) ([]port.UnitCooperatives, error) {
+	if s.Store.Cooperatives == nil {
+		return nil, unavailable("cooperatives")
+	}
+	if units != nil && len(units) == 0 {
+		return []port.UnitCooperatives{}, nil // danh sách rỗng (khác nil = mọi đơn vị): không thấy gì
+	}
+	return s.Store.Cooperatives.ByUnit(ctx, units)
+}
+
+// Active thực hiện port.Cooperatives.
+func (s *Service) Active(ctx context.Context) ([]port.CooperativeSite, error) {
+	if s.Store.Cooperatives == nil {
+		return nil, unavailable("cooperatives")
+	}
+	return s.Store.Cooperatives.Active(ctx)
+}
+
+// Centroids thực hiện port.Cooperatives.
+func (s *Service) Centroids(ctx context.Context, coops []uuid.UUID) (map[uuid.UUID]port.CoopCentroid, error) {
+	if s.Store.Cooperatives == nil {
+		return nil, unavailable("cooperatives")
+	}
+	if coops != nil && len(coops) == 0 {
+		return map[uuid.UUID]port.CoopCentroid{}, nil
+	}
+	return s.Store.Cooperatives.Centroids(ctx, coops)
+}
+
+// ---- Households ----
+
+// Membership thực hiện port.Households.
+func (s *Service) Membership(ctx context.Context, ref uuid.UUID) (port.HouseholdMembership, error) {
+	if s.Store.Households == nil {
+		return port.HouseholdMembership{}, unavailable("households")
+	}
+	if ref == uuid.Nil {
+		return port.HouseholdMembership{}, port.ErrHouseholdNotFound
+	}
+	m, err := s.Store.Households.Membership(ctx, ref)
+	if err != nil {
+		return m, err
+	}
+	m.ViaShareGrant = shareread.Mark(ctx, ShareHousehold, []uuid.UUID{m.OwnerTenant})[0]
+	return m, nil
+}
+
+// InCommunes thực hiện port.Households.
+func (s *Service) InCommunes(ctx context.Context, communes []string) ([]uuid.UUID, error) {
+	if s.Store.Households == nil {
+		return nil, unavailable("households")
+	}
+	if communes != nil && len(communes) == 0 {
+		return []uuid.UUID{}, nil
+	}
+	return s.Store.Households.InCommunes(ctx, communes)
+}
+
+// ---- Plots ----
+
+// Get thực hiện port.Plots.
+func (s *Service) Get(ctx context.Context, ref uuid.UUID) (port.Plot, error) {
+	if s.Store.Plots == nil {
+		return port.Plot{}, unavailable("plots")
+	}
+	if ref == uuid.Nil {
+		return port.Plot{}, port.ErrPlotNotFound
+	}
+	p, err := s.Store.Plots.Get(ctx, ref)
+	if err != nil {
+		return p, err
+	}
+	p.ViaShareGrant = shareread.Mark(ctx, SharePlot, []uuid.UUID{p.OwnerTenant})[0]
+	return p, nil
+}
+
+// DistanceM thực hiện port.Plots.
+func (s *Service) DistanceM(ctx context.Context, ref uuid.UUID, lon, lat decimal.Decimal) (decimal.Decimal, error) {
+	if s.Store.Plots == nil {
+		return decimal.Zero, unavailable("plots")
+	}
+	if ref == uuid.Nil {
+		return decimal.Zero, port.ErrPlotNotFound
+	}
+	return s.Store.Plots.DistanceM(ctx, ref, lon, lat)
+}
+
+// Facts thực hiện port.Plots.
+func (s *Service) Facts(ctx context.Context, refs []uuid.UUID) (map[uuid.UUID]port.Plot, error) {
+	if s.Store.Plots == nil {
+		return nil, unavailable("plots")
+	}
+	if len(refs) == 0 {
+		return map[uuid.UUID]port.Plot{}, nil
+	}
+	facts, err := s.Store.Plots.Facts(ctx, refs)
+	if err != nil {
+		return facts, err
+	}
+	keys := make([]uuid.UUID, 0, len(facts))
+	owners := make([]uuid.UUID, 0, len(facts))
+	for k, p := range facts {
+		keys, owners = append(keys, k), append(owners, p.OwnerTenant)
+	}
+	for i, via := range shareread.Mark(ctx, SharePlot, owners) {
+		p := facts[keys[i]]
+		p.ViaShareGrant = via
+		facts[keys[i]] = p
+	}
+	return facts, nil
+}
+
+// DigitizedByCommune thực hiện port.Plots.
+func (s *Service) DigitizedByCommune(ctx context.Context, communes []string) ([]port.PlotStat, error) {
+	if s.Store.Plots == nil {
+		return nil, unavailable("plots")
+	}
+	if communes != nil && len(communes) == 0 {
+		return []port.PlotStat{}, nil
+	}
+	return s.Store.Plots.DigitizedByCommune(ctx, communes)
+}
+
+// DigitizedByCooperative thực hiện port.Plots.
+func (s *Service) DigitizedByCooperative(ctx context.Context, coops []uuid.UUID) (map[uuid.UUID]port.PlotStat, error) {
+	if s.Store.Plots == nil {
+		return nil, unavailable("plots")
+	}
+	if coops != nil && len(coops) == 0 {
+		return map[uuid.UUID]port.PlotStat{}, nil
+	}
+	return s.Store.Plots.DigitizedByCooperative(ctx, coops)
+}
+
+// ---- Seasons ----
+
+// ActivityByCooperative thực hiện port.Seasons.
+func (s *Service) ActivityByCooperative(ctx context.Context, coops []uuid.UUID) (map[uuid.UUID]port.CoopActivity, error) {
+	if s.Store.Seasons == nil {
+		return nil, unavailable("seasons")
+	}
+	if coops != nil && len(coops) == 0 {
+		return map[uuid.UUID]port.CoopActivity{}, nil
+	}
+	return s.Store.Seasons.ActivityByCooperative(ctx, coops)
+}
+
+// Areas thực hiện port.Seasons.
+func (s *Service) Areas(ctx context.Context, coop uuid.UUID, seasonCode string, year int) ([]port.CoopSeasonArea, error) {
+	if s.Store.Seasons == nil {
+		return nil, unavailable("seasons")
+	}
+	return s.Store.Seasons.Areas(ctx, coop, seasonCode, year)
+}
+
+// Supply thực hiện port.Seasons.
+func (s *Service) Supply(ctx context.Context, year int) ([]port.CoopSeasonSupply, error) {
+	if s.Store.Seasons == nil {
+		return nil, unavailable("seasons")
+	}
+	return s.Store.Seasons.Supply(ctx, year)
+}
+
+// Production thực hiện port.Seasons.
+func (s *Service) Production(ctx context.Context, q port.ProductionQuery) (port.ProductionData, error) {
+	if s.Store.Seasons == nil {
+		return port.ProductionData{}, unavailable("seasons")
+	}
+	return s.Store.Seasons.Production(ctx, q)
+}
+
+// HarvestDates thực hiện port.Seasons.
+func (s *Service) HarvestDates(ctx context.Context, plotRefs []uuid.UUID) ([]port.SeasonHarvestDate, error) {
+	if s.Store.Seasons == nil {
+		return nil, unavailable("seasons")
+	}
+	if len(plotRefs) == 0 {
+		return []port.SeasonHarvestDate{}, nil
+	}
+	return s.Store.Seasons.HarvestDates(ctx, plotRefs)
+}
+
+// Codes thực hiện port.Seasons.
+func (s *Service) Codes(ctx context.Context, refs []uuid.UUID) (map[uuid.UUID]port.SeasonKey, error) {
+	if s.Store.Seasons == nil {
+		return nil, unavailable("seasons")
+	}
+	if len(refs) == 0 {
+		return map[uuid.UUID]port.SeasonKey{}, nil
+	}
+	return s.Store.Seasons.Codes(ctx, refs)
+}
+
+// Progress thực hiện port.Seasons.
+func (s *Service) Progress(ctx context.Context, asOf time.Time) ([]port.SeasonProgress, error) {
+	if s.Store.Seasons == nil {
+		return nil, unavailable("seasons")
+	}
+	return s.Store.Seasons.Progress(ctx, asOf)
+}
+
+// ---- Diary ----
+
+// Diary là port.Diary của mặt tiền (tách khỏi Service vì Get trùng tên với port.Plots.Get).
+type Diary struct{ Svc *Service }
+
+// Get thực hiện port.Diary.
+func (d Diary) Get(ctx context.Context, ref uuid.UUID) (port.DiaryEntry, error) {
+	if d.Svc == nil || d.Svc.Store.Diary == nil {
+		return port.DiaryEntry{}, unavailable("diary")
+	}
+	if ref == uuid.Nil {
+		return port.DiaryEntry{}, port.ErrDiaryEntryNotFound
+	}
+	e, err := d.Svc.Store.Diary.Get(ctx, ref)
+	if err != nil {
+		return e, err
+	}
+	e.ViaShareGrant = shareread.Mark(ctx, ShareDiaryEntry, []uuid.UUID{e.OwnerTenant})[0]
+	return e, nil
+}
+
+// BySeason thực hiện port.Diary.
+func (d Diary) BySeason(ctx context.Context, season, after uuid.UUID, limit int) ([]port.DiaryEntry, error) {
+	if d.Svc == nil || d.Svc.Store.Diary == nil {
+		return nil, unavailable("diary")
+	}
+	out, err := d.Svc.Store.Diary.BySeason(ctx, season, after, ClampDiaryLimit(limit))
+	if err != nil {
+		return out, err
+	}
+	owners := make([]uuid.UUID, len(out))
+	for i := range out {
+		owners[i] = out[i].OwnerTenant
+	}
+	for i, via := range shareread.Mark(ctx, ShareDiaryEntry, owners) {
+		out[i].ViaShareGrant = via
+	}
+	return out, nil
+}
+
+// ClampDiaryLimit chuẩn hóa giới hạn trang của Diary.BySeason.
+func ClampDiaryLimit(limit int) int {
+	switch {
+	case limit <= 0:
+		return DefaultDiaryLimit
+	case limit > MaxDiaryLimit:
+		return MaxDiaryLimit
+	}
+	return limit
+}
+
+// ---- Resolve ----
+
+// Resolve thực hiện port.Resolve từ các cổng đọc. Tenant lấy từ context (bắt buộc). Phân giải cooperative (HTX
+// đang hoạt động), household, plot, diary_entry qua cổng đọc; season, harvest qua store vụ (W3.3).
+func (s *Service) Resolve(ctx context.Context, t port.SubjectType, id uuid.UUID) (port.Subject, error) {
+	tid, err := tenant.FromContext(ctx)
+	if err != nil {
+		return port.Subject{}, err
+	}
+	sub := port.Subject{Type: t, ID: id, TenantID: tid}
+	switch t {
+	case port.SubjectCooperative, port.SubjectHousehold, port.SubjectPlot, port.SubjectDiaryEntry, port.SubjectSeason, port.SubjectHarvest:
+	default:
+		return port.Subject{}, fmt.Errorf("%w: %q", port.ErrSubjectTypeUnsupported, t)
+	}
+	if id == uuid.Nil {
+		return port.Subject{}, port.ErrSubjectNotFound
+	}
+	switch t {
+	case port.SubjectSeason, port.SubjectHarvest:
+		if s.Store.Season == nil {
+			return port.Subject{}, unavailable("seasons")
+		}
+		resolve := s.Store.Season.ResolveSeason
+		if t == port.SubjectHarvest {
+			resolve = s.Store.Season.ResolveHarvest
+		}
+		r, err := resolve(ctx, id)
+		if err != nil {
+			return port.Subject{}, err
+		}
+		r.TenantID = tid
+		return r, nil
+	case port.SubjectCooperative:
+		sites, err := s.Active(ctx)
+		if err != nil {
+			return port.Subject{}, err
+		}
+		for _, c := range sites {
+			if c.Ref == id {
+				sub.NodeRef, sub.CommuneCode, sub.Status = c.Ref, c.CommuneCode, "active"
+				return sub, nil
+			}
+		}
+		return port.Subject{}, port.ErrSubjectNotFound
+	case port.SubjectHousehold:
+		m, err := s.Membership(ctx, id)
+		if errors.Is(err, port.ErrHouseholdNotFound) {
+			return port.Subject{}, port.ErrSubjectNotFound
+		}
+		if err != nil {
+			return port.Subject{}, err
+		}
+		sub.NodeRef, sub.CommuneCode, sub.HouseholdRef, sub.Status = m.CooperativeRef, m.CommuneCode, m.Ref, "inactive"
+		if m.Active {
+			sub.Status = "active"
+		}
+		return sub, nil
+	case port.SubjectPlot:
+		p, err := s.Get(ctx, id)
+		if errors.Is(err, port.ErrPlotNotFound) {
+			return port.Subject{}, port.ErrSubjectNotFound
+		}
+		if err != nil {
+			return port.Subject{}, err
+		}
+		sub.NodeRef, sub.CommuneCode, sub.HouseholdRef, sub.Status = p.CooperativeRef, p.CommuneCode, p.HouseholdRef, p.Status
+		return sub, nil
+	default: // port.SubjectDiaryEntry
+		e, err := Diary{Svc: s}.Get(ctx, id)
+		if errors.Is(err, port.ErrDiaryEntryNotFound) {
+			return port.Subject{}, port.ErrSubjectNotFound
+		}
+		if err != nil {
+			return port.Subject{}, err
+		}
+		sub.NodeRef, sub.CommuneCode, sub.HouseholdRef, sub.Status = e.CooperativeRef, e.CommuneCode, e.HouseholdRef, e.Status
+		return sub, nil
+	}
+}

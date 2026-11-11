@@ -1,0 +1,5 @@
+# Vân tay = <commit>:<tệp>:<quy tắc>:<dòng>. Danh sách của repo gốc gắn với commit của repo đó nên không còn hiệu lực ở
+# đây và đã được bỏ. Lần quét thư mục lúc tạo bản chụp (11/11/2026) còn 4 phát hiện, đều là dữ liệu GIẢ đã được rà ở
+# repo gốc: apps/web-htx/src/apiclient/g5.test.tsx (khóa mẫu trong kiểm thử), internal/platform/party/handler/
+# grantlookup_integration_test.go (KeyPrefix mẫu, 2 dòng), docs/runbooks/integration-batches.md (tên hợp đồng).
+# Khi bật gitleaks trong CI: chạy trên commit đầu, rà lại và ghi vân tay mới vào đây.

@@ -1,0 +1,435 @@
+package handler
+
+// HTTP của KN v7.7 gói P2: khu vực, cây 3 cấp, bảng ảnh hưởng.
+// Admin API (MFA): /v1/regions*, /v1/orgs/tree, /v1/orgs/{ref}/region|impact|communes/ensure.
+// Application API: /v1/regions, /v1/orgs/tree.
+// Danh mục phòng ban (/v1/departments, /v1/departments/{id}*, #118), menu (/v1/menu), cây module phòng ban
+// (/v1/departments/{code}/modules) và nạp phòng ban mặc định (/v1/orgs/{ref}/departments/seed, #222) do chủ KN
+// (internal/kn/extension/departments) đăng ký qua port.DepartmentAdmin.
+
+import (
+	"context"
+	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
+
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/party/app"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/party/domain"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/party/port"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/party/store"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/httpx"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/idempotency"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/problem"
+)
+
+// KN gói app.KN cho HTTP.
+type KN struct{ Svc *app.KN }
+
+// RegisterAdmin gắn route Admin API. Danh mục phòng ban /v1/departments, /v1/departments/{id}* (#118) và nạp phòng ban
+// /v1/orgs/{ref}/departments/seed (#222) do chủ KN (internal/kn/extension/departments, qua port.DepartmentAdmin) đăng ký.
+func (h KN) RegisterAdmin(rg *gin.RouterGroup) {
+	rg.GET("/regions", h.listRegions)
+	rg.POST("/regions", h.createRegion)
+	rg.POST("/regions/seed", h.seedRegions)
+	rg.GET("/regions/:id", h.getRegion)
+	rg.PUT("/regions/:id", h.updateRegion)
+	rg.POST("/regions/:id/deactivate", h.setRegionActive(false))
+	rg.POST("/regions/:id/reactivate", h.setRegionActive(true))
+	rg.GET("/regions/:id/log", h.regionLog)
+	rg.GET("/orgs/tree", h.tree)
+	rg.POST("/orgs/:ref/region", h.assignRegion)
+	rg.GET("/orgs/:ref/region-log", h.orgRegionLog)
+	rg.POST("/orgs/:ref/communes/ensure", h.ensureCommunes)
+	rg.GET("/orgs/:ref/impact", h.impact)
+}
+
+// RegisterApp gắn route Application API (đọc). GET /v1/departments (#118), GET /v1/menu và
+// GET /v1/departments/{code}/modules (#222) do chủ KN đăng ký.
+func (h KN) RegisterApp(rg *gin.RouterGroup) {
+	rg.GET("/regions", h.listRegions)
+	rg.GET("/orgs/tree", h.tree)
+}
+
+// ---------------------------------------------------------------------------
+// DTO
+// ---------------------------------------------------------------------------
+
+type logEntryDTO struct {
+	Seq          int64                `json:"seq"`
+	Event        string               `json:"event"`
+	ActorRef     string               `json:"actor_ref"`
+	ActorDisplay *string              `json:"actor_display"`
+	At           string               `json:"at"`
+	RecordedAt   string               `json:"recorded_at"`
+	Changes      []domain.FieldChange `json:"changes"`
+	Reason       *string              `json:"reason"`
+}
+
+func writeLog(c *gin.Context, es []app.LogEntry, err error) {
+	if err != nil {
+		httpx.Fail(c, err)
+		return
+	}
+	items := make([]logEntryDTO, 0, len(es))
+	var next *int64
+	for _, e := range es {
+		items = append(items, logEntryDTO{Seq: e.Seq, Event: e.Event, ActorRef: e.ActorRef.String(), ActorDisplay: strPtr(e.ActorDisplay),
+			At: e.At.UTC().Format(time.RFC3339Nano), RecordedAt: e.RecordedAt.UTC().Format(time.RFC3339Nano), Changes: e.Changes, Reason: e.Reason})
+	}
+	if n := len(es); n > 0 && n == clampLimit(limitOf(c)) {
+		s := es[n-1].Seq
+		next = &s
+	}
+	c.JSON(http.StatusOK, gin.H{"items": items, "next_cursor": next})
+}
+
+func limitOf(c *gin.Context) int {
+	n, _ := strconv.Atoi(c.Query("limit"))
+	return n
+}
+
+func clampLimit(n int) int {
+	if n <= 0 || n > 200 {
+		return 50
+	}
+	return n
+}
+
+func afterSeq(c *gin.Context) (int64, bool) {
+	s := c.Query("cursor")
+	if s == "" {
+		return 0, true
+	}
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil || n < 0 {
+		httpx.Fail(c, problem.Validation.WithField("cursor", "phải là số seq ≥ 0"))
+		return 0, false
+	}
+	return n, true
+}
+
+func pathID(c *gin.Context, name string, nf error) (uuid.UUID, bool) {
+	id, err := uuid.Parse(c.Param(name))
+	if err != nil {
+		httpx.Fail(c, nf)
+		return uuid.Nil, false
+	}
+	return id, true
+}
+
+func idemKey(c *gin.Context) string { return idempotency.KeyFromContext(c.Request.Context()) }
+
+// ---------------------------------------------------------------------------
+// Khu vực
+// ---------------------------------------------------------------------------
+
+type reasonReq struct {
+	Reason string `json:"reason"`
+}
+
+type regionDTO struct {
+	ID                 string  `json:"id"`
+	ProvinceCode       string  `json:"province_code"`
+	Code               string  `json:"code"`
+	Name               string  `json:"name"`
+	SortOrder          int     `json:"sort_order"`
+	Active             bool    `json:"active"`
+	DeactivationReason *string `json:"deactivation_reason"`
+	CommuneCount       int     `json:"commune_count"`
+	UpdatedBy          string  `json:"updated_by"`
+	UpdatedAt          string  `json:"updated_at"`
+}
+
+func toRegionDTO(r store.RegionRow, communes int) regionDTO {
+	return regionDTO{ID: r.ID.String(), ProvinceCode: r.ProvinceCode, Code: r.Code, Name: r.Name, SortOrder: r.SortOrder, Active: r.Active,
+		DeactivationReason: strPtr(r.DeactivationReason), CommuneCount: communes, UpdatedBy: r.UpdatedBy.String(),
+		UpdatedAt: r.UpdatedAt.UTC().Format(time.RFC3339Nano)}
+}
+
+func (h KN) listRegions(c *gin.Context) {
+	vs, err := h.Svc.ListRegions(c.Request.Context(), c.Query("province_code"), c.Query("include_inactive") == "true")
+	if err != nil {
+		httpx.Fail(c, err)
+		return
+	}
+	items := make([]regionDTO, 0, len(vs))
+	total := 0
+	for _, v := range vs {
+		items = append(items, toRegionDTO(v.RegionRow, v.Communes))
+		total += v.Communes
+	}
+	c.JSON(http.StatusOK, gin.H{"province_code": c.Query("province_code"), "items": items, "assigned_communes": total})
+}
+
+type regionReq struct {
+	ProvinceCode string `json:"province_code"`
+	Code         string `json:"code"`
+	Name         string `json:"name"`
+	SortOrder    int    `json:"sort_order"`
+}
+
+func (h KN) createRegion(c *gin.Context) {
+	var req regionReq
+	if !bindJSON(c, &req) {
+		return
+	}
+	r, replayed, err := h.Svc.CreateRegion(c.Request.Context(), port.Region{ProvinceCode: req.ProvinceCode, Code: req.Code, Name: req.Name,
+		SortOrder: req.SortOrder}, idemKey(c))
+	if err != nil {
+		httpx.Fail(c, err)
+		return
+	}
+	c.Header("Location", "/v1/regions/"+r.ID.String())
+	written(c, replayed, toRegionDTO(r, 0))
+}
+
+func (h KN) getRegion(c *gin.Context) {
+	id, ok := pathID(c, "id", app.ErrRegionNotFound)
+	if !ok {
+		return
+	}
+	v, err := h.Svc.GetRegion(c.Request.Context(), id)
+	if err != nil {
+		httpx.Fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, toRegionDTO(v.RegionRow, v.Communes))
+}
+
+func (h KN) updateRegion(c *gin.Context) {
+	id, ok := pathID(c, "id", app.ErrRegionNotFound)
+	if !ok {
+		return
+	}
+	var req regionReq
+	if !bindJSON(c, &req) {
+		return
+	}
+	r, err := h.Svc.UpdateRegion(c.Request.Context(), id, req.Name, req.SortOrder)
+	if err != nil {
+		httpx.Fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, toRegionDTO(r, 0))
+}
+
+func (h KN) setRegionActive(active bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, ok := pathID(c, "id", app.ErrRegionNotFound)
+		if !ok {
+			return
+		}
+		var req reasonReq
+		if c.Request.ContentLength != 0 && !bindJSON(c, &req) {
+			return
+		}
+		r, replayed, err := h.Svc.SetRegionActive(c.Request.Context(), id, active, req.Reason, idemKey(c))
+		if err != nil {
+			httpx.Fail(c, err)
+			return
+		}
+		written(c, replayed, toRegionDTO(r, 0))
+	}
+}
+
+func (h KN) regionLog(c *gin.Context) {
+	id, ok := pathID(c, "id", app.ErrRegionNotFound)
+	if !ok {
+		return
+	}
+	after, ok := afterSeq(c)
+	if !ok {
+		return
+	}
+	es, err := h.Svc.RegionLog(c.Request.Context(), id, after, limitOf(c))
+	writeLog(c, es, err)
+}
+
+func (h KN) seedRegions(c *gin.Context) {
+	var req struct {
+		ProvinceCode string `json:"province_code"`
+	}
+	if !bindJSON(c, &req) {
+		return
+	}
+	res, err := h.Svc.SeedRegions(c.Request.Context(), req.ProvinceCode, idemKey(c))
+	if err != nil {
+		httpx.Fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"province_code": res.ProvinceCode, "regions_created": res.RegionsCreated, "assigned": res.Assigned,
+		"already_assigned": res.AlreadyAssigned, "missing_node": res.MissingNode, "status": res.Status})
+}
+
+type assignReq struct {
+	RegionCode *string `json:"region_code"`
+	Reason     string  `json:"reason"`
+}
+
+func (h KN) assignRegion(c *gin.Context) {
+	ref, ok := pathID(c, "ref", app.ErrOrgNotFound)
+	if !ok {
+		return
+	}
+	var req assignReq
+	if !bindJSON(c, &req) {
+		return
+	}
+	code := ""
+	if req.RegionCode != nil {
+		code = *req.RegionCode
+	}
+	res, err := h.Svc.AssignRegion(c.Request.Context(), ref, code, req.Reason, idemKey(c))
+	if err != nil {
+		httpx.Fail(c, err)
+		return
+	}
+	written(c, res.Replayed, gin.H{"org_ref": res.OrgRef.String(), "commune_code": res.CommuneCode, "province_code": res.ProvinceCode,
+		"region_code": strPtr(res.RegionCode), "action": res.Action})
+}
+
+func (h KN) orgRegionLog(c *gin.Context) {
+	ref, ok := pathID(c, "ref", app.ErrOrgNotFound)
+	if !ok {
+		return
+	}
+	after, ok := afterSeq(c)
+	if !ok {
+		return
+	}
+	es, err := h.Svc.OrgRegionLog(c.Request.Context(), ref, after, limitOf(c))
+	writeLog(c, es, err)
+}
+
+// ---------------------------------------------------------------------------
+// Cây 3 cấp, bảo đảm Nút xã, ảnh hưởng
+// ---------------------------------------------------------------------------
+
+type regionRefDTO struct {
+	Code string `json:"code"`
+	Name string `json:"name"`
+}
+
+type treeNodeDTO struct {
+	Ref           *string       `json:"ref"`
+	Kind          string        `json:"kind"`
+	Code          string        `json:"code"`
+	Name          string        `json:"name"`
+	AdminUnitCode *string       `json:"admin_unit_code"`
+	Level         int           `json:"level"`
+	Active        bool          `json:"active"`
+	Region        *regionRefDTO `json:"region"`
+	CommuneCount  int           `json:"commune_count"`
+	Children      []treeNodeDTO `json:"children"`
+}
+
+func toTreeDTO(n app.TreeNode) treeNodeDTO {
+	d := treeNodeDTO{Ref: refPtr(n.Ref), Kind: n.Kind, Code: n.Code, Name: n.Name, AdminUnitCode: strPtr(n.AdminUnitCode), Level: n.Level,
+		Active: n.Active, CommuneCount: n.CommuneCount, Children: make([]treeNodeDTO, 0, len(n.Children))}
+	if n.Region != nil {
+		d.Region = &regionRefDTO{Code: n.Region.RegionCode, Name: n.Region.RegionName}
+	}
+	for _, ch := range n.Children {
+		d.Children = append(d.Children, toTreeDTO(ch))
+	}
+	return d
+}
+
+func (h KN) tree(c *gin.Context) {
+	ns, err := h.Svc.OrgTree(c.Request.Context(), c.Query("include_inactive") == "true")
+	if err != nil {
+		httpx.Fail(c, err)
+		return
+	}
+	items := make([]treeNodeDTO, 0, len(ns))
+	for _, n := range ns {
+		items = append(items, toTreeDTO(n))
+	}
+	c.JSON(http.StatusOK, gin.H{"items": items})
+}
+
+func (h KN) ensureCommunes(c *gin.Context) {
+	ref, ok := pathID(c, "ref", app.ErrOrgNotFound)
+	if !ok {
+		return
+	}
+	var req struct {
+		CodePrefix string `json:"code_prefix"`
+	}
+	if c.Request.ContentLength != 0 && !bindJSON(c, &req) {
+		return
+	}
+	res, err := h.Svc.EnsureCommuneNodes(c.Request.Context(), ref, req.CodePrefix, idemKey(c))
+	if err != nil {
+		httpx.Fail(c, err)
+		return
+	}
+	created := make([]orgDTO, 0, len(res.Created))
+	for _, o := range res.Created {
+		created = append(created, toOrgDTO(o))
+	}
+	c.JSON(http.StatusOK, gin.H{"province_code": res.ProvinceCode, "communes": res.Communes, "existing": res.Existing, "created": created})
+}
+
+type impactRowDTO struct {
+	Kind      string           `json:"kind"`
+	Label     string           `json:"label"`
+	Count     *int             `json:"count"`
+	AreaHa    *decimal.Decimal `json:"area_ha,omitempty"`
+	Available bool             `json:"available"`
+}
+
+func (h KN) impact(c *gin.Context) {
+	ref, ok := pathID(c, "ref", app.ErrOrgNotFound)
+	if !ok {
+		return
+	}
+	im, err := h.Svc.OrgImpact(c.Request.Context(), ref)
+	if err != nil {
+		httpx.Fail(c, err)
+		return
+	}
+	rows := make([]impactRowDTO, 0, len(im.Rows))
+	for _, r := range im.Rows {
+		d := impactRowDTO{Kind: r.Kind, Label: r.Label, AreaHa: r.AreaHa, Available: r.Available}
+		if r.Available {
+			n := r.Count
+			d.Count = &n
+		}
+		rows = append(rows, d)
+	}
+	warnings := im.Warnings
+	if warnings == nil {
+		warnings = []string{}
+	}
+	c.JSON(http.StatusOK, gin.H{"org": toOrgDTO(im.Org), "communes": im.Communes, "rows": rows, "warnings": warnings, "movable": im.Movable})
+}
+
+// withRegions gắn khu vực vào Nút xã của danh sách /v1/orgs (FN-AD-04.02: Khu vực trả kèm trong /v1/orgs).
+func withRegions(ctx context.Context, svc *app.KN, items []orgDTO, orgs []port.Org) {
+	if svc == nil {
+		return
+	}
+	var refs []uuid.UUID
+	for _, o := range orgs {
+		if o.Kind == port.OrgExtensionTeam {
+			refs = append(refs, o.Ref)
+		}
+	}
+	if len(refs) == 0 {
+		return
+	}
+	regions, err := svc.RegionsOf(ctx, refs)
+	if err != nil {
+		return // trang trí: lỗi không chặn danh sách
+	}
+	for i, o := range orgs {
+		if r, ok := regions[o.Ref]; ok {
+			items[i].Region = &regionRefDTO{Code: r.RegionCode, Name: r.RegionName}
+		}
+	}
+}

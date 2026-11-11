@@ -1,0 +1,16 @@
+package cropcycle
+
+import (
+	shareddb "github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/db"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/tenant"
+)
+
+// DBModule: mọi giao dịch của module chạy SET LOCAL ROLE r_cropcycle (ADR-0028, W2.6). Pool truyền vào là vai đăng
+// nhập của đơn vị triển khai (app_*), hoặc vai cũ trong kỳ chuyển — là thành viên r_cropcycle.
+var DBModule = shareddb.Module("pf/cropcycle")
+
+// forModule bọc pool để mọi giao dịch mở qua nó chạy dưới vai của module (db.ForModule; nil giữ nil).
+func forModule(b tenant.Beginner) tenant.Beginner { return shareddb.ForModule(b, DBModule) }
+
+// DBRole là vai đăng nhập cũ của module (kỳ chuyển ADR-0028 — chỉ còn membership r_cropcycle; kiểm thử e2e dùng).
+const DBRole = "cropcycle_app"

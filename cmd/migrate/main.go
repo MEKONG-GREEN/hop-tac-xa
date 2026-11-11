@@ -1,0 +1,145 @@
+// Lệnh migrate: dựng vai/database và chạy migration. Là job riêng, chạy TRƯỚC
+// khi triển khai ứng dụng (mục 20).
+//
+//	migrate bootstrap   tạo/cập nhật vai và database — cần AG_PG_ADMIN_URL (quản trị cụm)
+//	migrate up          áp migration cho mọi cụm bằng vai ag_migrator — cần AG_DB_URL; AG_MIGRATE_RUNNER=v2 chọn bộ
+//	                    chạy theo module (W7.1, ADR-0038), mặc định v1 (golang-migrate) trong kỳ chuyển
+//	migrate verify-runner  đối chiếu trạng thái golang-migrate với sổ theo module (v2) — mã thoát 1 nếu lệch
+//	migrate verify      kiểm các view cổng (v_missing_immutability, v_missing_rls) phải rỗng
+//	migrate maintain    tạo trước phân vùng tháng cho mọi bảng sổ ở mọi cụm (AG_PARTITION_MONTHS_AHEAD, mặc định 24)
+//	migrate verify-chains  chạy shared.verify_chain cho mọi chuỗi trong chain_head; có chỗ đứt → mã thoát 1
+//	migrate anchor      neo mọi cụm một lần + manifest ký số (AG_ANCHOR_DATE, mặc định ngày vừa kết thúc)
+//	migrate purge-idempotency  xóa Idempotency-Key hết hạn + idem_key sổ quá 30 ngày (W2.1) ở mọi cụm (vai ag_ops_jobs) — CronJob
+//	                    của vùng không chạy lịch worker (G4 Kubernetes, docs/runbooks/k8s-deploy.md)
+//
+// Mật khẩu vai: AG_DB_PASSWORD_<VAI> hoặc AG_DB_APP_PASSWORD.
+//
+// Tách theo vùng (G4, RB-5): AG_CLUSTERS chọn cụm (mặc định mọi cụm), AG_<CỤM>_DB_URL đặt
+// URL gốc riêng từng cụm (cmd/internal/clusterenv). bootstrap chưa lọc theo cụm (dbadmin).
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+
+	"github.com/MEKONG-GREEN/hop-tac-xa/cmd/internal/clusterenv"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/db"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/dbadmin"
+)
+
+func main() {
+	if len(os.Args) < 2 {
+		fmt.Fprintln(os.Stderr, "dùng: migrate bootstrap|up|verify|verify-runner|maintain|verify-chains|anchor|purge-idempotency")
+		os.Exit(2)
+	}
+	if err := run(os.Args[1]); err != nil {
+		fmt.Fprintln(os.Stderr, "migrate:", err)
+		os.Exit(1)
+	}
+}
+
+func need(k string) (string, error) {
+	v := os.Getenv(k)
+	if v == "" {
+		return "", fmt.Errorf("thiếu biến môi trường %s", k)
+	}
+	return v, nil
+}
+
+func run(cmd string) error {
+	ctx := context.Background()
+	switch cmd {
+	case "bootstrap":
+		admin, err := need("AG_PG_ADMIN_URL")
+		if err != nil {
+			return err
+		}
+		// AG_CLUSTERS (G4, RB-5): chỉ dựng vai + database của cụm được chọn; rỗng = mọi cụm.
+		clusters, err := clusterenv.Selected()
+		if err != nil {
+			return err
+		}
+		return dbadmin.BootstrapClusters(ctx, admin, "", clusters)
+	case "up":
+		base, err := need("AG_DB_URL")
+		if err != nil {
+			return err
+		}
+		clusters, err := clusterenv.Selected()
+		if err != nil {
+			return err
+		}
+		runner, err := dbadmin.Runner()
+		if err != nil {
+			return err
+		}
+		for _, c := range clusters {
+			if runner == "v2" {
+				err = dbadmin.MigrateV2(ctx, clusterenv.BaseURL(c, base), c, "", func(f string, a ...any) { fmt.Printf(f+"\n", a...) })
+			} else {
+				err = dbadmin.MigrateV1(clusterenv.BaseURL(c, base), c, "")
+			}
+			if err != nil {
+				return err
+			}
+			fmt.Printf("đã áp migration (bộ chạy %s): %s\n", runner, dbadmin.DatabaseName(c, ""))
+		}
+		return nil
+	case "verify-runner":
+		return verifyRunner(ctx)
+	case "verify":
+		base, err := need("AG_DB_URL")
+		if err != nil {
+			return err
+		}
+		clusters, err := clusterenv.Selected()
+		if err != nil {
+			return err
+		}
+		bad := 0
+		for _, c := range clusters {
+			dsn, err := dbadmin.RoleURL(clusterenv.BaseURL(c, base), c, "", dbadmin.Migrator)
+			if err != nil {
+				return err
+			}
+			pool, err := db.Open(ctx, dsn, db.Options{AppName: "migrate-verify"})
+			if err != nil {
+				return err
+			}
+			for _, view := range []string{"shared.v_missing_immutability", "shared.v_missing_rls"} {
+				rows, err := pool.Query(ctx, "SELECT schema_name, table_name, problem FROM "+view)
+				if err != nil {
+					pool.Close()
+					return err
+				}
+				for rows.Next() {
+					var s, t, p string
+					if err := rows.Scan(&s, &t, &p); err != nil {
+						rows.Close()
+						pool.Close()
+						return err
+					}
+					fmt.Printf("%s %s: %s.%s — %s\n", dbadmin.DatabaseName(c, ""), view, s, t, p)
+					bad++
+				}
+				rows.Close()
+			}
+			pool.Close()
+		}
+		if bad > 0 {
+			return fmt.Errorf("%d vi phạm", bad)
+		}
+		fmt.Println("cổng catalog: sạch")
+		return nil
+	case "maintain":
+		return maintain(ctx)
+	case "verify-chains":
+		return verifyChains(ctx)
+	case "anchor":
+		return anchorNow(ctx)
+	case "purge-idempotency":
+		return purgeIdempotency(ctx)
+	}
+	return fmt.Errorf("lệnh không hỗ trợ: %s", cmd)
+}

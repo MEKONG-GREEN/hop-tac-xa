@@ -1,0 +1,106 @@
+[
+  {
+    "evidence_type": "awd_log",
+    "provisional": true,
+    "source_note": "Danh mục mẫu G1 — TẠM, chờ chốt danh mục trường bằng chứng thương mại (C-1). Theo KN US-MRV-01: nhật ký AWD tại SPOT, ≥ 1 ảnh + toạ độ + thời gian tự động.",
+    "fields": [
+      {"key": "plot_ref", "label_vi": "Thửa ruộng / SPOT", "data_type": "text", "required": true},
+      {"key": "season", "label_vi": "Vụ", "data_type": "text", "required": true},
+      {"key": "stage", "label_vi": "Giai đoạn sinh trưởng", "data_type": "enum", "required": true,
+       "enum_values": ["ma", "de_nhanh", "lam_dong", "tro_bong", "chin"]},
+      {"key": "awd_water_level_cm", "label_vi": "Mực nước so với mặt ruộng", "data_type": "decimal", "unit": "cm",
+       "required": true, "min": "-30", "max": "30", "max_scale": 1,
+       "help_vi": "Đo tại ống quan trắc; âm = dưới mặt ruộng"},
+      {"key": "awd_dry_days", "label_vi": "Số ngày khô liên tục", "data_type": "integer", "unit": "ngày",
+       "required": true, "min": "0", "max": "60"},
+      {"key": "field_surface", "label_vi": "Tình trạng mặt ruộng", "data_type": "enum", "required": false,
+       "enum_values": ["ngap", "am", "nut_ne", "kho"]},
+      {"key": "photo", "label_vi": "Ảnh hiện trường", "data_type": "photo", "required": true, "min": "1", "max": "10"},
+      {"key": "gps", "label_vi": "Toạ độ lúc chụp", "data_type": "geo_point", "required": true},
+      {"key": "note", "label_vi": "Ghi chú", "data_type": "text", "required": false, "max": "1000"}
+    ]
+  },
+  {
+    "evidence_type": "field_checklist",
+    "provisional": true,
+    "source_note": "Danh mục mẫu G1 — TẠM, chờ chốt C-1. Theo KN US-MRV-03: kiểm tra thực địa theo danh mục chuẩn (ranh giới, phỏng vấn, chế độ nước, ước tính số liệu).",
+    "fields": [
+      {"key": "plot_ref", "label_vi": "Thửa ruộng / SPOT", "data_type": "text", "required": true},
+      {"key": "season", "label_vi": "Vụ", "data_type": "text", "required": true},
+      {"key": "stage", "label_vi": "Giai đoạn sinh trưởng", "data_type": "enum", "required": false,
+       "enum_values": ["ma", "de_nhanh", "lam_dong", "tro_bong", "chin"]},
+      {"key": "check_boundary_ok", "label_vi": "Ranh giới thửa khớp bản đồ", "data_type": "boolean", "required": true},
+      {"key": "check_interview_done", "label_vi": "Đã phỏng vấn nông hộ", "data_type": "boolean", "required": true},
+      {"key": "check_water_regime", "label_vi": "Chế độ nước quan sát được", "data_type": "enum", "required": true,
+       "enum_values": ["awd", "ngap_lien_tuc", "khac"]},
+      {"key": "check_estimated_yield_t_ha", "label_vi": "Ước tính năng suất", "data_type": "decimal", "unit": "t/ha",
+       "required": false, "min": "0", "max": "20", "max_scale": 2},
+      {"key": "check_visit_date", "label_vi": "Ngày kiểm tra", "data_type": "date", "required": true},
+      {"key": "photo", "label_vi": "Ảnh hiện trường", "data_type": "photo", "required": true, "min": "1", "max": "10"},
+      {"key": "gps", "label_vi": "Toạ độ lúc kiểm tra", "data_type": "geo_point", "required": true},
+      {"key": "note", "label_vi": "Ghi chú", "data_type": "text", "required": false, "max": "1000"}
+    ]
+    },
+  {
+    "evidence_type": "straw_handling",
+    "provisional": true,
+    "source_note": "Danh mục mẫu G3 — TẠM, chờ chốt C-1. Theo KN FR-07: cán bộ ghi nhận xử lý rơm rạ tại thửa (kèm ảnh + toạ độ) làm bằng chứng tránh đốt lộ thiên.",
+    "fields": [
+      {"key": "plot_ref", "label_vi": "Thửa ruộng", "data_type": "text", "required": true},
+      {"key": "season", "label_vi": "Vụ", "data_type": "text", "required": true},
+      {"key": "handling_method", "label_vi": "Cách xử lý rơm", "data_type": "enum", "required": true,
+       "enum_values": ["cuon_thu_gom", "vui_lap", "u_phan", "de_lai_ruong", "dot"]},
+      {"key": "observed_burning", "label_vi": "Có dấu hiệu đốt rơm", "data_type": "boolean", "required": true},
+      {"key": "photo", "label_vi": "Ảnh hiện trường", "data_type": "photo", "required": true, "min": "1", "max": "10"},
+      {"key": "gps", "label_vi": "Toạ độ lúc chụp", "data_type": "geo_point", "required": true},
+      {"key": "note", "label_vi": "Ghi chú", "data_type": "text", "required": false, "max": "1000"}
+    ]
+  },
+  {
+    "evidence_type": "pest_disaster",
+    "provisional": true,
+    "source_note": "Danh mục mẫu G3 — TẠM, chờ chốt C-1. Theo KN US-MRV-04: ghi nhận sâu bệnh/thiên tai (loại, cấp gây hại 1–5, diện tích ảnh hưởng); vượt ngưỡng (tham số mrv.urgent.*) → tự gắn nhãn Cảnh báo khẩn.",
+    "fields": [
+      {"key": "plot_ref", "label_vi": "Thửa ruộng (bỏ trống nếu cả vùng)", "data_type": "text", "required": false},
+      {"key": "season", "label_vi": "Vụ", "data_type": "text", "required": false},
+      {"key": "hazard_kind", "label_vi": "Nhóm", "data_type": "enum", "required": true, "enum_values": ["sau_benh", "thien_tai"]},
+      {"key": "category", "label_vi": "Loại dịch hại / thiên tai", "data_type": "enum", "required": true,
+       "enum_values": ["ray_nau", "dao_on", "dao_on_co_bong", "sau_cuon_la", "vang_lun_xoan_la", "oc_buou_vang", "chuot",
+                       "lu_lut", "han_han", "xam_nhap_man", "bao_loc", "mua_da", "khac"]},
+      {"key": "severity_level", "label_vi": "Mức độ gây hại", "data_type": "integer", "unit": "cấp", "required": true, "min": "1", "max": "5",
+       "help_vi": "Cấp 1 (nhẹ) – 5 (rất nặng)"},
+      {"key": "affected_area_ha", "label_vi": "Diện tích ảnh hưởng", "data_type": "decimal", "unit": "ha", "required": true,
+       "min": "0", "max": "100000", "max_scale": 2},
+      {"key": "photo", "label_vi": "Ảnh hiện trường", "data_type": "photo", "required": true, "min": "1", "max": "10"},
+      {"key": "gps", "label_vi": "Toạ độ lúc chụp", "data_type": "geo_point", "required": true},
+      {"key": "note", "label_vi": "Ghi chú", "data_type": "text", "required": false, "max": "1000"}
+    ]
+  },
+  {
+    "evidence_type": "irrigation_infrastructure",
+    "provisional": true,
+    "source_note": "Danh mục mẫu G3 — TẠM, chờ chốt C-1. Theo KN FR-08: cán bộ xã xác nhận hạ tầng tưới tiêu chủ động đủ cho AWD (ống quan trắc, bờ bao, cống/kênh điều tiết) của một thửa, hoặc cả xã khi không gắn thửa. Nhật ký App HTX ghi AWD mà chưa có xác nhận đạt → cờ bất thường.",
+    "fields": [
+      {"key": "plot_ref", "label_vi": "Thửa ruộng (bỏ trống = cả xã)", "data_type": "text", "required": false},
+      {"key": "infra_ready", "label_vi": "Hạ tầng đủ cho AWD", "data_type": "boolean", "required": true},
+      {"key": "monitoring_tube", "label_vi": "Có ống quan trắc mực nước", "data_type": "boolean", "required": true},
+      {"key": "bund_ok", "label_vi": "Bờ bao giữ nước", "data_type": "boolean", "required": true},
+      {"key": "water_control", "label_vi": "Cống/kênh điều tiết chủ động", "data_type": "boolean", "required": true},
+      {"key": "photo", "label_vi": "Ảnh hiện trường", "data_type": "photo", "required": true, "min": "1", "max": "10"},
+      {"key": "gps", "label_vi": "Toạ độ lúc kiểm tra", "data_type": "geo_point", "required": true},
+      {"key": "note", "label_vi": "Ghi chú", "data_type": "text", "required": false, "max": "1000"}
+    ]
+  },
+  {
+    "evidence_type": "htx_farm_log",
+    "provisional": true,
+    "source_note": "Danh mục mẫu G3 — TẠM, chờ chốt C-1. Nhật ký canh tác App HTX liên kết làm tham chiếu bằng chứng (KN FR-06, US-MRV-02); nội dung nhật ký ở pf/cropcycle, liên kết ghim phiên bản danh mục này.",
+    "fields": [
+      {"key": "plot_ref", "label_vi": "Thửa ruộng", "data_type": "text", "required": true},
+      {"key": "season", "label_vi": "Vụ", "data_type": "text", "required": true},
+      {"key": "activity_code", "label_vi": "Hoạt động", "data_type": "enum", "required": true,
+       "enum_values": ["lam_dat", "gieo_sa", "tuoi_nuoc", "bon_phan", "phun_thuoc", "kiem_tra", "thu_hoach"]},
+      {"key": "log_ref", "label_vi": "Mã nhật ký HTX", "data_type": "text", "required": true}
+    ]
+  }
+]

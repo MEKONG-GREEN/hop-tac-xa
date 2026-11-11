@@ -1,0 +1,99 @@
+import { describe, expect, it } from "vitest";
+import { deepLinkHref } from "./deepLink";
+import { KIND_LABEL } from "@/notify/notify";
+
+const ID = "01927b3e-0ff1-7000-8000-00000000abcd";
+
+describe("deepLinkHref — liên kết thông báo sang trang web", () => {
+  it("W11.26: chỉ nhận UUID đợt đầy đủ, bỏ query/hash và có đích HRM dự phòng", () => {
+    const base = "/kn/nhan-su/danh-gia";
+    expect(deepLinkHref(`${base}/dot/${ID.toUpperCase()}?x=1#y`, "hrm_appraisal")).toBe(`${base}/dot/${ID}`);
+    for (const path of [`${base}/dot/abc`, `${base}/dot/${ID}/../x`, `${base}/dot/${ID}x`, `https://evil.example${base}/dot/${ID}`]) {
+      expect(deepLinkHref(path, "hrm_appraisal")).toBe(base);
+      expect(deepLinkHref(path)).toBeNull();
+    }
+    expect(deepLinkHref(null, "hrm_appraisal")).toBe(base);
+    expect(deepLinkHref(`${base}/dot/${ID}/phieu/${ID.toUpperCase()}`, "hrm_appraisal")).toBe(`${base}/dot/${ID}/phieu/${ID}`);
+    expect(deepLinkHref(`${base}/dot/${ID}/phieu/${ID}/extra`, "hrm_appraisal")).toBe(base);
+    expect(deepLinkHref(`${base}/dot/${ID}/phieu/invalid`, "hrm_appraisal")).toBe(base);
+
+    expect(deepLinkHref(null, "hrm_promotion_due")).toBe("/kn/nhan-su/nang-bac");
+    expect(deepLinkHref(null, "hrm_plan_reminder")).toBe("/kn/nhan-su/ke-hoach-phong");
+    expect(KIND_LABEL.hrm_appraisal).toBe("Đánh giá viên chức");
+    expect(KIND_LABEL.hrm_promotion_due).toBe("Nhắc xét nâng bậc lương");
+    expect(KIND_LABEL.hrm_plan_reminder).toBe("Nhắc kế hoạch phòng");
+  });
+
+  it("các loại có sẵn: chỉ đạo, tài liệu, nhiệm vụ leo thang, xung đột, tổ chức", () => {
+    expect(deepLinkHref(`/extension/directives/${ID}`, "directive")).toBe(`/chi-dao?id=${ID}`);
+    expect(deepLinkHref(`/documents/${ID}`, "document")).toBe(`/thu-vien?doc=${ID}`);
+    expect(deepLinkHref(`/extension/tasks/${ID}`, "task_escalated")).toBe(`/nhiem-vu?task=${ID}`);
+    expect(deepLinkHref(`/sync/conflicts/${ID}`, "sync_conflict")).toBe(`/quan-tri/xung-dot?id=${ID}`);
+    expect(deepLinkHref(`/orgs/${ID}`, "org_deactivated")).toBe(`/quan-tri/to-chuc?org=${ID}`);
+  });
+
+  it("HTX US-LOG-05: farm_log_pending → trang phê duyệt nhật ký", () => {
+    expect(deepLinkHref(`/cropcycle/farm-logs/${ID}`, "farm_log_pending")).toBe("/htx/phe-duyet");
+  });
+
+  it("HTX US-LOG-05 AC-3: farm_log_reviewed → trang nhật ký canh tác", () => {
+    expect(deepLinkHref(`/cropcycle/farm-logs/${ID}`, "farm_log_reviewed")).toBe("/htx/nhat-ky");
+  });
+
+  it("HTX US-SEASON-01: season_opened → trang mùa vụ", () => {
+    expect(deepLinkHref(`/cropcycle/seasons/${ID}`, "season_opened")).toBe("/htx/mua-vu");
+  });
+
+  it("KN US-HTX-05: household_registered / household_membership_changed → danh sách HTX & nông hộ", () => {
+    expect(deepLinkHref(`/households/${ID}`, "household_registered")).toBe("/htx");
+    expect(deepLinkHref(`/households/${ID}`, "household_membership_changed")).toBe("/htx");
+  });
+
+  it("KN US-TASK-01: task_assigned → trang nhiệm vụ mở sẵn nhiệm vụ", () => {
+    expect(deepLinkHref(`/extension/tasks/${ID}`, "task_assigned")).toBe(`/nhiem-vu?task=${ID}`);
+  });
+
+  it("GIS US-SYNC-02: integration_dead_lettered → màn Giám sát đồng bộ", () => {
+    expect(deepLinkHref(`/sync/integrations/${ID}`, "integration_dead_lettered")).toBe("/quan-tri/giam-sat-dong-bo");
+    expect(deepLinkHref(null, "integration_dead_lettered")).toBe("/quan-tri/giam-sat-dong-bo");
+  });
+
+  it("CGH FN-07: area_feed_stale → Bản đồ CGH (banner độ tươi + nhật ký đồng bộ)", () => {
+    expect(deepLinkHref("/mechanization/area-sync-log", "area_feed_stale")).toBe("/cgh");
+    expect(deepLinkHref("", "area_feed_stale")).toBe("/cgh");
+  });
+
+  it("không có kind vẫn nhận dạng theo đường dẫn (nhật ký mặc định → phê duyệt)", () => {
+    expect(deepLinkHref(`/cropcycle/farm-logs/${ID}`)).toBe("/htx/phe-duyet");
+    expect(deepLinkHref(`/extension/tasks/${ID}?x=1#y`)).toBe(`/nhiem-vu?task=${ID}`);
+  });
+
+  it("deep_link trống/lạ: dùng trang mặc định theo kind của App HTX", () => {
+    expect(deepLinkHref("", "farm_log_pending")).toBe("/htx/phe-duyet");
+    expect(deepLinkHref(null, "farm_log_reviewed")).toBe("/htx/nhat-ky");
+    expect(deepLinkHref("/unknown/path", "season_opened")).toBe("/htx/mua-vu");
+    expect(deepLinkHref(undefined, "household_registered")).toBe("/htx");
+    expect(deepLinkHref("/x", "household_membership_changed")).toBe("/htx");
+  });
+
+  it("W11.53b: thông báo biểu dự án KNQG (gửi/xác nhận-trả lại/trình) → màn Mẫu biểu mở đúng biểu", () => {
+    const doc = "0192f0a0-1234-7abc-8def-0123456789ab";
+    for (const kind of ["cnts_knqg_sent", "cnts_knqg_reviewed", "cnts_knqg_submitted"]) {
+      expect(deepLinkHref(`/kn/cnts/du-an-mau-bieu?doc=${doc}`, kind)).toBe(`/kn/cnts/du-an-mau-bieu?doc=${doc}`);
+      expect(deepLinkHref(`/kn/cnts/du-an-mau-bieu?doc=${doc.toUpperCase()}#x`, kind)).toBe(`/kn/cnts/du-an-mau-bieu?doc=${doc}`);
+      // mã sai dạng/chèn thêm → chỉ mở màn danh sách, không mang chuỗi tuỳ ý sang URL
+      expect(deepLinkHref("/kn/cnts/du-an-mau-bieu?doc=../../admin", kind)).toBe("/kn/cnts/du-an-mau-bieu");
+      expect(deepLinkHref(`/kn/cnts/du-an-mau-bieu?doc=${doc}x`, kind)).toBe("/kn/cnts/du-an-mau-bieu");
+      expect(deepLinkHref(null, kind)).toBe("/kn/cnts/du-an-mau-bieu");
+    }
+    expect(deepLinkHref(`/kn/cnts/du-an-mau-bieu/../../x?doc=${doc}`, "cnts_knqg_sent")).toBe("/kn/cnts/du-an-mau-bieu");
+  });
+
+  it("kind lạ và đường dẫn lạ → null (chỉ mở hộp thư)", () => {
+    expect(deepLinkHref("/unknown/path", "unknown_kind")).toBeNull();
+    expect(deepLinkHref("https://evil.example/extension/tasks/abc", "task_assigned")).toBeNull();
+    expect(deepLinkHref(`/extension/tasks/${ID}/../../x`, "task_assigned")).toBeNull();
+    expect(deepLinkHref(null)).toBeNull();
+    expect(deepLinkHref("", "toString")).toBeNull();
+  });
+});

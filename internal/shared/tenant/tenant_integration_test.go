@@ -1,0 +1,257 @@
+package tenant_test
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/dbadmin"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/ids"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/pgtest"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/tenant"
+	"github.com/MEKONG-GREEN/hop-tac-xa/migrations"
+)
+
+func TestMain(m *testing.M) { os.Exit(pgtest.Run(m)) }
+
+func insertConsent(ctx context.Context, tx pgx.Tx, tid, subject uuid.UUID) error {
+	_, err := tx.Exec(ctx, `INSERT INTO pf_party.consent
+	  (id, tenant_id, stream_key, subject_ref, purpose, text_version, status, channel, event_time, actor_ref, idem_key, rule_version)
+	  VALUES ($1, $2, $3, $4, 'mrv.evidence', 'v1', 'granted', 'field_app', now(), $5, $6, 'consent/v1')`,
+		ids.New(), tid, "subject:"+subject.String(), subject, ids.New(), ids.New().String())
+	return err
+}
+
+// R-32: N goroutine, N tenant, qua PgBouncer transaction mode nếu có. Mỗi
+// goroutine ghi rồi đọc; không goroutine nào được thấy bản ghi của tenant khác.
+func TestTenantLeakParallel(t *testing.T) {
+	env := pgtest.Get(t)
+	if env.ViaBouncer {
+		t.Log("chạy qua PgBouncer transaction mode")
+	} else {
+		t.Log("CẢNH BÁO: chạy thẳng PostgreSQL — CI phải đặt AG_TEST_PGBOUNCER_URL")
+	}
+	pool := env.Pool(t, migrations.PF, "party_app")
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	const tenants, rounds = 24, 15
+	var wg sync.WaitGroup
+	errs := make(chan error, tenants)
+	for i := 0; i < tenants; i++ {
+		tid := ids.New()
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for r := 0; r < rounds; r++ {
+				err := tenant.WithTenantTx(ctx, pool, tid, func(tx pgx.Tx) error {
+					if err := insertConsent(ctx, tx, tid, ids.New()); err != nil {
+						return err
+					}
+					var foreign int
+					if err := tx.QueryRow(ctx, "SELECT count(*) FROM pf_party.consent WHERE tenant_id <> $1", tid).Scan(&foreign); err != nil {
+						return err
+					}
+					if foreign != 0 {
+						return fmt.Errorf("RÒ RỈ: tenant %s thấy %d bản ghi của tenant khác", tid, foreign)
+					}
+					var own int
+					if err := tx.QueryRow(ctx, "SELECT count(*) FROM pf_party.consent").Scan(&own); err != nil {
+						return err
+					}
+					if own != r+1 {
+						return fmt.Errorf("tenant %s: thấy %d bản ghi, mong %d", tid, own, r+1)
+					}
+					return nil
+				})
+				if err != nil {
+					errs <- err
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Error(err)
+	}
+}
+
+// R-31: thiếu ngữ cảnh tenant → rỗng, không phải "thấy tất cả".
+func TestNoTenantContextSeesNothing(t *testing.T) {
+	env := pgtest.Get(t)
+	pool := env.Pool(t, migrations.PF, "party_app")
+	ctx := context.Background()
+	tid := ids.New()
+	if err := tenant.WithTenantTx(ctx, pool, tid, func(tx pgx.Tx) error { return insertConsent(ctx, tx, tid, ids.New()) }); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM pf_party.consent").Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("không có ngữ cảnh mà thấy %d bản ghi", n)
+	}
+	// Owner cũng bị FORCE RLS.
+	owner := env.Pool(t, migrations.PF, dbadmin.Migrator)
+	if err := owner.QueryRow(ctx, "SELECT count(*) FROM pf_party.consent").Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("owner không có ngữ cảnh mà thấy %d bản ghi", n)
+	}
+}
+
+// WITH CHECK: không ghi được bản ghi mang tenant khác ngữ cảnh.
+func TestCannotWriteForeignTenant(t *testing.T) {
+	env := pgtest.Get(t)
+	pool := env.Pool(t, migrations.PF, "party_app")
+	ctx := context.Background()
+	mine, theirs := ids.New(), ids.New()
+	err := tenant.WithTenantTx(ctx, pool, mine, func(tx pgx.Tx) error { return insertConsent(ctx, tx, theirs, ids.New()) })
+	if err == nil {
+		t.Fatal("ghi bản ghi của tenant khác phải bị RLS chặn")
+	}
+}
+
+// R-30: SET LOCAL hết hiệu lực sau giao dịch — kết nối trả về pool sạch.
+func TestContextDoesNotOutliveTransaction(t *testing.T) {
+	env := pgtest.Get(t)
+	ctx := context.Background()
+	dsn, err := dbadmin.RoleURL(env.DirectURL, migrations.PF, env.Suffix, "party_app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, err := pgx.Connect(ctx, dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.Close(ctx) }()
+	if err := tenant.WithTenantTx(ctx, conn, ids.New(), func(tx pgx.Tx) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	var v *string
+	if err := conn.QueryRow(ctx, "SELECT nullif(current_setting('app.tenant_id', true), '')").Scan(&v); err != nil {
+		t.Fatal(err)
+	}
+	if v != nil {
+		t.Fatalf("app.tenant_id còn sót sau giao dịch: %s", *v)
+	}
+}
+
+// ADR-0020: Within đổi ngữ cảnh tenant trong CÙNG giao dịch (RLS vẫn áp) rồi trả về tenant cũ.
+func TestWithinSwitchesAndRestores(t *testing.T) {
+	env := pgtest.Get(t)
+	pool := env.Pool(t, migrations.PF, "party_app")
+	ctx := context.Background()
+	a, b := ids.New(), ids.New()
+	err := tenant.WithTenantTx(ctx, pool, a, func(tx pgx.Tx) error {
+		if err := tenant.Within(ctx, tx, tenant.MintGrant(a, b), func() error { return insertConsent(ctx, tx, b, ids.New()) }); err != nil {
+			return err
+		}
+		// Đã về tenant a: dòng của b không thấy.
+		var n int
+		if err := tx.QueryRow(ctx, "SELECT count(*) FROM pf_party.consent").Scan(&n); err != nil {
+			return err
+		}
+		if n != 0 {
+			return fmt.Errorf("sau Within vẫn thấy %d dòng", n)
+		}
+		return insertConsent(ctx, tx, a, ids.New())
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tid := range []uuid.UUID{a, b} {
+		var n int
+		if err := tenant.WithTenantTx(ctx, pool, tid, func(tx pgx.Tx) error {
+			return tx.QueryRow(ctx, "SELECT count(*) FROM pf_party.consent").Scan(&n)
+		}); err != nil || n != 1 {
+			t.Fatalf("tenant %s phải có đúng 1 dòng: %d %v", tid, n, err)
+		}
+	}
+}
+
+// H4: Within không đổi tenant khi thiếu bằng chứng cấp quyền (Grant zero / thiếu một phía) hoặc
+// bằng chứng cấp cho tenant nguồn khác ngữ cảnh hiện hành; fn không chạy, ngữ cảnh giữ nguyên.
+func TestWithinRejectsMissingOrForeignGrant(t *testing.T) {
+	env := pgtest.Get(t)
+	pool := env.Pool(t, migrations.PF, "party_app")
+	ctx := context.Background()
+	a, b, c := ids.New(), ids.New(), ids.New()
+	cases := []struct {
+		name string
+		g    tenant.Grant
+		want error
+	}{
+		{"zero", tenant.Grant{}, tenant.ErrGrantMissing},
+		{"thiếu đích", tenant.MintGrant(a, uuid.Nil), tenant.ErrGrantMissing},
+		{"thiếu nguồn", tenant.MintGrant(uuid.Nil, b), tenant.ErrGrantMissing},
+		{"nguồn khác ngữ cảnh", tenant.MintGrant(c, b), tenant.ErrGrantMismatch},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ran := false
+			err := tenant.WithTenantTx(ctx, pool, a, func(tx pgx.Tx) error {
+				if err := tenant.Within(ctx, tx, tc.g, func() error { ran = true; return nil }); !errors.Is(err, tc.want) {
+					return fmt.Errorf("muốn %w, nhận %w", tc.want, err)
+				}
+				var cur string
+				if err := tx.QueryRow(ctx, "SELECT current_setting('app.tenant_id', true)").Scan(&cur); err != nil {
+					return err
+				}
+				if cur != a.String() {
+					return fmt.Errorf("ngữ cảnh phải giữ tenant %s, đang là %s", a, cur)
+				}
+				return nil
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if ran {
+				t.Fatal("fn không được chạy khi bằng chứng không hợp lệ")
+			}
+		})
+	}
+}
+
+// Review M7: fn trả lỗi (không phải lỗi SQL) mà người gọi nuốt lỗi rồi dùng tiếp tx → vẫn chạy dưới tenant cũ.
+func TestWithinRestoresOnError(t *testing.T) {
+	env := pgtest.Get(t)
+	pool := env.Pool(t, migrations.PF, "party_app")
+	ctx := context.Background()
+	a, b := ids.New(), ids.New()
+	boom := errors.New("lỗi nghiệp vụ")
+	err := tenant.WithTenantTx(ctx, pool, a, func(tx pgx.Tx) error {
+		if err := tenant.Within(ctx, tx, tenant.MintGrant(a, b), func() error { return boom }); !errors.Is(err, boom) {
+			return fmt.Errorf("mong lỗi gốc của fn: %w", err)
+		}
+		var cur string
+		if err := tx.QueryRow(ctx, "SELECT current_setting('app.tenant_id', true)").Scan(&cur); err != nil {
+			return err
+		}
+		if cur != a.String() {
+			return fmt.Errorf("sau lỗi của fn ngữ cảnh phải về tenant %s, đang là %s", a, cur)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRejectsNilTenant(t *testing.T) {
+	err := tenant.WithTenantTx(context.Background(), nil, uuid.Nil, func(pgx.Tx) error { return nil })
+	if !errors.Is(err, tenant.ErrMissing) {
+		t.Fatalf("muốn ErrMissing, nhận %v", err)
+	}
+}

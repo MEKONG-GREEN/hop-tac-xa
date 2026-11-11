@@ -1,0 +1,18 @@
+# Khối ```sql được docsql bỏ qua (R-OPS-04). Không sửa bản tài liệu gốc trong
+# docs/kien-truc/ để bỏ qua — ghi ở đây.
+#
+# Mỗi mục:
+#   doc:    tên tệp tài liệu (không kèm thư mục)
+#   block:  số thứ tự khối sql trong tài liệu, đếm từ 1 (để người đọc tìm; được kiểm khớp)
+#   hash:   ≥ 8 ký tự hex đầu của SHA-256 thân khối — xem: go run ./tools/docsql -list TỆP.md
+#   reason: lý do. Khối minh họa: "minh họa: …". Lỗi tài liệu: "lỗi trong tài liệu v4.1: …"
+#           và thêm câu hỏi vào docs/cau-hoi-ton-dong.md mục H.
+#
+# Khối đổi nội dung → hash đổi → mục thành "thừa" và docsql hỏng: xem lại mục đó.
+#
+# Lần chạy đầu (W0.4, 04/10/2026): 9/9 khối của v4.1 chạy được — không cần bỏ qua.
+# W2.3 (05/10/2026): khối #1 §14 tạo vai app_platform — từ W2.3 dbadmin.Bootstrap tạo vai này (vai là đối tượng
+# mức cụm PostgreSQL, docsql chạy trên cùng cụm với kiểm thử) nên CREATE ROLE trùng. Hiện thực được kiểm ở
+# internal/shared/db (T4/T5) và internal/shared/dbadmin.
+skips:
+  - {doc: AgriGreen-Thiet-ke-kien-truc-he-thong-v4_1.md, block: 1, hash: bb79616ac032, reason: "minh họa: CREATE ROLE app_platform — vai do dbadmin.Bootstrap tạo từ W2.3 (ADR-0028), trùng trên cụm dùng chung; hiện thực kiểm ở internal/shared/db và dbadmin"}

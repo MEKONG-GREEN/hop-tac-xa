@@ -1,0 +1,368 @@
+package domain
+
+import (
+	"errors"
+	"fmt"
+	"regexp"
+	"slices"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+	"unicode/utf8"
+
+	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
+
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/masterdata/port"
+)
+
+// CatalogRuleVersion ghim vào mọi dòng sổ catalog_change.
+const CatalogRuleVersion = "pf.masterdata.catalog/v1"
+
+// CatalogFormat là định dạng tệp danh mục nhúng.
+const CatalogFormat = "agrigreen.catalogs/v1"
+
+// baseCatalogs là danh mục dùng chung / Trồng trọt (trước W11.41).
+var baseCatalogs = []string{port.CatalogRiceVariety, port.CatalogFarmStage, port.CatalogMachineType, port.CatalogSeason, port.CatalogPest, port.CatalogVesselClass,
+	port.CatalogCrop, port.CatalogMaterial, port.CatalogProductionModel, port.CatalogReportType}
+
+// Catalogs là các danh mục gốc do module dùng chung quản lý.
+var Catalogs = slices.Clone(baseCatalogs)
+
+// Hành động ghi vào sổ lịch sử danh mục.
+const (
+	ActionCreated     = "created"
+	ActionUpdated     = "updated"
+	ActionDeactivated = "deactivated"
+	ActionReactivated = "reactivated"
+)
+
+// MinReasonLen là độ dài tối thiểu của lý do ngừng dùng (giống correction_reason).
+const MinReasonLen = 10
+
+var itemCodeRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,39}$`)
+
+// Lỗi kiểm dữ liệu danh mục.
+var (
+	ErrCatalogUnknown = errors.New("danh mục không tồn tại (xem GET /v1/masterdata/catalogs)")
+	ErrItemCode       = errors.New("mã mục 1–40 ký tự [A-Za-z0-9_.-]")
+	ErrItemName       = errors.New("tên bắt buộc, tối đa 200 ký tự")
+	ErrReason         = fmt.Errorf("lý do bắt buộc, %d–500 ký tự", MinReasonLen)
+)
+
+// KnownCatalog cho biết c là danh mục module quản lý.
+func KnownCatalog(c string) bool { return slices.Contains(Catalogs, c) }
+
+// Item là một mục danh mục (bảng hiện trạng).
+type Item struct {
+	Catalog            string
+	Code               string
+	Name               string
+	Attrs              map[string]string
+	Active             bool
+	DeactivationReason string
+	Revision           int
+	UpdatedBy          uuid.UUID
+	UpdatedAt          time.Time
+	// ValidFrom (chỉ danh mục CNTS, W11.41): ngày bắt đầu hiệu lực của giá trị — khi ghi là ngày áp dụng (zero =
+	// hôm nay), khi đọc theo ngày là valid_from của phiên bản có hiệu lực. Không lưu ở bảng hiện trạng.
+	ValidFrom time.Time
+}
+
+// Snapshot là trạng thái của mục ghi vào sổ lịch sử (trước → sau).
+type Snapshot struct {
+	Name               string            `json:"name"`
+	Attrs              map[string]string `json:"attrs"`
+	Active             bool              `json:"active"`
+	DeactivationReason *string           `json:"deactivation_reason,omitempty"`
+}
+
+// Snapshot chụp trạng thái hiện tại.
+func (it Item) Snapshot() Snapshot {
+	s := Snapshot{Name: it.Name, Attrs: it.Attrs, Active: it.Active}
+	if it.DeactivationReason != "" {
+		r := it.DeactivationReason
+		s.DeactivationReason = &r
+	}
+	return s
+}
+
+// Change là một dòng sổ lịch sử danh mục.
+type Change struct {
+	ID         uuid.UUID
+	Catalog    string
+	Code       string
+	Action     string
+	Before     *Snapshot
+	After      Snapshot
+	Reason     string
+	EventTime  time.Time
+	ActorRef   uuid.UUID
+	IdemKey    string
+	Seq        int64
+	RecordedAt time.Time
+}
+
+// CatalogStreamKey: mỗi mục danh mục một chuỗi băm.
+func CatalogStreamKey(catalog, code string) string { return "catalog:" + catalog + ":" + code }
+
+// ValidateReason kiểm lý do ngừng dùng.
+func ValidateReason(r string) error {
+	n := utf8.RuneCountInString(strings.TrimSpace(r))
+	if n < MinReasonLen || n > 500 {
+		return FieldError{Field: "reason", Err: ErrReason}
+	}
+	return nil
+}
+
+type attrSpec = port.AttributeSpec
+
+func intRange(lo, hi int) func(string) (string, error) {
+	return func(s string) (string, error) {
+		n, err := strconv.Atoi(strings.TrimSpace(s))
+		if err != nil || n < lo || n > hi {
+			return "", fmt.Errorf("phải là số nguyên %d–%d", lo, hi)
+		}
+		return strconv.Itoa(n), nil
+	}
+}
+
+func oneOf(vals ...string) func(string) (string, error) {
+	return func(s string) (string, error) {
+		if !slices.Contains(vals, s) {
+			return "", fmt.Errorf("phải là một trong %s", strings.Join(vals, ", "))
+		}
+		return s, nil
+	}
+}
+
+func text(max int) func(string) (string, error) {
+	return func(s string) (string, error) {
+		if utf8.RuneCountInString(s) > max {
+			return "", fmt.Errorf("tối đa %d ký tự", max)
+		}
+		return s, nil
+	}
+}
+
+// yield: năng suất kỳ vọng (tấn/ha) là decimal > 0, ≤ 30, tối đa 4 chữ số thập phân.
+func yield(s string) (string, error) {
+	d, err := decimal.NewFromString(strings.TrimSpace(s))
+	if err != nil || !d.IsPositive() || d.GreaterThan(decimal.NewFromInt(30)) || d.Exponent() < -4 {
+		return "", errors.New("phải là số thập phân > 0 và ≤ 30 (tấn/ha), tối đa 4 chữ số lẻ")
+	}
+	return d.String(), nil
+}
+
+// positiveDec: số thập phân > 0, ≤ max, tối đa 4 chữ số lẻ (kích thước phương tiện, tải trọng).
+func positiveDec(max int64) func(string) (string, error) {
+	return func(s string) (string, error) {
+		d, err := decimal.NewFromString(strings.TrimSpace(s))
+		if err != nil || !d.IsPositive() || d.GreaterThan(decimal.NewFromInt(max)) || d.Exponent() < -4 {
+			return "", fmt.Errorf("phải là số thập phân > 0 và ≤ %d, tối đa 4 chữ số lẻ", max)
+		}
+		return d.String(), nil
+	}
+}
+
+// codeList: danh sách mã mục ngăn cách dấu phẩy, chuẩn hóa (bỏ khoảng trắng, bỏ trùng, sắp xếp); tối đa 200 mã.
+func codeList(s string) (string, error) {
+	var out []string
+	for _, c := range strings.Split(s, ",") {
+		c = strings.TrimSpace(c)
+		if c == "" {
+			continue
+		}
+		if !itemCodeRe.MatchString(c) {
+			return "", fmt.Errorf("mã %q không hợp lệ", c)
+		}
+		if !slices.Contains(out, c) {
+			out = append(out, c)
+		}
+	}
+	if len(out) > 200 {
+		return "", errors.New("tối đa 200 mã")
+	}
+	sort.Strings(out)
+	return strings.Join(out, ","), nil
+}
+
+// nonEmpty: chuỗi bắt buộc, tối đa max ký tự.
+func nonEmpty(max int) func(string) (string, error) {
+	return func(s string) (string, error) {
+		s = strings.TrimSpace(s)
+		if s == "" || utf8.RuneCountInString(s) > max {
+			return "", fmt.Errorf("bắt buộc, tối đa %d ký tự", max)
+		}
+		return s, nil
+	}
+}
+
+func stageRefNamed(what string) func(string) (string, error) {
+	return func(s string) (string, error) {
+		if !itemCodeRe.MatchString(s) {
+			return "", errors.New("phải là " + what)
+		}
+		return s, nil
+	}
+}
+
+// CodeList tách thuộc tính danh sách mã (affected_crops) đã chuẩn hóa.
+func CodeList(s string) []string {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	return strings.Split(s, ",")
+}
+
+func stageRef(s string) (string, error) {
+	if !itemCodeRe.MatchString(s) {
+		return "", errors.New("phải là mã khâu sản xuất")
+	}
+	return s, nil
+}
+
+var attrSpecs = map[string]map[string]attrSpec{
+	port.CatalogRiceVariety: {
+		"growth_days":             {Required: true, Normalize: intRange(1, 365)},
+		"expected_yield_t_per_ha": {Required: true, Normalize: yield},
+		"description":             {Required: false, Normalize: text(500)},
+	},
+	port.CatalogFarmStage: {
+		"pilot":       {Required: true, Normalize: oneOf("true", "false")}, // cờ thí điểm CGH (BR-06)
+		"description": {Required: false, Normalize: text(500)},
+	},
+	port.CatalogMachineType: {
+		"farm_stage":  {Required: true, Normalize: stageRef}, // khâu tự gán theo chủng loại (CGH BR-02)
+		"description": {Required: false, Normalize: text(500)},
+	},
+	port.CatalogSeason: {
+		"start_month": {Required: false, Normalize: intRange(1, 12)},
+		"end_month":   {Required: false, Normalize: intRange(1, 12)},
+		"description": {Required: false, Normalize: text(500)},
+	},
+	port.CatalogPest: {
+		"kind":                      {Required: true, Normalize: oneOf("sau_hai", "benh_hai", "dong_vat_hai", "co_dai")},
+		"description":               {Required: false, Normalize: text(500)},
+		port.AttrAffectedCrops:      {Required: false, Normalize: codeList},  // KN v7.7 FN-AD-04.05: cây trồng bị ảnh hưởng
+		port.AttrSeverityThresholds: {Required: false, Normalize: text(500)}, // không bắt buộc, điền sau
+	},
+	port.CatalogCrop: {
+		port.AttrParentCode: {Required: false, Normalize: stageRefNamed("mã nhóm cây trồng")},
+		"is_group":          {Required: false, Normalize: oneOf("true", "false")},
+		"unit":              {Required: false, Normalize: text(20)},
+		"description":       {Required: false, Normalize: text(500)},
+	},
+	port.CatalogMaterial: {
+		"unit":        {Required: true, Normalize: nonEmpty(20)},
+		"group":       {Required: false, Normalize: text(100)},
+		"description": {Required: false, Normalize: text(500)},
+	},
+	port.CatalogProductionModel: {
+		"description": {Required: false, Normalize: text(500)},
+	},
+	port.CatalogReportType: {
+		"period":      {Required: true, Normalize: oneOf("week", "month", "season", "year", "ad_hoc", "dispatch")},
+		"level":       {Required: false, Normalize: oneOf("province", "commune", "both")},
+		"description": {Required: false, Normalize: text(500)},
+	},
+	port.CatalogVesselClass: {
+		"capacity_t":      {Required: true, Normalize: positiveDec(100000)},
+		"beam_m":          {Required: true, Normalize: positiveDec(100)},
+		"draft_m":         {Required: true, Normalize: positiveDec(50)},
+		"air_draft_m":     {Required: true, Normalize: positiveDec(100)},
+		"min_width_m":     {Required: true, Normalize: positiveDec(500)},
+		"min_depth_m":     {Required: true, Normalize: positiveDec(50)},
+		"min_clearance_m": {Required: true, Normalize: positiveDec(100)},
+		"description":     {Required: false, Normalize: text(500)},
+	},
+}
+
+// CanonicalCode là dạng chuẩn của mã mục: mã mùa vụ luôn viết HOA (UAT DEF-HTX-13 —
+// "dx-2027" và "DX-2027" là một vụ, không được thành hai mục). Danh mục khác giữ
+// nguyên mã (vd khâu "lam_dat"). Dùng cả khi ghi lẫn khi tra.
+func CanonicalCode(catalog, code string) string {
+	code = strings.TrimSpace(code)
+	if catalog == port.CatalogSeason {
+		return strings.ToUpper(code)
+	}
+	return code
+}
+
+// Normalize kiểm và chuẩn hóa mục trước khi ghi: mã, tên, thuộc tính theo từng
+// danh mục (thiếu thuộc tính bắt buộc hoặc có thuộc tính lạ đều bị từ chối).
+func (it Item) Normalize() (Item, error) {
+	if !KnownCatalog(it.Catalog) {
+		return it, FieldError{Field: "catalog", Err: ErrCatalogUnknown}
+	}
+	return it.NormalizeWith(port.CatalogDefinition{Catalog: it.Catalog, Attributes: attrSpecs[it.Catalog]})
+}
+
+// NormalizeWith applies an explicitly registered pure schema.
+func (it Item) NormalizeWith(def port.CatalogDefinition) (Item, error) {
+	if def.Catalog != it.Catalog {
+		return it, FieldError{Field: "catalog", Err: ErrCatalogUnknown}
+	}
+	it.Code = CanonicalCode(it.Catalog, it.Code)
+	if !itemCodeRe.MatchString(it.Code) {
+		return it, FieldError{Field: "code", Err: ErrItemCode}
+	}
+	it.Name = strings.TrimSpace(it.Name)
+	if it.Name == "" || utf8.RuneCountInString(it.Name) > 200 {
+		return it, FieldError{Field: "name", Err: ErrItemName}
+	}
+	spec := def.Attributes
+	out := make(map[string]string, len(it.Attrs))
+	keys := make([]string, 0, len(it.Attrs))
+	for k := range it.Attrs {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		s, ok := spec[k]
+		if !ok {
+			return it, FieldError{Field: "attrs." + k, Err: errors.New("thuộc tính không có trong danh mục " + it.Catalog)}
+		}
+		v, err := s.Normalize(it.Attrs[k])
+		if err != nil {
+			return it, FieldError{Field: "attrs." + k, Err: err}
+		}
+		out[k] = v
+	}
+	for k, s := range spec {
+		if _, ok := out[k]; s.Required && !ok {
+			return it, FieldError{Field: "attrs." + k, Err: errors.New("bắt buộc")}
+		}
+	}
+	if def.ValidateAttrs != nil {
+		if err := def.ValidateAttrs(out); err != nil {
+			return it, err
+		}
+	}
+	if it.Catalog == port.CatalogSeason {
+		_, a := out["start_month"]
+		_, b := out["end_month"]
+		if a != b {
+			return it, FieldError{Field: "attrs.end_month", Err: errors.New("start_month và end_month đi cùng nhau")}
+		}
+	}
+	it.Attrs = out
+	return it, nil
+}
+
+// SameContent cho biết hai mục có cùng tên và thuộc tính.
+func (it Item) SameContent(o Item) bool {
+	if it.Name != o.Name || len(it.Attrs) != len(o.Attrs) {
+		return false
+	}
+	for k, v := range it.Attrs {
+		if o.Attrs[k] != v {
+			return false
+		}
+	}
+	return true
+}
+
+// NativeCatalog protects the schemas owned by this capability from replacement.
+func NativeCatalog(c string) bool { return slices.Contains(baseCatalogs, c) }
