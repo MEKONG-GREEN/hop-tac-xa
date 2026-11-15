@@ -440,6 +440,53 @@ func TestAH2_AC4_CropTypeRules(t *testing.T) {
 	}
 }
 
+// AC4 — Loại cây còn mục cũ trỏ tới qua parent_code (dữ liệu khởi tạo) thì chỉ ẩn, mục cũ giữ nguyên.
+func TestAH2_AC4_CropWithLegacyChildrenOnlyHidden(t *testing.T) {
+	f := newFixture(t)
+	f.withUsage(fakeUsage{})
+	tid := f.seeded()
+	admin := f.caller(tid, port.RoleMasterdataAdmin)
+
+	st, b := admin.adm(http.MethodPost, cropsPath+"/RAU_MAU/delete", nil)
+	if st != http.StatusOK || b["outcome"] != "hidden" {
+		t.Fatalf("xóa Rau màu còn mục cây con: %d %v", st, b)
+	}
+	if codes := adminListCodes(t, admin, cropsPath+"?include_inactive=true&limit=200"); !slices.Contains(codes, "RAU_MUONG") || !slices.Contains(codes, "RAU_MAU") {
+		t.Fatalf("mục cây con và loại cây bị ẩn phải còn nguyên: %v", codes)
+	}
+}
+
+// Giống đã ẩn của loại cây đang ẩn vẫn sửa được tên, số ngày khi không đổi loại cây; chuyển sang loại cây ẩn thì từ chối.
+func TestAH2_EditHiddenVarietyOfHiddenCrop(t *testing.T) {
+	f := newFixture(t)
+	f.withUsage(fakeUsage{})
+	tid := f.seeded()
+	admin := f.caller(tid, port.RoleMasterdataAdmin)
+
+	crop := admin.newCrop(t, "Cây ẩn để sửa", "false")
+	other := admin.newCrop(t, "Cây ẩn khác", "false")
+	v := admin.newVariety(t, crop, "Giống cũ", "60")
+	if st, b := admin.adm(http.MethodPost, varietiesPath+"/"+v+"/deactivate", map[string]any{}); st != http.StatusOK {
+		t.Fatalf("ẩn giống: %d %v", st, b)
+	}
+	for _, c := range []string{crop, other} {
+		if st, b := admin.adm(http.MethodPost, cropsPath+"/"+c+"/deactivate", map[string]any{}); st != http.StatusOK {
+			t.Fatalf("ẩn loại cây: %d %v", st, b)
+		}
+	}
+	st, b := admin.adm(http.MethodPut, varietiesPath+"/"+v, map[string]any{"name": "Giống mới", "attrs": variety(crop, "90")})
+	if st != http.StatusOK || b["name"] != "Giống mới" {
+		t.Fatalf("sửa giống ẩn của loại cây ẩn: %d %v", st, b)
+	}
+	st, b = admin.adm(http.MethodPut, varietiesPath+"/"+v, map[string]any{"name": "Giống mới", "attrs": variety(other, "90")})
+	if st != http.StatusUnprocessableEntity {
+		t.Fatalf("chuyển sang loại cây đang ẩn phải bị từ chối: %d %v", st, b)
+	}
+	if field, _ := firstError(t, b); field != "attrs.crop_code" {
+		t.Fatalf("lỗi ở %q, mong attrs.crop_code", field)
+	}
+}
+
 // AC5 — Quyền: chỉ vai quản trị danh mục ghi; TV, ĐD chỉ xem.
 func TestAH2_AC5_OnlyCatalogAdminWrites(t *testing.T) {
 	f := newFixture(t)

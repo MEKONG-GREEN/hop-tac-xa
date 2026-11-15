@@ -43,7 +43,7 @@ interface Input {
 }
 
 /** Kiểm dữ liệu vào; trả attrs đã chuẩn hóa (chỉ thuộc tính màn mới gửi) hoặc lỗi 422. */
-function check(catalog: Catalog, input: Input): { name: string; attrs: Record<string, string> } | Response {
+function check(catalog: Catalog, input: Input, cur?: CatalogItem): { name: string; attrs: Record<string, string> } | Response {
   const errors: { field: string; reason: string }[] = [];
   const name = typeof input.name === "string" ? input.name.trim() : "";
   if (!name || name.length > 200) errors.push({ field: "name", reason: "bắt buộc, tối đa 200 ký tự" });
@@ -57,9 +57,11 @@ function check(catalog: Catalog, input: Input): { name: string; attrs: Record<st
     else attrs.is_rice = rice;
   } else {
     const crop = typeof raw.crop_code === "string" ? raw.crop_code : "";
+    // Giống đã ẩn không đổi loại cây thì vẫn sửa được dù loại cây đang ẩn (giống máy chủ).
+    const hiddenSameCrop = !!cur && !cur.active && cur.attrs.crop_code === crop;
     const target = crop ? find("crop", crop) : undefined;
     if (!crop) errors.push({ field: "attrs.crop_code", reason: "bắt buộc" });
-    else if (!target || !isType(target) || !target.active) errors.push({ field: "attrs.crop_code", reason: "Loại cây không tồn tại hoặc đang ẩn" });
+    else if (!target || !isType(target) || (!target.active && !hiddenSameCrop)) errors.push({ field: "attrs.crop_code", reason: "Loại cây không tồn tại hoặc đang ẩn" });
     else attrs.crop_code = crop;
     const days = typeof raw.growth_days === "string" ? raw.growth_days.trim() : "";
     if (!/^\d+$/.test(days) || Number(days) <= 0 || Number(days) > 2147483647) errors.push({ field: "attrs.growth_days", reason: GROWTH_DAYS_MSG });
@@ -90,7 +92,7 @@ function update(catalog: Catalog, code: string, body: unknown): Out {
   const cur = find(catalog, code);
   if (!cur) return problem(404, "masterdata.catalog_item_not_found", "Not found");
   if (catalog === "crop" && !isType(cur)) return readOnly();
-  const ok = check(catalog, (body ?? {}) as Input);
+  const ok = check(catalog, (body ?? {}) as Input, cur);
   if (ok instanceof Response) return ok;
   if (taken(catalog, ok.name, ok.attrs, code)) return dupName();
   // Thuộc tính cũ màn mới không gửi (năng suất, mô tả…) được giữ nguyên.

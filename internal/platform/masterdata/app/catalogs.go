@@ -272,8 +272,14 @@ func (s *Service) UpdateItem(ctx context.Context, in domain.Item) (domain.Item, 
 				return err
 			}
 		}
-		if err := s.checkRefs(ctx, tx, upd, upd.ValidFrom); err != nil {
-			return err
+		// Giống đã ẩn mà không đổi loại cây thì vẫn sửa được tên, số ngày khi loại cây của nó đang ẩn:
+		// loại cây chỉ phải đang hiện khi giống đang hiện hoặc được chuyển sang loại cây khác.
+		hiddenVarietySameCrop := upd.Catalog == port.CatalogRiceVariety && !cur.Active &&
+			upd.Attrs[port.AttrCropCode] == cur.Attrs[port.AttrCropCode]
+		if !hiddenVarietySameCrop {
+			if err := s.checkRefs(ctx, tx, upd, upd.ValidFrom); err != nil {
+				return err
+			}
 		}
 		if cv {
 			if domain.NameKey(upd.Name) != domain.NameKey(cur.Name) || upd.Attrs[port.AttrCropCode] != cur.Attrs[port.AttrCropCode] {

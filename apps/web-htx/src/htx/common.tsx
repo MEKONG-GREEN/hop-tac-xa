@@ -4,6 +4,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { unwrap } from "@/api/client";
 import { newIdempotencyKey } from "@/api/idempotency";
+import { collectPages } from "@/api/pagination";
 import type { ApiProblem } from "@/api/problem";
 import type { CatalogItem, CatalogName } from "@/api/types";
 import { useAuth } from "@/auth/AuthProvider";
@@ -26,10 +27,13 @@ export function useCatalog(catalog: CatalogName): CatalogItem[] {
 export function useCatalogNames(catalog: CatalogName): Map<string, string> {
   const { api } = useAuth();
   const res = useAsync(
-    () => unwrap(api.GET("/v1/masterdata/catalogs/{catalog}", { params: { path: { catalog }, query: { include_inactive: true, limit: 200 } } })),
+    () =>
+      collectPages((cursor) =>
+        unwrap(api.GET("/v1/masterdata/catalogs/{catalog}", { params: { path: { catalog }, query: { include_inactive: true, cursor, limit: 200 } } })),
+      ),
     [api, catalog],
   );
-  return useMemo(() => new Map((res.data?.items ?? []).map((i) => [i.code, i.name])), [res.data]);
+  return useMemo(() => new Map((res.data ?? []).map((i) => [i.code, i.name])), [res.data]);
 }
 
 export function LocationChip({ status, distance }: { status: string | null | undefined; distance?: string | null }) {

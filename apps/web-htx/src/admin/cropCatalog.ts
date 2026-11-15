@@ -1,6 +1,6 @@
 // Danh mục cây trồng & giống (AH-2, BRD FN-01). Loại cây và giống dùng lại danh mục crop và rice_variety của
 // pf/masterdata: loại cây = mục crop KHÔNG có parent_code; giống thuộc một loại cây qua attrs.crop_code.
-// Hàm thuần ở đây; màn hình ở CropCatalog.tsx. Máy chủ vẫn là nơi kiểm lại mọi luật.
+// Hàm thuần ở đây; màn hình ở CropCatalogScreen.tsx. Máy chủ vẫn là nơi kiểm lại mọi luật.
 import type { AdminApiClient } from "@/api/client";
 import { unwrap } from "@/api/client";
 import { collectPages } from "@/api/pagination";

@@ -54,6 +54,15 @@ func CountVarieties(ctx context.Context, tx pgx.Tx, cropCode string, visibleOnly
 	return n, err
 }
 
+// CropHasLegacyChildren cho biết có mục crop cũ (chưa xóa) còn trỏ tới loại cây này qua parent_code.
+// Các mục đó giữ nguyên dữ liệu nên loại cây chỉ được ẩn, không xóa.
+func CropHasLegacyChildren(ctx context.Context, tx pgx.Tx, cropCode string) (bool, error) {
+	var ok bool
+	err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pf_masterdata.catalog_item
+	    WHERE catalog = 'crop' AND deleted_at IS NULL AND attrs->>'parent_code' = $1)`, cropCode).Scan(&ok)
+	return ok, err
+}
+
 // PestsAffectingCrop cho biết có mục sâu bệnh (chưa xóa) nêu cây trồng này ở "cây trồng bị ảnh hưởng".
 func PestsAffectingCrop(ctx context.Context, tx pgx.Tx, cropCode string) (bool, error) {
 	var ok bool

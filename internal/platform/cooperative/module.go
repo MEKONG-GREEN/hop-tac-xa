@@ -317,7 +317,6 @@ func (k markers) MarkersInBBox(ctx context.Context, minLon, minLat, maxLon, maxL
 	return out, nil
 }
 
-// plotStats đổi DTO thống kê thửa sang partyport.PlotStat.
 // CatalogUsage cho pf/masterdata (AH-2): giống đã gắn vụ, sản lượng hoặc quy trình SOP thì chỉ được ẩn, không xóa.
 func (m *Module) CatalogUsage() mdport.CatalogUsage { return seasonCatalogUsage{m.season} }
 
@@ -340,6 +339,7 @@ func (p plotDepartments) DepartmentUsage(ctx context.Context, _ uuid.UUID, code 
 	return partyport.Usage{Records: n}, err
 }
 
+// plotStats đổi DTO thống kê thửa sang partyport.PlotStat.
 type plotStats struct{ plot *plotapp.Service }
 
 func (p plotStats) DigitizedByCommune(ctx context.Context, communes []string) ([]partyport.PlotStat, error) {

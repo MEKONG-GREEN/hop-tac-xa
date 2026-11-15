@@ -299,6 +299,10 @@ func (s *Service) DeleteItem(ctx context.Context, catalog, code, key string) (De
 				return e
 			} else if pest {
 				inUse = true
+			} else if legacy, e := store.CropHasLegacyChildren(ctx, tx, cur.Code); e != nil {
+				return e
+			} else if legacy {
+				inUse = true
 			}
 		}
 		if inUse && !cur.Active {
