@@ -40,7 +40,7 @@ class _HouseholdsScreenState extends ConsumerState<HouseholdsScreen> {
     final list = ref.watch(_householdsProvider);
     final canCall = ref.services.manager.householdCallAvailable;
     return Scaffold(
-      appBar: AppBar(title: const Text('Nông hộ của HTX')),
+      appBar: AppBar(title: const Text('Nông hộ')),
       body: list.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Lỗi: $e')),

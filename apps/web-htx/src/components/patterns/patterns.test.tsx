@@ -4,7 +4,38 @@ import { describe, expect, it, vi } from "vitest";
 import { AlertList, deltaPct, formatDelta, HotMetric, progressColor, sparkPath } from "./dashboard";
 import { BreadcrumbTailProvider, useBreadcrumbTailValue } from "@/shell/Breadcrumb";
 import { DetailPage, LabelValueBlock, LogPanel, RelatedTabs } from "./detail";
-import { DataTable, FilterBar, FilterChip, pageItems, rangeText, RowActions } from "./list";
+import { useState } from "react";
+import { Collapsible } from "./collapsible";
+import { DataTable, FilterBar, FilterChip, pageItems, rangeText, resultCountText, RowActions } from "./list";
+
+const STATUS_OPTIONS = [
+  { value: "", label: "Tất cả" },
+  { value: "draft", label: "Lưu nháp" },
+];
+
+/** Màn gọi mẫu: 2 ô trên hàng, 1 ô trong "Lọc thêm"; tự đếm ô đang đặt và đặt lại trong onClear. */
+function FilterHarness() {
+  const [a, setA] = useState("draft");
+  const [b, setB] = useState("");
+  const [c, setC] = useState("");
+  const active = [a, b, c].filter(Boolean).length;
+  return (
+    <FilterBar
+      resultCount={3}
+      activeCount={active}
+      moreActiveCount={c ? 1 : 0}
+      onClear={() => {
+        setA("");
+        setB("");
+        setC("");
+      }}
+      more={<FilterChip label="Loại" value={c} onChange={setC} options={STATUS_OPTIONS} />}
+    >
+      <FilterChip label="Trạng thái" value={a} onChange={setA} options={STATUS_OPTIONS} />
+      <FilterChip label="Vùng" value={b} onChange={setB} options={STATUS_OPTIONS} />
+    </FilterBar>
+  );
+}
 
 describe("List", () => {
   it("số trang: 1 2 3 … 10, lân cận trang hiện tại", () => {
@@ -50,31 +81,123 @@ describe("List", () => {
     expect(screen.queryByRole("navigation")).toBeNull();
   });
 
-  it("thẻ lọc tô xanh khi khác mặc định; Đặt lại", async () => {
+  it("AC-N3: thanh lọc có số kết quả; Xóa lọc vô hiệu khi chưa đặt ô nào, bấm thì mọi ô về mặc định", async () => {
     const user = userEvent.setup();
-    const onReset = vi.fn();
-    const onChange = vi.fn();
-    render(
-      <FilterBar onReset={onReset}>
-        <FilterChip label="Trạng thái" value="draft" onChange={onChange} options={[{ value: "", label: "Tất cả" }, { value: "draft", label: "Lưu nháp" }]} />
-      </FilterBar>,
-    );
-    const select = screen.getByRole("combobox", { name: "Trạng thái" });
-    expect(select.closest(".fchip")).toHaveClass("is-set");
-    await user.selectOptions(select, "");
-    expect(onChange).toHaveBeenCalledWith("");
-    await user.click(screen.getByRole("button", { name: "Đặt lại" }));
-    expect(onReset).toHaveBeenCalled();
+    render(<FilterHarness />);
+    expect(screen.getByText("3 kết quả")).toBeInTheDocument();
+    const clear = screen.getByRole("button", { name: "Xóa lọc" });
+    expect(clear).toBeEnabled();
+    expect(screen.getByRole("combobox", { name: "Trạng thái" }).closest(".fchip")).toHaveClass("is-set");
+    expect(screen.queryByRole("button", { name: "Đặt lại" })).toBeNull();
+
+    // ô trong phần ẩn: nút "Lọc thêm" báo số ô đang đặt, mặc định đóng
+    const more = screen.getByRole("button", { name: "Lọc thêm" });
+    expect(more).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByLabelText("Lọc thêm", { selector: "div" })).not.toBeVisible();
+    await user.click(more);
+    expect(more).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("group", { name: "Lọc thêm" })).toBeVisible();
+    await user.selectOptions(screen.getByRole("combobox", { name: "Loại" }), "draft");
+    expect(screen.getByRole("button", { name: "Lọc thêm (1)" })).toBeInTheDocument();
+
+    await user.click(clear);
+    for (const name of ["Trạng thái", "Vùng", "Loại"]) expect(screen.getByRole("combobox", { name })).toHaveValue("");
+    expect(document.querySelector(".fchip.is-set")).toBeNull();
+    expect(screen.getByRole("button", { name: "Xóa lọc" })).toBeDisabled();
   });
 
-  it("xem/sửa/xóa; chỉ xem khi không truyền sửa/xóa (Cấp Quốc gia)", () => {
-    const { rerender } = render(<RowActions label="HTX A" viewHref="/x" editHref="/x?sua=1" onDelete={() => undefined} />);
-    expect(screen.getByRole("link", { name: "Xem HTX A" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Sửa HTX A" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Xóa HTX A" })).toBeInTheDocument();
-    rerender(<RowActions label="HTX A" viewHref="/x" />);
-    expect(screen.queryByRole("link", { name: "Sửa HTX A" })).toBeNull();
+  it("số kết quả theo vi-VN; không có phần ẩn thì không có nút Lọc thêm", () => {
+    expect(resultCountText(1234)).toBe("1.234 kết quả");
+    render(<FilterBar resultCount={0} activeCount={0} onClear={() => undefined} />);
+    expect(screen.getByText("0 kết quả")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Lọc thêm/ })).toBeNull();
+  });
+
+  it("AC-N2: nút chính, nút phụ, menu Thêm chứa các thao tác còn lại", async () => {
+    const user = userEvent.setup();
+    const onCopy = vi.fn();
+    const onDelete = vi.fn();
+    render(
+      <RowActions
+        label="HTX A"
+        primary={{ label: "Sửa", href: "/x?sua=1" }}
+        secondary={{ label: "Xem", href: "/x" }}
+        more={[{ label: "Sao chép", onClick: onCopy }, { label: "Xóa", onClick: onDelete, danger: true }]}
+      />,
+    );
+    expect(screen.getByRole("link", { name: "Sửa HTX A" })).toHaveClass("btn-p");
+    expect(screen.getByRole("link", { name: "Xem HTX A" })).toHaveClass("btn-o");
     expect(screen.queryByRole("button", { name: "Xóa HTX A" })).toBeNull();
+    expect(screen.queryByRole("menu")).toBeNull();
+
+    const trigger = screen.getByRole("button", { name: "Thêm thao tác cho HTX A" });
+    expect(trigger).toHaveTextContent("Thêm");
+    await user.click(trigger);
+    const items = within(screen.getByRole("menu")).getAllByRole("menuitem");
+    expect(items.map((i) => i.textContent)).toEqual(["Sao chép", "Xóa"]);
+    expect(items[1]).toHaveClass("danger");
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(trigger).toHaveFocus();
+
+    await user.click(trigger);
+    await user.click(screen.getByRole("menuitem", { name: "Xóa" }));
+    expect(onDelete).toHaveBeenCalledTimes(1);
+    expect(onCopy).not.toHaveBeenCalled();
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("menu Thêm đóng khi bấm ra ngoài", async () => {
+    const user = userEvent.setup();
+    render(<RowActions label="HTX A" primary={{ label: "Sửa", href: "/x" }} more={[{ label: "Ẩn", onClick: () => undefined }]} />);
+    await user.click(screen.getByRole("button", { name: "Thêm thao tác cho HTX A" }));
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    await user.click(document.body);
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("chỉ có quyền xem: nút chính là Xem, không có nút phụ và không có nút Thêm", () => {
+    render(<RowActions label="HTX A" primary={{ label: "Xem", href: "/x" }} />);
+    expect(screen.getByRole("link", { name: "Xem HTX A" })).toHaveClass("btn-p");
+    expect(screen.queryByRole("link", { name: "Sửa HTX A" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Thêm thao tác/ })).toBeNull();
+    // `more` rỗng cũng không hiện nút Thêm
+    render(<RowActions label="HTX B" primary={{ label: "Xem", href: "/y" }} more={[]} />);
+    expect(screen.queryByRole("button", { name: /Thêm thao tác/ })).toBeNull();
+  });
+
+  it("kiểu chặn xóa/hủy làm nút chính hoặc nút phụ", () => {
+    // Kiểm bằng `tsc --noEmit`: dòng @ts-expect-error sai (không còn lỗi kiểu) sẽ làm tsc đỏ.
+    const noop = () => undefined;
+    const elements = [
+      // @ts-expect-error `danger` chỉ có ở thao tác trong menu "Thêm"
+      <RowActions key="p" label="A" primary={{ label: "Xóa", onClick: noop, danger: true }} />,
+      // @ts-expect-error `danger` chỉ có ở thao tác trong menu "Thêm"
+      <RowActions key="s" label="A" primary={{ label: "Sửa", onClick: noop }} secondary={{ label: "Hủy", onClick: noop, danger: true }} />,
+    ];
+    expect(elements).toHaveLength(2);
+  });
+});
+
+describe("Collapsible", () => {
+  it("AC3: mặc định đóng, bấm thì mở, bấm lại thì đóng; nội dung vẫn nằm trong DOM", async () => {
+    const user = userEvent.setup();
+    render(
+      <Collapsible title="Thông tin thêm">
+        <input aria-label="Ghi chú" />
+      </Collapsible>,
+    );
+    const head = screen.getByRole("button", { name: "Thông tin thêm" });
+    expect(head).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByLabelText("Ghi chú", { selector: "input" })).not.toBeVisible();
+    await user.click(head);
+    expect(head).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("region", { name: "Thông tin thêm" })).toBeVisible();
+    await user.type(screen.getByLabelText("Ghi chú"), "abc");
+    await user.click(head);
+    expect(screen.getByLabelText("Ghi chú", { selector: "input" })).not.toBeVisible();
+    expect(screen.getByLabelText("Ghi chú", { selector: "input", exact: true })).toHaveValue("abc");
   });
 });
 

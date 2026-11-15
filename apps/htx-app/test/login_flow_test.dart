@@ -75,6 +75,9 @@ void main() {
         find.byKey(const ValueKey('activation-link')),
         link,
       );
+      // Lỗi đang hiện ở ô nhập làm danh sách dài hơn màn hình thử: cuộn tới nút.
+      await tester.ensureVisible(find.text('Mở trang kích hoạt'));
+      await tester.pump();
       await tester.tap(find.text('Mở trang kích hoạt'));
       await settle(tester);
       expect(env.dialer.opened.single.toString(), link);

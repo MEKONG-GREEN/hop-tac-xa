@@ -112,7 +112,7 @@ class _HarvestScreenState extends ConsumerState<HarvestScreen> {
   Widget build(BuildContext context) {
     final rows = ref.watch(_harvestRowsProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Khai sản lượng thu hoạch')),
+      appBar: AppBar(title: const Text('Khai sản lượng')),
       body: rows.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Lỗi: $e')),

@@ -131,6 +131,16 @@ describe("menu App HTX theo vai", () => {
     expect(hrefs(persona("cuc")).some((x) => x.startsWith("/htx"))).toBe(false);
   });
 
+  it("AH-24 AC4: nhãn điều hướng tiếng Việt; màn quản lý vụ gọi là Vụ canh tác, không còn Mùa vụ", () => {
+    expect(findNavItem("/htx/mua-vu")?.label).toBe("Vụ canh tác");
+    for (const id of ["htx", "setter"]) {
+      const labels = visibleNav(persona(id)).flatMap((g) => g.items.map((i) => i.label));
+      expect(labels).toContain("Vụ canh tác");
+      expect(labels).not.toContain("Mùa vụ");
+      expect(labels.filter((l) => l.includes("Dashboard"))).toEqual([]);
+    }
+  });
+
   it("Quy trình SOP cho người soạn và người phê duyệt", () => {
     expect(hrefs(persona("setter"))).toContain("/quan-tri/quy-trinh");
     expect(hrefs(persona("approver"))).toContain("/quan-tri/quy-trinh");
