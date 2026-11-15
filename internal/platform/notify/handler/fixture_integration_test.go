@@ -181,7 +181,7 @@ func (m member) do(method, path string, body any) resp {
 	if err != nil {
 		m.f.t.Fatal(err)
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 	raw, _ := io.ReadAll(res.Body)
 	out := resp{status: res.StatusCode, body: map[string]any{}}
 	_ = json.Unmarshal(raw, &out.body)
