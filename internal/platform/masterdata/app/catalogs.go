@@ -91,6 +91,8 @@ func (s *Service) checkRefs(ctx context.Context, tx pgx.Tx, it domain.Item, on t
 		return s.checkCatalogConstraints(ctx, tx, it, on, *d.Constraints)
 	}
 	switch it.Catalog {
+	case port.CatalogRiceVariety:
+		return s.checkVarietyCrop(ctx, tx, it.Attrs[port.AttrCropCode])
 	case port.CatalogCrop:
 		parent := it.Attrs[port.AttrParentCode]
 		if parent == "" {
@@ -167,6 +169,12 @@ func (s *Service) CreateItem(ctx context.Context, in domain.Item, key string) (d
 	if err := s.knownCatalog(in.Catalog); err != nil {
 		return domain.Item{}, false, err
 	}
+	if cropVariety(in.Catalog) {
+		var err error
+		if in, err = s.prepareCreate(in); err != nil {
+			return domain.Item{}, false, err
+		}
+	}
 	it, err := s.normalizeCatalogItem(s.prepareCatalogIdentity(in))
 	if err != nil {
 		return domain.Item{}, false, asProblem(err)
@@ -194,13 +202,16 @@ func (s *Service) CreateItem(ctx context.Context, in domain.Item, key string) (d
 		} else if cur != nil {
 			return ErrItemExists
 		}
+		if cropVariety(it.Catalog) {
+			if err := s.lockScope(ctx, tx, p.TenantID, it); err != nil {
+				return err
+			}
+		}
 		if err := s.checkRefs(ctx, tx, it, it.ValidFrom); err != nil {
 			return err
 		}
-		if taken, err := store.ItemNameTaken(ctx, tx, it.Catalog, it.Name, it.Code); err != nil {
+		if err := s.nameTaken(ctx, tx, p.TenantID, it); err != nil {
 			return err
-		} else if taken {
-			return ErrItemNameTaken
 		}
 		c := &domain.Change{ID: ids.New(), Catalog: it.Catalog, Code: it.Code, Action: domain.ActionCreated,
 			After: it.Snapshot(), EventTime: now, ActorRef: p.ActorRef, IdemKey: key}
@@ -240,18 +251,39 @@ func (s *Service) UpdateItem(ctx context.Context, in domain.Item) (domain.Item, 
 			return ErrItemNotFound
 		}
 		upd = s.keepCatalogIdentity(upd, *cur)
+		cv := cropVariety(upd.Catalog)
+		if cv {
+			if err := guardWritable(*cur); err != nil {
+				return err
+			}
+			upd = carryLegacyAttrs(upd, *cur)
+			if upd.Catalog == port.CatalogCrop {
+				if err := checkCropShape(upd.Attrs); err != nil {
+					return err
+				}
+			}
+		}
 		if cur.SameContent(upd) {
 			out = *cur
 			return nil
 		}
+		if cv {
+			if err := s.lockScope(ctx, tx, p.TenantID, upd); err != nil {
+				return err
+			}
+		}
 		if err := s.checkRefs(ctx, tx, upd, upd.ValidFrom); err != nil {
 			return err
 		}
-		if upd.Name != cur.Name {
-			if taken, err := store.ItemNameTaken(ctx, tx, upd.Catalog, upd.Name, upd.Code); err != nil {
+		if cv {
+			if domain.NameKey(upd.Name) != domain.NameKey(cur.Name) || upd.Attrs[port.AttrCropCode] != cur.Attrs[port.AttrCropCode] {
+				if err := s.nameTaken(ctx, tx, p.TenantID, upd); err != nil {
+					return err
+				}
+			}
+		} else if upd.Name != cur.Name {
+			if err := s.nameTaken(ctx, tx, p.TenantID, upd); err != nil {
 				return err
-			} else if taken {
-				return ErrItemNameTaken
 			}
 		}
 		next := *cur
@@ -280,10 +312,15 @@ func (s *Service) SetActive(ctx context.Context, catalog, code string, active bo
 		return domain.Item{}, false, err
 	}
 	reason = strings.TrimSpace(reason)
-	if !active || reason != "" {
+	cv := cropVariety(catalog)
+	// Loại cây, giống (AH-2): ẩn không cần lý do — có gửi thì vẫn kiểm, để trống thì ghi lý do hệ thống.
+	if (!active && !cv) || reason != "" {
 		if err := domain.ValidateReason(reason); err != nil {
 			return domain.Item{}, false, asProblem(err)
 		}
+	}
+	if cv && !active && reason == "" {
+		reason = systemHideReason
 	}
 	now := s.Clock.Now()
 	var out domain.Item
@@ -306,8 +343,27 @@ func (s *Service) SetActive(ctx context.Context, catalog, code string, active bo
 		if cur == nil {
 			return ErrItemNotFound
 		}
+		if cv {
+			if err := guardWritable(*cur); err != nil {
+				return err
+			}
+		}
 		if cur.Active == active {
 			return ErrItemState
+		}
+		if cv {
+			if err := s.lockScope(ctx, tx, p.TenantID, *cur); err != nil {
+				return err
+			}
+			if !active {
+				if err := s.checkHideable(ctx, tx, *cur); err != nil {
+					return err
+				}
+			} else if catalog == port.CatalogRiceVariety {
+				if err := s.checkVarietyCropShown(ctx, tx, *cur); err != nil {
+					return err
+				}
+			}
 		}
 		if active {
 			if err := s.checkRefs(ctx, tx, *cur, s.today()); err != nil {

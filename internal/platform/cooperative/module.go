@@ -318,6 +318,18 @@ func (k markers) MarkersInBBox(ctx context.Context, minLon, minLat, maxLon, maxL
 }
 
 // plotStats đổi DTO thống kê thửa sang partyport.PlotStat.
+// CatalogUsage cho pf/masterdata (AH-2): giống đã gắn vụ, sản lượng hoặc quy trình SOP thì chỉ được ẩn, không xóa.
+func (m *Module) CatalogUsage() mdport.CatalogUsage { return seasonCatalogUsage{m.season} }
+
+type seasonCatalogUsage struct{ season *seasonapp.Service }
+
+func (u seasonCatalogUsage) CatalogItemInUse(ctx context.Context, catalog, code string) (bool, error) {
+	if catalog != mdport.CatalogRiceVariety {
+		return false, nil
+	}
+	return u.season.VarietyInUse(ctx, code)
+}
+
 // DepartmentUsage cho pf/party (W11.02, FN-AD-04.03): số thửa theo phòng ban (thửa cũ không phòng ban → Trồng trọt, X-12).
 func (m *Module) DepartmentUsage() partyport.DepartmentUsage { return plotDepartments{m.plot} }
 

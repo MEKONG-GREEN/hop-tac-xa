@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, type ChangeEvent, type FormEvent } from "react";
 import { ATTR_LABEL } from "@/admin/catalogs";
 import { unwrap } from "@/api/client";
@@ -60,13 +61,13 @@ function CatalogImport({ onDone }: { onDone: () => void }) {
   };
   const template = () =>
     saveBlob(
-      new Blob([toCsv([["catalog", "code", "name", "growth_days", "expected_yield_t_per_ha"], ["rice_variety", "OM9582", "OM9582", "95", "6.8"]])], { type: "text/csv;charset=utf-8" }),
+      new Blob([toCsv([["catalog", "code", "name", "unit"], ["material", "PHAN_KALI", "Phân Kali", "kg"]])], { type: "text/csv;charset=utf-8" }),
       "mau-nhap-danh-muc.csv",
     );
   return (
     <form className="panel stack" style={{ gap: 8, marginBottom: 16 }} onSubmit={(e) => void submit(e)} aria-label="Nhập danh mục từ tệp">
       <b>Nhập danh mục hàng loạt (.xlsx hoặc CSV, tối đa 500 dòng)</b>
-      <span className="small mute">Cột catalog (mã danh mục, vd rice_variety), code, name; cột khác là thuộc tính (vd growth_days). Dòng hợp lệ được tạo trong một lần nhập, dòng lỗi không chặn dòng khác.</span>
+      <span className="small mute">Cột catalog (mã danh mục, vd material), code, name; cột khác là thuộc tính (vd unit). Cây trồng và giống lúa không nhập từ tệp: thêm ở màn Danh mục cây trồng & giống. Dòng hợp lệ được tạo trong một lần nhập, dòng lỗi không chặn dòng khác.</span>
       <div className="row">
         <input type="file" aria-label="Tệp danh mục" accept=".xlsx,.csv" onChange={(e) => void onFile(e)} />
         <button type="submit" className="btn btn-p btn-sm" disabled={!ok || busy}>
@@ -151,6 +152,14 @@ export default function CatalogsPage() {
         </span>
       </div>
       <MfaNotice />
+      {current === "crop" || current === "rice_variety" ? (
+        <div className="alert alert-info" style={{ marginBottom: 16 }} role="status">
+          <Icon name="info" />
+          <span>
+            Danh mục này chỉ xem ở đây. Thêm, sửa, ẩn, xóa tại màn <Link href="/du-lieu-nen/danh-muc-giong">Danh mục cây trồng & giống</Link>.
+          </span>
+        </div>
+      ) : null}
       {catalogs.error ? <ProblemAlert problem={catalogs.error} onRetry={catalogs.reload} /> : null}
       <div className="grid2" style={{ gridTemplateColumns: "minmax(220px, 280px) minmax(0, 1fr)", alignItems: "start" }}>
         <nav className="card sec" aria-label="Chọn danh mục">

@@ -4414,6 +4414,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/masterdata/catalogs/{catalog}/items/{code}/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                catalog: components["parameters"]["Catalog"];
+                code: components["parameters"]["ItemCode"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Xóa loại cây hoặc giống (AH-2) — chưa được dùng ở đâu thì đã xóa, đang được dùng thì chỉ ẩn */
+        post: operations["deleteCatalogItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -4618,11 +4638,12 @@ export interface components {
             unchanged: number;
         };
         CatalogItemInput: {
-            /** @description Bắt buộc khi thêm; khi sửa bỏ trống hoặc trùng mã trên đường dẫn */
+            /** @description Bắt buộc khi thêm (crop, rice_variety: bỏ trống, máy chủ sinh mã); khi sửa bỏ trống hoặc trùng mã trên đường dẫn */
             code?: string;
             name: string;
             /**
-             * @description Theo danh mục — rice_variety: growth_days, expected_yield_t_per_ha (decimal); farm_stage: pilot (true|false, cờ thí điểm CGH), description;
+             * @description Theo danh mục — rice_variety (giống): crop_code (mã loại cây đang hiện, bắt buộc), growth_days (số nguyên > 0, ngày), expected_yield_t_per_ha (tùy chọn, dữ liệu cũ);
+             *     crop (loại cây): is_rice (true|false, cờ "là lúa", bắt buộc khi thêm; không có parent_code); farm_stage: pilot (true|false, cờ thí điểm CGH), description;
              *     machine_type: farm_stage (mã khâu đang dùng); season: start_month, end_month; pest: kind (sau_hai|benh_hai|dong_vat_hai|co_dai).
              *     W11.41 CNTS — cnts_species: group, unit, herd_column, order; cnts_breed: species; cnts_disease: species (danh sách), notifiable;
              *     cnts_vaccine: species (loài so sánh, bắt buộc), diseases, report_group (heo|bo|cum_gia_cam|dai|khac), order; cnts_chemical: unit, target;
@@ -4680,6 +4701,7 @@ export interface components {
             seq: number;
         };
         ReasonInput: {
+            /** @description Tùy chọn với crop, rice_variety (bỏ trống: máy chủ ghi lý do hệ thống); bắt buộc với danh mục khác khi ngừng dùng */
             reason?: string;
         };
         CatalogSnapshot: {
@@ -4689,12 +4711,14 @@ export interface components {
             };
             active?: boolean;
             deactivation_reason?: string;
+            /** @description AH-2: mục đã xóa (chỉ crop, rice_variety) */
+            deleted?: boolean;
         };
         CatalogChange: {
             /** Format: uuid */
             id: string;
             /** @enum {string} */
-            action: "created" | "updated" | "deactivated" | "reactivated";
+            action: "created" | "updated" | "deactivated" | "reactivated" | "deleted";
             before: components["schemas"]["CatalogSnapshot"] | null;
             after: components["schemas"]["CatalogSnapshot"];
             reason: string | null;
@@ -6723,6 +6747,11 @@ export interface components {
             /** Format: date-time */
             approved_at?: string | null;
         };
+        CatalogDeleteResult: {
+            /** @enum {string} */
+            outcome: "deleted" | "hidden";
+            item: components["schemas"]["CatalogItem"];
+        };
         ParamValue: {
             key: string;
             /** @description Số thập phân dạng chuỗi (R-10) */
@@ -7578,7 +7607,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["Problem"];
-            /** @description masterdata.catalog_item_state */
+            /** @description masterdata.catalog_item_state | masterdata.crop_type_has_visible_varieties | masterdata.catalog_item_read_only */
             409: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
         };
@@ -7611,6 +7640,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["Problem"];
+            /** @description masterdata.catalog_item_state | masterdata.crop_type_hidden | masterdata.catalog_item_read_only */
             409: components["responses"]["Problem"];
         };
     };
@@ -15861,6 +15891,39 @@ export interface operations {
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
+        };
+    };
+    deleteCatalogItem: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                catalog: components["parameters"]["Catalog"];
+                code: components["parameters"]["ItemCode"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description outcome deleted (mục biến khỏi mọi danh sách, lịch sử giữ lại) hoặc hidden (đang được dùng nên chỉ ẩn) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogDeleteResult"];
+                };
+            };
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            /** @description masterdata.crop_type_has_visible_varieties | masterdata.catalog_item_read_only */
+            409: components["responses"]["Problem"];
+            /** @description masterdata.catalog_delete_unsupported */
+            422: components["responses"]["Problem"];
+            /** @description masterdata.dependency_unavailable */
+            503: components["responses"]["Problem"];
         };
     };
 }

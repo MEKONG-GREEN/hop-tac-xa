@@ -31,7 +31,7 @@ func SyncItems(ctx context.Context, tx pgx.Tx, catalogs []string, after int64, l
 		var attrs string
 		it := &r.Item
 		if err := rows.Scan(&it.Catalog, &it.Code, &it.Name, &attrs, &it.Active, &it.DeactivationReason, &it.Revision,
-			&it.UpdatedBy, &it.UpdatedAt, &r.Seq); err != nil {
+			&it.UpdatedBy, &it.UpdatedAt, &it.Deleted, &r.Seq); err != nil {
 			return nil, err
 		}
 		it.Attrs = map[string]string{}

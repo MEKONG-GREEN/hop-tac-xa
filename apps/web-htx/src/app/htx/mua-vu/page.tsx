@@ -11,7 +11,7 @@ import { Dialog } from "@/components/Dialog";
 import { Icon } from "@/components/Icon";
 import { ProblemAlert } from "@/components/ProblemAlert";
 import { Empty, LoadMore, Loading, PageHead } from "@/components/ui";
-import { LocationChip, ReasonDialog, ResultList, StatusChip, useCatalog } from "@/htx/common";
+import { LocationChip, ReasonDialog, ResultList, StatusChip, useCatalog, useCatalogNames } from "@/htx/common";
 import { SEASON_STATUS, sowingDateError, todayVN } from "@/htx/rules";
 import { CoopPicker, ReadOnlyNotice, useCoopFields, useHtxScope, type HtxScope } from "@/htx/scope";
 import { formatDecimal } from "@/lib/decimal";
@@ -317,6 +317,7 @@ function CorrectDialog({ season, onClose, onDone }: { season: CropSeason; onClos
 function SeasonDetailDialog({ season, onClose }: { season: CropSeason; onClose: () => void }) {
   const { api } = useAuth();
   const d = useAsync(() => unwrap(api.GET("/v1/cropcycle/seasons/{ref}", { params: { path: { ref: season.season_ref } } })), [api, season.season_ref]);
+  const varietyName = useCatalogNames("rice_variety");
   const ACTION: Record<string, string> = { opened: "Mở vụ", corrected: "Sửa (bản ghi bù)", completed: "Hoàn thành vụ", cancelled: "Hủy vụ" };
   return (
     <Dialog title={`Vụ ${season.season_code} ${season.season_year} — lô ${season.plot_code}`} onClose={onClose}>
@@ -332,7 +333,7 @@ function SeasonDetailDialog({ season, onClose }: { season: CropSeason; onClose: 
           <ol style={{ margin: "0 0 0 18px" }} aria-label="Lịch sử vụ">
             {d.data.events.map((ev) => (
               <li key={ev.id} className="small" style={{ marginBottom: 4 }}>
-                <b style={{ display: "inline" }}>{ACTION[ev.action] ?? ev.action}</b> · {formatDate(ev.event_time)} · giống {ev.variety_code} · sạ {formatDate(ev.sowing_date)}
+                <b style={{ display: "inline" }}>{ACTION[ev.action] ?? ev.action}</b> · {formatDate(ev.event_time)} · giống {ev.variety_code ? (varietyName.get(ev.variety_code) ?? ev.variety_code) : "—"} · sạ {formatDate(ev.sowing_date)}
                 {ev.correction_reason ? <div className="mute">Lý do: {ev.correction_reason}</div> : null}
               </li>
             ))}
@@ -379,6 +380,7 @@ export default function SeasonsPage() {
   );
   const reload = () => setVersion((v) => v + 1);
   const seasonName = useMemo(() => new Map(seasons.map((s) => [s.code, s.name])), [seasons]);
+  const varietyName = useCatalogNames("rice_variety");
 
   return (
     <>
@@ -469,7 +471,7 @@ export default function SeasonsPage() {
                     {seasonName.get(s.season_code) ?? s.season_code} {s.season_year}
                   </td>
                   <td>
-                    {s.variety_code}
+                    {varietyName.get(s.variety_code) ?? s.variety_code}
                     <div className="mute small">SOP phiên bản {s.sop_version_no ?? "—"}</div>
                   </td>
                   <td>{formatDate(s.sowing_date)}</td>

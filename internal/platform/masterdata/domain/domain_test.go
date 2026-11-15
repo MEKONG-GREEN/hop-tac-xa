@@ -216,7 +216,7 @@ func TestParseGazetteerRejects(t *testing.T) {
 
 func TestCatalogNormalize(t *testing.T) {
 	it, err := Item{Catalog: port.CatalogRiceVariety, Code: "OM5451", Name: " OM5451 ",
-		Attrs: map[string]string{"growth_days": " 95", "expected_yield_t_per_ha": "6.750"}}.Normalize()
+		Attrs: map[string]string{"crop_code": "LUA", "growth_days": " 95", "expected_yield_t_per_ha": "6.750"}}.Normalize()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -229,8 +229,15 @@ func TestCatalogNormalize(t *testing.T) {
 	}
 	bad := []Item{
 		{Catalog: "giong", Code: "A", Name: "A"},
-		{Catalog: port.CatalogRiceVariety, Code: "A", Name: "A", Attrs: map[string]string{"growth_days": "95"}},
-		{Catalog: port.CatalogRiceVariety, Code: "A", Name: "A", Attrs: map[string]string{"growth_days": "95", "expected_yield_t_per_ha": "0"}},
+		{Catalog: port.CatalogRiceVariety, Code: "A", Name: "A", Attrs: map[string]string{"growth_days": "95"}},                                                     // AH-2: thiếu loại cây
+		{Catalog: port.CatalogRiceVariety, Code: "A", Name: "A", Attrs: map[string]string{"crop_code": "LUA"}},                                                      // thiếu thời gian sinh trưởng
+		{Catalog: port.CatalogRiceVariety, Code: "A", Name: "A", Attrs: map[string]string{"crop_code": "LUA", "growth_days": "95", "expected_yield_t_per_ha": "0"}}, // năng suất có gửi thì vẫn kiểm
+		{Catalog: port.CatalogRiceVariety, Code: "A", Name: "A", Attrs: map[string]string{"crop_code": "LUA", "growth_days": "0"}},                                  // AH-2 AC3
+		{Catalog: port.CatalogRiceVariety, Code: "A", Name: "A", Attrs: map[string]string{"crop_code": "LUA", "growth_days": "-5"}},
+		{Catalog: port.CatalogRiceVariety, Code: "A", Name: "A", Attrs: map[string]string{"crop_code": "LUA", "growth_days": "1.5"}},
+		{Catalog: port.CatalogRiceVariety, Code: "A", Name: "A", Attrs: map[string]string{"crop_code": "LUA", "growth_days": "abc"}},
+		{Catalog: port.CatalogRiceVariety, Code: "A", Name: "A", Attrs: map[string]string{"crop_code": "LUA", "growth_days": ""}},
+		{Catalog: port.CatalogCrop, Code: "A", Name: "A", Attrs: map[string]string{"is_rice": "có"}},
 		{Catalog: port.CatalogFarmStage, Code: "lam_dat", Name: "Làm đất", Attrs: map[string]string{"pilot": "có"}},
 		{Catalog: port.CatalogFarmStage, Code: "lam_dat", Name: "Làm đất", Attrs: map[string]string{"pilot": "true", "mau": "đỏ"}},
 		{Catalog: port.CatalogMachineType, Code: "MGD", Name: "Máy gặt", Attrs: map[string]string{}},
@@ -246,6 +253,48 @@ func TestCatalogNormalize(t *testing.T) {
 	}
 	if err := ValidateReason("ngắn"); err == nil {
 		t.Fatal("lý do ngắn phải bị từ chối")
+	}
+}
+
+// AH-2: giống không cần năng suất, thời gian sinh trưởng không có giới hạn trên nghiệp vụ.
+func TestVarietyYieldOptionalAndGrowthDaysUnbounded(t *testing.T) {
+	it, err := Item{Catalog: port.CatalogRiceVariety, Code: "A", Name: "A",
+		Attrs: map[string]string{"crop_code": "LUA", "growth_days": "400"}}.Normalize()
+	if err != nil || it.Attrs["growth_days"] != "400" {
+		t.Fatalf("giống không năng suất, 400 ngày phải hợp lệ: %+v %v", it, err)
+	}
+	var fe FieldError
+	_, err = Item{Catalog: port.CatalogRiceVariety, Code: "A", Name: "A",
+		Attrs: map[string]string{"crop_code": "LUA", "growth_days": "0"}}.Normalize()
+	if !errors.As(err, &fe) || fe.Field != "attrs.growth_days" {
+		t.Fatalf("lỗi phải chỉ trường attrs.growth_days: %v", err)
+	}
+	if _, err := (Item{Catalog: port.CatalogCrop, Code: "A", Name: "A", Attrs: map[string]string{"is_rice": "true"}}).Normalize(); err != nil {
+		t.Fatalf("loại cây có cờ là lúa: %v", err)
+	}
+}
+
+func TestNameKeyAndIsCropType(t *testing.T) {
+	for _, c := range []struct {
+		a, b string
+		same bool
+	}{
+		{"om 5451", "OM  5451", true},
+		{" Rau  MÀU ", "rau màu", true},
+		{"OM5451", "OM 5451", false},
+	} {
+		if (NameKey(c.a) == NameKey(c.b)) != c.same {
+			t.Errorf("NameKey(%q) so với NameKey(%q): mong same=%v", c.a, c.b, c.same)
+		}
+	}
+	if !IsCropType(Item{Catalog: port.CatalogCrop, Attrs: map[string]string{"is_rice": "true"}}) {
+		t.Error("mục crop không có nhóm cha là loại cây")
+	}
+	if IsCropType(Item{Catalog: port.CatalogCrop, Attrs: map[string]string{port.AttrParentCode: "RAU_MAU"}}) {
+		t.Error("mục crop có nhóm cha không phải loại cây")
+	}
+	if IsCropType(Item{Catalog: port.CatalogRiceVariety}) {
+		t.Error("giống không phải loại cây")
 	}
 }
 

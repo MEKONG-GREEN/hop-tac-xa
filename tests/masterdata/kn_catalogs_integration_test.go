@@ -72,28 +72,23 @@ func TestFN_AD_04_05_AgriCatalogs(t *testing.T) {
 		t.Fatalf("tên danh mục: %v", names)
 	}
 
-	// Cây trồng phân cấp: cha phải là nhóm cấp 1 đang dùng, không phải chính nó.
-	crop := func(code, name, parent string) (int, map[string]any) {
-		attrs := map[string]string{"is_group": "false"}
-		if parent != "" {
-			attrs["parent_code"] = parent
-		}
-		return admin.adm(http.MethodPost, "/v1/masterdata/catalogs/crop/items", map[string]any{"code": code, "name": name, "attrs": attrs})
+	// Loại cây (AH-2): danh sách phẳng, không có nhóm cha, mã do hệ thống sinh, có cờ "là lúa".
+	crop := func(name string, attrs map[string]string) (int, map[string]any) {
+		return admin.adm(http.MethodPost, "/v1/masterdata/catalogs/crop/items", map[string]any{"name": name, "attrs": attrs})
 	}
-	if st, body := crop("DUA_HAU", "Dưa hấu", "KHONG_CO"); st != http.StatusUnprocessableEntity || body["code"] != "masterdata.catalog_ref_invalid" {
-		t.Fatalf("cha không có: %d %v", st, body)
+	if st, body := crop("Dưa hấu", map[string]string{"is_rice": "false", "parent_code": "RAU_MAU"}); st != http.StatusUnprocessableEntity || body["code"] != "validation_failed" {
+		t.Fatalf("loại cây có nhóm cha: %d %v", st, body)
 	}
-	if st, body := crop("DUA_HAU", "Dưa hấu", "RAU_MUONG"); st != http.StatusUnprocessableEntity || body["code"] != "masterdata.catalog_ref_invalid" {
-		t.Fatalf("cha là cây cấp 2 (chỉ 2 cấp nhóm › cây): %d %v", st, body)
+	if st, body := admin.adm(http.MethodPost, "/v1/masterdata/catalogs/crop/items", map[string]any{"code": "DUA_HAU", "name": "Dưa hấu", "attrs": map[string]string{"is_rice": "false"}}); st != http.StatusUnprocessableEntity {
+		t.Fatalf("gửi mã: %d %v", st, body)
 	}
-	if st, body := crop("DUA_HAU", "Dưa hấu", "RAU_MAU"); st != http.StatusCreated {
-		t.Fatalf("tạo cây: %d %v", st, body)
+	st, body = crop("Dưa hấu", map[string]string{"is_rice": "false"})
+	if st != http.StatusCreated {
+		t.Fatalf("tạo loại cây: %d %v", st, body)
 	}
-	// Trùng mã, trùng tên (không phân biệt hoa thường) → chặn.
-	if st, body := crop("DUA_HAU", "Dưa hấu 2", "RAU_MAU"); st != http.StatusConflict || body["code"] != "masterdata.catalog_item_exists" {
-		t.Fatalf("trùng mã: %d %v", st, body)
-	}
-	if st, body := crop("DUA_HAU_2", "DƯA HẤU", "RAU_MAU"); st != http.StatusConflict || body["code"] != "masterdata.catalog_item_name_taken" {
+	duaHau := body["code"].(string)
+	// Trùng tên (không phân biệt hoa thường, khoảng trắng thừa) → chặn.
+	if st, body := crop("DƯA  HẤU", map[string]string{"is_rice": "false"}); st != http.StatusConflict || body["code"] != "masterdata.catalog_item_name_taken" {
 		t.Fatalf("trùng tên: %d %v", st, body)
 	}
 
@@ -117,13 +112,13 @@ func TestFN_AD_04_05_AgriCatalogs(t *testing.T) {
 	if st, body := pest("sau_thu_1", "XOAI,KHONG_CO"); st != http.StatusUnprocessableEntity || body["code"] != "masterdata.catalog_ref_invalid" {
 		t.Fatalf("cây bị ảnh hưởng không có: %d %v", st, body)
 	}
-	st, body = pest("sau_thu_1", " XOAI ,DUA_HAU,XOAI")
-	if st != http.StatusCreated || body["attrs"].(map[string]any)["affected_crops"] != "DUA_HAU,XOAI" {
+	st, body = pest("sau_thu_1", " XOAI ,"+duaHau+",XOAI")
+	if st != http.StatusCreated || body["attrs"].(map[string]any)["affected_crops"] != duaHau+",XOAI" {
 		t.Fatalf("sâu bệnh: %d %v", st, body)
 	}
 	// Điền ngưỡng sau (PUT) → lịch sử ghi cũ → mới.
 	st, body = admin.do(f.admin, http.MethodPut, "/v1/masterdata/catalogs/pest/items/sau_thu_1", "", map[string]any{"name": "Sâu thử sau_thu_1",
-		"attrs": map[string]string{"kind": "sau_hai", "affected_crops": "DUA_HAU,XOAI", "severity_thresholds": "nhẹ < 10%; nặng ≥ 30% (tạm)"}})
+		"attrs": map[string]string{"kind": "sau_hai", "affected_crops": duaHau + ",XOAI", "severity_thresholds": "nhẹ < 10%; nặng ≥ 30% (tạm)"}})
 	if st != http.StatusOK {
 		t.Fatalf("điền ngưỡng: %d %v", st, body)
 	}
@@ -143,13 +138,13 @@ func TestFN_AD_04_05_AgriCatalogs(t *testing.T) {
 	}
 	f.mod.UseFormUsage(fakeFormUsage{"crop/XOAI": 2})
 	st, body = admin.adm(http.MethodGet, "/v1/masterdata/catalogs/crop/items", nil)
-	if c := codesOf(body); st != http.StatusOK || c["XOAI"]["forms_in_use"] != float64(2) || c["DUA_HAU"]["forms_in_use"] != float64(0) {
+	if c := codesOf(body); st != http.StatusOK || c["XOAI"]["forms_in_use"] != float64(2) || c[duaHau]["forms_in_use"] != float64(0) {
 		t.Fatalf("biểu đang dùng: %d %v", st, body)
 	}
 
 	// Cách ly tenant: tenant khác không thấy mục vừa tạo.
 	other := f.seeded()
-	if st, _ := knOfficer(t, f, other).get("/v1/masterdata/catalogs/crop/DUA_HAU"); st != http.StatusNotFound {
+	if st, _ := knOfficer(t, f, other).get("/v1/masterdata/catalogs/crop/" + duaHau); st != http.StatusNotFound {
 		t.Fatalf("tenant khác thấy mục: %d", st)
 	}
 }
