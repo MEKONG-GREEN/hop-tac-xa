@@ -47,3 +47,47 @@ func TestCatalogUsage_VarietyInSeasonSopHarvest(t *testing.T) {
 		t.Fatal("tenant khác không được thấy tham chiếu")
 	}
 }
+
+// AH-7 AC4: mùa vụ đã có vụ được tính là đang được tham chiếu (chỉ ẩn, không xóa), không phân biệt hoa thường;
+// cột "Đang dùng" đếm số vụ.
+func TestCatalogUsage_SeasonInSeasonEvent(t *testing.T) {
+	f := newFixture(t)
+	ctx := tenant.WithID(context.Background(), f.tenant)
+	inUse := func(ctx context.Context, code string) bool {
+		t.Helper()
+		used, err := f.mod.svc.SeasonInUse(ctx, code)
+		if err != nil {
+			t.Fatalf("SeasonInUse(%s): %v", code, err)
+		}
+		return used
+	}
+
+	if inUse(ctx, "HT") {
+		t.Fatal("mùa vụ chưa có vụ không được tính là đang dùng")
+	}
+	if got, err := f.mod.svc.SeasonCounts(ctx, []string{"HT", "DX"}); err != nil || len(got) != 0 {
+		t.Fatalf("chưa có vụ thì không có số đếm: %v %v", got, err)
+	}
+	f.publishedSOP("SOP OM5451", "OM5451") // mở vụ cần SOP đã ban hành cho giống
+	r := f.farmer(f.h1).open(f.p1, map[string]any{"season_code": "HT"})
+	if r.status != http.StatusCreated {
+		t.Fatalf("mở vụ: %d %s", r.status, r.raw)
+	}
+	if !inUse(ctx, "HT") || !inUse(ctx, "ht") {
+		t.Fatal("mùa vụ đã gắn vụ phải được tính là đang dùng, không phân biệt hoa thường")
+	}
+	if inUse(ctx, "DX") {
+		t.Fatal("mùa vụ khác chưa gắn gì")
+	}
+	if got, err := f.mod.svc.SeasonCounts(ctx, []string{"ht", "DX"}); err != nil || len(got) != 1 || got["HT"] != 1 {
+		t.Fatalf("số vụ theo mùa vụ (khóa HOA): %v %v", got, err)
+	}
+	// Tenant khác không thấy dữ liệu của tenant này (RLS).
+	other := tenant.WithID(context.Background(), ids.New())
+	if inUse(other, "HT") {
+		t.Fatal("tenant khác không được thấy tham chiếu")
+	}
+	if got, err := f.mod.svc.SeasonCounts(other, []string{"HT"}); err != nil || len(got) != 0 {
+		t.Fatalf("tenant khác không có số đếm: %v %v", got, err)
+	}
+}

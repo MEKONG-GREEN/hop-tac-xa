@@ -130,7 +130,7 @@ export interface paths {
         /** Liệt kê mục danh mục (mặc định gồm cả mục đã ngừng dùng) */
         get: operations["adminListCatalogItems"];
         put?: never;
-        /** Thêm mục danh mục (vai masterdata_admin) */
+        /** Thêm mục danh mục (vai masterdata_admin). crop, rice_variety, season (AH-2, AH-7) — mã do hệ thống sinh, không gửi code */
         post: operations["createCatalogItem"];
         delete?: never;
         options?: never;
@@ -4426,7 +4426,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Xóa loại cây hoặc giống (AH-2) — chưa được dùng ở đâu thì đã xóa, đang được dùng thì chỉ ẩn */
+        /** Xóa loại cây, giống (AH-2) hoặc mùa vụ (AH-7) — chưa được dùng ở đâu thì đã xóa, đang được dùng thì chỉ ẩn */
         post: operations["deleteCatalogItem"];
         delete?: never;
         options?: never;
@@ -4675,6 +4675,8 @@ export interface components {
             updated_at: string;
             /** @description KN v7.7 FN-AD-04.05: số mẫu báo cáo đang dùng mục (vắng khi chưa nối P3) */
             forms_in_use?: number;
+            /** @description AH-7: số vụ đang dùng mùa vụ (chỉ danh mục season, Admin API; vắng khi chưa nối nguồn) */
+            seasons_in_use?: number;
             /**
              * Format: date
              * @description W11.41 (danh mục cnts_*): ngày bắt đầu hiệu lực của giá trị trả về (đọc theo at hoặc vừa ghi)
@@ -4711,7 +4713,7 @@ export interface components {
             };
             active?: boolean;
             deactivation_reason?: string;
-            /** @description AH-2: mục đã xóa (chỉ crop, rice_variety) */
+            /** @description AH-2, AH-7: mục đã xóa (chỉ crop, rice_variety, season) */
             deleted?: boolean;
         };
         CatalogChange: {

@@ -69,6 +69,14 @@ describe("menu theo phạm vi và vai", () => {
     expect(visibleNav(persona("setter")).map((g) => g.label)).toContain("7. Dữ liệu nền");
   });
 
+  it("AH-7 AC5: Dữ liệu nền › Danh mục mùa vụ chỉ cho quản trị danh mục; vai khác không thấy", () => {
+    expect(hrefs(persona("setter"))).toContain("/du-lieu-nen/danh-muc-mua-vu");
+    expect(findNavItem("/du-lieu-nen/danh-muc-mua-vu")?.label).toBe("Danh mục mùa vụ");
+    for (const id of ["htx", "approver", "tw", "tinh", "xa", "cuc"]) expect(hrefs(persona(id)), id).not.toContain("/du-lieu-nen/danh-muc-mua-vu");
+    const admin = buildPrincipal({ sub: "m1", realm_access: { roles: ["masterdata_admin"] } }, null);
+    expect(hrefs(admin)).toContain("/du-lieu-nen/danh-muc-mua-vu");
+  });
+
   it("GIS US-CFG-01: Quy chuẩn hiển thị bản đồ cho người đặt/duyệt tham số; không cho cán bộ KN", () => {
     expect(hrefs(persona("setter"))).toContain("/quan-tri/hien-thi");
     expect(hrefs(persona("approver"))).toContain("/quan-tri/hien-thi");

@@ -169,7 +169,7 @@ func (s *Service) CreateItem(ctx context.Context, in domain.Item, key string) (d
 	if err := s.knownCatalog(in.Catalog); err != nil {
 		return domain.Item{}, false, err
 	}
-	if cropVariety(in.Catalog) {
+	if adminManaged(in.Catalog) {
 		var err error
 		if in, err = s.prepareCreate(in); err != nil {
 			return domain.Item{}, false, err
@@ -202,7 +202,7 @@ func (s *Service) CreateItem(ctx context.Context, in domain.Item, key string) (d
 		} else if cur != nil {
 			return ErrItemExists
 		}
-		if cropVariety(it.Catalog) {
+		if adminManaged(it.Catalog) {
 			if err := s.lockScope(ctx, tx, p.TenantID, it); err != nil {
 				return err
 			}
@@ -251,7 +251,7 @@ func (s *Service) UpdateItem(ctx context.Context, in domain.Item) (domain.Item, 
 			return ErrItemNotFound
 		}
 		upd = s.keepCatalogIdentity(upd, *cur)
-		cv := cropVariety(upd.Catalog)
+		cv := adminManaged(upd.Catalog)
 		if cv {
 			if err := guardWritable(*cur); err != nil {
 				return err
@@ -318,15 +318,15 @@ func (s *Service) SetActive(ctx context.Context, catalog, code string, active bo
 		return domain.Item{}, false, err
 	}
 	reason = strings.TrimSpace(reason)
-	cv := cropVariety(catalog)
-	// Loại cây, giống (AH-2): ẩn không cần lý do — có gửi thì vẫn kiểm, để trống thì ghi lý do hệ thống.
+	cv := adminManaged(catalog)
+	// Loại cây, giống (AH-2), mùa vụ (AH-7): ẩn không cần lý do — có gửi thì vẫn kiểm, để trống thì ghi lý do hệ thống.
 	if (!active && !cv) || reason != "" {
 		if err := domain.ValidateReason(reason); err != nil {
 			return domain.Item{}, false, asProblem(err)
 		}
 	}
 	if cv && !active && reason == "" {
-		reason = systemHideReason
+		reason, _ = systemReasons(catalog)
 	}
 	now := s.Clock.Now()
 	var out domain.Item

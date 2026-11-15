@@ -19,6 +19,7 @@ provides:
     - Catalogs
     - EffectiveCatalogs
     - FormUsage
+    - SeasonUsage
     - StaffNames
   events: [pf.masterdata.admin_unit.changed/v1, pf.masterdata.param.approved/v1]
   internal_events: []

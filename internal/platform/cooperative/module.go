@@ -13,6 +13,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -317,16 +318,37 @@ func (k markers) MarkersInBBox(ctx context.Context, minLon, minLat, maxLon, maxL
 	return out, nil
 }
 
-// CatalogUsage cho pf/masterdata (AH-2): giống đã gắn vụ, sản lượng hoặc quy trình SOP thì chỉ được ẩn, không xóa.
+// CatalogUsage cho pf/masterdata (AH-2, AH-7): giống đã gắn vụ, sản lượng hoặc quy trình SOP, mùa vụ đã có vụ hoặc
+// sản lượng thì chỉ được ẩn, không xóa.
 func (m *Module) CatalogUsage() mdport.CatalogUsage { return seasonCatalogUsage{m.season} }
 
 type seasonCatalogUsage struct{ season *seasonapp.Service }
 
 func (u seasonCatalogUsage) CatalogItemInUse(ctx context.Context, catalog, code string) (bool, error) {
-	if catalog != mdport.CatalogRiceVariety {
-		return false, nil
+	switch catalog {
+	case mdport.CatalogRiceVariety:
+		return u.season.VarietyInUse(ctx, code)
+	case mdport.CatalogSeason:
+		return u.season.SeasonInUse(ctx, code)
 	}
-	return u.season.VarietyInUse(ctx, code)
+	return false, nil
+}
+
+// SeasonUsage cho pf/masterdata (AH-7): số vụ đang dùng mỗi mùa vụ, cột "Đang dùng" của màn Danh mục mùa vụ.
+func (m *Module) SeasonUsage() mdport.SeasonUsage { return seasonUsage{m.season} }
+
+type seasonUsage struct{ season *seasonapp.Service }
+
+func (u seasonUsage) SeasonsUsing(ctx context.Context, codes []string) (map[string]int, error) {
+	counts, err := u.season.SeasonCounts(ctx, codes)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]int, len(codes))
+	for _, c := range codes {
+		out[c] = counts[strings.ToUpper(c)]
+	}
+	return out, nil
 }
 
 // DepartmentUsage cho pf/party (W11.02, FN-AD-04.03): số thửa theo phòng ban (thửa cũ không phòng ban → Trồng trọt, X-12).

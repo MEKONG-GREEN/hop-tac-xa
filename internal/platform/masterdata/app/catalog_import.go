@@ -132,8 +132,8 @@ func (s *Service) ImportCatalogs(ctx context.Context, body io.Reader, key string
 				}
 			}
 			row.Catalog, row.Code = it.Catalog, strings.TrimSpace(it.Code)
-			if cropVariety(it.Catalog) { // AH-2: loại cây và giống chỉ thêm ở màn Danh mục cây trồng & giống
-				row.Reason = "Thêm tại màn Danh mục cây trồng & giống"
+			if adminManaged(it.Catalog) { // AH-2, AH-7: loại cây, giống, mùa vụ chỉ thêm ở màn riêng (mã do hệ thống sinh)
+				row.Reason = importRejectReason(it.Catalog)
 				res.add(row)
 				continue
 			}

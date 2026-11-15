@@ -188,6 +188,14 @@ func (h Handler) listItems(admin bool) gin.HandlerFunc {
 				items[i].FormsInUse = &n
 			}
 		}
+		if admin {
+			if used := h.Svc.SeasonsInUse(c.Request.Context(), c.Param("catalog"), codes); used != nil {
+				for i := range items {
+					n := used[items[i].Code]
+					items[i].SeasonsInUse = &n
+				}
+			}
+		}
 		c.JSON(http.StatusOK, gin.H{"items": items, "next_cursor": encodeCursor(pg.Next)})
 	}
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { unwrap } from "@/api/client";
 import { newIdempotencyKey } from "@/api/idempotency";
 import { collectPages, usePagedList } from "@/api/pagination";
@@ -47,7 +47,10 @@ function OpenPanel({ scope, onDone }: { scope: HtxScope; onDone: () => void }) {
   const [q, setQ] = useState("");
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [copy, setCopy] = useState(false);
-  const [seasonCode, setSeasonCode] = useState("TD");
+  const [pickedSeason, setSeasonCode] = useState("");
+  // AH-7: mùa vụ chọn từ danh mục đang hiện; mùa vụ đã ẩn hoặc chưa chọn thì lấy mục đầu, không gửi mã đã ẩn.
+  const seasonCode = seasons.some((s) => s.code === pickedSeason) ? pickedSeason : (seasons[0]?.code ?? "");
+  const seasonNames = useCatalogNames("season");
   const [year, setYear] = useState(String(YEAR));
   const [variety, setVariety] = useState("");
   const [sowing, setSowing] = useState(todayVN());
@@ -65,6 +68,7 @@ function OpenPanel({ scope, onDone }: { scope: HtxScope; onDone: () => void }) {
   const codeOf = (ref: string) => fields.plots.find((p) => p.properties.ref === ref)?.properties.code ?? ref.slice(0, 8);
   const sowingErr = sowingDateError(sowing);
   const errors = {
+    season: !seasonCode ? "Chọn vụ." : null,
     plots: picked.size === 0 ? "Chọn ít nhất một lô ruộng." : picked.size > 200 ? "Tối đa 200 lô một lần." : null,
     variety: !copy && !variety ? "Chọn giống lúa." : null,
     sowing: sowingErr,
@@ -193,7 +197,7 @@ function OpenPanel({ scope, onDone }: { scope: HtxScope; onDone: () => void }) {
           </button>
           {prev?.cfg ? (
             <span>
-              Vụ {prev.cfg.season_code} {prev.cfg.season_year} · giống <b style={{ display: "inline" }}>{prev.cfg.variety_code}</b> · SOP phiên bản {prev.cfg.sop_version_no}
+              Vụ {seasonNames.get(prev.cfg.season_code) ?? prev.cfg.season_code} {prev.cfg.season_year} · giống <b style={{ display: "inline" }}>{prev.cfg.variety_code}</b> · SOP phiên bản {prev.cfg.sop_version_no}
             </span>
           ) : null}
           {prev?.problem ? <span className="err">{prev.problem.message}</span> : null}
@@ -202,13 +206,14 @@ function OpenPanel({ scope, onDone }: { scope: HtxScope; onDone: () => void }) {
       <div className="row" style={{ alignItems: "flex-start" }}>
         <div className="field">
           <label htmlFor="open-season">Vụ</label>
-          <select id="open-season" className="select" value={seasonCode} onChange={(e) => setSeasonCode(e.target.value)}>
+          <select id="open-season" className="select" value={seasonCode} aria-invalid={touched && !!errors.season} onChange={(e) => setSeasonCode(e.target.value)}>
             {seasons.map((s) => (
               <option key={s.code} value={s.code}>
                 {s.name}
               </option>
             ))}
           </select>
+          {touched && errors.season ? <span className="err">{errors.season}</span> : null}
         </div>
         <div className="field">
           <label htmlFor="open-year">Năm</label>
@@ -318,9 +323,10 @@ function SeasonDetailDialog({ season, onClose }: { season: CropSeason; onClose: 
   const { api } = useAuth();
   const d = useAsync(() => unwrap(api.GET("/v1/cropcycle/seasons/{ref}", { params: { path: { ref: season.season_ref } } })), [api, season.season_ref]);
   const varietyName = useCatalogNames("rice_variety");
+  const seasonName = useCatalogNames("season");
   const ACTION: Record<string, string> = { opened: "Mở vụ", corrected: "Sửa (bản ghi bù)", completed: "Hoàn thành vụ", cancelled: "Hủy vụ" };
   return (
-    <Dialog title={`Vụ ${season.season_code} ${season.season_year} — lô ${season.plot_code}`} onClose={onClose}>
+    <Dialog title={`Vụ ${seasonName.get(season.season_code) ?? season.season_code} ${season.season_year} — lô ${season.plot_code}`} onClose={onClose}>
       {d.error ? <ProblemAlert problem={d.error} /> : null}
       {d.loading && !d.data ? <Loading /> : null}
       {d.data ? (
@@ -379,7 +385,8 @@ export default function SeasonsPage() {
     [api, scope.coopRef, status, seasonCode, year, variety, version],
   );
   const reload = () => setVersion((v) => v + 1);
-  const seasonName = useMemo(() => new Map(seasons.map((s) => [s.code, s.name])), [seasons]);
+  // AH-7: tên theo mã kể cả mùa vụ đã ẩn — vụ cũ vẫn hiện đúng tên (danh sách chọn ở trên chỉ có mục đang hiện).
+  const seasonName = useCatalogNames("season");
   const varietyName = useCatalogNames("rice_variety");
 
   return (
