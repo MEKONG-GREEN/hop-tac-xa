@@ -45,3 +45,20 @@ List<String> rolesFromJwt(String? token) {
     return const [];
   }
 }
+
+/// Mã tài khoản (claim `sub`) trong access token — cùng quy ước không xác minh
+/// chữ ký như [rolesFromJwt]. Thiếu hoặc token hỏng → null.
+String? subjectFromJwt(String? token) {
+  if (token == null) return null;
+  final parts = token.split('.');
+  if (parts.length < 2) return null;
+  try {
+    final body = utf8.decode(base64Url.decode(base64Url.normalize(parts[1])));
+    final j = jsonDecode(body);
+    if (j is! Map) return null;
+    final sub = j['sub'];
+    return sub is String && sub.isNotEmpty ? sub : null;
+  } catch (_) {
+    return null;
+  }
+}

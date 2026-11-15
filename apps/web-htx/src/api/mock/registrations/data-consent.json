@@ -1,0 +1,11 @@
+{
+  "id": "data-consent",
+  "source": "./data-consent",
+  "app": [
+    {
+      "export": "dataConsentAppRoutes",
+      "order": 3000
+    }
+  ],
+  "admin": []
+}

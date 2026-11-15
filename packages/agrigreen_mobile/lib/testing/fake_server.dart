@@ -40,6 +40,17 @@ class FakeServer implements SyncApi {
   bool revoked = false;
   bool unauthenticated = false;
 
+  /// Đồng ý thu thập dữ liệu (AH-23, REQ-011): true = tài khoản chưa đồng ý —
+  /// `GET /v1/me/data-consent` trả `required`, `push`/`uploadFile` bị từ chối
+  /// 403 `accounts.data_consent_required`. `POST` đúng phiên bản thì ghi nhận.
+  bool dataConsentRequired = false;
+  String dataConsentVersion = 'tam-1';
+  String dataConsentText = 'Nội dung đồng ý thu thập dữ liệu (giả lập).';
+
+  /// Thân các lần POST /v1/me/data-consent đã nhận.
+  final List<Map<String, Object?>> consentPosts = [];
+  static const _consentPath = '/v1/me/data-consent';
+
   /// Bỏ kết quả của các id này khỏi phản hồi (máy chủ "quên" trả).
   Set<String> omitResultsFor = {};
   bool Function(Map<String, Object?> wire)? rejectIf;
@@ -80,6 +91,7 @@ class FakeServer implements SyncApi {
     required List<OutboxRecord> records,
   }) async {
     _guard();
+    if (dataConsentRequired) throw DataConsentRequiredException();
     pushBatchKeys.add(batchKey);
     final body = HttpSyncApi.encodePushBody(deviceId, records);
     pushBodies.add(body);
@@ -171,6 +183,7 @@ class FakeServer implements SyncApi {
     String? fileRef,
   }) async {
     _guard();
+    if (dataConsentRequired) throw DataConsentRequiredException();
     uploadKeys.add(idempotencyKey);
     uploadFileRefs.add(fileRef);
     if (failNextUploads > 0) {
@@ -216,6 +229,21 @@ class FakeServer implements SyncApi {
     Map<String, String>? query,
   }) async {
     _guard();
+    if (path == _consentPath) {
+      return dataConsentRequired
+          ? {
+              'required': true,
+              'version': dataConsentVersion,
+              'text': dataConsentText,
+              'consented_at': null,
+            }
+          : {
+              'required': false,
+              'version': dataConsentVersion,
+              'text': null,
+              'consented_at': '2026-11-20T03:04:05Z',
+            };
+    }
     final h = onGet;
     if (h != null) {
       gets.add(path);
@@ -253,6 +281,18 @@ class FakeServer implements SyncApi {
     Map<String, Object?>? body,
   }) async {
     _guard();
+    if (path == _consentPath) {
+      consentPosts.add({...?body, 'idempotency_key': idempotencyKey});
+      if (body?['version'] != dataConsentVersion) {
+        throw ApiException(409, 'accounts.data_consent_version_stale');
+      }
+      dataConsentRequired = false;
+      return {
+        'id': 'consent-$idempotencyKey',
+        'version': dataConsentVersion,
+        'consented_at': '2026-11-20T03:04:05Z',
+      };
+    }
     actionCalls.add((path, idempotencyKey));
     if (failNextActions > 0) {
       failNextActions--;
