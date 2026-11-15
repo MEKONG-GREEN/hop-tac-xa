@@ -31,7 +31,7 @@ export function SeasonDetailDialog({ seasonRef, onClose }: { seasonRef: string; 
           <ol style={{ margin: "0 0 0 18px" }} aria-label="Lịch sử vụ">
             {d.data.events.map((ev) => (
               <li key={ev.id} className="small" style={{ marginBottom: 4 }}>
-                <b style={{ display: "inline" }}>{ACTION[ev.action] ?? ev.action}</b> · {formatDate(ev.event_time)} · giống {ev.variety_code ? (varietyName.get(ev.variety_code) ?? ev.variety_code) : "—"} · sạ{formatDate(ev.sowing_date)}
+                <b style={{ display: "inline" }}>{ACTION[ev.action] ?? ev.action}</b> · {formatDate(ev.event_time)} · giống {ev.variety_code ? (varietyName.get(ev.variety_code) ?? ev.variety_code) : "—"} · sạ {formatDate(ev.sowing_date)}
                 {ev.correction_reason ? <div className="mute">Lý do: {ev.correction_reason}</div> : null}
               </li>
             ))}

@@ -315,10 +315,10 @@ function CorrectDialog({ season, onClose, onDone }: { season: CropSeason; onClos
   );
 }
 
-/** Vụ mùa của HTX (HTX US-SEASON-02/03/04): lọc, mở vụ hộ/hàng loạt, sửa/hủy có lý do. KN chỉ xem. */
 /** Mã vụ trong `?season=` (từ thông báo) phải là UUID đầy đủ; sai dạng → bỏ qua, chỉ mở danh sách. */
 const STRICT_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** Vụ mùa của HTX (HTX US-SEASON-02/03/04): lọc, mở vụ hộ/hàng loạt, sửa/hủy có lý do. KN chỉ xem. */
 function SeasonsInner() {
   const { api } = useAuth();
   const router = useRouter();
@@ -522,7 +522,6 @@ function SeasonsInner() {
     </>
   );
 }
-
 
 export default function SeasonsPage() {
   return (

@@ -34,6 +34,7 @@ describe("AH-22 AC2: mở vụ từ thông báo", () => {
     expect(await screen.findByText("Vụ DX 2026 — lô L-01")).toBeTruthy();
     expect(screen.getByLabelText("Lịch sử vụ").textContent).toContain("Mở vụ");
     await waitFor(() => expect(screen.getByLabelText("Lịch sử vụ").textContent).toContain("giống Lúa ST25"));
+    expect(screen.getByLabelText("Lịch sử vụ").textContent).toContain("sạ 05/10/2026");
   });
 
   it("AH22_AC2: vụ không tồn tại (404) → hiện lỗi", async () => {
