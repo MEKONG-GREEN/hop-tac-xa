@@ -23,5 +23,9 @@ func nativeNotificationKinds() []string {
 		port.KindMRVOverdue,
 		port.KindEgressAnomaly,
 		port.KindAccountDormant,
+		port.KindSeasonCalendarPublished,
+		port.KindSeasonTaskDue,
+		port.KindSeasonLogMissing,
+		port.KindSeasonProcessChanged,
 	}
 }

@@ -97,3 +97,22 @@ describe("deepLinkHref — liên kết thông báo sang trang web", () => {
     expect(deepLinkHref("", "toString")).toBeNull();
   });
 });
+
+describe("AH-22 AC2: thông báo Thành viên HTX tới đúng vụ, việc hoặc lịch", () => {
+  const TASK = "01927b3e-0ff1-7000-8000-00000000dcba";
+
+  it("AH22_AC2: việc đến hạn/trễ hạn (NTF.2) mở màn vụ của việc đó", () => {
+    expect(deepLinkHref(`/cropcycle/seasons/${ID}/tasks/${TASK}`, "season_task_due")).toBe(`/htx/mua-vu?season=${ID}`);
+  });
+
+  it("AH22_AC2: NTF.3 và NTF.4 mở đúng vụ; season_opened giữ danh sách vụ", () => {
+    expect(deepLinkHref(`/cropcycle/seasons/${ID}`, "season_log_missing")).toBe(`/htx/mua-vu?season=${ID}`);
+    expect(deepLinkHref(`/cropcycle/seasons/${ID}`, "season_process_changed")).toBe(`/htx/mua-vu?season=${ID}`);
+    expect(deepLinkHref(`/cropcycle/seasons/${ID}`, "season_opened")).toBe("/htx/mua-vu");
+    expect(deepLinkHref(null, "season_log_missing")).toBe("/htx/mua-vu");
+  });
+
+  it("AH22_AC2: lịch thời vụ (NTF.1) chưa có màn đích → null, thông báo ở lại trung tâm", () => {
+    expect(deepLinkHref(`/cropcycle/calendars/${ID}`, "season_calendar_published")).toBeNull();
+  });
+});

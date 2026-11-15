@@ -13,7 +13,7 @@ import { deepLinkHref } from "@/lib/deepLink";
 import { formatDateTime } from "@/lib/format";
 import { toApiProblem } from "@/lib/useAsync";
 import { DeliveryHealthBanner } from "@/notify/DeliveryHealthBanner";
-import { announceNotificationsChanged, KIND_LABEL, markAllRead, markRead, relativeTime } from "@/notify/notify";
+import { announceNotificationsChanged, groupByDay, KIND_LABEL, markAllRead, markRead, timeOfDay } from "@/notify/notify";
 
 /** Hộp thư thông báo (pf/notify): chưa đọc/tất cả, đánh dấu đã đọc, mở đúng màn hình theo deep_link. */
 export default function InboxPage() {
@@ -59,10 +59,10 @@ export default function InboxPage() {
     <>
       <PageHead
         title="Thông báo"
-        subtitle="Chỉ đạo, cảnh báo, tài liệu mới, nhiệm vụ leo thang, xung đột đồng bộ — nội dung chỉ đọc qua máy chủ trong nước"
+        subtitle="Chỉ đạo, cảnh báo, lịch thời vụ, nhắc việc, thay đổi quy trình — nội dung chỉ đọc qua máy chủ trong nước"
         actions={
           <button type="button" className="btn btn-o btn-sm" onClick={() => void readAll()}>
-            Đánh dấu tất cả đã đọc
+            Đọc tất cả
           </button>
         }
       />
@@ -77,25 +77,32 @@ export default function InboxPage() {
           <span className="mute small">Tự cập nhật huy hiệu mỗi 60 giây</span>
         </div>
         {list.error ? <ProblemAlert problem={list.error} onRetry={list.reload} /> : null}
-        <ul className="list-plain">
-          {list.items.map((n) => (
-            <li key={n.id} style={{ padding: 0 }}>
-              <button type="button" className={`item${n.read_at ? "" : " unread"}`} onClick={() => void open(n)}>
-                <span className="row" style={{ gap: 6 }}>
-                  <span className={`chip ${n.severity === "urgent" ? "c-bad" : "c-info"}`}>{KIND_LABEL[n.kind] ?? n.kind}</span>
-                  {n.topic ? <span className="chip c-mute">Theo chủ đề</span> : null}
-                  {!n.read_at ? <span className="chip c-violet">Chưa đọc</span> : null}
-                  <span className="mute small" title={formatDateTime(n.created_at)}>
-                    {relativeTime(n.created_at)}
-                  </span>
-                </span>
-                <b>{n.title}</b>
-                <span className="small">{n.body}</span>
-                {!deepLinkHref(n.deep_link, n.kind) ? <span className="mute small">Không có màn hình liên kết trên web.</span> : null}
-              </button>
-            </li>
-          ))}
-        </ul>
+        {groupByDay(list.items).map((day) => (
+          <section key={day.key}>
+            <h3 className="small mute" style={{ margin: "12px 0 4px" }}>
+              {day.label}
+            </h3>
+            <ul className="list-plain">
+              {day.items.map((n) => (
+                <li key={n.id} style={{ padding: 0 }}>
+                  <button type="button" className={`item${n.read_at ? "" : " unread"}`} onClick={() => void open(n)}>
+                    <span className="row" style={{ gap: 6 }}>
+                      <span className={`chip ${n.severity === "urgent" ? "c-bad" : "c-info"}`}>{KIND_LABEL[n.kind] ?? n.kind}</span>
+                      {n.topic ? <span className="chip c-mute">Theo chủ đề</span> : null}
+                      {n.read_at ? <span className="chip c-mute">Đã đọc</span> : <span className="chip c-violet">Chưa đọc</span>}
+                      <span className="mute small" title={formatDateTime(n.created_at)}>
+                        {timeOfDay(n.created_at)}
+                      </span>
+                    </span>
+                    <b>{n.title}</b>
+                    <span className="small">{n.body}</span>
+                    {!deepLinkHref(n.deep_link, n.kind) ? <span className="mute small">Chưa có màn hình liên kết.</span> : null}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
         {list.loading ? <Loading /> : null}
         {!list.loading && !list.error && list.items.length === 0 ? <Empty>Không có thông báo.</Empty> : null}
         <LoadMore hasMore={list.hasMore} loading={list.loading} onClick={list.loadMore} />

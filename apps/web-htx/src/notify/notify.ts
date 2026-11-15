@@ -46,6 +46,11 @@ export const KIND_LABEL: Record<Notification["kind"], string> = {
   hrm_appraisal: "Đánh giá viên chức",
   hrm_promotion_due: "Nhắc xét nâng bậc lương",
   hrm_plan_reminder: "Nhắc kế hoạch phòng",
+  // Thông báo cho Thành viên HTX (AH-22, NTF.1–NTF.4)
+  season_calendar_published: "Lịch thời vụ",
+  season_task_due: "Nhắc việc",
+  season_log_missing: "Nhắc ghi nhật ký",
+  season_process_changed: "Quy trình thay đổi",
 };
 
 export function unreadCount(api: ApiClient): Promise<number> {
@@ -58,6 +63,43 @@ export function markRead(api: ApiClient, id: string): Promise<Notification> {
 
 export function markAllRead(api: ApiClient): Promise<number> {
   return unwrap(api.POST("/v1/notifications/read-all", { params: { header: { "Idempotency-Key": newIdempotencyKey() } } })).then((r) => r.marked);
+}
+
+const dayKeyFmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh", year: "numeric", month: "2-digit", day: "2-digit" });
+const timeFmt = new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+
+/** Ngày theo giờ Việt Nam dạng YYYY-MM-DD (nhóm theo ngày tạo của hộp thư, AH-22). */
+export function vnDayKey(iso: string): string {
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? dayKeyFmt.format(t) : "";
+}
+
+/** Giờ Việt Nam dạng HH:mm. */
+export function timeOfDay(iso: string): string {
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? timeFmt.format(t) : "—";
+}
+
+/** "Hôm nay", "Hôm qua", còn lại dd/mm/yyyy. */
+export function dayLabel(key: string, now: number = Date.now()): string {
+  if (key === vnDayKey(new Date(now).toISOString())) return "Hôm nay";
+  if (key === vnDayKey(new Date(now - 24 * 3_600_000).toISOString())) return "Hôm qua";
+  const [y, m, d] = key.split("-");
+  return y && m && d ? `${d}/${m}/${y}` : "Không rõ ngày";
+}
+
+export type NotificationDay = { key: string; label: string; items: Notification[] };
+
+/** Nhóm theo ngày tạo (giờ Việt Nam), giữ thứ tự đầu vào (mới nhất trước). */
+export function groupByDay(items: readonly Notification[], now: number = Date.now()): NotificationDay[] {
+  const groups: NotificationDay[] = [];
+  for (const n of items) {
+    const key = vnDayKey(n.created_at);
+    const last = groups[groups.length - 1];
+    if (last && last.key === key) last.items.push(n);
+    else groups.push({ key, label: dayLabel(key, now), items: [n] });
+  }
+  return groups;
 }
 
 /** "3 giờ trước" — thời gian tương đối cho hộp thư. */
