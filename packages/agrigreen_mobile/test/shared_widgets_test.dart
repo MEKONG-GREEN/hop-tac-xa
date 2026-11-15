@@ -158,7 +158,7 @@ void main() {
       expect(find.text('3 kết quả'), findsOneWidget);
       expect(find.text('Lọc thêm'), findsOneWidget);
       // phần ẩn mặc định đóng
-      expect(find.text('Loại'), findsNothing);
+      expect(find.text('Loại').hitTestable(), findsNothing);
 
       await tester.tap(find.text('Lọc thêm'));
       await tester.pumpAndSettle();
@@ -190,6 +190,32 @@ void main() {
             .onPressed,
         isNull,
       );
+    });
+
+    testWidgets('đóng rồi mở lại "Lọc thêm" thì chữ đã nhập trong ô vẫn còn', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _app(
+          FilterBar(
+            resultCount: 1,
+            activeCount: 1,
+            onClear: () {},
+            filters: const [],
+            moreFilters: const [TextField(key: Key('tu-khoa'))],
+          ),
+        ),
+      );
+      await tester.tap(find.text('Lọc thêm'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('tu-khoa')), 'lúa');
+      await tester.tap(find.text('Lọc thêm'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('tu-khoa')).hitTestable(), findsNothing);
+
+      await tester.tap(find.text('Lọc thêm'));
+      await tester.pumpAndSettle();
+      expect(find.text('lúa'), findsOneWidget);
     });
 
     testWidgets('Xóa lọc vô hiệu khi chưa đặt ô nào', (tester) async {

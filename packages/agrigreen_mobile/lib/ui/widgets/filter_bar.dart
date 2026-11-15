@@ -65,13 +65,18 @@ class _FilterBarState extends State<FilterBar> {
             ),
           ],
         ),
-        if (hasMore && _moreOpen)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: widget.moreFilters,
+        // Luôn giữ phần ẩn trong cây để ô lọc không mất giá trị đang hiện.
+        if (hasMore)
+          Visibility(
+            visible: _moreOpen,
+            maintainState: true,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: widget.moreFilters,
+              ),
             ),
           ),
       ],
