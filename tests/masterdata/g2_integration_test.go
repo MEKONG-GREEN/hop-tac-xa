@@ -105,14 +105,16 @@ func TestCatalogImportPerRowErrors(t *testing.T) {
 	tid := f.seeded()
 	admin := f.caller(tid, port.RoleMasterdataAdmin)
 	var buf bytes.Buffer
-	if err := tabular.WriteXLSX(&buf, "Danh mục", []string{"Danh mục", "Mã", "Tên", "growth_days", "expected_yield_t_per_ha"}, [][]string{
-		{"rice_variety", "OM9999", "OM9999 thử", "96", "6.5"}, // 2: tạo
-		{"rice_variety", "OM5451", "OM5451", "95", "6.75"},    // 3: đã có cùng nội dung → skipped
-		{"rice_variety", "ST25", "ST25 khác", "105", "5.5"},   // 4: đã có khác nội dung → rejected
-		{"rice_variety", "BAD", "Thiếu năng suất", "90", ""},  // 5: thiếu thuộc tính bắt buộc
-		{"khong_co", "X1", "Danh mục lạ", "", ""},             // 6: danh mục không tồn tại
-		{"rice_variety", "OM9999", "OM9999 lặp", "96", "6.5"}, // 7: trùng dòng 2
-		{"season", "td", "Thu Đông", "", ""},                  // 8: mã vụ chuẩn hóa HOA → TD đã có, khác tên → rejected
+	// AH-2: loại cây và giống không nhập từ Excel (thêm ở màn Danh mục cây trồng & giống) — dùng danh mục vật tư.
+	if err := tabular.WriteXLSX(&buf, "Danh mục", []string{"Danh mục", "Mã", "Tên", "unit", "group"}, [][]string{
+		{"material", "VT9999", "Vật tư thử", "kg", "Phân bón"},       // 2: tạo
+		{"material", "PHAN_URE", "Phân Urê", "kg", "Phân bón"},       // 3: đã có cùng nội dung → skipped
+		{"material", "PHAN_DAP", "Phân DAP khác", "bao", "Phân bón"}, // 4: đã có khác nội dung → rejected
+		{"material", "BAD", "Thiếu ĐVT", "", ""},                     // 5: thiếu thuộc tính bắt buộc
+		{"khong_co", "X1", "Danh mục lạ", "", ""},                    // 6: danh mục không tồn tại
+		{"material", "VT9999", "Vật tư lặp", "kg", ""},               // 7: trùng dòng 2
+		{"season", "td", "Thu Đông", "", ""},                         // 8: mã vụ chuẩn hóa HOA → TD đã có, khác tên → rejected
+		{"rice_variety", "OM9998", "Giống thử", "", ""},              // 9: giống chỉ thêm ở màn mới → rejected
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -130,15 +132,23 @@ func TestCatalogImportPerRowErrors(t *testing.T) {
 			t.Fatalf("dòng lỗi phải có lý do: %v", m)
 		}
 	}
-	for row, want := range map[int]string{2: "created", 3: "skipped", 4: "rejected", 5: "rejected", 6: "rejected", 7: "rejected", 8: "rejected"} {
+	for row, want := range map[int]string{2: "created", 3: "skipped", 4: "rejected", 5: "rejected", 6: "rejected", 7: "rejected", 8: "rejected", 9: "rejected"} {
 		if status[row] != want {
 			t.Fatalf("dòng %d: %q, muốn %q (%v)", row, status[row], want, rows)
 		}
 	}
-	if body["total"].(float64) != 7 || body["rejected"].(float64) != 5 {
+	if body["total"].(float64) != 8 || body["rejected"].(float64) != 6 {
 		t.Fatalf("tổng: %v", body)
 	}
-	if it, err := f.mod.Catalogs().Get(tenantCtx(tid), port.CatalogRiceVariety, "OM9999"); err != nil || it.Attrs["growth_days"] != "96" {
+	for _, r := range rows {
+		if m := r.(map[string]any); m["row"].(float64) == 9 && m["reason"] != "Thêm tại màn Danh mục cây trồng & giống" {
+			t.Fatalf("giống nhập từ Excel phải bị từ chối kèm lý do: %v", m)
+		}
+	}
+	if _, err := f.mod.Catalogs().Get(tenantCtx(tid), port.CatalogRiceVariety, "OM9998"); err == nil {
+		t.Fatal("giống nhập từ Excel không được tạo")
+	}
+	if it, err := f.mod.Catalogs().Get(tenantCtx(tid), port.CatalogMaterial, "VT9999"); err != nil || it.Attrs["unit"] != "kg" {
 		t.Fatalf("mục vừa nhập: %+v %v", it, err)
 	}
 	// Gọi lặp cùng Idempotency-Key → phát lại, không tạo thêm.

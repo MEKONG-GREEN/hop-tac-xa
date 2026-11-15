@@ -483,6 +483,11 @@ export function cropSeasonsOf(coopRef: string): CropSeason[] {
   ensure();
   return SEASONS.filter((x) => x.s.cooperative_ref === coopRef).map((x) => x.s);
 }
+/** AH-2: giống có đang được vụ hoặc quy trình SOP giả lập tham chiếu không (xóa chỉ ẩn khi có). */
+export function varietyReferenced(code: string): boolean {
+  ensure();
+  return SEASONS.some((x) => x.s.variety_code === code) || BINDINGS.some((b) => b.variety_code === code);
+}
 export function cropLogsOf(coopRef: string): CropFarmLogState[] {
   ensure();
   return LOGS.filter((x) => x.state.cooperative_ref === coopRef).map((x) => x.state);

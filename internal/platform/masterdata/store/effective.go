@@ -99,7 +99,7 @@ func ItemsAt(ctx context.Context, tx pgx.Tx, catalog string, d time.Time) ([]dom
 	         coalesce((v.after->>'active')::boolean, i.active), v.valid_from
 	    FROM pf_masterdata.catalog_item i
 	    LEFT JOIN v ON v.code = i.code
-	   WHERE i.catalog = $1
+	   WHERE i.catalog = $1 AND i.deleted_at IS NULL
 	     AND (v.code IS NOT NULL OR NOT EXISTS (
 	           SELECT 1 FROM pf_masterdata.catalog_effective e WHERE e.catalog = $1 AND e.code = i.code))
 	   ORDER BY i.code`, catalog, day(d))

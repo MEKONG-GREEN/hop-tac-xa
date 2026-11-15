@@ -94,6 +94,10 @@ func (m *Module) UseStaffDirectory(d port.StaffNames) { m.svc.Staff = d }
 // UseFormUsage nối P3 (pf/reports) cho cột "biểu đang dùng" của danh mục nông nghiệp (KN v7.7 FN-AD-04.05).
 func (m *Module) UseFormUsage(f port.FormUsage) { m.svc.Forms = f }
 
+// UseCatalogUsage (AH-2) nối nguồn đếm tham chiếu của module khác (vụ, SOP, sản lượng, thẻ tài liệu): mục loại cây,
+// giống đang được dùng thì "xóa" chỉ ẩn. Không nối nguồn nào → xóa coi như đang được dùng (chỉ ẩn).
+func (m *Module) UseCatalogUsage(u port.CatalogUsage) { m.svc.Usage = append(m.svc.Usage, u) }
+
 // UseApprovals (W6.1) nối cap/workflow (pf/workflow): gửi duyệt/duyệt/từ chối phiên bản tham số ghi thêm yêu cầu
 // và quyết định vào sổ pf_workflow cùng giao dịch. Không nối → luồng cũ.
 func (m *Module) UseApprovals(a wfport.Approvals) { m.svc.Approvals = a }

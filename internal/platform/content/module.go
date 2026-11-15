@@ -7,6 +7,8 @@
 package content
 
 import (
+	"context"
+
 	"github.com/gin-gonic/gin"
 
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/content/app"
@@ -46,6 +48,15 @@ type Module struct{ svc *app.Service }
 // Mọi giao dịch mở qua pool chạy dưới vai r_content (db.ForModule).
 func New(b tenant.Beginner, clk clock.Clock, d Deps) *Module {
 	return &Module{svc: &app.Service{DB: db.ForModule(b, DBModule), Clock: clk, Scope: d.Scope, Catalogs: d.Catalogs, Units: d.AdminUnits, Store: d.Store}}
+}
+
+// CatalogUsage cho pf/masterdata (AH-2): mục danh mục đang là nhãn của tài liệu thì chỉ được ẩn, không xóa.
+func (m *Module) CatalogUsage() mdport.CatalogUsage { return catalogUsage{m.svc} }
+
+type catalogUsage struct{ svc *app.Service }
+
+func (u catalogUsage) CatalogItemInUse(ctx context.Context, catalog, code string) (bool, error) {
+	return u.svc.CatalogTagInUse(ctx, catalog, code)
 }
 
 // RegisterApp gắn route Application API.

@@ -9,7 +9,7 @@ import (
 // CatalogCounts đếm mục theo danh mục: [tổng, ngừng dùng].
 func CatalogCounts(ctx context.Context, tx pgx.Tx) (map[string][2]int, error) {
 	rows, err := tx.Query(ctx, `SELECT catalog, count(*), count(*) FILTER (WHERE NOT active)
-	  FROM pf_masterdata.catalog_item GROUP BY catalog`)
+	  FROM pf_masterdata.catalog_item WHERE deleted_at IS NULL GROUP BY catalog`)
 	if err != nil {
 		return nil, err
 	}

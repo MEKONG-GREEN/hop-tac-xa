@@ -3,6 +3,8 @@
 
 /** Nhãn tiếng Việt cho khóa thuộc tính hay gặp. */
 export const ATTR_LABEL: Record<string, string> = {
+  crop_code: "Loại cây",
+  is_rice: "Là lúa",
   growth_days: "Thời gian sinh trưởng (ngày)",
   expected_yield_t_per_ha: "Năng suất kỳ vọng (tấn/ha)",
   pilot: "Thí điểm CGH",

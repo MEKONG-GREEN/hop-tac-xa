@@ -95,6 +95,12 @@ func toItemDTO(it domain.Item) itemDTO {
 	return d
 }
 
+// deleteResultDTO: outcome "deleted" (mục đã xóa) hoặc "hidden" (đang được dùng nên chỉ ẩn).
+type deleteResultDTO struct {
+	Outcome string  `json:"outcome"`
+	Item    itemDTO `json:"item"`
+}
+
 type effectiveDTO struct {
 	ID        string          `json:"id"`
 	ValidFrom string          `json:"valid_from"`

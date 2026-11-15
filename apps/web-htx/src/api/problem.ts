@@ -42,6 +42,14 @@ export const PROBLEM_MESSAGES: Readonly<Record<string, string>> = {
   // pf/masterdata
   "masterdata.admin_unit_not_found": "Không tìm thấy đơn vị hành chính có hiệu lực với mã này.",
   "masterdata.catalog_not_found": "Danh mục không tồn tại.",
+  "masterdata.catalog_item_not_found": "Không tìm thấy mục này (có thể đã bị xóa). Vui lòng tải lại.",
+  "masterdata.catalog_item_name_taken": "Tên đã tồn tại. Chọn tên khác hoặc cho hiện lại mục đã ẩn.",
+  // AH-2: loại cây và giống
+  "masterdata.crop_type_has_visible_varieties": "Loại cây còn giống đang hiển thị. Ẩn các giống đó trước.",
+  "masterdata.crop_type_hidden": "Loại cây của giống đang ẩn. Cho hiện loại cây trước.",
+  "masterdata.catalog_item_read_only": "Mục cũ không còn là loại cây, chỉ xem.",
+  "masterdata.catalog_delete_unsupported": "Danh mục này không có thao tác xóa.",
+  "masterdata.dependency_unavailable": "Chưa kiểm tra được mục có đang được sử dụng không. Vui lòng thử lại sau.",
   "masterdata.param_version_not_found": "Không tìm thấy phiên bản tham số.",
   "masterdata.param_invalid_transition": "Trạng thái phiên bản không cho phép thao tác này (có thể đã được người khác xử lý). Vui lòng tải lại.",
   "masterdata.param_not_setter": "Chỉ người đặt tham số mới được gửi duyệt phiên bản này.",
@@ -573,7 +581,7 @@ export function parseRetryAfter(value: string | null | undefined, now: number = 
 }
 
 /** Thông báo cho người dùng: ưu tiên bảng mã; mã lạ thì dùng detail/title của server. */
-const PREFER_DETAIL: ReadonlySet<string> = new Set(["party.out_of_scope", "party.import_invalid", "hrm.report_blocked", "hrm.promotion_export_blocked", "hrm.nlth_quota_exceeded", "hrm.decision_warnings", "hrm.decision_stale", "hrm.decision_cancel_order", "hrm.promotion_conflict"]);
+const PREFER_DETAIL: ReadonlySet<string> = new Set(["party.out_of_scope", "party.import_invalid", "hrm.report_blocked", "hrm.promotion_export_blocked", "hrm.nlth_quota_exceeded", "hrm.decision_warnings", "hrm.decision_stale", "hrm.decision_cancel_order", "hrm.promotion_conflict", "masterdata.crop_type_has_visible_varieties"]);
 
 export function problemMessage(p: Pick<ProblemDetails, "code" | "status" | "detail" | "title">): string {
   // Thông báo nghiệp vụ của 422 (vd "Vui lòng nhập đầy đủ Tên tuyến và Phân loại." — docs/errors.md) nằm ở `detail`.

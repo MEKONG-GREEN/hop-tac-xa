@@ -39,6 +39,7 @@ func (h Handler) RegisterAdmin(rg *gin.RouterGroup) {
 	rg.PUT("/masterdata/catalogs/:catalog/items/:code", h.updateItem)
 	rg.POST("/masterdata/catalogs/:catalog/items/:code/deactivate", h.setActive(false))
 	rg.POST("/masterdata/catalogs/:catalog/items/:code/reactivate", h.setActive(true))
+	rg.POST("/masterdata/catalogs/:catalog/items/:code/delete", h.deleteItem)
 	rg.GET("/masterdata/catalogs/:catalog/items/:code/history", h.history)
 	rg.GET("/masterdata/catalogs/:catalog/items/:code/versions", h.itemVersions)
 	httpx.AllowBody(rg, http.MethodPost, "/masterdata/catalog-imports", app.MaxCatalogImportBytes)
@@ -298,6 +299,16 @@ func (h Handler) setActive(active bool) gin.HandlerFunc {
 		}
 		c.JSON(http.StatusOK, toItemDTO(it))
 	}
+}
+
+// deleteItem (AH-2): loại cây, giống chưa được dùng → đã xóa; đang được dùng → chỉ ẩn.
+func (h Handler) deleteItem(c *gin.Context) {
+	res, _, err := h.Svc.DeleteItem(c.Request.Context(), c.Param("catalog"), c.Param("code"), idempotency.KeyFromContext(c.Request.Context()))
+	if err != nil {
+		httpx.Fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, deleteResultDTO{Outcome: res.Outcome, Item: toItemDTO(res.Item)})
 }
 
 func (h Handler) history(c *gin.Context) {

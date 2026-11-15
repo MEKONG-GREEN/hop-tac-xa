@@ -57,7 +57,12 @@ Mã lỗi của module có dạng `<module>.<lỗi>`.
 | 409 | `masterdata.catalog_item_exists` | pf/masterdata: mã đã có trong danh mục (kể cả mục đã ngừng dùng) |
 | 409 | `masterdata.catalog_item_state` | pf/masterdata: ngừng dùng mục đã ngừng, hoặc dùng lại mục đang dùng |
 | 422 | `masterdata.farm_stage_invalid` | pf/masterdata: loại máy gắn khâu sản xuất không có hoặc đã ngừng dùng |
-| 409 | `masterdata.catalog_item_name_taken` | pf/masterdata (KN v7.7 FN-AD-04.05): danh mục đã có mục khác cùng tên (không phân biệt hoa/thường tiếng Việt) |
+| 409 | `masterdata.catalog_item_name_taken` | pf/masterdata (KN v7.7 FN-AD-04.05): danh mục đã có mục khác cùng tên (không phân biệt hoa/thường tiếng Việt). Loại cây (crop) và giống (rice_variety), AH-2: so theo tên đã bỏ khoảng trắng thừa, không phân biệt hoa/thường; loại cây trùng trong các loại cây, giống trùng trong cùng loại cây; mục đã ẩn vẫn tính, mục đã xóa không tính |
+| 409 | `masterdata.crop_type_has_visible_varieties` | pf/masterdata (AH-2): ẩn hoặc xóa loại cây khi còn giống đang hiển thị — detail nêu số giống |
+| 409 | `masterdata.crop_type_hidden` | pf/masterdata (AH-2): hiện lại giống khi loại cây của giống đang ẩn |
+| 409 | `masterdata.catalog_item_read_only` | pf/masterdata (AH-2): sửa, ẩn, xóa mục crop cũ có nhóm cha (không còn là loại cây) — chỉ xem |
+| 422 | `masterdata.catalog_delete_unsupported` | pf/masterdata (AH-2): thao tác xóa chỉ có với loại cây (crop) và giống (rice_variety) |
+| 503 | `masterdata.dependency_unavailable` | pf/masterdata (AH-2): không hỏi được nguồn tham chiếu của module khác khi xóa loại cây, giống — không đổi gì |
 | 422 | `masterdata.catalog_ref_invalid` | pf/masterdata (KN v7.7 FN-AD-04.05): cây trồng gắn nhóm không phải nhóm cấp 1 đang dùng (hoặc chính nó); sâu bệnh gắn cây trồng bị ảnh hưởng không có/đã ngừng dùng |
 | 409 | `masterdata.cnts_stamp_taken` | pf/masterdata (W11.41, BRD CNTS FN-06): mã số khắc mộc dấu GS/GC đã thuộc cơ sở giết mổ khác (kể cả cơ sở đã ngừng dùng — mã là định danh, không tái dùng); `field` chỉ mã → cơ sở đang giữ |
 | 422 | `masterdata.cnts_commune_invalid` | pf/masterdata (W11.41, FN-06 BR-02): cơ sở giết mổ trỏ mã không phải xã/phường/đặc khu có hiệu lực tại ngày áp dụng (`valid_from`) |

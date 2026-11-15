@@ -261,7 +261,7 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/CatalogItem"}
         "404": {$ref: "#/components/responses/Problem"}
-        "409": {description: masterdata.catalog_item_state, $ref: "#/components/responses/Problem"}
+        "409": {description: "masterdata.catalog_item_state | masterdata.crop_type_has_visible_varieties | masterdata.catalog_item_read_only", $ref: "#/components/responses/Problem"}
         "422": {$ref: "#/components/responses/Problem"}
   /v1/masterdata/catalogs/{catalog}/items/{code}/reactivate:
     parameters:
@@ -284,7 +284,7 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/CatalogItem"}
         "404": {$ref: "#/components/responses/Problem"}
-        "409": {$ref: "#/components/responses/Problem"}
+        "409": {description: "masterdata.catalog_item_state | masterdata.crop_type_hidden | masterdata.catalog_item_read_only", $ref: "#/components/responses/Problem"}
   /v1/masterdata/catalogs/{catalog}/items/{code}/history:
     parameters:
       - $ref: "#/components/parameters/Catalog"
@@ -6509,6 +6509,27 @@ paths:
         "404": {$ref: "#/components/responses/Problem"}
         "422": {$ref: "#/components/responses/Problem"}
   # --- hết pf/party KN v7.7 gói P2 ---
+  /v1/masterdata/catalogs/{catalog}/items/{code}/delete:
+    parameters:
+      - $ref: "#/components/parameters/Catalog"
+      - $ref: "#/components/parameters/ItemCode"
+    post:
+      summary: Xóa loại cây hoặc giống (AH-2) — chưa được dùng ở đâu thì đã xóa, đang được dùng thì chỉ ẩn
+      operationId: deleteCatalogItem
+      tags: [masterdata]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: outcome deleted (mục biến khỏi mọi danh sách, lịch sử giữ lại) hoặc hidden (đang được dùng nên chỉ ẩn)
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/CatalogDeleteResult"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {description: "masterdata.crop_type_has_visible_varieties | masterdata.catalog_item_read_only", $ref: "#/components/responses/Problem"}
+        "422": {description: masterdata.catalog_delete_unsupported, $ref: "#/components/responses/Problem"}
+        "503": {description: masterdata.dependency_unavailable, $ref: "#/components/responses/Problem"}
 components:
   securitySchemes:
     oidc:
@@ -6863,13 +6884,14 @@ components:
       type: object
       required: [name]
       properties:
-        code: {type: string, pattern: "^[A-Za-z0-9][A-Za-z0-9_.-]{0,39}$", description: "Bắt buộc khi thêm; khi sửa bỏ trống hoặc trùng mã trên đường dẫn"}
+        code: {type: string, pattern: "^[A-Za-z0-9][A-Za-z0-9_.-]{0,39}$", description: "Bắt buộc khi thêm (crop, rice_variety: bỏ trống, máy chủ sinh mã); khi sửa bỏ trống hoặc trùng mã trên đường dẫn"}
         name: {type: string, maxLength: 200}
         attrs:
           type: object
           additionalProperties: {type: string}
           description: |
-            Theo danh mục — rice_variety: growth_days, expected_yield_t_per_ha (decimal); farm_stage: pilot (true|false, cờ thí điểm CGH), description;
+            Theo danh mục — rice_variety (giống): crop_code (mã loại cây đang hiện, bắt buộc), growth_days (số nguyên > 0, ngày), expected_yield_t_per_ha (tùy chọn, dữ liệu cũ);
+            crop (loại cây): is_rice (true|false, cờ "là lúa", bắt buộc khi thêm; không có parent_code); farm_stage: pilot (true|false, cờ thí điểm CGH), description;
             machine_type: farm_stage (mã khâu đang dùng); season: start_month, end_month; pest: kind (sau_hai|benh_hai|dong_vat_hai|co_dai).
             W11.41 CNTS — cnts_species: group, unit, herd_column, order; cnts_breed: species; cnts_disease: species (danh sách), notifiable;
             cnts_vaccine: species (loài so sánh, bắt buộc), diseases, report_group (heo|bo|cum_gia_cam|dai|khac), order; cnts_chemical: unit, target;
@@ -6907,7 +6929,7 @@ components:
     ReasonInput:
       type: object
       properties:
-        reason: {type: string, minLength: 10, maxLength: 500}
+        reason: {type: string, minLength: 10, maxLength: 500, description: "Tùy chọn với crop, rice_variety (bỏ trống: máy chủ ghi lý do hệ thống); bắt buộc với danh mục khác khi ngừng dùng"}
     CatalogSnapshot:
       type: object
       properties:
@@ -6915,12 +6937,13 @@ components:
         attrs: {type: object, additionalProperties: {type: string}}
         active: {type: boolean}
         deactivation_reason: {type: string}
+        deleted: {type: boolean, description: "AH-2: mục đã xóa (chỉ crop, rice_variety)"}
     CatalogChange:
       type: object
       required: [id, action, before, after, reason, event_time, actor_ref, seq, recorded_at]
       properties:
         id: {type: string, format: uuid}
-        action: {type: string, enum: [created, updated, deactivated, reactivated]}
+        action: {type: string, enum: [created, updated, deactivated, reactivated, deleted]}
         before: {oneOf: [{$ref: "#/components/schemas/CatalogSnapshot"}, {type: "null"}]}
         after: {$ref: "#/components/schemas/CatalogSnapshot"}
         reason: {type: [string, "null"]}
@@ -8591,6 +8614,12 @@ components:
         proposed_at: {type: string, format: date-time}
         approved_by: {type: [string, "null"], format: uuid}
         approved_at: {type: [string, "null"], format: date-time}
+    CatalogDeleteResult:
+      type: object
+      required: [outcome, item]
+      properties:
+        outcome: {type: string, enum: [deleted, hidden]}
+        item: {$ref: "#/components/schemas/CatalogItem"}
   requestBodies:
     ContentTransition:
       required: true

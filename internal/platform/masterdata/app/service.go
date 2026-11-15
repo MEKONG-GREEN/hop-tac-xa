@@ -42,6 +42,18 @@ var (
 	ErrCatalogRef    = problem.New(http.StatusUnprocessableEntity, "masterdata.catalog_ref_invalid",
 		"Mục tham chiếu (nhóm cây trồng, cây trồng bị ảnh hưởng) không có hoặc đã ngừng dùng")
 
+	// AH-2: loại cây và giống.
+	// ErrCropTypeHasVisibleVarieties: không ẩn/xóa loại cây khi còn giống đang hiển thị.
+	ErrCropTypeHasVisibleVarieties = problem.New(http.StatusConflict, "masterdata.crop_type_has_visible_varieties", "Loại cây còn giống đang hiển thị")
+	// ErrCropTypeHidden: không cho hiện lại giống khi loại cây của nó đang ẩn.
+	ErrCropTypeHidden = problem.New(http.StatusConflict, "masterdata.crop_type_hidden", "Loại cây của giống đang ẩn — cho hiện loại cây trước")
+	// ErrCatalogItemReadOnly: mục cũ không còn là loại cây (có nhóm cha) chỉ để xem.
+	ErrCatalogItemReadOnly = problem.New(http.StatusConflict, "masterdata.catalog_item_read_only", "Mục cũ không còn là loại cây — chỉ xem")
+	// ErrDeleteUnsupported: chỉ loại cây và giống có thao tác xóa.
+	ErrDeleteUnsupported = problem.New(http.StatusUnprocessableEntity, "masterdata.catalog_delete_unsupported", "Danh mục này không có thao tác xóa")
+	// ErrDependency: không hỏi được nguồn tham chiếu của module khác — không đổi gì.
+	ErrDependency = problem.New(http.StatusServiceUnavailable, "masterdata.dependency_unavailable", "Chưa kiểm tra được mục có đang được sử dụng không")
+
 	ErrParamNotFound = problem.New(http.StatusNotFound, "masterdata.param_not_found", "Không có tham số đã phê duyệt có hiệu lực tại thời điểm tra").
 				WithCause(params.ErrParamNotFound)
 	ErrVersionNotFound = problem.New(http.StatusNotFound, "masterdata.param_version_not_found", "Không có phiên bản tham số")
@@ -67,6 +79,9 @@ type Service struct {
 	Staff staffDirectory
 	// Forms (tùy chọn, P3): số mẫu báo cáo đang dùng mỗi mục — cột "biểu đang dùng" (FN-AD-04.05).
 	Forms port.FormUsage
+	// Usage (tùy chọn, AH-2): nguồn đếm tham chiếu của module khác (vụ, SOP, sản lượng, thẻ tài liệu) — quyết định xóa
+	// hay chỉ ẩn loại cây, giống. Thiếu thì xóa coi như đang được dùng (chỉ ẩn).
+	Usage []port.CatalogUsage
 	// Approvals (tùy chọn, W6.1): cap/workflow — gửi duyệt/duyệt/từ chối phiên bản tham số ghi thêm yêu cầu và
 	// quyết định vào sổ pf_workflow CÙNG giao dịch (bốn mắt kiểm lại ở DB). Nil → chỉ luồng cũ.
 	Approvals wfport.Approvals

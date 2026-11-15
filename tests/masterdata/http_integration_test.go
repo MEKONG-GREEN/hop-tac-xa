@@ -536,30 +536,32 @@ func TestCatalogDeactivateKeepsHistory(t *testing.T) {
 	admin := f.caller(tid, port.RoleMasterdataAdmin)
 	reader := f.caller(tid)
 
+	// AH-2: mã do hệ thống sinh — không gửi code, dùng mã trả về.
 	code, b := admin.adm("POST", "/v1/masterdata/catalogs/rice_variety/items", map[string]any{
-		"code": "OM380", "name": "OM380", "attrs": map[string]string{"growth_days": "95", "expected_yield_t_per_ha": "6.2"}})
+		"name": "OM380", "attrs": map[string]string{"crop_code": "LUA", "growth_days": "95", "expected_yield_t_per_ha": "6.2"}})
 	if code != 201 || b["active"] != true {
 		t.Fatalf("thêm giống: %d %v", code, b)
 	}
-	if code, b := admin.adm("PUT", "/v1/masterdata/catalogs/rice_variety/items/OM380", map[string]any{
-		"name": "OM380 (chịu mặn)", "attrs": map[string]string{"growth_days": "96", "expected_yield_t_per_ha": "6.2"}}); code != 200 || b["revision"] != 2.0 {
+	vcode := b["code"].(string)
+	if code, b := admin.adm("PUT", "/v1/masterdata/catalogs/rice_variety/items/"+vcode, map[string]any{
+		"name": "OM380 (chịu mặn)", "attrs": map[string]string{"crop_code": "LUA", "growth_days": "96", "expected_yield_t_per_ha": "6.2"}}); code != 200 || b["revision"] != 2.0 {
 		t.Fatalf("sửa: %d %v", code, b)
 	}
-	if code, b := admin.adm("POST", "/v1/masterdata/catalogs/rice_variety/items/OM380/deactivate", map[string]any{"reason": "ngắn"}); code != 422 {
+	if code, b := admin.adm("POST", "/v1/masterdata/catalogs/rice_variety/items/"+vcode+"/deactivate", map[string]any{"reason": "ngắn"}); code != 422 {
 		t.Fatalf("lý do quá ngắn: %d %v", code, b)
 	}
-	code, b = admin.adm("POST", "/v1/masterdata/catalogs/rice_variety/items/OM380/deactivate", map[string]any{"reason": "Giống thoái hóa, ngừng khuyến cáo từ vụ Hè Thu 2026"})
+	code, b = admin.adm("POST", "/v1/masterdata/catalogs/rice_variety/items/"+vcode+"/deactivate", map[string]any{"reason": "Giống thoái hóa, ngừng khuyến cáo từ vụ Hè Thu 2026"})
 	if code != 200 || b["active"] != false || b["deactivation_reason"] == nil {
 		t.Fatalf("ngừng dùng: %d %v", code, b)
 	}
-	if code, b := admin.adm("POST", "/v1/masterdata/catalogs/rice_variety/items/OM380/deactivate", map[string]any{"reason": "Ngừng dùng lần thứ hai"}); code != 409 || b["code"] != "masterdata.catalog_item_state" {
+	if code, b := admin.adm("POST", "/v1/masterdata/catalogs/rice_variety/items/"+vcode+"/deactivate", map[string]any{"reason": "Ngừng dùng lần thứ hai"}); code != 409 || b["code"] != "masterdata.catalog_item_state" {
 		t.Fatalf("ngừng lần hai: %d %v", code, b)
 	}
 
 	// Application API: danh sách mặc định chỉ mục đang dùng; mục vẫn đọc được.
 	_, list := reader.get("/v1/masterdata/catalogs/rice_variety?limit=200")
 	for _, it := range list["items"].([]any) {
-		if it.(map[string]any)["code"] == "OM380" {
+		if it.(map[string]any)["code"] == vcode {
 			t.Fatal("mục ngừng dùng không được trong danh sách mặc định")
 		}
 	}
@@ -567,16 +569,16 @@ func TestCatalogDeactivateKeepsHistory(t *testing.T) {
 	if len(all["items"].([]any)) != len(list["items"].([]any))+1 {
 		t.Fatalf("include_inactive phải thấy mục đã ngừng: %v", all)
 	}
-	if code, it := reader.get("/v1/masterdata/catalogs/rice_variety/OM380"); code != 200 || it["active"] != false {
+	if code, it := reader.get("/v1/masterdata/catalogs/rice_variety/" + vcode); code != 200 || it["active"] != false {
 		t.Fatalf("mục vẫn còn: %d %v", code, it)
 	}
-	pi, err := f.mod.Catalogs().Get(reader.ctx(), port.CatalogRiceVariety, "OM380")
+	pi, err := f.mod.Catalogs().Get(reader.ctx(), port.CatalogRiceVariety, vcode)
 	if err != nil || pi.Active {
 		t.Fatalf("port: %+v %v", pi, err)
 	}
 
 	// Lịch sử: created → updated → deactivated, có trước → sau và lý do.
-	code, h := admin.adm("GET", "/v1/masterdata/catalogs/rice_variety/items/OM380/history", nil)
+	code, h := admin.adm("GET", "/v1/masterdata/catalogs/rice_variety/items/"+vcode+"/history", nil)
 	items, _ := h["items"].([]any)
 	if code != 200 || len(items) != 3 {
 		t.Fatalf("lịch sử: %d %v", code, h)
@@ -596,14 +598,14 @@ func TestCatalogDeactivateKeepsHistory(t *testing.T) {
 	// Không xóa cứng ở DB; sổ lịch sử có chuỗi băm nguyên vẹn.
 	pool := f.env.Pool(t, migrations.PF, masterdata.DBRole)
 	err = tenant.WithTenantTx(context.Background(), pool, tid, func(tx pgx.Tx) error {
-		_, e := tx.Exec(context.Background(), "DELETE FROM pf_masterdata.catalog_item WHERE code = 'OM380'")
+		_, e := tx.Exec(context.Background(), "DELETE FROM pf_masterdata.catalog_item WHERE code = '"+vcode+"'")
 		return e
 	})
 	if err == nil {
 		t.Fatal("xóa mục danh mục phải thất bại")
 	}
 	err = tenant.WithTenantTx(context.Background(), pool, tid, func(tx pgx.Tx) error {
-		r, e := ledger.Verify(context.Background(), tx, "pf_masterdata.catalog_change", tid, "catalog:rice_variety:OM380")
+		r, e := ledger.Verify(context.Background(), tx, "pf_masterdata.catalog_change", tid, "catalog:rice_variety:"+vcode)
 		if e == nil && (!r.OK || r.RowsChecked != 3) {
 			t.Errorf("chuỗi băm: %+v", r)
 		}

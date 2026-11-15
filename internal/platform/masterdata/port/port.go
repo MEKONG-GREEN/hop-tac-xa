@@ -127,7 +127,9 @@ type Catalogs interface {
 
 // Tên danh mục.
 const (
-	CatalogRiceVariety = "rice_variety" // attrs: growth_days, expected_yield_t_per_ha (decimal)
+	// CatalogRiceVariety: giống (AH-2). attrs: crop_code (mã loại cây, bắt buộc), growth_days (ngày, số nguyên > 0,
+	// chỉ tham khảo), expected_yield_t_per_ha (decimal, tùy chọn — dữ liệu cũ giữ nguyên, giống mới không có).
+	CatalogRiceVariety = "rice_variety"
 	CatalogFarmStage   = "farm_stage"   // attrs: pilot ("true"/"false" — cờ thí điểm CGH BR-06), description
 	CatalogMachineType = "machine_type" // attrs: farm_stage (khâu tự gán theo chủng loại, CGH BR-02)
 	CatalogSeason      = "season"       // attrs: start_month, end_month (tùy chọn)
@@ -142,8 +144,9 @@ const (
 	// Cây trồng, Sâu bệnh dịch hại (pest, gắn cây trồng bị ảnh hưởng), Loại máy móc (machine_type, 14 loại
 	// PL3 CGH khi khách gửi danh sách — Q-01), Mô hình sản xuất; và loại báo cáo của phòng ban.
 
-	// CatalogCrop: cây trồng, phân cấp "nhóm › cây". attrs: parent_code (mã nhóm, tùy chọn — mục không có
-	// cha là nhóm cấp 1), is_group ("true"/"false"), unit (ĐVT sản lượng, tùy chọn), description.
+	// CatalogCrop: cây trồng. Loại cây (AH-2) = mục KHÔNG có parent_code, danh sách phẳng; attrs: is_rice ("true"/"false"
+	// — cờ "là lúa"). Mục cũ có parent_code (cây con của nhóm) không còn là loại cây, chỉ được giữ để danh mục sâu
+	// bệnh còn trỏ tới. Thuộc tính cũ: parent_code, is_group, unit (ĐVT sản lượng), description.
 	CatalogCrop = "crop"
 	// CatalogMaterial: vật tư nông nghiệp. attrs: unit (ĐVT, bắt buộc — kg, lít, bao…), group (tùy chọn), description.
 	CatalogMaterial = "material"
@@ -160,7 +163,15 @@ const (
 	AttrAffectedCrops      = "affected_crops"
 	AttrSeverityThresholds = "severity_thresholds"
 	AttrParentCode         = "parent_code"
+	AttrCropCode           = "crop_code" // rice_variety: mã loại cây của giống (AH-2)
+	AttrIsRice             = "is_rice"   // crop: cờ "là lúa" của loại cây (AH-2)
 )
+
+// CatalogUsage (tùy chọn, module khác cung cấp qua gốc lắp ráp): mục danh mục có đang được dữ liệu của module đó
+// tham chiếu không — quyết định xóa hẳn hay chỉ ẩn (AH-2, BRD FN-01 BR-02, EX-03). Tenant lấy từ context.
+type CatalogUsage interface {
+	CatalogItemInUse(ctx context.Context, catalog, code string) (bool, error)
+}
 
 // FormUsage (tùy chọn, P3) đếm số mẫu báo cáo đang dùng mỗi mục danh mục — cột "biểu đang dùng" của
 // màn Danh mục nông nghiệp (FN-AD-04.05). Tenant lấy từ context.
