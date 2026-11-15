@@ -312,4 +312,45 @@ void main() {
       expect(formKey.currentState!.validate(), isFalse);
     },
   );
+
+  testWidgets(
+    'CollapsibleSection: validate thất bại thì khối mở và thấy chữ lỗi',
+    (tester) async {
+      final formKey = GlobalKey<FormState>();
+      var hasError = false;
+      await tester.pumpWidget(
+        _app(
+          StatefulBuilder(
+            builder: (context, setState) => Form(
+              key: formKey,
+              child: Column(
+                children: [
+                  CollapsibleSection(
+                    title: 'Thông tin thêm',
+                    hasError: hasError,
+                    child: TextFormField(
+                      validator: (v) => (v == null || v.isEmpty)
+                          ? 'Bắt buộc nhập ghi chú'
+                          : null,
+                    ),
+                  ),
+                  FilledButton(
+                    onPressed: () => setState(
+                      () => hasError = !formKey.currentState!.validate(),
+                    ),
+                    child: const Text('Lưu'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(find.text('Bắt buộc nhập ghi chú'), findsNothing);
+      await tester.tap(find.text('Lưu'));
+      await tester.pumpAndSettle();
+      expect(hasError, isTrue);
+      expect(find.text('Bắt buộc nhập ghi chú'), findsOneWidget);
+    },
+  );
 }

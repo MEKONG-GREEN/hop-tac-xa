@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { AlertList, deltaPct, formatDelta, HotMetric, progressColor, sparkPath } from "./dashboard";
 import { BreadcrumbTailProvider, useBreadcrumbTailValue } from "@/shell/Breadcrumb";
 import { DetailPage, LabelValueBlock, LogPanel, RelatedTabs } from "./detail";
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { Collapsible } from "./collapsible";
 import { DataTable, FilterBar, FilterChip, pageItems, rangeText, resultCountText, RowActions } from "./list";
 
@@ -198,6 +198,26 @@ describe("Collapsible", () => {
     await user.click(head);
     expect(screen.getByLabelText("Ghi chú", { selector: "input" })).not.toBeVisible();
     expect(screen.getByLabelText("Ghi chú", { selector: "input", exact: true })).toHaveValue("abc");
+  });
+
+  it("gửi form khi ô bắt buộc trong khối đóng còn trống: form bị chặn và khối tự mở để thấy ô lỗi", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn((e: FormEvent) => e.preventDefault());
+    render(
+      <form onSubmit={onSubmit}>
+        <Collapsible title="Thông tin thêm">
+          <input aria-label="Ghi chú" required />
+        </Collapsible>
+        <button type="submit">Lưu</button>
+      </form>,
+    );
+    const head = screen.getByRole("button", { name: "Thông tin thêm" });
+    expect(head).toHaveAttribute("aria-expanded", "false");
+    await user.click(screen.getByRole("button", { name: "Lưu" }));
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(head).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByLabelText("Ghi chú")).toBeVisible();
+    expect(screen.getByLabelText("Ghi chú")).toBeInvalid();
   });
 });
 
