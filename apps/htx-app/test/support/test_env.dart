@@ -158,7 +158,9 @@ class TestEnv {
   TestEnv({List<String> roles = const ['farmer'], FakeServer? server})
     : oidc = JwtOidc(roles),
       roles = roles,
-      server = server ?? FakeServer();
+      server = server ?? FakeServer() {
+    this.server.dataConsentApplies = roles.contains('coop_manager');
+  }
 
   final List<String> roles;
   final FakeServer server;

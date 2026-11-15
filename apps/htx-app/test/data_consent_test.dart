@@ -1,4 +1,7 @@
+import 'package:agrigreen_htx/application/data_consent_service.dart';
 import 'package:agrigreen_htx/ui/providers.dart';
+import 'package:agrigreen_mobile/core/ids.dart';
+import 'package:agrigreen_mobile/data/secure/secure_store.dart';
 import 'package:agrigreen_htx/ui/screens/data_consent_screen.dart';
 import 'package:agrigreen_htx/ui/screens/home_screen.dart';
 import 'package:agrigreen_htx/ui/screens/login_screen.dart';
@@ -189,8 +192,54 @@ void main() {
     await loginToHome(tester, env);
     expect(find.byType(DataConsentScreen), findsNothing);
     expect(env.server.consentPosts, isEmpty);
+    // Máy chủ không trả version cho tài khoản này; vẫn có bản nhớ ngoại tuyến.
+    expect(await env.store.read('htx.data_consent'), 'u-1|');
     await finish(tester);
   });
+
+  _offlineUnlockTests();
+}
+
+/// Dịch vụ đồng ý trên kho an toàn trong bộ nhớ.
+DataConsentService _service(FakeServer server, MemorySecureStore store) =>
+    DataConsentService(api: server, store: store, ids: UuidV7Generator());
+
+void _offlineUnlockTests() {
+  // Mở khóa PIN khi mất mạng (phiên ngoại tuyến): kết quả phụ thuộc bản nhớ
+  // ghi lần kiểm tra trực tuyến gần nhất.
+  for (final applies in [false, true]) {
+    final roles = applies ? const ['coop_manager'] : const ['farmer'];
+    test('mở khóa ngoại tuyến sau khi đã kiểm tra trực tuyến: '
+        '${roles.first} vào được, không bị chặn', () async {
+      final store = MemorySecureStore();
+      await store.write(SecureKeys.accessToken, fakeJwt(roles));
+      final server = FakeServer()..dataConsentApplies = applies;
+      final service = _service(server, store);
+      expect((await service.check()).isOk, isTrue);
+
+      final offline = _OfflineConsentServer();
+      final next = _service(offline, store);
+      final check = await next.check();
+      expect(check.isOk, isTrue);
+      expect(check.isBlocked, isFalse);
+    });
+  }
+
+  test(
+    'mất mạng, chưa từng kiểm tra → chặn; tài khoản khác bản nhớ → chặn',
+    () async {
+      final store = MemorySecureStore();
+      await store.write(
+        SecureKeys.accessToken,
+        fakeJwt(const ['coop_manager']),
+      );
+      final offline = _OfflineConsentServer();
+      expect((await _service(offline, store).check()).isBlocked, isTrue);
+
+      await store.write(DataConsentService.cacheKey, 'u-khac|tam-1');
+      expect((await _service(offline, store).check()).isBlocked, isTrue);
+    },
+  );
 }
 
 /// Máy chủ mất mạng đúng lúc hỏi trạng thái đồng ý (tắt bằng [offline]).

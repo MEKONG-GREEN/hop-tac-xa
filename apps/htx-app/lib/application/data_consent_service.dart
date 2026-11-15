@@ -61,7 +61,9 @@ class DataConsentService {
       final j = await _api.getJson(path);
       final version = j['version'];
       if (j['required'] != true) {
-        if (version is String && version.isNotEmpty) await _remember(version);
+        // Tài khoản không thuộc diện đồng ý (version null) cũng được nhớ, để
+        // mở khóa ngoại tuyến không bị chặn oan.
+        await _remember(version is String ? version : '');
         return const DataConsentCheck.ok();
       }
       await forget();

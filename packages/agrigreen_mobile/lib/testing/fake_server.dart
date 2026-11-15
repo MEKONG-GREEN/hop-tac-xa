@@ -44,6 +44,9 @@ class FakeServer implements SyncApi {
   /// `GET /v1/me/data-consent` trả `required`, `push`/`uploadFile` bị từ chối
   /// 403 `accounts.data_consent_required`. `POST` đúng phiên bản thì ghi nhận.
   bool dataConsentRequired = false;
+
+  /// Tài khoản có thuộc diện phải đồng ý (vai quản lý HTX) hay không.
+  bool dataConsentApplies = true;
   String dataConsentVersion = 'tam-1';
   String dataConsentText = 'Nội dung đồng ý thu thập dữ liệu (giả lập).';
 
@@ -230,6 +233,16 @@ class FakeServer implements SyncApi {
   }) async {
     _guard();
     if (path == _consentPath) {
+      // Như máy chủ thật: tài khoản không thuộc diện đồng ý nhận `{required:false}`
+      // không kèm phiên bản.
+      if (!dataConsentApplies) {
+        return {
+          'required': false,
+          'version': null,
+          'text': null,
+          'consented_at': null,
+        };
+      }
       return dataConsentRequired
           ? {
               'required': true,
