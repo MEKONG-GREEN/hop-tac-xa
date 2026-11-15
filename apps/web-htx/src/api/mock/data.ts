@@ -505,11 +505,11 @@ const cat = (catalog: CatalogName, rows: [string, string, Record<string, string>
 
 export const CATALOGS: Record<CatalogName, CatalogItem[]> = {
   rice_variety: cat("rice_variety", [
-    ["OM5451", "OM5451", { growth_days: "95", expected_yield_t_per_ha: "6.75" }],
-    ["OM18", "OM18", { growth_days: "97", expected_yield_t_per_ha: "6.75" }],
-    ["DT8", "Đài Thơm 8", { growth_days: "100", expected_yield_t_per_ha: "6.5" }],
-    ["ST25", "ST25 (lúa đặc sản)", { growth_days: "105", expected_yield_t_per_ha: "5.5" }],
-    ["IR50404", "IR50404", { growth_days: "90", expected_yield_t_per_ha: "7.25" }, true],
+    ["OM5451", "OM5451", { crop_code: "LUA", growth_days: "95", expected_yield_t_per_ha: "6.75" }],
+    ["OM18", "OM18", { crop_code: "LUA", growth_days: "97", expected_yield_t_per_ha: "6.75" }],
+    ["DT8", "Đài Thơm 8", { crop_code: "LUA", growth_days: "100", expected_yield_t_per_ha: "6.5" }],
+    ["ST25", "ST25 (lúa đặc sản)", { crop_code: "LUA", growth_days: "105", expected_yield_t_per_ha: "5.5" }],
+    ["IR50404", "IR50404", { crop_code: "LUA", growth_days: "90", expected_yield_t_per_ha: "7.25" }, true],
   ]),
   farm_stage: cat("farm_stage", [
     ["lam_dat", "Làm đất", { pilot: "true" }],
@@ -540,7 +540,10 @@ export const CATALOGS: Record<CatalogName, CatalogItem[]> = {
   vessel_class: cat("vessel_class", []),
   // KN v7.7 FN-AD-04.05 (gói P2) — dữ liệu nền tạm (Q-01).
   crop: cat("crop", [
-    ["RAU_MAU", "Rau màu", { is_group: "true" }],
+    // AH-2: loại cây = mục không có parent_code (có cờ "là lúa"); mục cũ có parent_code chỉ còn để xem.
+    ["LUA", "Lúa", { is_rice: "true", is_group: "true" }],
+    ["RAU_MAU", "Rau màu", { is_rice: "false", is_group: "true" }],
+    ["CAY_AN_QUA", "Cây ăn quả", { is_rice: "false", is_group: "true" }],
     ["RAU_MUONG", "Rau muống", { parent_code: "RAU_MAU", is_group: "false", unit: "tấn" }],
   ]),
   // Mã khớp sổ vật tư giả lập (kn-collect.ts MATERIALS đọc từ đây — BF-TT-MAT #105).

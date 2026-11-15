@@ -1,9 +1,10 @@
 "use client";
 
 // Mảnh giao diện dùng chung của các màn hình App HTX.
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { unwrap } from "@/api/client";
 import { newIdempotencyKey } from "@/api/idempotency";
+import { collectPages } from "@/api/pagination";
 import type { ApiProblem } from "@/api/problem";
 import type { CatalogItem, CatalogName } from "@/api/types";
 import { useAuth } from "@/auth/AuthProvider";
@@ -17,6 +18,22 @@ export function useCatalog(catalog: CatalogName): CatalogItem[] {
   const { api } = useAuth();
   const res = useAsync(() => unwrap(api.GET("/v1/masterdata/catalogs/{catalog}", { params: { path: { catalog }, query: { limit: 200 } } })), [api, catalog]);
   return res.data?.items ?? [];
+}
+
+/**
+ * Tên theo mã của một danh mục, kể cả mục đã ẩn (AH-2, AC4): vụ cũ vẫn hiển thị đúng tên giống dù giống đã ẩn.
+ * Danh sách chọn vẫn dùng useCatalog (chỉ mục đang hiện).
+ */
+export function useCatalogNames(catalog: CatalogName): Map<string, string> {
+  const { api } = useAuth();
+  const res = useAsync(
+    () =>
+      collectPages((cursor) =>
+        unwrap(api.GET("/v1/masterdata/catalogs/{catalog}", { params: { path: { catalog }, query: { include_inactive: true, cursor, limit: 200 } } })),
+      ),
+    [api, catalog],
+  );
+  return useMemo(() => new Map((res.data ?? []).map((i) => [i.code, i.name])), [res.data]);
 }
 
 export function LocationChip({ status, distance }: { status: string | null | undefined; distance?: string | null }) {

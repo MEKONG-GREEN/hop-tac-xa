@@ -1,0 +1,11 @@
+{
+  "id": "crop-catalog",
+  "source": "./crop-catalog",
+  "app": [],
+  "admin": [
+    {
+      "export": "cropCatalogAdminRoutes",
+      "order": 120
+    }
+  ]
+}

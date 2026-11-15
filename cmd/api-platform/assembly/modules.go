@@ -256,6 +256,8 @@ func Build(ctx context.Context, open PoolOpener, clk clock.Clock, ext External) 
 	pty.UseDepartmentUsage(coop.DepartmentUsage())
 	pty.UseFormAvailability(rep.FormAvailability())
 	md.UseFormUsage(rep.FormUsage())
+	md.UseCatalogUsage(coop.CatalogUsage()) // AH-2: giống đã gắn vụ, SOP, sản lượng → chỉ ẩn
+	md.UseCatalogUsage(cnt.CatalogUsage())  // AH-2: thẻ tài liệu tin tức
 
 	// pf/waterway (G2): API ghi sổ đoạn/công trình, tạo job dựng và phát hành; worker dựng đồ thị (cmd/worker).
 	ww := waterway.New(unit, clk, waterway.Deps{Params: md.Params(), Catalogs: md.Catalogs()})

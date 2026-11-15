@@ -183,6 +183,8 @@ export type HtxCollectionResponse = S["HtxCollectionResponse"];
 
 // pf/masterdata — nhập danh mục (Admin)
 export type CatalogImportResult = AS["CatalogImportResult"];
+// pf/masterdata — xóa loại cây, giống (Admin, AH-2): "deleted" (đã xóa) hoặc "hidden" (đang được dùng nên chỉ ẩn)
+export type CatalogDeleteResult = AS["CatalogDeleteResult"];
 
 // pf/party — GET /v1/me (người gọi + phạm vi đã giải)
 export type Me = S["Me"];

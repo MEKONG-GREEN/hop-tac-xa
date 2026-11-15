@@ -36,6 +36,7 @@ const (
 	ActionUpdated     = "updated"
 	ActionDeactivated = "deactivated"
 	ActionReactivated = "reactivated"
+	ActionDeleted     = "deleted" // AH-2: mục chưa được dùng ở đâu — đánh dấu đã xóa, bản ghi và lịch sử vẫn giữ
 )
 
 // MinReasonLen là độ dài tối thiểu của lý do ngừng dùng (giống correction_reason).
@@ -62,9 +63,11 @@ type Item struct {
 	Attrs              map[string]string
 	Active             bool
 	DeactivationReason string
-	Revision           int
-	UpdatedBy          uuid.UUID
-	UpdatedAt          time.Time
+	// Deleted (AH-2): đã xóa — không vào bất kỳ danh sách nào, vẫn đọc được theo mã; luôn đi cùng Active = false.
+	Deleted   bool
+	Revision  int
+	UpdatedBy uuid.UUID
+	UpdatedAt time.Time
 	// ValidFrom (chỉ danh mục CNTS, W11.41): ngày bắt đầu hiệu lực của giá trị — khi ghi là ngày áp dụng (zero =
 	// hôm nay), khi đọc theo ngày là valid_from của phiên bản có hiệu lực. Không lưu ở bảng hiện trạng.
 	ValidFrom time.Time
@@ -76,11 +79,12 @@ type Snapshot struct {
 	Attrs              map[string]string `json:"attrs"`
 	Active             bool              `json:"active"`
 	DeactivationReason *string           `json:"deactivation_reason,omitempty"`
+	Deleted            bool              `json:"deleted,omitempty"`
 }
 
 // Snapshot chụp trạng thái hiện tại.
 func (it Item) Snapshot() Snapshot {
-	s := Snapshot{Name: it.Name, Attrs: it.Attrs, Active: it.Active}
+	s := Snapshot{Name: it.Name, Attrs: it.Attrs, Active: it.Active, Deleted: it.Deleted}
 	if it.DeactivationReason != "" {
 		r := it.DeactivationReason
 		s.DeactivationReason = &r
@@ -144,6 +148,15 @@ func text(max int) func(string) (string, error) {
 		}
 		return s, nil
 	}
+}
+
+// positiveInt: số nguyên > 0 (thời gian sinh trưởng, ngày). Không có giới hạn trên nghiệp vụ; int32 chỉ là giới hạn kỹ thuật.
+func positiveInt(s string) (string, error) {
+	n, err := strconv.ParseInt(strings.TrimSpace(s), 10, 32)
+	if err != nil || n <= 0 {
+		return "", errors.New("thời gian sinh trưởng phải là số nguyên lớn hơn 0 (ngày)")
+	}
+	return strconv.FormatInt(n, 10), nil
 }
 
 // yield: năng suất kỳ vọng (tấn/ha) là decimal > 0, ≤ 30, tối đa 4 chữ số thập phân.
@@ -225,8 +238,9 @@ func stageRef(s string) (string, error) {
 
 var attrSpecs = map[string]map[string]attrSpec{
 	port.CatalogRiceVariety: {
-		"growth_days":             {Required: true, Normalize: intRange(1, 365)},
-		"expected_yield_t_per_ha": {Required: true, Normalize: yield},
+		port.AttrCropCode:         {Required: true, Normalize: stageRefNamed("mã loại cây")},
+		"growth_days":             {Required: true, Normalize: positiveInt},
+		"expected_yield_t_per_ha": {Required: false, Normalize: yield}, // AH-2: giống mới không có năng suất; dữ liệu cũ giữ nguyên
 		"description":             {Required: false, Normalize: text(500)},
 	},
 	port.CatalogFarmStage: {
@@ -250,6 +264,7 @@ var attrSpecs = map[string]map[string]attrSpec{
 	},
 	port.CatalogCrop: {
 		port.AttrParentCode: {Required: false, Normalize: stageRefNamed("mã nhóm cây trồng")},
+		port.AttrIsRice:     {Required: false, Normalize: oneOf("true", "false")},
 		"is_group":          {Required: false, Normalize: oneOf("true", "false")},
 		"unit":              {Required: false, Normalize: text(20)},
 		"description":       {Required: false, Normalize: text(500)},
@@ -362,6 +377,15 @@ func (it Item) SameContent(o Item) bool {
 		}
 	}
 	return true
+}
+
+// NameKey là khóa so trùng tên của loại cây và giống (AH-2): bỏ khoảng trắng đầu, cuối, gộp khoảng trắng liền nhau,
+// không phân biệt hoa thường. "om 5451" và "OM  5451" trùng nhau; "OM5451" và "OM 5451" là hai tên khác nhau.
+func NameKey(s string) string { return strings.ToLower(strings.Join(strings.Fields(s), " ")) }
+
+// IsCropType cho biết mục là loại cây (AH-2): mục crop không có nhóm cha.
+func IsCropType(it Item) bool {
+	return it.Catalog == port.CatalogCrop && it.Attrs[port.AttrParentCode] == ""
 }
 
 // NativeCatalog protects the schemas owned by this capability from replacement.

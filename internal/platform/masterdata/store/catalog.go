@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -13,12 +14,12 @@ import (
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/ledger"
 )
 
-const itemCols = `catalog, code, name, attrs::text, active, coalesce(deactivation_reason, ''), revision, updated_by, updated_at`
+const itemCols = `catalog, code, name, attrs::text, active, coalesce(deactivation_reason, ''), revision, updated_by, updated_at, deleted_at IS NOT NULL`
 
 func scanItem(row pgx.Row) (domain.Item, error) {
 	var it domain.Item
 	var attrs string
-	err := row.Scan(&it.Catalog, &it.Code, &it.Name, &attrs, &it.Active, &it.DeactivationReason, &it.Revision, &it.UpdatedBy, &it.UpdatedAt)
+	err := row.Scan(&it.Catalog, &it.Code, &it.Name, &attrs, &it.Active, &it.DeactivationReason, &it.Revision, &it.UpdatedBy, &it.UpdatedAt, &it.Deleted)
 	if err != nil {
 		return it, err
 	}
@@ -43,10 +44,11 @@ func Item(ctx context.Context, tx pgx.Tx, catalog, code string, forUpdate bool) 
 	return &it, nil
 }
 
-// Items liệt kê mục của một danh mục theo mã, sau mã after (cursor).
+// Items liệt kê mục của một danh mục theo mã, sau mã after (cursor). Mục đã xóa (AH-2) không vào danh sách nào,
+// kể cả includeInactive.
 func Items(ctx context.Context, tx pgx.Tx, catalog string, includeInactive bool, after string, limit int) ([]domain.Item, error) {
 	rows, err := tx.Query(ctx, "SELECT "+itemCols+` FROM pf_masterdata.catalog_item
-	    WHERE catalog = $1 AND ($2::boolean OR active) AND code > $3 ORDER BY code LIMIT $4`, catalog, includeInactive, after, limit)
+	    WHERE catalog = $1 AND ($2::boolean OR active) AND deleted_at IS NULL AND code > $3 ORDER BY code LIMIT $4`, catalog, includeInactive, after, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -72,14 +74,20 @@ func UpsertItem(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, it domain.It
 	if !it.Active {
 		reason = &it.DeactivationReason
 	}
+	var deletedAt *time.Time
+	if it.Deleted {
+		t := it.UpdatedAt.UTC()
+		deletedAt = &t
+	}
 	_, err = tx.Exec(ctx, `INSERT INTO pf_masterdata.catalog_item
-	    (tenant_id, catalog, code, name, attrs, active, deactivation_reason, revision, last_change_id, updated_by, updated_at)
-	  VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11)
+	    (tenant_id, catalog, code, name, attrs, active, deactivation_reason, revision, last_change_id, updated_by, updated_at, deleted_at)
+	  VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11, $12)
 	  ON CONFLICT (tenant_id, catalog, code) DO UPDATE SET
 	    name = EXCLUDED.name, attrs = EXCLUDED.attrs, active = EXCLUDED.active,
 	    deactivation_reason = EXCLUDED.deactivation_reason, revision = EXCLUDED.revision,
-	    last_change_id = EXCLUDED.last_change_id, updated_by = EXCLUDED.updated_by, updated_at = EXCLUDED.updated_at`,
-		tenantID, it.Catalog, it.Code, it.Name, string(attrs), it.Active, reason, it.Revision, changeID, it.UpdatedBy, it.UpdatedAt.UTC())
+	    last_change_id = EXCLUDED.last_change_id, updated_by = EXCLUDED.updated_by, updated_at = EXCLUDED.updated_at,
+	    deleted_at = EXCLUDED.deleted_at`,
+		tenantID, it.Catalog, it.Code, it.Name, string(attrs), it.Active, reason, it.Revision, changeID, it.UpdatedBy, it.UpdatedAt.UTC(), deletedAt)
 	return err
 }
 
@@ -161,7 +169,7 @@ func Changes(ctx context.Context, tx pgx.Tx, catalog, code string, afterSeq int6
 // (KN v7.7 FN-AD-04.05: trùng tên → chặn). So khớp chữ hoa/thường tiếng Việt ở Go (lower() của DB phụ
 // thuộc LC_CTYPE, cụm "C" không hạ chữ có dấu); danh mục chỉ vài trăm mục.
 func ItemNameTaken(ctx context.Context, tx pgx.Tx, catalog, name, exceptCode string) (bool, error) {
-	rows, err := tx.Query(ctx, `SELECT name FROM pf_masterdata.catalog_item WHERE catalog = $1 AND code <> $2`, catalog, exceptCode)
+	rows, err := tx.Query(ctx, `SELECT name FROM pf_masterdata.catalog_item WHERE catalog = $1 AND code <> $2 AND deleted_at IS NULL`, catalog, exceptCode)
 	if err != nil {
 		return false, err
 	}

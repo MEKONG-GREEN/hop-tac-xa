@@ -198,6 +198,11 @@ export const NAV_GROUPS: readonly NavGroup[] = [
       { href: "/quan-tri/nhat-ky-xuat", module: "pf/metering", label: "Nhật ký xuất dữ liệu", icon: "shield", roles: [ROLES.meteringViewer, ROLES.platformAdmin] },
     ],
   },
+  {
+    // AH-2: loại cây và giống dùng chung cho mọi HTX (Admin quản lý; vai khác chỉ xem ở nơi chọn khi mở vụ).
+    label: "7. Dữ liệu nền",
+    items: [{ href: "/du-lieu-nen/danh-muc-giong", module: "pf/masterdata", label: "Danh mục giống", icon: "sprout", roles: [ROLES.platformAdmin, ROLES.masterdataAdmin] }],
+  },
 ];
 
 export function canSee(item: NavItem, p: Principal | null, disabled: DisabledModules = NONE): boolean {
