@@ -314,10 +314,10 @@ void main() {
   );
 
   testWidgets(
-    'CollapsibleSection: validate thất bại thì khối mở và thấy chữ lỗi',
+    'CollapsibleSection: mỗi lần validate thất bại thì khối mở và thấy chữ lỗi, kể cả sau khi tự đóng',
     (tester) async {
       final formKey = GlobalKey<FormState>();
-      var hasError = false;
+      var failedChecks = 0;
       await tester.pumpWidget(
         _app(
           StatefulBuilder(
@@ -327,7 +327,7 @@ void main() {
                 children: [
                   CollapsibleSection(
                     title: 'Thông tin thêm',
-                    hasError: hasError,
+                    failedChecks: failedChecks,
                     child: TextFormField(
                       validator: (v) => (v == null || v.isEmpty)
                           ? 'Bắt buộc nhập ghi chú'
@@ -335,9 +335,9 @@ void main() {
                     ),
                   ),
                   FilledButton(
-                    onPressed: () => setState(
-                      () => hasError = !formKey.currentState!.validate(),
-                    ),
+                    onPressed: () => setState(() {
+                      if (!formKey.currentState!.validate()) failedChecks++;
+                    }),
                     child: const Text('Lưu'),
                   ),
                 ],
@@ -349,8 +349,17 @@ void main() {
       expect(find.text('Bắt buộc nhập ghi chú'), findsNothing);
       await tester.tap(find.text('Lưu'));
       await tester.pumpAndSettle();
-      expect(hasError, isTrue);
+      expect(failedChecks, 1);
       expect(find.text('Bắt buộc nhập ghi chú'), findsOneWidget);
+
+      // Người dùng tự đóng khối rồi lưu lại khi vẫn còn lỗi: khối phải mở lại.
+      await tester.tap(find.text('Thông tin thêm'));
+      await tester.pumpAndSettle();
+      expect(find.text('Bắt buộc nhập ghi chú').hitTestable(), findsNothing);
+      await tester.tap(find.text('Lưu'));
+      await tester.pumpAndSettle();
+      expect(failedChecks, 2);
+      expect(find.text('Bắt buộc nhập ghi chú').hitTestable(), findsOneWidget);
     },
   );
 }

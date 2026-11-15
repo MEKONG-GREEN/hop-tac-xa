@@ -28,7 +28,7 @@
 
 - Thao tác tạo mới mở trang riêng (web) hoặc màn riêng (app), không dùng hộp thoại nổi.
 - Khối thu/mở mặc định đóng, dùng `Collapsible` (web) hoặc `CollapsibleSection` (app); các thành phần này không có tham số mở sẵn.
-- Trường bắt buộc trong khối đóng vẫn được kiểm khi lưu. Kiểm thất bại thì khối phải mở để người dùng thấy lý do: `Collapsible` (web) tự mở khi ô bên trong không hợp lệ lúc gửi form; với `CollapsibleSection` (app), màn gọi truyền `hasError: !formKey.currentState!.validate()` để khối mở.
+- Trường bắt buộc trong khối đóng vẫn được kiểm khi lưu. Kiểm thất bại thì khối phải mở để người dùng thấy lý do: `Collapsible` (web) tự mở khi ô bên trong không hợp lệ lúc gửi form; với `CollapsibleSection` (app), màn gọi giữ một bộ đếm, tăng nó sau mỗi lần `formKey.currentState!.validate()` trả false và truyền vào `failedChecks`; mỗi lần bộ đếm đổi, khối mở lại, kể cả khi người dùng vừa tự đóng.
 - Áp cho màn làm mới từ nay; không đổi các màn cũ.
 
 ## AC4 — Thuật ngữ và thiết bị

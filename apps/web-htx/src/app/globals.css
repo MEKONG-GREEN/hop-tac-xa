@@ -383,7 +383,7 @@ fieldset.plain legend { font-size: 12.5px; font-weight: 600; color: var(--ink2);
 .count-pill { display: inline-grid; place-items: center; min-width: 24px; height: 22px; padding: 0 7px; border-radius: 11px; font-family: var(--font-sans); font-size: 12px; font-weight: 500; background: var(--danger-bg); color: var(--danger); border: 1px solid #f5c2bc; }
 .role-pill { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 999px; font-family: var(--font-sans); font-size: 12px; font-weight: 500; background: var(--primary-50); color: var(--primary-ink); border: 1px solid var(--primary-line); vertical-align: middle; }
 
-/* Thanh bộ lọc dạng thẻ + Đặt lại */
+/* Thanh lọc một hàng: ô lọc hiện thẳng, số kết quả, "Lọc thêm" (ô lọc phụ) và "Xóa lọc" */
 .filters { padding: 12px 14px; margin-bottom: 16px; }
 .filters-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .filters-more { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--slate-200); }
@@ -416,6 +416,7 @@ fieldset.plain legend { font-size: 12.5px; font-weight: 600; color: var(--ink2);
 .pill-warn { background: var(--warning-bg); border-color: #f6d7a7; color: var(--warning); }
 .pill-bad { background: var(--danger-bg); border-color: #f5c2bc; color: var(--danger); }
 .pill-info { background: var(--info-bg); border-color: #b3e0f2; color: var(--info); }
+/* Hàng nút của một dòng: một nút chính, tối đa một nút phụ, các thao tác còn lại trong menu "Thêm" */
 .row-acts { display: inline-flex; align-items: center; gap: 8px; }
 .row-more { position: relative; display: inline-flex; }
 .row-more-menu { position: absolute; right: 0; top: 100%; z-index: 20; min-width: 160px; margin-top: 4px; padding: 4px; background: #fff; border: 1px solid var(--slate-200); border-radius: 8px; box-shadow: 0 8px 24px rgba(15, 23, 42, .12); display: flex; flex-direction: column; }
