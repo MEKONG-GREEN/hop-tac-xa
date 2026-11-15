@@ -221,10 +221,10 @@ func (m member) unread() int {
 	return r.num("unread")
 }
 
-// registerToken gắn token đẩy cho thiết bị của thành viên.
+// registerToken gắn token đẩy riêng cho thiết bị của thành viên (token trùng ở thiết bị khác bị thay thế).
 func (m member) registerToken() {
 	m.f.t.Helper()
-	r := m.do(http.MethodPost, "/v1/devices/"+m.device.String()+"/push-token", map[string]string{"provider": "fcm", "token": "tok-" + strings.Repeat("a", 40)})
+	r := m.do(http.MethodPost, "/v1/devices/"+m.device.String()+"/push-token", map[string]string{"provider": "fcm", "token": "tok-" + m.device.String() + strings.Repeat("a", 8)})
 	if r.status != http.StatusOK {
 		m.f.t.Fatalf("push-token: %d %v", r.status, r.body)
 	}

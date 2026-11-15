@@ -265,6 +265,9 @@ func TestAH22_AC4_NguoiNhan(t *testing.T) {
 		t.Fatalf("bị từ chối mà có %d thông báo trong bảng", n)
 	}
 
+	// A và B có token đẩy để lần gọi hợp lệ xếp lượt gửi thật.
+	a.registerToken()
+	b.registerToken()
 	notice, err := f.taskDue(coop, a.actor, b.actor)
 	if err != nil {
 		t.Fatal(err)
@@ -277,15 +280,27 @@ func TestAH22_AC4_NguoiNhan(t *testing.T) {
 	}
 
 	// Gọi lại cùng SourceID: không tạo trùng, không xếp thêm lượt gửi.
-	before := f.count(`SELECT count(*) FROM pf_notify.push_delivery WHERE tenant_id = $1`, f.tenant)
+	const deliveriesSQL = `SELECT count(*) FROM pf_notify.push_delivery WHERE tenant_id = $1`
+	const requestedSQL = `SELECT count(*) FROM shared.outbox WHERE tenant_id = $1 AND event_type = $2`
+	before := f.count(deliveriesSQL, f.tenant)
+	if before != 2 {
+		t.Fatalf("lần gọi đầu phải xếp 2 lượt gửi (A, B), có %d", before)
+	}
+	requestedBefore := f.count(requestedSQL, f.tenant, notifyport.EventPushRequested)
+	if requestedBefore == 0 {
+		t.Fatal("lần gọi đầu phải phát pf.notify.push.requested")
+	}
 	if err := f.mod.MemberNotifier().TaskDue(context.Background(), f.tenant, notice); err != nil {
 		t.Fatal(err)
 	}
 	if len(a.list("")) != 1 || len(b.list("")) != 1 {
 		t.Fatal("gọi lại cùng SourceID không được tạo bản thứ hai")
 	}
-	if after := f.count(`SELECT count(*) FROM pf_notify.push_delivery WHERE tenant_id = $1`, f.tenant); after != before {
+	if after := f.count(deliveriesSQL, f.tenant); after != before {
 		t.Fatalf("lượt gửi tăng từ %d lên %d khi gọi lại", before, after)
+	}
+	if after := f.count(requestedSQL, f.tenant, notifyport.EventPushRequested); after != requestedBefore {
+		t.Fatalf("pf.notify.push.requested tăng từ %d lên %d khi gọi lại", requestedBefore, after)
 	}
 }
 
