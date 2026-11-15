@@ -14,7 +14,7 @@ Giao diện chỉ dùng tiếng Việt và dùng đúng các thuật ngữ dư�
 | Admin | chưa xác định | "quản trị viên hệ thống" | BRD Kế hoạch mùa vụ, I.7 |
 | Nông hộ | Đơn vị sản xuất có sẵn trong danh sách do Admin quản lý, có diện tích đất riêng (ha); không đăng nhập và không phải nhập gì | "hộ nông dân", "household" | BRD Kế hoạch mùa vụ, I.6 |
 | Vụ | Một vụ canh tác gắn với một nông hộ, có diện tích canh tác (ha), loại cây, giống, mốc gốc và SOP; được tạo khi mở vụ. Một nông hộ có thể có nhiều vụ | "mùa", "season" | BRD Kế hoạch mùa vụ, I.6 |
-| Mùa vụ | Mùa trong năm theo danh mục do Admin quản lý (ví dụ Đông Xuân, Hè Thu, Thu Đông); dùng "vụ" để chỉ mùa trong năm | chưa xác định | Quyết định của nhóm dự án ở AH-7 |
+| Mùa vụ | Mùa trong năm theo danh mục do Admin quản lý (ví dụ Đông Xuân, Hè Thu, Thu Đông) | dùng "vụ" để chỉ mùa trong năm | Quyết định của nhóm dự án ở AH-7 |
 | Kế hoạch mùa vụ | Phần của vụ gồm lịch các việc theo giai đoạn kèm ngày dự kiến tính theo mốc gốc và SOP, sản lượng dự kiến và ngày thu hoạch dự kiến | "lịch thời vụ" khi nói về một vụ cụ thể | BRD Kế hoạch mùa vụ, I.6 |
 | Quy trình SOP (viết tắt: SOP) | Bộ quy trình kỹ thuật chuẩn của từng loại cây trồng, dạng checklist gồm các giai đoạn và các việc | "quy trình kỹ thuật", "template" | BRD Kế hoạch mùa vụ, I.6 |
 | Bản chụp SOP | Bản sao SOP, kèm tùy chỉnh của Thành viên HTX, được gắn với từng vụ khi mở vụ; sửa SOP chuẩn sau đó không làm đổi vụ đang chạy | "snapshot" | BRD Kế hoạch mùa vụ, I.6 |

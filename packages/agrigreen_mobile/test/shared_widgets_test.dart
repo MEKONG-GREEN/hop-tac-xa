@@ -270,4 +270,46 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Nội dung'), findsOneWidget);
   });
+
+  testWidgets('CollapsibleSection giữ giá trị đã nhập khi đóng rồi mở lại', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(
+        const CollapsibleSection(
+          title: 'Thông tin thêm',
+          child: TextField(key: Key('ghi-chu')),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Thông tin thêm'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('ghi-chu')), 'Ghi chú ruộng');
+    await tester.tap(find.text('Thông tin thêm'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Thông tin thêm'));
+    await tester.pumpAndSettle();
+    expect(find.text('Ghi chú ruộng'), findsOneWidget);
+  });
+
+  testWidgets(
+    'CollapsibleSection đóng vẫn để Form.validate kiểm trường bắt buộc',
+    (tester) async {
+      final formKey = GlobalKey<FormState>();
+      await tester.pumpWidget(
+        _app(
+          Form(
+            key: formKey,
+            child: CollapsibleSection(
+              title: 'Thông tin thêm',
+              child: TextFormField(
+                validator: (v) => (v == null || v.isEmpty) ? 'Bắt buộc' : null,
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(formKey.currentState!.validate(), isFalse);
+    },
+  );
 }

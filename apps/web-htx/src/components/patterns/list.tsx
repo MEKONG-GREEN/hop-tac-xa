@@ -173,6 +173,7 @@ export function RowActions({ label, primary, secondary, more }: { label: string;
             aria-label={`Thêm thao tác cho ${label}`}
             onClick={() => setOpen((v) => !v)}
           >
+            <Icon name="more" size={16} />
             Thêm
           </button>
           {open ? (
