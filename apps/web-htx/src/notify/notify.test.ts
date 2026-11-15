@@ -48,6 +48,14 @@ describe("AH-22 AC1 — nhóm theo ngày (giờ Việt Nam)", () => {
     expect(groupByDay([], NOW)).toEqual([]);
   });
 
+  it("AH22_AC1: đầu vào xen kẽ ngày (mục đồng bộ trễ đứng trước) → mỗi ngày một nhóm, mới nhất trước", () => {
+    const items = [mk("tre", "2026-09-30T05:00:00Z"), mk("a", "2026-09-30T20:00:00Z"), mk("c", "2026-09-30T08:00:00Z"), mk("b", "2026-09-30T17:30:00Z")];
+    const groups = groupByDay(items, NOW);
+    expect(groups.map((g) => g.label)).toEqual(["Hôm nay", "Hôm qua"]);
+    expect(groups[0]!.items.map((n) => n.id)).toEqual(["a", "b"]);
+    expect(groups[1]!.items.map((n) => n.id)).toEqual(["c", "tre"]);
+  });
+
   it("AH22_AC1: vnDayKey và timeOfDay theo giờ Việt Nam", () => {
     expect(vnDayKey("2026-09-30T23:30:00Z")).toBe("2026-10-01");
     expect(timeOfDay("2026-09-30T23:30:00Z")).toBe("06:30");

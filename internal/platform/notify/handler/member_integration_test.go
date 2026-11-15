@@ -229,13 +229,12 @@ func TestAH22_AC3_ThietBiKhongNhan(t *testing.T) {
 		if len(items) != 1 {
 			t.Fatalf("thông báo phải có trong trung tâm, có %d", len(items))
 		}
-		for _, d := range f.deliveries(str(items[0], "id")) {
-			if d.sent {
-				t.Fatalf("không có token mà ghi sent: %+v", d)
-			}
+		if ds := f.deliveries(str(items[0], "id")); len(ds) != 0 {
+			t.Fatalf("không có token mà vẫn xếp lượt gửi: %+v", ds)
 		}
-		if p.sends() != 0 {
-			t.Fatalf("không có token mà gọi Send %d lần", p.sends())
+		const requestedSQL = `SELECT count(*) FROM shared.outbox WHERE tenant_id = $1 AND event_type = $2`
+		if n := f.count(requestedSQL, f.tenant, notifyport.EventPushRequested); n != 0 {
+			t.Fatalf("không có token mà phát pf.notify.push.requested %d lần", n)
 		}
 	})
 }

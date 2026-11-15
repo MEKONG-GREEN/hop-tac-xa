@@ -90,10 +90,14 @@ export function dayLabel(key: string, now: number = Date.now()): string {
 
 export type NotificationDay = { key: string; label: string; items: Notification[] };
 
-/** Nhóm theo ngày tạo (giờ Việt Nam), giữ thứ tự đầu vào (mới nhất trước). */
+/**
+ * Nhóm theo ngày tạo (giờ Việt Nam), mới nhất trước. Tự sắp theo `created_at` vì API trả theo thứ tự ghi nhận, còn
+ * `created_at` là thời điểm sự kiện: nhật ký ghi ngoại tuyến đồng bộ trễ sẽ đứng trước mà mang ngày cũ.
+ */
 export function groupByDay(items: readonly Notification[], now: number = Date.now()): NotificationDay[] {
+  const newestFirst = [...items].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
   const groups: NotificationDay[] = [];
-  for (const n of items) {
+  for (const n of newestFirst) {
     const key = vnDayKey(n.created_at);
     const last = groups[groups.length - 1];
     if (last && last.key === key) last.items.push(n);
