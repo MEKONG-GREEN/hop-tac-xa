@@ -133,7 +133,9 @@ func (m *Module) UseFarmerHouseholds(f port.FarmerHouseholds) { m.season.Farmers
 func (m *Module) UseSharing(pa partyport.PartnerAccess) { m.season.Sharing, m.plot.Sharing = pa, pa }
 
 // UseActorNames nối danh bạ tên người thao tác (khung Log của thửa KN và sổ hồ sơ KN — pf/accounts).
-func (m *Module) UseActorNames(n partyport.ActorNames) { m.plot.Names, m.member.Names = n, n }
+func (m *Module) UseActorNames(n partyport.ActorNames) {
+	m.plot.Names, m.member.Names, m.season.Names = n, n, n
+}
 
 // UseEgress (G5, ADR-0024) nối điểm kiểm soát xuất (pf/metering) cho tệp KN xuất (kn_plot_file). cp nil → hành vi cũ.
 func (m *Module) UseEgress(cp meter.Checkpoint, mode meter.Mode, log *slog.Logger) {

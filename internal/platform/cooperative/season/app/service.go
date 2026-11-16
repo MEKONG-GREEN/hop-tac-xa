@@ -47,6 +47,7 @@ var (
 	ErrSOPEmpty           = problem.New(http.StatusUnprocessableEntity, "cropcycle.sop_empty", "Quy trình chưa có giai đoạn hoặc việc — chưa phát hành được")
 	ErrSOPHarvestWindow   = problem.New(http.StatusUnprocessableEntity, "cropcycle.sop_harvest_window", "Việc Thu hoạch cuối phải có cửa sổ Theo ngày so với mốc gốc hoặc Theo giai đoạn")
 	ErrSOPState           = problem.New(http.StatusConflict, "cropcycle.sop_state", "Trạng thái quy trình không cho phép thao tác này")
+	ErrSOPNotDeletable    = problem.New(http.StatusConflict, "cropcycle.sop_not_deletable", "SOP đã phát hành không xóa được — chỉ ngừng áp dụng được.")
 	ErrSOPNotPublished    = problem.New(http.StatusUnprocessableEntity, "cropcycle.sop_not_published", "Quy trình chưa được ban hành — không áp dụng vào vụ được")
 	ErrNoSOPForVariety    = problem.New(http.StatusUnprocessableEntity, "cropcycle.no_sop_for_variety", "Chưa có quy trình SOP chuẩn đã ban hành cho giống lúa này")
 	ErrSeasonNotFound     = problem.New(http.StatusNotFound, "cropcycle.season_not_found", "Không tìm thấy vụ")
@@ -106,6 +107,7 @@ type Service struct {
 	GpsLog   geoport.GpsLog          // log GPS của pf/geo (consumer port.GpsLogConsumer); thiếu → consumer lỗi, giao lại
 	// Sharing (ADR-0020): cấp quyền chia sẻ + sổ đọc của bề mặt đối tác (pf/party); thiếu → 403.
 	Sharing partyport.PartnerAccess
+	Names   partyport.ActorNames // tùy chọn: tên người phát hành SOP
 	Log     *slog.Logger
 }
 
@@ -490,6 +492,12 @@ func stagesOrEmpty(s []domain.Stage) []domain.Stage {
 func isUnique(err error, constraint string) bool {
 	var pg *pgconn.PgError
 	return errors.As(err, &pg) && pg.Code == "23505" && (constraint == "" || pg.ConstraintName == constraint)
+}
+
+// isCheckViolation cho biết err là vi phạm ràng buộc CHECK.
+func isCheckViolation(err error) bool {
+	var pg *pgconn.PgError
+	return errors.As(err, &pg) && pg.Code == "23514"
 }
 
 func uuidPtr(u uuid.UUID) *uuid.UUID {

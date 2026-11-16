@@ -106,7 +106,7 @@ func newFixture(t *testing.T) *fixture {
 	f.catalogs = newFakeCatalogs()
 	f.db = shareddb.ForModule(pool, shareddb.Module("pf/cooperative"))
 	f.mod = seasonMod{svc: &app.Service{DB: f.db, Clock: f.clk, Scope: sc, Orgs: f.orgs, Plots: f.plots, Params: f.params,
-		Catalogs: f.catalogs, Farmers: f.farmers}}
+		Catalogs: f.catalogs, Farmers: f.farmers, Names: fakeNames{}}}
 	f.share.Grant(f.tenant, f.mkg, partyport.ShareKinds...) // ADR-0020: tenant chương trình → tenant MKG, mọi loại
 	f.mod.UseSharing(f.share, f.share)
 	log := telemetry.NewLogger("test", io.Discard)

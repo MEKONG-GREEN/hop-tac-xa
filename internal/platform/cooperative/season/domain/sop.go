@@ -18,6 +18,25 @@ const (
 	VersionPublished = "published"
 )
 
+// Trạng thái hiển thị của phiên bản (suy từ dữ liệu, không lưu cột): Nháp / Đang áp dụng / Ngừng áp dụng.
+const (
+	VersionStateDraft   = "draft"
+	VersionStateActive  = "active"
+	VersionStateRetired = "retired"
+)
+
+// VersionState là chỗ duy nhất suy trạng thái hiển thị của phiên bản (AH-21 AC2): bản nháp là draft; bản đã phát hành
+// mới nhất của mẫu chưa ngừng là active; mọi bản đã phát hành còn lại là retired.
+func VersionState(versionStatus string, versionNo int, templateStatus string, publishedVersion *int) string {
+	switch {
+	case versionStatus != VersionPublished:
+		return VersionStateDraft
+	case templateStatus != TemplateRetired && publishedVersion != nil && versionNo == *publishedVersion:
+		return VersionStateActive
+	}
+	return VersionStateRetired
+}
+
 // Giới hạn của bước SOP.
 const (
 	MaxSteps       = 100

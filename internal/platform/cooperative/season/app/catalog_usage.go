@@ -18,7 +18,7 @@ func (s *Service) VarietyInUse(ctx context.Context, code string) (bool, error) {
 		return tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pf_coop.season_event WHERE variety_code = $1::text)
 		    OR EXISTS (SELECT 1 FROM pf_coop.harvest_declaration WHERE variety_code = $1::text)
 		    OR EXISTS (SELECT 1 FROM pf_coop.variety_sop_binding WHERE variety_code = $1::text)
-		    OR EXISTS (SELECT 1 FROM pf_coop.sop_template WHERE variety_code = $1::text)`, code).Scan(&used)
+		    OR EXISTS (SELECT 1 FROM pf_coop.sop_template WHERE variety_code = $1::text AND deleted_at IS NULL)`, code).Scan(&used)
 	})
 	return used, err
 }
@@ -27,7 +27,7 @@ func (s *Service) VarietyInUse(ctx context.Context, code string) (bool, error) {
 func (s *Service) CropInUse(ctx context.Context, code string) (bool, error) {
 	var used bool
 	err := tenant.FromCtxTx(ctx, s.DB, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pf_coop.sop_template WHERE crop = $1::text)`, code).Scan(&used)
+		return tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pf_coop.sop_template WHERE crop = $1::text AND deleted_at IS NULL)`, code).Scan(&used)
 	})
 	return used, err
 }

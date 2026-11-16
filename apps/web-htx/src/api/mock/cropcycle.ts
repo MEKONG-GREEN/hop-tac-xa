@@ -149,9 +149,12 @@ const STEPS_ST25: SopContent = content(
   ],
 );
 
+/** Bản ghi phiên bản của mock: `state` và `published_by_display` do máy chủ giả suy khi trả ra (xem versionOut). */
+type VersionRec = Omit<CropSOPVersion, "state" | "published_by_display">;
+
 interface SopRec {
   t: CropSOPTemplate;
-  versions: CropSOPVersion[];
+  versions: VersionRec[];
 }
 
 /** Việc Thu hoạch cuối đã có ngày: số ngày thu hoạch = Từ của việc, độ dài cửa sổ thu hoạch = 0. */
@@ -161,7 +164,7 @@ function harvestOf(steps: CropSOPStep[]): { off: number | null; win: number | nu
   return h ? { off: h.day_offset, win: 0 } : { off: null, win: null };
 }
 
-function version(template_ref: string, no: number, c: SopContent, status: "draft" | "published", author: string, daysAgo: number, note: string | null): CropSOPVersion {
+function version(template_ref: string, no: number, c: SopContent, status: "draft" | "published", author: string, daysAgo: number, note: string | null): VersionRec {
   const h = harvestOf(c.steps);
   const at = new Date(Date.now() - daysAgo * 86_400_000).toISOString();
   return {
@@ -229,17 +232,29 @@ function seedSops(): void {
   }
 }
 
-function findVersion(id: string | null | undefined): { rec: SopRec; v: CropSOPVersion } | undefined {
+function findVersion(id: string | null | undefined): { rec: SopRec; v: VersionRec } | undefined {
   for (const rec of SOPS) {
     const v = rec.versions.find((x) => x.id === id);
     if (v) return { rec, v };
   }
   return undefined;
 }
-function sopOut(rec: SopRec, onlyPublished: boolean): CropSOP {
-  return { ...rec.t, versions: onlyPublished ? rec.versions.filter((v) => v.status === "published") : rec.versions };
+/** Giả lập máy chủ (domain.VersionState): màn hình chỉ đọc `state`, không tự suy. */
+function versionState(t: CropSOPTemplate, v: VersionRec): CropSOPVersion["state"] {
+  if (v.status !== "published") return "draft";
+  return t.status !== "retired" && v.version_no === t.published_version ? "active" : "retired";
 }
-function publishedVersionFor(variety: string): CropSOPVersion | undefined {
+/** Tên người phát hành giả (máy chủ thật tra từ danh bạ). */
+const PUBLISHER_NAMES: Record<string, string> = { [SETTER]: "Quản trị viên A", [APPROVER]: "Phê duyệt viên", [ADMIN_OTHER]: "Quản trị viên B" };
+function versionOut(t: CropSOPTemplate, v: VersionRec, admin: boolean): CropSOPVersion {
+  const name = admin && v.published_by ? PUBLISHER_NAMES[v.published_by] : undefined;
+  return { ...v, state: versionState(t, v), ...(name ? { published_by_display: name } : {}) };
+}
+function sopOut(rec: SopRec, onlyPublished: boolean): CropSOP {
+  const vs = onlyPublished ? rec.versions.filter((v) => v.status === "published") : rec.versions;
+  return { ...rec.t, versions: vs.map((v) => versionOut(rec.t, v, !onlyPublished)) };
+}
+function publishedVersionFor(variety: string): VersionRec | undefined {
   const b = BINDINGS.find((x) => x.variety_code === variety);
   const rec = b ? SOPS.find((s) => s.t.ref === b.template_ref) : undefined;
   if (!rec || rec.t.status !== "published") return undefined;
@@ -320,7 +335,7 @@ function farmerOf(householdRef: string | null): string {
   return householdRef ? `01927b3e-fa2e-7000-8000-${householdRef.slice(-12)}` : HTX_ACTOR;
 }
 
-function newSeason(ref: PlotRef, o: { code: string; year: number; variety: string; sowing: string; sop: CropSOPVersion; actor: string; onBehalf: boolean; loc: CropSeason["location_status"]; copied?: string | null; at?: string }): SeasonRec {
+function newSeason(ref: PlotRef, o: { code: string; year: number; variety: string; sowing: string; sop: VersionRec; actor: string; onBehalf: boolean; loc: CropSeason["location_status"]; copied?: string | null; at?: string }): SeasonRec {
   const p = ref.plot.properties;
   const h = harvestOf(o.sop.steps);
   const off = h.off ?? 95;
@@ -582,7 +597,7 @@ function lastSeasonOf(plotRef: string): SeasonRec | undefined {
   return SEASONS.filter((x) => x.s.plot_ref === plotRef && x.s.status !== "cancelled").sort((x, y) => Date.parse(x.s.opened_at ?? "") - Date.parse(y.s.opened_at ?? "")).at(-1);
 }
 
-function resolveSop(body: Record<string, unknown>, variety: string): CropSOPVersion | Response {
+function resolveSop(body: Record<string, unknown>, variety: string): VersionRec | Response {
   const id = typeof body.sop_version_id === "string" && body.sop_version_id ? body.sop_version_id : null;
   if (id) {
     const f = findVersion(id);
@@ -844,7 +859,7 @@ export const cropcycleAppRoutes: Route[] = [
     handler: ({ params }) => {
       ensure();
       const f = findVersion(params[0]);
-      return f && f.v.status === "published" ? json({ version: f.v, template: f.rec.t }) : problem(404, "cropcycle.sop_not_found", "Not found");
+      return f && f.v.status === "published" ? json({ version: versionOut(f.rec.t, f.v, false), template: f.rec.t }) : problem(404, "cropcycle.sop_not_found", "Not found");
     },
   },
   {
@@ -1427,7 +1442,7 @@ function infoErrors(b: Record<string, unknown>): Response | null {
 }
 
 /** Chặn phát hành (EX-05, Q-06): rỗng, giai đoạn chưa có việc, không có việc Thu hoạch, Thu hoạch cuối không có cửa sổ ngày. */
-function publishBlock(v: CropSOPVersion): Response | null {
+function publishBlock(v: VersionRec): Response | null {
   if (v.stages.length === 0 || v.steps.length === 0) return problem(422, "cropcycle.sop_empty", "SOP empty", { errors: [{ field: "stages", reason: "chưa có giai đoạn hoặc việc" }] });
   const empty = v.stages.findIndex((s) => !v.steps.some((x) => x.stage_seq === s.seq));
   if (empty >= 0) return problem(422, "cropcycle.sop_empty", "SOP empty", { errors: [{ field: `stages[${empty}]`, reason: "giai đoạn chưa có việc" }] });
@@ -1447,7 +1462,7 @@ function newTemplate(p: MockPersona, o: { code: string; name: string; crop: stri
   const ref = uuidv7();
   const t: CropSOPTemplate = { ref, code: o.code, name: o.name.trim(), crop: o.crop, variety_code: o.variety, anchor_name: o.anchor, scope: o.scope, cooperative_ref: o.coop, standard: o.standard, description: o.description, status: "draft", status_reason: null, source_template_ref: o.source, latest_version: 1, published_version: null, created_at: at, updated_at: at };
   const h = harvestOf(o.content.steps);
-  const v: CropSOPVersion = { id: uuidv7(), template_ref: ref, version_no: 1, status: "draft", stages: o.content.stages, steps: o.content.steps, harvest_day_offset: h.off, harvest_window_days: h.win, source_version_ref: null, change_note: o.note, authored_by: p.me.actor_ref, authored_at: at, published_by: null, published_at: null };
+  const v: VersionRec = { id: uuidv7(), template_ref: ref, version_no: 1, status: "draft", stages: o.content.stages, steps: o.content.steps, harvest_day_offset: h.off, harvest_window_days: h.win, source_version_ref: null, change_note: o.note, authored_by: p.me.actor_ref, authored_at: at, published_by: null, published_at: null };
   const rec = { t, versions: [v] };
   SOPS.push(rec);
   return rec;
@@ -1627,6 +1642,12 @@ export const cropcycleAdminRoutes: Route[] = [
       const b = bodyOf(body);
       const name = typeof b.name === "string" ? b.name : "";
       if (!name.trim()) return validation([{ field: "name", reason: "bắt buộc" }]);
+      // Trường không gửi (hoặc giống null) → lấy của SOP nguồn; giống là chuỗi rỗng → SOP chung của loại cây (AH-21 AC1).
+      const crop = typeof b.crop === "string" ? b.crop.trim() : src.t.crop;
+      const variety = typeof b.variety_code === "string" ? b.variety_code.trim() : (src.t.variety_code ?? "");
+      const anchor = typeof b.anchor_name === "string" ? b.anchor_name.trim() : src.t.anchor_name;
+      const bad = infoErrors({ name, crop, variety_code: variety, anchor_name: anchor });
+      if (bad) return bad;
       if (SOPS.some((x) => normName(x.t.name) === normName(name))) return problem(409, "cropcycle.sop_name_taken", "Name taken");
       let code = typeof b.code === "string" && b.code.trim() ? b.code.trim() : `${src.t.code}-BS${SOPS.length + 1}`.slice(0, 40);
       if (!CODE.test(code)) return validation([{ field: "code", reason: "Mã chữ in hoa/số, 2–40 ký tự" }]);
@@ -1638,9 +1659,9 @@ export const cropcycleAdminRoutes: Route[] = [
       const rec = newTemplate(persona, {
         code,
         name,
-        crop: src.t.crop,
-        variety: src.t.variety_code ?? null,
-        anchor: src.t.anchor_name,
+        crop,
+        variety: variety || null,
+        anchor,
         scope: b.scope === "htx" ? "htx" : src.t.scope,
         coop: typeof b.cooperative_ref === "string" ? b.cooperative_ref : src.t.cooperative_ref ?? null,
         standard: src.t.standard ?? null,
@@ -1670,6 +1691,26 @@ export const cropcycleAdminRoutes: Route[] = [
     },
   },
   {
+    // Đánh dấu đã xóa SOP chưa phát hành lần nào (AH-21, Q-46); giả lập bỏ khỏi danh sách như máy chủ lọc deleted_at.
+    // SOP đã phát hành chỉ ngừng áp dụng được.
+    method: "POST",
+    pattern: /^\/v1\/cropcycle\/sops\/([\w-]+)\/delete$/,
+    handler: ({ params, persona }) => {
+      ensure();
+      const d = sopAdminDenied(persona, true);
+      if (d) return d;
+      const i = SOPS.findIndex((x) => x.t.ref === params[0]);
+      const rec = SOPS[i];
+      if (!rec) return problem(404, "cropcycle.sop_not_found", "Not found");
+      const used = SEASONS.some((x) => x.s.sop_template_ref === rec.t.ref);
+      if (rec.t.status !== "draft" || rec.t.published_version !== null || used) {
+        return problem(409, "cropcycle.sop_not_deletable", "SOP đã phát hành không xóa được — chỉ ngừng áp dụng được.");
+      }
+      SOPS.splice(i, 1);
+      return json({ ref: rec.t.ref, deleted: true });
+    },
+  },
+  {
     method: "GET",
     pattern: /^\/v1\/cropcycle\/sop-versions\/([\w-]+)$/,
     handler: ({ params, persona }) => {
@@ -1677,7 +1718,7 @@ export const cropcycleAdminRoutes: Route[] = [
       const d = sopAdminDenied(persona, false);
       if (d) return d;
       const f = findVersion(params[0]);
-      return f ? json({ version: f.v, template: f.rec.t }) : problem(404, "cropcycle.sop_not_found", "Not found");
+      return f ? json({ version: versionOut(f.rec.t, f.v, true), template: f.rec.t }) : problem(404, "cropcycle.sop_not_found", "Not found");
     },
   },
   {

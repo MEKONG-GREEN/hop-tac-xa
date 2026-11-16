@@ -139,3 +139,28 @@ func TestNotePII(t *testing.T) {
 		t.Error("NameKey")
 	}
 }
+
+// AH-21 AC2: trạng thái hiển thị của phiên bản suy ra ở một chỗ — Nháp / Đang áp dụng / Ngừng áp dụng.
+func TestVersionState_AH21_AC2(t *testing.T) {
+	one, two := 1, 2
+	cases := []struct {
+		name      string
+		status    string
+		no        int
+		template  string
+		published *int
+		want      string
+	}{
+		{"bản nháp của mẫu chưa phát hành", VersionDraft, 1, TemplateDraft, nil, VersionStateDraft},
+		{"bản nháp của mẫu đang áp dụng", VersionDraft, 2, TemplatePublished, &one, VersionStateDraft},
+		{"bản đã phát hành mới nhất của mẫu đang áp dụng", VersionPublished, 2, TemplatePublished, &two, VersionStateActive},
+		{"bản đã phát hành trước đó", VersionPublished, 1, TemplatePublished, &two, VersionStateRetired},
+		{"bản mới nhất của mẫu đã ngừng", VersionPublished, 2, TemplateRetired, &two, VersionStateRetired},
+		{"đã phát hành nhưng mẫu chưa ghi phiên bản", VersionPublished, 1, TemplatePublished, nil, VersionStateRetired},
+	}
+	for _, c := range cases {
+		if got := VersionState(c.status, c.no, c.template, c.published); got != c.want {
+			t.Errorf("%s: %s, muốn %s", c.name, got, c.want)
+		}
+	}
+}

@@ -2633,7 +2633,7 @@ paths:
 # @ag-order: 170
   /v1/cropcycle/sops/{ref}/clone:
     post:
-      summary: Nhân bản mẫu SOP giữ nguyên bước và thứ tự (HTX US-CAT-03)
+      summary: Nhân bản mẫu SOP giữ nguyên bước và thứ tự, sang giống hoặc loại cây khác (HTX US-CAT-03, AH-21)
       operationId: cloneCropSOP
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -2648,15 +2648,43 @@ paths:
               properties:
                 name: {type: string}
                 code: {type: string, description: "Bỏ trống → tự sinh"}
+                crop: {type: string, description: "Mã loại cây; không gửi → lấy của SOP nguồn"}
+                variety_code: {type: [string, "null"], description: "Không gửi hoặc null → lấy của SOP nguồn; chuỗi rỗng → SOP chung của loại cây"}
+                anchor_name: {type: string, maxLength: 100, description: "Tên mốc gốc; không gửi → lấy của SOP nguồn"}
                 scope: {type: string, enum: [system, htx]}
                 cooperative_ref: {type: [string, "null"], format: uuid}
       responses:
         "201": {description: Bản sao (nháp), content: {application/json: {schema: {$ref: "#/components/schemas/CropSOP"}}}}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+# @ag-order: 171
+  /v1/cropcycle/sops/{ref}/delete:
+    post:
+      summary: Xóa SOP chưa phát hành lần nào (AH-21, Q-46) — đánh dấu đã xóa, không xóa dòng; SOP đã xóa biến mất khỏi danh sách và đọc trả 404; SOP đã phát hành chỉ ngừng áp dụng được
+      operationId: deleteCropSOP
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Đã xóa
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ref, deleted]
+                properties:
+                  ref: {type: string, format: uuid}
+                  deleted: {type: boolean}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
         "409": {$ref: "#/components/responses/Problem"}
 # @ag-order: 171
   /v1/cropcycle/sops/{ref}/retire:
     post:
-      summary: Ngừng dùng mẫu (không xóa; vụ đã ghim giữ phiên bản)
+      summary: Ngừng áp dụng mẫu (không xóa, không ẩn; được phép cả khi SOP đang gắn vụ — vụ giữ phiên bản đã ghim)
       operationId: retireCropSOP
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -4283,12 +4311,16 @@ components:
 # @ag-order: 351
     CropSOPVersion:
       type: object
-      required: [id, template_ref, version_no, status, stages, steps]
+      required: [id, template_ref, version_no, status, state, stages, steps]
       properties:
         id: {type: string, format: uuid}
         template_ref: {type: string, format: uuid}
         version_no: {type: integer}
         status: {type: string, enum: [draft, published]}
+        state:
+          type: string
+          enum: [draft, active, retired]
+          description: "Trạng thái hiển thị do máy chủ suy ra: draft = Nháp; active = Đang áp dụng (bản đã phát hành mới nhất của SOP chưa ngừng); retired = Ngừng áp dụng (các bản đã phát hành còn lại)"
         stages: {type: array, items: {$ref: "#/components/schemas/CropSOPStage"}}
         steps: {type: array, items: {$ref: "#/components/schemas/CropSOPStep"}}
         harvest_day_offset: {type: [integer, "null"]}
@@ -4298,6 +4330,7 @@ components:
         authored_by: {type: string, format: uuid}
         authored_at: {type: string, format: date-time}
         published_by: {type: [string, "null"], format: uuid}
+        published_by_display: {type: [string, "null"], description: "Tên người phát hành tra từ danh bạ; không tra được thì không có"}
         published_at: {type: [string, "null"], format: date-time}
 # @ag-order: 352
     CropSOP:

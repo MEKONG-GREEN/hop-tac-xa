@@ -23,3 +23,9 @@
 |---|---|---|
 | 422 | `cropcycle.sop_import_invalid` | Tệp nhập SOP sai mẫu: không phải .xlsx (CSV, .xls cũ, byte rác), ô công thức, quá 2 MB, thiếu sheet hoặc cột bắt buộc, sheet "Thông tin chung" không đúng một dòng dữ liệu, sheet "Giai đoạn"/"Việc" không có dòng, quá 30 giai đoạn hoặc 100 việc. `detail` nêu lý do riêng; không có danh sách dòng |
 | 422 | `cropcycle.sop_import_rows` | Tệp đúng mẫu nhưng có dòng lỗi — không tạo SOP. Trường mở rộng `rows` liệt kê đủ mọi lỗi: `{sheet, row, column, reason}` (`row` là số dòng trong tệp), sắp theo sheet → dòng → cột |
+
+### pf/cooperative — quy trình SOP (AH-21)
+
+| HTTP | code | Khi nào |
+|---|---|---|
+| 409 | `cropcycle.sop_not_deletable` | Xóa SOP đã phát hành (đang áp dụng hay đã ngừng), SOP Nháp đã ngừng, hoặc đã có vụ tham chiếu — chỉ ngừng áp dụng được |

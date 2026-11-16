@@ -17,6 +17,7 @@ import (
 	mdport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/masterdata/port"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/authz"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/ids"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/ledger"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/problem"
 )
 
@@ -34,6 +35,7 @@ const MaxAnchorNameLen = 100
 type SOPView struct {
 	Template store.Template
 	Versions []store.Version
+	Names    map[uuid.UUID]string // tên người phát hành (chỉ Admin API; thiếu → hiện "—")
 }
 
 // CreateSOPInput tạo mẫu SOP mới với bản nháp phiên bản 1 (HTX US-CAT-01). Code để trống thì hệ thống sinh mã.
@@ -245,9 +247,9 @@ func insertTemplate(ctx context.Context, tx pgx.Tx, tid uuid.UUID, t store.Templ
 	}
 	err = store.InsertTemplate(ctx, tx, tid, t)
 	switch {
-	case isUnique(err, "sop_template_tenant_id_name_key_key"):
+	case isUnique(err, "sop_template_name_live"):
 		return ErrSOPNameTaken
-	case isUnique(err, "sop_template_tenant_id_code_key"):
+	case isUnique(err, "sop_template_code_live"):
 		return ErrSOPCodeTaken
 	}
 	return err
@@ -354,6 +356,12 @@ func (s *Service) UpdateDraft(ctx context.Context, versionID uuid.UUID, in domai
 		if v == nil {
 			return ErrSOPNotFound
 		}
+		// Mẫu đã đánh dấu xóa thì bản nháp của nó coi như không còn.
+		if t, err := store.TemplateByRef(ctx, tx, v.TemplateRef, false); err != nil {
+			return err
+		} else if t == nil {
+			return ErrSOPNotFound
+		}
 		if v.Status != domain.VersionDraft {
 			return ErrSOPState.WithDetail("phiên bản đã phát hành không sửa được — tạo phiên bản mới")
 		}
@@ -422,6 +430,9 @@ func (s *Service) PublishSOP(ctx context.Context, versionID uuid.UUID) (SOPView,
 		if err != nil {
 			return err
 		}
+		if t == nil { // mẫu bị đánh dấu xóa giữa hai transaction
+			return ErrSOPNotFound
+		}
 		if v.Status != domain.VersionDraft || t.Status == domain.TemplateRetired {
 			return ErrSOPState.WithDetail("chỉ phát hành được bản nháp của mẫu chưa ngừng dùng")
 		}
@@ -461,10 +472,14 @@ func (s *Service) PublishSOP(ctx context.Context, versionID uuid.UUID) (SOPView,
 }
 
 // CloneInput nhân bản mẫu SOP (HTX US-CAT-03).
+// Crop, VarietyCode, AnchorName nil → lấy của SOP nguồn; VarietyCode rỗng → SOP chung của loại cây (AH-21 AC1).
 type CloneInput struct {
 	SourceRef      uuid.UUID
 	Code           string
 	Name           string
+	Crop           *string
+	VarietyCode    *string
+	AnchorName     *string
 	Scope          string
 	CooperativeRef uuid.UUID
 }
@@ -501,8 +516,9 @@ func (s *Service) CloneSOP(ctx context.Context, in CloneInput) (SOPView, error) 
 		return SOPView{}, ErrSOPNotFound
 	}
 	ref := ids.New()
-	ci := CreateSOPInput{Code: in.Code, Name: in.Name, Crop: src.Crop, VarietyCode: src.VarietyCode, AnchorName: src.AnchorName,
-		Scope: in.Scope, CooperativeRef: in.CooperativeRef, Standard: src.Standard, Description: src.Description}
+	ci := CreateSOPInput{Code: in.Code, Name: in.Name, Crop: orDefault(in.Crop, src.Crop), VarietyCode: orDefault(in.VarietyCode, src.VarietyCode),
+		AnchorName: orDefault(in.AnchorName, src.AnchorName),
+		Scope:      in.Scope, CooperativeRef: in.CooperativeRef, Standard: src.Standard, Description: src.Description}
 	if ci.Scope == "" {
 		ci.Scope, ci.CooperativeRef = src.Scope, src.CooperativeRef
 	}
@@ -529,6 +545,13 @@ func (s *Service) CloneSOP(ctx context.Context, in CloneInput) (SOPView, error) 
 		return s.loadView(ctx, tx, t.Ref, &view)
 	})
 	return view, err
+}
+
+func orDefault(v *string, def string) string {
+	if v == nil {
+		return def
+	}
+	return *v
 }
 
 // SOPInfoInput sửa thông tin chung của mẫu SOP còn nháp.
@@ -574,7 +597,7 @@ func (s *Service) UpdateSOPInfo(ctx context.Context, ref uuid.UUID, in SOPInfoIn
 		}
 		t.Name, t.NameKey, t.Crop, t.VarietyCode, t.AnchorName = in.Name, key, in.Crop, in.VarietyCode, in.AnchorName
 		err = store.UpdateTemplateInfo(ctx, tx, *t)
-		if isUnique(err, "sop_template_tenant_id_name_key_key") {
+		if isUnique(err, "sop_template_name_live") {
 			return ErrSOPNameTaken
 		}
 		if err != nil {
@@ -613,6 +636,49 @@ func (s *Service) RetireSOP(ctx context.Context, ref uuid.UUID, reason string) (
 		return s.loadView(ctx, tx, ref, &view)
 	})
 	return view, err
+}
+
+// DeleteSOP đánh dấu đã xóa SOP chưa phát hành lần nào (Q-46): đang Nháp, không có phiên bản đã phát hành, không có vụ
+// tham chiếu; không xóa dòng (RB-1). SOP đã phát hành (đang áp dụng hay đã ngừng) bị từ chối — chỉ ngừng áp dụng được.
+// Ràng buộc CHECK của cơ sở dữ liệu kiểm lại điều kiện. SOP nháp đã được nhân bản vẫn xóa được vì dòng nguồn còn nguyên.
+func (s *Service) DeleteSOP(ctx context.Context, ref uuid.UUID) error {
+	p, err := authz.Require(ctx, sopAuthorRoles...)
+	if err != nil {
+		return err
+	}
+	return s.inTx(ctx, p.TenantID, func(tx pgx.Tx) error {
+		// Khóa phiên bản trước, mẫu sau — cùng thứ tự với PublishSOP.
+		if _, err := store.LockVersionsOf(ctx, tx, ref); err != nil {
+			return err
+		}
+		t, err := store.TemplateByRef(ctx, tx, ref, true)
+		if err != nil {
+			return err
+		}
+		if t == nil {
+			return ErrSOPNotFound
+		}
+		switch {
+		case t.PublishedVersion != nil || t.Status == domain.TemplatePublished:
+			return ErrSOPNotDeletable
+		case t.Status == domain.TemplateRetired:
+			return ErrSOPNotDeletable.WithDetail("SOP đã ngừng áp dụng — không xóa được")
+		}
+		seasons, err := store.TemplateHasSeasons(ctx, tx, ref)
+		if err != nil {
+			return err
+		}
+		if seasons {
+			return ErrSOPNotDeletable.WithDetail("SOP đã có vụ tham chiếu — chỉ ngừng áp dụng được")
+		}
+		if err := store.MarkTemplateDeleted(ctx, tx, ref); err != nil {
+			if errors.Is(ledger.Classify(err), ledger.ErrImmutable) || isCheckViolation(err) {
+				return ErrSOPNotDeletable
+			}
+			return err
+		}
+		return nil
+	})
 }
 
 // BindVariety gắn giống lúa với mẫu SOP mặc định (HTX US-SEASON-01 AC-1).
@@ -762,7 +828,31 @@ func (s *Service) GetSOP(ctx context.Context, ref uuid.UUID, admin bool) (SOPVie
 		}
 		view.Versions = pub
 	}
+	if admin {
+		view.Names = s.publisherNames(ctx, view.Versions)
+	}
 	return view, nil
+}
+
+// publisherNames tra tên người phát hành ngoài transaction; không tra được thì để trống (giao diện hiện "—").
+func (s *Service) publisherNames(ctx context.Context, vs []store.Version) map[uuid.UUID]string {
+	if s.Names == nil {
+		return nil
+	}
+	var refs []uuid.UUID
+	for _, v := range vs {
+		if v.PublishedBy != uuid.Nil && !slices.Contains(refs, v.PublishedBy) {
+			refs = append(refs, v.PublishedBy)
+		}
+	}
+	if len(refs) == 0 {
+		return nil
+	}
+	m, err := s.Names.DisplayNames(ctx, refs)
+	if err != nil {
+		return nil
+	}
+	return m
 }
 
 // GetSOPVersion đọc một phiên bản (Application API: chỉ bản đã phát hành).

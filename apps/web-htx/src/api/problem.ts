@@ -448,6 +448,7 @@ export const PROBLEM_MESSAGES: Readonly<Record<string, string>> = {
   "cropcycle.sop_harvest_step_missing": "Quy trình phải có bước thu hoạch để kế hoạch sản xuất có điểm kết thúc.",
   "cropcycle.sop_empty": "Quy trình chưa có giai đoạn hoặc việc — chưa phát hành được.",
   "cropcycle.sop_harvest_window": "Việc Thu hoạch cuối phải có cửa sổ Theo ngày so với mốc gốc hoặc Theo giai đoạn.",
+  "cropcycle.sop_not_deletable": "SOP đã phát hành không xóa được — chỉ ngừng áp dụng được.",
   "cropcycle.sop_state": "Trạng thái quy trình không cho phép thao tác này (bản đã phát hành không sửa được — hãy tạo phiên bản mới).",
   "cropcycle.sop_not_published": "Quy trình chưa được ban hành — không áp dụng vào vụ được.",
   "cropcycle.sop_import_invalid": "Tệp nhập SOP không đúng mẫu — hãy tải file mẫu và thử lại.",
