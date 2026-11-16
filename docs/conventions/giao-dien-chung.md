@@ -41,6 +41,7 @@
 | Thành phần | Nền tảng | Mã |
 |---|---|---|
 | `FilterBar`, `FilterChip`, `SearchBox`, `RowActions` | Web | `apps/web-htx/src/components/patterns/list.tsx` |
+| `ListScreen`, `MainCell`, `clientList` | Web | `apps/web-htx/src/components/patterns/listScreen.tsx`, `list.tsx` |
 | `Collapsible` | Web | `apps/web-htx/src/components/patterns/collapsible.tsx` |
 | `buildTheme`, `AgColors` | App | `packages/agrigreen_mobile/lib/ui/theme.dart` |
 | `ActionRow`, `ActionItem` | App | `packages/agrigreen_mobile/lib/ui/widgets/action_row.dart` |

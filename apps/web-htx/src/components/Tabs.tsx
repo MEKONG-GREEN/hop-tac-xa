@@ -5,6 +5,8 @@ import { useId, useRef, type KeyboardEvent, type ReactNode } from "react";
 export interface TabDef {
   id: string;
   label: string;
+  /** Số lượng hiện cạnh tên tab (UX-01: tab trạng thái hoặc phân loại kèm số lượng). */
+  count?: number;
 }
 
 /** Tab theo mẫu WAI-ARIA: mũi tên trái/phải, Home/End chuyển tab. */
@@ -59,6 +61,12 @@ export function Tabs({
             onKeyDown={onKey}
           >
             {t.label}
+            {t.count !== undefined ? (
+              <>
+                {" "}
+                <span className="tab-count">{t.count.toLocaleString("vi-VN")}</span>
+              </>
+            ) : null}
           </button>
         ))}
       </div>
