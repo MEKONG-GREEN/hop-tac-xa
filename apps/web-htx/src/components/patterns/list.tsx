@@ -2,9 +2,10 @@
 
 // Mẫu trang List (BRD §4.0 mục 3, Design Sample "Screens / List"): tiêu đề + nút, thanh bộ lọc dạng thẻ
 // một hàng có số kết quả, "Lọc thêm" và "Xóa lọc", bảng có STT, nhãn trạng thái, hàng nút mỗi dòng (nút chính,
-// tối đa một nút phụ, còn lại trong menu "Thêm"), phân trang số trang. Quy ước: docs/conventions/giao-dien-chung.md.
+// tối đa một nút phụ, còn lại trong menu "Thêm"), phân trang số trang. Bảng còn có chế độ UX-01 (AH-292): bỏ cột STT,
+// sắp xếp theo cột, bấm dòng để mở. Quy ước: docs/conventions/giao-dien-chung.md.
 import Link from "next/link";
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { Icon } from "../Icon";
 
 export interface FilterOption {
@@ -265,16 +266,62 @@ export function Pagination({ page, pageSize, total, onPage }: { page: number; pa
   );
 }
 
+export type SortDir = "asc" | "desc";
+export interface SortState {
+  key: string;
+  dir: SortDir;
+}
+
+/** Bấm cột khác → tăng dần; bấm lại cột đang sắp → đảo chiều. */
+export function nextSort(current: SortState | null, key: string): SortState {
+  if (current && current.key === key) return { key, dir: current.dir === "asc" ? "desc" : "asc" };
+  return { key, dir: "asc" };
+}
+
 export interface Column<T> {
   key: string;
   header: string;
   cell: (row: T) => ReactNode;
   className?: string;
+  /** Có giá trị → bấm tiêu đề cột để sắp xếp (cần `onSort` của bảng). */
+  sortKey?: string;
+}
+
+/** Phần tử bên trong dòng tự xử lý bấm: bấm vào đó không kích hoạt việc mở dòng. */
+const ROW_INTERACTIVE = "a, button, input, select, textarea, label, [role='menu'], [role='menuitem'], [data-row-actions]";
+
+function openFromRow(e: ReactMouseEvent<HTMLTableRowElement>) {
+  if ((e.target as Element).closest(ROW_INTERACTIVE)) return;
+  if (window.getSelection()?.toString()) return; // đang bôi chữ để sao chép
+  e.currentTarget.querySelector<HTMLElement>("[data-row-open]")?.click();
+}
+
+/**
+ * Ô chính của dòng (UX-01): tên và một dòng phụ (SĐT, ấp, HTX…). Tên là liên kết hoặc nút thật (`data-row-open`):
+ * bàn phím dùng được và bấm vào dòng sẽ bấm hộ phần tử này (xem `DataTable` `openRowOnClick`).
+ */
+export function MainCell({ title, sub, open }: { title: ReactNode; sub?: ReactNode; open: { href: string } | { onClick: () => void } }) {
+  return (
+    <>
+      {"href" in open ? (
+        <Link data-row-open="" className="lst-main" href={open.href}>
+          {title}
+        </Link>
+      ) : (
+        <button type="button" data-row-open="" className="lst-main" onClick={open.onClick}>
+          {title}
+        </button>
+      )}
+      {sub ? <div className="lst-sub">{sub}</div> : null}
+    </>
+  );
 }
 
 /**
  * Bảng danh sách có cột STT do hệ thống đánh (R-A5, theo trang) và phân trang số trang.
  * Không truyền `onPage` → bảng không phân trang (STT từ 1), dùng thay `<table className="dt">` tự viết.
+ * `index={false}` bỏ cột STT (mẫu UX-01: cột đầu là mã). `sort`/`onSort` + `Column.sortKey`: tiêu đề cột là nút sắp xếp,
+ * bảng chỉ báo trạng thái lên, màn gọi tự sắp. `openRowOnClick`: bấm dòng bấm hộ `[data-row-open]` (xem `MainCell`).
  */
 export function DataTable<T>({
   caption,
@@ -286,6 +333,10 @@ export function DataTable<T>({
   total = rows.length,
   onPage,
   empty = "Không có dữ liệu phù hợp bộ lọc.",
+  index = true,
+  sort,
+  onSort,
+  openRowOnClick = false,
 }: {
   caption: string;
   columns: Column<T>[];
@@ -296,7 +347,12 @@ export function DataTable<T>({
   total?: number;
   onPage?: (p: number) => void;
   empty?: ReactNode;
+  index?: boolean;
+  sort?: SortState | null;
+  onSort?: (s: SortState) => void;
+  openRowOnClick?: boolean;
 }) {
+  const sortIcon = (dir: SortDir | null) => (dir === "asc" ? "▲" : dir === "desc" ? "▼" : "↕");
   return (
     <div className="card dt-card">
       <div className="tbl-wrap">
@@ -304,19 +360,37 @@ export function DataTable<T>({
           <caption className="sr-only">{caption}</caption>
           <thead>
             <tr>
-              <th scope="col">STT</th>
-              {columns.map((c) => (
-                <th key={c.key} scope="col" className={c.className}>
-                  {c.header}
-                </th>
-              ))}
+              {index ? <th scope="col">STT</th> : null}
+              {columns.map((c) => {
+                const sortKey = onSort ? c.sortKey : undefined;
+                const dir = sortKey !== undefined && sort?.key === sortKey ? sort.dir : null;
+                return (
+                  <th
+                    key={c.key}
+                    scope="col"
+                    className={c.className}
+                    aria-sort={dir === "asc" ? "ascending" : dir === "desc" ? "descending" : undefined}
+                  >
+                    {sortKey !== undefined && onSort ? (
+                      <button type="button" className="th-sort" onClick={() => onSort(nextSort(sort ?? null, sortKey))}>
+                        {c.header}
+                        <span aria-hidden="true" className="th-sort-ic">
+                          {sortIcon(dir)}
+                        </span>
+                      </button>
+                    ) : (
+                      c.header
+                    )}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
             {rows.length ? (
               rows.map((r, i) => (
-                <tr key={rowKey(r)}>
-                  <td className="stt">{(page - 1) * pageSize + i + 1}</td>
+                <tr key={rowKey(r)} className={openRowOnClick ? "is-openable" : undefined} onClick={openRowOnClick ? openFromRow : undefined}>
+                  {index ? <td className="stt">{(page - 1) * pageSize + i + 1}</td> : null}
                   {columns.map((c) => (
                     <td key={c.key} className={c.className}>
                       {c.cell(r)}
@@ -326,7 +400,7 @@ export function DataTable<T>({
               ))
             ) : (
               <tr>
-                <td colSpan={columns.length + 1} className="empty">
+                <td colSpan={columns.length + (index ? 1 : 0)} className="empty">
                   {empty}
                 </td>
               </tr>

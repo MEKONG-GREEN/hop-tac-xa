@@ -180,3 +180,52 @@ describe("Màn Danh mục mùa vụ (AH-7)", () => {
     expect(CATALOGS.season.some((s) => s.name === "Trái phép")).toBe(false);
   });
 });
+
+describe("Mẫu danh sách UX-01 (AH-292)", () => {
+  const tab = (re: RegExp) => screen.findByRole("tab", { name: re });
+
+  it("cột đầu là mã; tab kèm số lượng", async () => {
+    render(<SeasonCatalog />);
+    expect(await tab(/^Tất cả 3$/)).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /^Đang hiện 3$/ })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /^Đã ẩn 0$/ })).toBeTruthy();
+    expect(screen.getAllByRole("columnheader")[0]).toHaveAccessibleName("Mã");
+    expect(screen.queryByRole("columnheader", { name: "STT" })).toBeNull();
+    for (const code of ["DX", "HT", "TD"]) expect(screen.getByText(code)).toBeTruthy();
+  });
+
+  it("ẩn một mùa vụ: số trên tab đổi; tab Đã ẩn chỉ còn mùa vụ đó", async () => {
+    render(<SeasonCatalog />);
+    await userEvent.click(await screen.findByRole("button", { name: "Ẩn Thu Đông" }));
+    await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Ẩn" }));
+    expect(await tab(/^Đang hiện 2$/)).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /^Đã ẩn 1$/ })).toBeTruthy();
+    await userEvent.click(screen.getByRole("tab", { name: /^Đã ẩn 1$/ }));
+    expect(screen.getByText("Thu Đông")).toBeTruthy();
+    expect(screen.queryByText("Đông Xuân")).toBeNull();
+  });
+
+  it("tìm không dấu; số trên tab bằng số kết quả", async () => {
+    render(<SeasonCatalog />);
+    await userEvent.type(await screen.findByRole("searchbox"), "dong");
+    expect(screen.getByText("Đông Xuân")).toBeTruthy();
+    expect(screen.getByText("Thu Đông")).toBeTruthy();
+    expect(screen.queryByText("Hè Thu")).toBeNull();
+    expect(screen.getByRole("tab", { name: /^Tất cả 2$/ })).toBeTruthy();
+    expect(screen.getByText("2 kết quả")).toBeTruthy();
+  });
+
+  it("bấm ô mã mở hộp Sửa; bấm nút Xóa cuối dòng chỉ mở hộp Xóa", async () => {
+    render(<SeasonCatalog />);
+    await userEvent.click(await screen.findByText("DX"));
+    const edit = await screen.findByRole("dialog");
+    expect(within(edit).getByRole("heading", { name: "Sửa mùa vụ" })).toBeTruthy();
+    expect((within(edit).getByLabelText(/Tên mùa vụ/) as HTMLInputElement).value).toBe("Đông Xuân");
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await userEvent.click(screen.getByRole("button", { name: "Xóa Hè Thu" }));
+    const del = await screen.findByRole("dialog");
+    expect(within(del).getByRole("heading", { name: "Xóa mùa vụ" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Sửa mùa vụ" })).toBeNull();
+  });
+});

@@ -81,6 +81,13 @@ describe("List", () => {
     expect(screen.queryByRole("navigation")).toBeNull();
   });
 
+  it("UX-01: index={false} bỏ cột STT; dòng rỗng trải đủ số cột thực có", () => {
+    render(<DataTable caption="Thử" index={false} columns={[{ key: "n", header: "Tên", cell: (r: { n: string }) => r.n }]} rows={[]} rowKey={(r) => r.n} />);
+    expect(screen.queryByRole("columnheader", { name: "STT" })).toBeNull();
+    expect(screen.getAllByRole("columnheader")).toHaveLength(1);
+    expect(screen.getByRole("cell")).toHaveAttribute("colspan", "1");
+  });
+
   it("AC-N3: thanh lọc có số kết quả; Xóa lọc vô hiệu khi chưa đặt ô nào, bấm thì mọi ô về mặc định", async () => {
     const user = userEvent.setup();
     render(<FilterHarness />);

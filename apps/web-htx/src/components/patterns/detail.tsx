@@ -133,7 +133,7 @@ export function DetailLayout({ main, log }: { main: ReactNode; log: ReactNode })
 
 /**
  * Trang riêng cho Thêm / Sửa / Xem chi tiết (R-A2, System Design "Screens / Detail"), thay pop-up:
- * breadcrumb thêm mắt xích cuối, "← Danh sách", tiêu đề (Noto Serif), nút thao tác góc phải, nội dung, Log bên phải.
+ * breadcrumb thêm mắt xích cuối, "← Danh sách", tiêu đề, nút thao tác góc phải, nội dung, Log bên phải.
  * Pop-up (`Dialog`) chỉ còn cho xác nhận xóa và thông báo ngắn.
  */
 export function DetailPage({

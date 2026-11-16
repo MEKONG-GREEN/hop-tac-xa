@@ -1,7 +1,7 @@
 "use client";
 
 // Màn "Danh mục mùa vụ" của Admin (AH-7, BRD FN-01 luồng phụ Mùa vụ, BR-07). Thêm, sửa, ẩn/hiện, xóa; mùa vụ đang được
-// vụ dùng thì "xóa" chỉ ẩn. Theo mẫu màn Danh mục giống (AH-2): mỗi thao tác ghi dùng MỘT Idempotency-Key
+// vụ dùng thì "xóa" chỉ ẩn. Áp mẫu danh sách UX-01 (AH-292: tab có số, tìm kiếm, lọc, sắp xếp, 10 dòng/trang). Theo mẫu màn Danh mục giống (AH-2): mỗi thao tác ghi dùng MỘT Idempotency-Key
 // (useIdempotentAction): bấm lại sau lỗi mạng gửi lại đúng khóa cũ. Lỗi giữ nguyên dữ liệu trên form. Máy chủ vẫn kiểm
 // lại mọi luật.
 import { useId, useState, type FormEvent } from "react";
@@ -15,7 +15,10 @@ import { Dialog } from "@/components/Dialog";
 import { SelectField, TextField, validateForm } from "@/components/form";
 import { MfaNotice } from "@/components/MfaNotice";
 import { ProblemAlert } from "@/components/ProblemAlert";
-import { Empty, Loading, PageHead } from "@/components/ui";
+import { FilterBar, FilterChip, SearchBox, type SortState } from "@/components/patterns/list";
+import { ListScreen, clientList, type ClientTab } from "@/components/patterns/listScreen";
+import { Loading, PageHead } from "@/components/ui";
+import { normalizeVi } from "@/cgh/pins";
 import { toApiProblem, useAsync } from "@/lib/useAsync";
 import { ConfirmDialog, ItemActions, SaveProblem, Status } from "./CropCatalogScreen";
 import { listAll } from "./cropCatalog";
@@ -31,6 +34,33 @@ import {
   type SeasonForm,
   type SeasonItem,
 } from "./seasonCatalog";
+
+const TABS: ClientTab<SeasonItem>[] = [
+  { id: "all", label: "Tất cả", match: () => true },
+  { id: "active", label: "Đang hiện", match: (s) => s.active },
+  { id: "hidden", label: "Đã ẩn", match: (s) => !s.active },
+];
+
+const USAGE_OPTIONS = [
+  { value: "", label: "Tất cả" },
+  { value: "used", label: "Có vụ đang dùng" },
+  { value: "unused", label: "Chưa dùng" },
+];
+
+function sortValue(s: SeasonItem, key: string): string | number | undefined {
+  switch (key) {
+    case "code":
+      return s.code;
+    case "name":
+      return s.name;
+    case "usage":
+      return s.seasons_in_use;
+    case "status":
+      return s.active ? 0 : 1;
+    default:
+      return undefined;
+  }
+}
 
 type Dlg = { kind: "season"; item?: CatalogItem } | { kind: "state"; item: CatalogItem; hide: boolean } | { kind: "delete"; item: CatalogItem };
 
@@ -116,11 +146,33 @@ function SeasonDialog({ item, onClose, onSaved }: { item?: CatalogItem; onClose:
 export function SeasonCatalog() {
   const { adminApi } = useAuth();
   const data = useAsync((): Promise<SeasonItem[]> => listAll(adminApi, "season"), [adminApi]);
-  const [showHidden, setShowHidden] = useState(true);
+  const [tab, setTab] = useState("all");
+  const [q, setQ] = useState("");
+  const [usage, setUsage] = useState("");
+  const [sort, setSort] = useState<SortState | null>(null);
+  const [page, setPage] = useState(1);
   const [dlg, setDlg] = useState<Dlg | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const seasons = (data.data ?? []).filter((s) => showHidden || s.active);
+  const term = normalizeVi(q);
+  const matches = (s: SeasonItem) => {
+    if (term && !normalizeVi([s.code, s.name, s.attrs.description ?? ""].join(" ")).includes(term)) return false;
+    // Mục chưa có số vụ đang dùng không khớp cả hai lựa chọn có giá trị (phương án chặt).
+    if (usage === "used") return s.seasons_in_use !== undefined && s.seasons_in_use > 0;
+    if (usage === "unused") return s.seasons_in_use === 0;
+    return true;
+  };
+  const list = clientList(data.data ?? [], { tabs: TABS, tab, filter: matches, sort, sortValue, page });
+  // Đổi tìm kiếm, bộ lọc, tab hoặc sắp xếp thì về trang 1.
+  const reset = <V,>(set: (v: V) => void) => (v: V) => {
+    set(v);
+    setPage(1);
+  };
+  const clearFilters = () => {
+    setQ("");
+    setUsage("");
+    setPage(1);
+  };
 
   const done = (message: string) => {
     setDlg(null);
@@ -153,51 +205,53 @@ export function SeasonCatalog() {
         </p>
       ) : null}
       {data.error ? <ProblemAlert problem={data.error} onRetry={data.reload} /> : null}
-      <label className="row small" style={{ margin: "8px 0" }}>
-        <input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} />
-        Hiện cả mục đã ẩn
-      </label>
       {data.loading && !data.data ? <Loading /> : null}
-      {seasons.length > 0 ? (
-        <div className="tbl-wrap">
-          <table className="tbl">
-            <caption className="sr-only">Danh sách mùa vụ</caption>
-            <thead>
-              <tr>
-                <th scope="col">Mùa vụ</th>
-                <th scope="col">Mô tả</th>
-                <th scope="col">Đang dùng</th>
-                <th scope="col">Trạng thái</th>
-                <th scope="col">Thao tác</th>
-              </tr>
-            </thead>
-            <tbody>
-              {seasons.map((s) => (
-                <tr key={s.code}>
-                  <td>
-                    <div style={{ fontWeight: 600 }}>{s.name}</div>
-                    {monthsLabel(s.attrs) ? <div className="small muted">Dự kiến: {monthsLabel(s.attrs)}</div> : null}
-                  </td>
-                  <td>{s.attrs.description ?? "—"}</td>
-                  <td>{usageLabel(s.seasons_in_use)}</td>
-                  <td>
-                    <Status item={s} />
-                  </td>
-                  <td>
-                    <ItemActions
-                      item={s}
-                      onEdit={() => setDlg({ kind: "season", item: s })}
-                      onState={() => setDlg({ kind: "state", item: s, hide: s.active })}
-                      onDelete={() => setDlg({ kind: "delete", item: s })}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : data.data ? (
-        <Empty>Chưa có mùa vụ nào.</Empty>
+      {data.data ? (
+        <ListScreen
+          caption="Danh sách mùa vụ"
+          tabsLabel="Trạng thái mùa vụ"
+          tabs={list.tabs}
+          tab={tab}
+          onTab={reset(setTab)}
+          filterBar={
+            <FilterBar resultCount={list.total} activeCount={(q.trim() ? 1 : 0) + (usage ? 1 : 0)} onClear={clearFilters}>
+              <SearchBox value={q} onChange={reset(setQ)} placeholder="Tìm theo mã, tên hoặc mô tả" />
+              <FilterChip label="Đang dùng" value={usage} options={USAGE_OPTIONS} onChange={reset(setUsage)} />
+            </FilterBar>
+          }
+          code={{ key: "code", header: "Mã", sortKey: "code", cell: (s) => s.code }}
+          main={{
+            key: "name",
+            header: "Mùa vụ",
+            sortKey: "name",
+            title: (s) => s.name,
+            sub: (s) => (monthsLabel(s.attrs) ? `Dự kiến: ${monthsLabel(s.attrs)}` : undefined),
+            open: (s) => ({ onClick: () => setDlg({ kind: "season", item: s }) }),
+          }}
+          columns={[
+            { key: "description", header: "Mô tả", cell: (s) => s.attrs.description ?? "—" },
+            { key: "usage", header: "Đang dùng", sortKey: "usage", className: "num", cell: (s) => usageLabel(s.seasons_in_use) },
+            { key: "status", header: "Trạng thái", sortKey: "status", cell: (s) => <Status item={s} /> },
+          ]}
+          actions={{
+            cell: (s) => (
+              <ItemActions
+                item={s}
+                onEdit={() => setDlg({ kind: "season", item: s })}
+                onState={() => setDlg({ kind: "state", item: s, hide: s.active })}
+                onDelete={() => setDlg({ kind: "delete", item: s })}
+              />
+            ),
+          }}
+          rows={list.rows}
+          rowKey={(s) => s.code}
+          total={list.total}
+          page={list.page}
+          onPage={setPage}
+          sort={sort}
+          onSort={reset(setSort)}
+          empty={data.data.length === 0 ? "Chưa có mùa vụ nào." : "Không có mùa vụ phù hợp tìm kiếm và bộ lọc."}
+        />
       ) : null}
       {dlg?.kind === "season" ? <SeasonDialog item={dlg.item} onClose={() => setDlg(null)} onSaved={done} /> : null}
       {dlg?.kind === "state" ? (
