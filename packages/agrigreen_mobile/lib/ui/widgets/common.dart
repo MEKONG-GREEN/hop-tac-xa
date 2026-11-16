@@ -26,54 +26,58 @@ class BigTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.all(12),
-          // Màn hình nhỏ (Android giá rẻ, ô lưới thấp): thu nhỏ nội dung thay vì tràn.
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Icon(icon, size: 40, color: AgColors.g700),
-                    if (badge != null)
-                      Positioned(
-                        right: -14,
-                        top: -8,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 7,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AgColors.red,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            badge!,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
+          padding: const EdgeInsets.all(8),
+          // Ô thấp (Android giá rẻ): chỉ biểu tượng co lại, chữ nhãn giữ cỡ 17.
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Icon(icon, size: 40, color: AgColors.g700),
+                      if (badge != null)
+                        Positioned(
+                          right: -14,
+                          top: -8,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AgColors.red,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            // Số đếm trong chấm tròn là ngoại lệ duy nhất của chữ ≥ 16.
+                            child: Text(
+                              badge!,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  label,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
+                    ],
                   ),
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -81,19 +85,22 @@ class BigTile extends StatelessWidget {
   }
 }
 
+/// Màu nền và màu chữ của nhãn trạng thái hàng đợi (tách ra để test tương phản).
+(Color bg, Color fg) statusChipColors(OutboxStatus status) => switch (status) {
+  OutboxStatus.pending => (AgColors.amberBg, AgColors.amber),
+  OutboxStatus.sent => (AgColors.g100, AgColors.g700),
+  OutboxStatus.superseded => (AgColors.g100, AgColors.g700),
+  OutboxStatus.conflict => (AgColors.amberBg, AgColors.amber),
+  OutboxStatus.rejected => (AgColors.redBg, AgColors.red),
+};
+
 class StatusChip extends StatelessWidget {
   const StatusChip(this.status, {super.key});
   final OutboxStatus status;
 
   @override
   Widget build(BuildContext context) {
-    final (bg, fg) = switch (status) {
-      OutboxStatus.pending => (AgColors.amberBg, AgColors.amber),
-      OutboxStatus.sent => (AgColors.g100, AgColors.g700),
-      OutboxStatus.superseded => (AgColors.g100, AgColors.g700),
-      OutboxStatus.conflict => (AgColors.amberBg, AgColors.amber),
-      OutboxStatus.rejected => (AgColors.redBg, AgColors.red),
-    };
+    final (bg, fg) = statusChipColors(status);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
@@ -102,7 +109,7 @@ class StatusChip extends StatelessWidget {
       ),
       child: Text(
         status.label,
-        style: TextStyle(color: fg, fontSize: 14, fontWeight: FontWeight.w600),
+        style: TextStyle(color: fg, fontSize: 16, fontWeight: FontWeight.w600),
       ),
     );
   }

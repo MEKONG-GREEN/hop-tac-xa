@@ -56,4 +56,7 @@ export 'ui/map/boundary_editor_screen.dart';
 export 'ui/map/map_packs_screen.dart';
 export 'ui/map/offline_tile_provider.dart';
 export 'ui/theme.dart';
+export 'ui/widgets/action_row.dart';
+export 'ui/widgets/collapsible_section.dart';
 export 'ui/widgets/common.dart';
+export 'ui/widgets/filter_bar.dart';

@@ -385,7 +385,7 @@ export default function SeasonsPage() {
   return (
     <>
       <PageHead
-        title="Mùa vụ"
+        title="Vụ canh tác"
         subtitle="Vụ của từng lô ruộng — mỗi lô tối đa một vụ đang mở; sửa và hủy bằng bản ghi bù kèm lý do"
         actions={
           scope.canWrite && scope.coopRef ? (

@@ -9,7 +9,7 @@ const done2 = plot(5); // vụ trước đã hoàn thành (giống OM18)
 
 test("HTX US-SEASON-02/04: mở vụ hàng loạt cho nhiều lô — lô đang canh tác bị bỏ qua kèm lý do", async ({ page }) => {
   await loginAs(page, "htx", "/htx/mua-vu");
-  await expect(page.getByRole("heading", { level: 1, name: "Mùa vụ" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Vụ canh tác" })).toBeVisible();
   await expect(page.getByRole("row").filter({ hasText: growing.code }).first()).toContainText("Đang canh tác");
   await page.getByRole("button", { name: "Mở vụ cho nông hộ" }).click();
   const form = page.getByRole("form", { name: "Mở vụ cho nông hộ" });

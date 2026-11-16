@@ -33,6 +33,13 @@ Một số mục của g1-conventions đã được thay bằng quy ước WH-B:
 | [fail-closed-config.md](fail-closed-config.md) | Cấu hình kênh ngoài, worker, RLS fail-closed |
 | `docs/kn/ui-kit.md` | Bộ UI kit chung của web (có sau khi [#97](https://github.com/MEKONG-GREEN/Agrigreen_demo_v2/issues/97) gộp) |
 
+## Giao diện
+
+| Tệp | Nội dung |
+|---|---|
+| [thuat-ngu-hien-thi.md](thuat-ngu-hien-thi.md) | Bảng thuật ngữ hiển thị chuẩn (chỉ tiếng Việt) |
+| [giao-dien-chung.md](giao-dien-chung.md) | Chữ ≥ 16, vùng chạm ≥ 48×48, hàng nút, thanh lọc, tạo mới mở màn riêng, khối thu/mở |
+
 ## Quyết định kiến trúc
 
 - [ADR — chỉ mục và số đã giữ chỗ](../adr/README.md). ADR hay cần: [0005 RLS](../adr/0005-rls-mot-policy-moi-bang.md), [0027 bốn tầng module](../adr/0027-bon-tang-module-tep-khai-bao.md), [0028 vai đăng nhập theo đơn vị](../adr/0028-vai-dang-nhap-theo-don-vi-trien-khai.md), [0038 migration theo module](../adr/0038-bo-chay-migration-theo-module.md), [0055 tách KN](../adr/0055-tach-he-thong-khuyen-nong.md).

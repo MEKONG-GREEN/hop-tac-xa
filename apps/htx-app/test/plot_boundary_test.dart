@@ -145,7 +145,7 @@ void main() {
       );
       final s = await loginToHome(tester, env);
       await openTile(tester, 'Bản đồ lô ruộng');
-      expect(find.text('Lô ruộng & Ranh giới GPS'), findsOneWidget);
+      expect(find.text('Bản đồ lô ruộng'), findsOneWidget);
       expect(find.byType(FlutterMap), findsOneWidget);
       expect(find.text('Lô KN vẽ'), findsOneWidget);
       expect(find.text('Lô chưa gán'), findsOneWidget);
@@ -304,7 +304,7 @@ void main() {
         closeTo(1.0, 0.01),
       );
       // Về bản đồ: lô mới hiện ngay, chờ đồng bộ.
-      expect(find.text('Lô ruộng & Ranh giới GPS'), findsOneWidget);
+      expect(find.text('Bản đồ lô ruộng'), findsOneWidget);
       expect(find.text('Chờ đồng bộ'), findsOneWidget);
       await finish(tester);
     },

@@ -59,7 +59,7 @@ class _NewsScreenState extends ConsumerState<NewsScreen> {
       for (final a in news.value ?? const <NewsArticle>[]) newsCategoryKey(a),
     };
     return Scaffold(
-      appBar: AppBar(title: const Text('Tin tức & Khuyến nông')),
+      appBar: AppBar(title: const Text('Tin tức')),
       body: Column(
         children: [
           Padding(

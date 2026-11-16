@@ -153,7 +153,7 @@ class _Count extends StatelessWidget {
           color: color,
         ),
       ),
-      Text(label, style: const TextStyle(fontSize: 14)),
+      Text(label, style: const TextStyle(fontSize: 16)),
     ],
   );
 }
@@ -247,7 +247,7 @@ class Tag extends StatelessWidget {
     ),
     child: Text(
       text,
-      style: TextStyle(color: color, fontSize: 14, fontWeight: FontWeight.w600),
+      style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.w600),
     ),
   );
 }
@@ -328,7 +328,7 @@ class _PhotoCaptureState extends ConsumerState<PhotoCapture> {
           padding: const EdgeInsets.only(top: 6),
           child: Text(
             _block!,
-            style: const TextStyle(color: AgColors.amber, fontSize: 15),
+            style: const TextStyle(color: AgColors.amber, fontSize: 16),
           ),
         ),
     ],

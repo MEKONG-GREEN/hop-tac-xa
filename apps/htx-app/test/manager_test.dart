@@ -130,7 +130,7 @@ void main() {
         return base(path, q);
       };
       await loginToHome(tester, env);
-      await openTile(tester, 'Dashboard');
+      await openTile(tester, 'Tổng quan');
       expect(find.text('120,5 ha'), findsOneWidget);
       expect(find.text('723,0 tấn'), findsOneWidget);
       expect(find.text('650,5 tấn'), findsOneWidget);

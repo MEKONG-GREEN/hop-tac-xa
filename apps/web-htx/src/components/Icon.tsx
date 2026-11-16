@@ -26,7 +26,9 @@ export type IconName =
   | "panelLeft"
   | "lock"
   | "unlock"
-  | "mail";
+  | "mail"
+  | "more"
+  | "filter";
 
 const PATHS: Record<IconName, string> = {
   dashboard: "M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z",
@@ -68,6 +70,8 @@ const PATHS: Record<IconName, string> = {
   users: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8",
   zap: "M13 2 3 14h9l-1 8 10-12h-9z",
   file: "M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M8 13h8M8 17h5",
+  more: "M5 12h.01M12 12h.01M19 12h.01",
+  filter: "M3 5h18l-7 8v6l-4 2v-8z",
   chevronDown: "M6 9l6 6 6-6",
   chevronRight: "M9 6l6 6-6 6",
   chevronLeft: "M15 6l-6 6 6 6",

@@ -103,7 +103,7 @@ class _PlotMapScreenState extends ConsumerState<PlotMapScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Lô ruộng & Ranh giới GPS'),
+        title: const Text('Bản đồ lô ruộng'),
         actions: [
           IconButton(
             tooltip: 'Bản đồ ngoại tuyến',
