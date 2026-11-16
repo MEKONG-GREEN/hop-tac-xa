@@ -16,7 +16,7 @@ import { menuAllows } from "@/shell/menu";
 import { purgeLegacyIdentifier, rememberIdentifier, useRememberedIdentifier } from "@/lib/rememberLogin";
 
 function LoginInner() {
-  const { status, principal, kn, login, loginWithPassword, loginAsPersona } = useAuth();
+  const { status, principal, kn, dataConsent, login, loginWithPassword, loginAsPersona } = useAuth();
   const router = useRouter();
   const params = useSearchParams();
   const returnTo = safeReturnTo(params.get("returnTo"));
@@ -31,6 +31,11 @@ function LoginInner() {
 
   useEffect(() => {
     if (status !== "authenticated" || !principal) return;
+    // AH-23: màn Đồng ý thu thập dữ liệu đứng trước mọi bước vào ứng dụng.
+    if (dataConsent.status === "required" || dataConsent.status === "error") {
+      router.replace(`/dong-y-thu-thap?returnTo=${encodeURIComponent(returnTo)}`);
+      return;
+    }
     if (kn.status === "choose") {
       router.replace(`/chon-vai-tro?returnTo=${encodeURIComponent(returnTo)}`);
       return;
@@ -42,7 +47,7 @@ function LoginInner() {
     const item = findNavItem(returnTo);
     const allowed = returnTo !== "/" && (!item || canSee(item, principal));
     router.replace(allowed ? returnTo : homeFor(principal));
-  }, [status, principal, kn, returnTo, router]);
+  }, [status, principal, kn, dataConsent, returnTo, router]);
 
   const submit = async (v: { identifier: string; password: string; remember: boolean }) => {
     setBusy(true);

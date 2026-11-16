@@ -82,6 +82,9 @@ var ParamRegistry = []ParamSpec{
 	{Key: port.ParamWaterwayGapReport, Name: "Ngưỡng báo khoảng hở mạng đường thủy", Unit: "m", Kind: ParamKindDecimal, Min: "0", Max: "100000"},
 	{Key: port.ParamHaversineFactor, Name: "Hệ số hiệu chỉnh Haversine → cự ly thực tế", Unit: "lần", Kind: ParamKindDecimal, Min: "1", Max: "3", Dimensional: true},
 	{Key: port.ParamActivationGrantLifespan, Name: "Hạn liên kết/QR kích hoạt tài khoản nông dân", Unit: "giờ", Kind: ParamKindDecimal, Min: "1", Max: "720"},
+	// AH-23 / KH-24 (REQ-011): đồng ý thu thập ảnh GPS và dữ liệu sản xuất — pf/accounts.
+	{Key: port.ParamAccountsDataConsentVersion, Name: "Mã phiên bản nội dung Đồng ý thu thập dữ liệu", Kind: ParamKindText},
+	{Key: port.ParamAccountsDataConsentTextPrefix, Name: "Nội dung Đồng ý thu thập dữ liệu", Kind: ParamKindText, Dimensional: true},
 	// G3 pf/mrv (seeddata/params.json) — hệ số CO2 TẠM, chờ khách ký phương pháp (C-1).
 	{Key: "mrv.co2.open_burning_kg_per_t", Name: "Hệ số phát thải đốt rơm lộ thiên (tạm, chờ ký phương pháp)", Unit: "kgCO2e/t", Kind: ParamKindDecimal, Min: "0", Max: "10000"},
 	{Key: "mrv.co2.transport_road_kg_per_tkm", Name: "Hệ số phát thải vận chuyển đường bộ (tạm)", Unit: "kgCO2e/t·km", Kind: ParamKindDecimal, Min: "0", Max: "10"},

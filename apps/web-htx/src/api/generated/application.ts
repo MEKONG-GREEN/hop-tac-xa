@@ -257,6 +257,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/data-consent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * AH-23 / REQ-011: người gọi có phải đồng ý thu thập ảnh GPS và dữ liệu sản xuất không (tài khoản HTX; Admin luôn required=false). Nội dung và phiên bản lấy từ tham số masterdata accounts.data_consent.*
+         * @description Các route nhận ảnh hoặc GPS (POST /v1/files, /v1/sync/push, /v1/cropcycle/seasons, /v1/cropcycle/farm-logs, /v1/plots và route con ghi) trả 403 accounts.data_consent_required cho tài khoản HTX chưa đồng ý phiên bản hiện hành; app mở lại màn Đồng ý khi gặp mã này.
+         */
+        get: operations["accountsDataConsentStatus"];
+        put?: never;
+        /** AH-23 / REQ-011: ghi bằng chứng đồng ý phiên bản nội dung hiện hành (thời điểm theo giờ máy chủ); đã đồng ý rồi thì trả bản đã ghi */
+        post: operations["accountsRecordDataConsent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/orgs": {
         parameters: {
             query?: never;
@@ -24579,6 +24600,26 @@ export interface components {
             reason: string;
             base_version: number;
         };
+        DataConsentStatus: {
+            /** @description true: phải hiện màn Đồng ý trước khi vào ứng dụng */
+            required: boolean;
+            /** @description Mã phiên bản nội dung hiện hành (null khi tài khoản không thuộc diện phải đồng ý) */
+            version: string | null;
+            /** @description Nội dung thông báo (chỉ có khi required) */
+            text: string | null;
+            /**
+             * Format: date-time
+             * @description Thời điểm đồng ý phiên bản hiện hành (giờ máy chủ), có khi required=false và đã đồng ý
+             */
+            consented_at: string | null;
+        };
+        DataConsentRecord: {
+            /** Format: uuid */
+            id: string;
+            version: string;
+            /** Format: date-time */
+            consented_at: string;
+        };
         KNMachineProfile: {
             /** Format: uuid */
             cooperative_ref: string;
@@ -27617,6 +27658,75 @@ export interface operations {
             409: components["responses"]["Problem"];
             /** @description accounts.department_required */
             422: components["responses"]["Problem"];
+        };
+    };
+    accountsDataConsentStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Trạng thái đồng ý */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataConsentStatus"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            /** @description accounts.data_consent_unconfigured */
+            503: components["responses"]["Problem"];
+        };
+    };
+    accountsRecordDataConsent: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Mã phiên bản nội dung người dùng đã đọc (lấy từ GET) */
+                    version: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Đã đồng ý phiên bản này trước đó (hoặc phát lại cùng khóa) — bản đã ghi, không ghi dòng mới */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataConsentRecord"];
+                };
+            };
+            /** @description Đã ghi bằng chứng đồng ý */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataConsentRecord"];
+                };
+            };
+            /** @description forbidden (không phải tài khoản HTX) */
+            403: components["responses"]["Problem"];
+            /** @description accounts.data_consent_version_stale */
+            409: components["responses"]["Problem"];
+            /** @description validation_failed (version sai dạng) | idempotency_key_reused */
+            422: components["responses"]["Problem"];
+            /** @description accounts.data_consent_unconfigured */
+            503: components["responses"]["Problem"];
         };
     };
     listOrgs: {

@@ -59,6 +59,51 @@ paths:
         "404": {description: accounts.assignment_not_found, $ref: "#/components/responses/Problem"}
         "409": {description: accounts.department_not_open, $ref: "#/components/responses/Problem"}
         "422": {description: accounts.department_required, $ref: "#/components/responses/Problem"}
+# @ag-order: 14
+  /v1/me/data-consent:
+    get:
+      summary: "AH-23 / REQ-011: người gọi có phải đồng ý thu thập ảnh GPS và dữ liệu sản xuất không (tài khoản HTX; Admin luôn required=false). Nội dung và phiên bản lấy từ tham số masterdata accounts.data_consent.*"
+      description: "Các route nhận ảnh hoặc GPS (POST /v1/files, /v1/sync/push, /v1/cropcycle/seasons, /v1/cropcycle/farm-logs, /v1/plots và route con ghi) trả 403 accounts.data_consent_required cho tài khoản HTX chưa đồng ý phiên bản hiện hành; app mở lại màn Đồng ý khi gặp mã này."
+      operationId: accountsDataConsentStatus
+      tags: [accounts]
+      responses:
+        "200":
+          description: Trạng thái đồng ý
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DataConsentStatus"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "503": {description: accounts.data_consent_unconfigured, $ref: "#/components/responses/Problem"}
+    post:
+      summary: "AH-23 / REQ-011: ghi bằng chứng đồng ý phiên bản nội dung hiện hành (thời điểm theo giờ máy chủ); đã đồng ý rồi thì trả bản đã ghi"
+      operationId: accountsRecordDataConsent
+      tags: [accounts]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                version: {type: string, description: "Mã phiên bản nội dung người dùng đã đọc (lấy từ GET)"}
+      responses:
+        "200":
+          description: Đã đồng ý phiên bản này trước đó (hoặc phát lại cùng khóa) — bản đã ghi, không ghi dòng mới
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DataConsentRecord"}
+        "201":
+          description: Đã ghi bằng chứng đồng ý
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DataConsentRecord"}
+        "403": {description: "forbidden (không phải tài khoản HTX)", $ref: "#/components/responses/Problem"}
+        "409": {description: accounts.data_consent_version_stale, $ref: "#/components/responses/Problem"}
+        "422": {description: "validation_failed (version sai dạng) | idempotency_key_reused", $ref: "#/components/responses/Problem"}
+        "503": {description: accounts.data_consent_unconfigured, $ref: "#/components/responses/Problem"}
 # @ag-order: 16
   /v1/me/delegations:
     get:
@@ -589,3 +634,20 @@ components:
         replayed: {type: boolean}
         activation: {oneOf: [{$ref: "#/components/schemas/FarmerActivation"}, {type: "null"}]}
         activation_error: {type: [string, "null"], description: "Mã lỗi khi chưa phát được liên kết (vd accounts.activation_link_unavailable)"}
+# @ag-order: 30200
+    DataConsentStatus:
+      type: object
+      required: [required, version, text, consented_at]
+      properties:
+        required: {type: boolean, description: "true: phải hiện màn Đồng ý trước khi vào ứng dụng"}
+        version: {type: [string, "null"], description: "Mã phiên bản nội dung hiện hành (null khi tài khoản không thuộc diện phải đồng ý)"}
+        text: {type: [string, "null"], description: "Nội dung thông báo (chỉ có khi required)"}
+        consented_at: {type: [string, "null"], format: date-time, description: "Thời điểm đồng ý phiên bản hiện hành (giờ máy chủ), có khi required=false và đã đồng ý"}
+# @ag-order: 30201
+    DataConsentRecord:
+      type: object
+      required: [id, version, consented_at]
+      properties:
+        id: {type: string, format: uuid}
+        version: {type: string}
+        consented_at: {type: string, format: date-time}

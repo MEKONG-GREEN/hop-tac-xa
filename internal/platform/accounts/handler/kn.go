@@ -83,6 +83,10 @@ func isWrite(m string) bool {
 // Chế độ hỗ trợ (FN-AD-04.07): thao tác ghi bắt buộc X-AG-Reason và ghi nhật ký trước + sau khi chạy.
 func (h Handler) Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// AH-23: chặn route nhận ảnh/GPS khi chưa đồng ý thu thập dữ liệu — trước nhánh KN, áp cho mọi request.
+		if !h.dataConsentGuard(c) {
+			return
+		}
 		raw := strings.TrimSpace(c.GetHeader(authz.ContextHeader))
 		if raw == "" {
 			c.Next()

@@ -111,7 +111,8 @@ func New(db tenant.Beginner, clk clock.Clock, d Deps) *Module {
 func (m *Module) RegisterApp(rg *gin.RouterGroup) {
 	h := handler.Handler{Svc: m.svc}
 	h.RegisterApp(rg)
-	h.RegisterKNApp(rg) // KN v7.7: /v1/me/contexts, /v1/me/context
+	h.RegisterKNApp(rg)          // KN v7.7: /v1/me/contexts, /v1/me/context
+	h.RegisterDataConsentApp(rg) // AH-23: /v1/me/data-consent
 }
 
 // FarmerHouseholds cho module khác: nông hộ liên kết với tài khoản nông dân

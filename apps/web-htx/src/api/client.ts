@@ -22,12 +22,18 @@ export interface ApiClientOptions {
   fetch?: (input: Request) => Promise<Response>;
   /** Ngữ cảnh phiên KN v7.7 (P1): gửi qua header X-AG-Context khi đã chọn vai trò + phòng ban. */
   getContextId?: () => string | null;
+  /** Gọi khi server trả 403 accounts.data_consent_required (AH-23): mở lại màn Đồng ý thu thập dữ liệu. */
+  onDataConsentRequired?: () => void;
 }
+
+/** Mã problem của máy chủ khi tài khoản HTX chưa đồng ý mà gửi ảnh/GPS (REQ-011). */
+export const DATA_CONSENT_REQUIRED_CODE = "accounts.data_consent_required";
 
 export function authMiddleware(
   getAccessToken: ApiClientOptions["getAccessToken"],
   onUnauthenticated?: () => void,
   getContextId?: () => string | null,
+  onDataConsentRequired?: () => void,
 ): Middleware {
   return {
     async onRequest({ request }) {
@@ -46,6 +52,15 @@ export function authMiddleware(
         const sent = request.headers.get("Authorization");
         if (sent === (token ? `Bearer ${token}` : null)) onUnauthenticated?.();
       }
+      if (response.status === 403 && onDataConsentRequired) {
+        // Đọc bản sao: thân phản hồi gốc vẫn nguyên cho người gọi.
+        const code = await response
+          .clone()
+          .json()
+          .then((b: { code?: unknown }) => b?.code)
+          .catch(() => undefined);
+        if (code === DATA_CONSENT_REQUIRED_CODE) onDataConsentRequired();
+      }
       return response;
     },
   };
@@ -58,7 +73,7 @@ function build<P extends object>(opts: ApiClientOptions): Client<P> {
   });
   // Bắt phiên thao tác (P0-WEB-IDEMKEY) phải đứng đầu: chạy đồng bộ trước await của authMiddleware.
   client.use(idempotencyScopeMiddleware());
-  client.use(authMiddleware(opts.getAccessToken, opts.onUnauthenticated, opts.getContextId));
+  client.use(authMiddleware(opts.getAccessToken, opts.onUnauthenticated, opts.getContextId, opts.onDataConsentRequired));
   client.use(idempotencyMiddleware());
   return client;
 }

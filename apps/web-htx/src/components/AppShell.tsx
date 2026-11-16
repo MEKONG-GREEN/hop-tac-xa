@@ -20,9 +20,9 @@ import { NotificationBell } from "./NotificationBell";
 import { Loading } from "./ui";
 import { SupportBanner } from "@/kn/SupportBanner";
 
-/** Trang không có khung (đăng nhập, chọn vai trò & phòng ban). */
+/** Trang không có khung (đăng nhập, chọn vai trò & phòng ban, đồng ý thu thập dữ liệu). */
 export function isBareRoute(pathname: string): boolean {
-  return pathname.startsWith("/login") || pathname.startsWith("/chon-vai-tro");
+  return pathname.startsWith("/login") || pathname.startsWith("/chon-vai-tro") || pathname.startsWith("/dong-y-thu-thap");
 }
 
 /** Menu đang dùng: menu cấu hình KN (P2) khi có ngữ cảnh, ngược lại menu cũ theo vai realm (nav.ts). */
@@ -120,7 +120,7 @@ export function AppShell({ children, SidebarComponent = Sidebar }: {
   children: ReactNode;
   SidebarComponent?: ComponentType<ComponentProps<typeof Sidebar>>;
 }) {
-  const { status, principal, logout, scopeWarning, kn, selectContext, changePassword, api } = useAuth();
+  const { status, principal, logout, scopeWarning, kn, selectContext, changePassword, api, dataConsent } = useAuth();
   const pathname = usePathname() ?? "/";
   const router = useRouter();
   const [navOpen, setNavOpen] = useState(false);
@@ -142,17 +142,19 @@ export function AppShell({ children, SidebarComponent = Sidebar }: {
     if (status === "anonymous") {
       router.replace(`/login?returnTo=${encodeURIComponent(pathname)}`);
     } else if (status === "authenticated") {
-      if (kn.status === "choose") router.replace(`/chon-vai-tro?returnTo=${encodeURIComponent(pathname)}`);
+      // AH-23: chưa đồng ý thu thập dữ liệu (hoặc chưa xác định được) → màn Đồng ý, trước cả bước chọn vai trò.
+      if (dataConsent.status === "required" || dataConsent.status === "error") router.replace(`/dong-y-thu-thap?returnTo=${encodeURIComponent(pathname)}`);
+      else if (kn.status === "choose") router.replace(`/chon-vai-tro?returnTo=${encodeURIComponent(pathname)}`);
       else if (kn.status === "active" && kn.context && pathname === "/") router.replace(kn.context.default_route);
       // Cục KTHT vào "/" → cổng CGH (BRD CGH FN-11 B1).
       else if (kn.status === "legacy" && pathname === "/" && !allowed) router.replace(homeFor(principal, disabled));
     }
-  }, [status, bare, pathname, router, allowed, principal, kn.status, kn.context, disabled]);
+  }, [status, bare, pathname, router, allowed, principal, kn.status, kn.context, disabled, dataConsent.status]);
 
   const note = noteState?.path === pathname ? noteState.text : null;
 
   if (bare) return <>{children}</>;
-  if (status !== "authenticated" || !principal || kn.status === "choose") {
+  if (status !== "authenticated" || !principal || kn.status === "choose" || dataConsent.status !== "not_required") {
     return (
       <main style={{ display: "grid", placeItems: "center", minHeight: "100vh" }}>
         <Loading label="Đang kiểm tra phiên đăng nhập…" />
