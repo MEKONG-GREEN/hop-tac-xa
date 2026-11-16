@@ -151,6 +151,7 @@ export type CropSOPTemplate = S["CropSOPTemplate"];
 export type CropSOPVersion = S["CropSOPVersion"];
 export type CropSOP = S["CropSOP"];
 export type AdminCropSOP = AS["CropSOP"];
+export type CropSOPImportRowError = AS["CropSOPImportRowError"];
 export type CropVarietyBinding = S["CropVarietyBinding"];
 export type CropSeason = S["CropSeason"];
 export type CropSeasonDetail = S["CropSeasonDetail"];

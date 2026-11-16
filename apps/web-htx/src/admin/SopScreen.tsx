@@ -48,6 +48,7 @@ import {
 import { formatDateTime } from "@/lib/format";
 import { toApiProblem, useAsync } from "@/lib/useAsync";
 import { ConfirmDialog } from "./CropCatalogScreen";
+import { SopImportDialog } from "./SopImport";
 
 const TPL_STATUS: Record<string, { text: string; cls: string }> = {
   draft: { text: "Nháp", cls: "c-warn" },
@@ -903,6 +904,7 @@ export function SopScreen(): ReactNode {
   const [notice, setNotice] = useState<string | null>(null);
   const [cropFilter, setCropFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [importOpen, setImportOpen] = useState(false);
   const list = useAsync(() => collectPages((cursor) => unwrap(adminApi.GET("/v1/cropcycle/sops", { params: { query: { cursor, limit: 200 } } })), 500), [adminApi, version]);
   const cropNames = useCatalogNames("crop");
   const varietyNames = useCatalogNames("rice_variety");
@@ -929,13 +931,28 @@ export function SopScreen(): ReactNode {
         subtitle="Quy trình kỹ thuật chuẩn theo loại cây, giống — soạn nháp, phát hành một bước; bản đã phát hành không sửa, sửa bằng phiên bản mới"
         actions={
           canAuthor && view.kind === "library" ? (
-            <button type="button" className="btn btn-p btn-sm" onClick={() => { setNotice(null); setView({ kind: "edit", ref: null }); }}>
-              <Icon name="sop" size={15} />
-              Soạn SOP
-            </button>
+            <>
+              <button type="button" className="btn btn-o btn-sm" onClick={() => setImportOpen(true)}>
+                <Icon name="upload" size={15} />
+                Nhập từ Excel
+              </button>
+              <button type="button" className="btn btn-p btn-sm" onClick={() => { setNotice(null); setView({ kind: "edit", ref: null }); }}>
+                <Icon name="sop" size={15} />
+                Soạn SOP
+              </button>
+            </>
           ) : null
         }
       />
+      {importOpen ? (
+        <SopImportDialog
+          onClose={() => setImportOpen(false)}
+          onImported={(ref) => {
+            setImportOpen(false);
+            changed(ref, "Đã nhập SOP Nháp từ Excel — kiểm tra rồi phát hành.");
+          }}
+        />
+      ) : null}
       <MfaNotice />
       {notice ? <p role="status">{notice}</p> : null}
       {view.kind === "edit" ? (

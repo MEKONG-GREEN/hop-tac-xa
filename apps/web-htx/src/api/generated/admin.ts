@@ -3336,6 +3336,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/cropcycle/sop-imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Nhập một SOP Nháp từ tệp Excel mẫu (AH-38, FN-01.4); thân request là chính tệp .xlsx
+         * @description Vai soạn SOP (sop_admin, platform_admin). Mỗi tệp một SOP; kết quả luôn là SOP Nháp phiên bản 1, phát hành như SOP soạn tay.
+         *     Tối đa 2 MB, 30 giai đoạn, 100 việc. Dùng đúng bộ luật kiểm của soạn SOP; đọc và kiểm xong cả tệp rồi mới ghi.
+         *     Tệp sai định dạng (không phải .xlsx, thiếu sheet hoặc cột, ô công thức, vượt giới hạn) → 422 cropcycle.sop_import_invalid
+         *     với detail riêng, không có danh sách dòng. Tệp có lỗi theo dòng → 422 cropcycle.sop_import_rows, không tạo SOP, trường mở rộng
+         *     rows liệt kê đủ mọi lỗi (sheet, row = số dòng trong tệp, column, reason). Tên SOP trùng → lỗi ở ô Tên SOP.
+         */
+        post: operations["importCropSOP"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cropcycle/sop-imports/template.xlsx": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Tải tệp Excel mẫu nhập SOP (AH-38) — có cột Loại cửa sổ, Từ, Đến, danh sách chọn và sheet hướng dẫn */
+        get: operations["cropSOPImportTemplate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/cropcycle/sop-versions/{id}/publish": {
         parameters: {
             query?: never;
@@ -6284,6 +6325,15 @@ export interface components {
         };
         CropSOP: components["schemas"]["CropSOPTemplate"] & {
             versions: components["schemas"]["CropSOPVersion"][];
+        };
+        CropSOPImportRowError: {
+            /** @description Tên sheet của tệp */
+            sheet: string;
+            /** @description Số dòng trong tệp (dòng tiêu đề là 1) */
+            row: number;
+            /** @description Tên cột trong dòng tiêu đề */
+            column: string;
+            reason: string;
         };
         CropVarietyBinding: {
             variety_code: string;
@@ -13827,6 +13877,67 @@ export interface operations {
             };
             409: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
+        };
+    };
+    importCropSOP: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+            };
+        };
+        responses: {
+            /** @description Đã tạo SOP Nháp */
+            201: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CropSOP"];
+                };
+            };
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            /** @description cropcycle.sop_import_invalid (tệp sai mẫu) hoặc cropcycle.sop_import_rows (có dòng lỗi, kèm rows) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"] & {
+                        rows?: components["schemas"]["CropSOPImportRowError"][];
+                    };
+                };
+            };
+        };
+    };
+    cropSOPImportTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tệp mẫu do máy chủ sinh (cùng đặc tả cột với bộ đọc) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                };
+            };
+            403: components["responses"]["Problem"];
         };
     };
     publishCropSOP: {

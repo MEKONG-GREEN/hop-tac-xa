@@ -15,6 +15,8 @@ export interface ProblemDetails {
   instance?: string;
   trace_id?: string;
   errors?: ProblemFieldError[];
+  /** Lỗi theo dòng của tệp nhập (vd cropcycle.sop_import_rows: sheet, row, column, reason). */
+  rows?: Record<string, unknown>[];
   /** 429: số giây phải chờ (thân `retry_after_s` hoặc header Retry-After). */
   retry_after_s?: number;
 }
@@ -449,6 +451,8 @@ export const PROBLEM_MESSAGES: Readonly<Record<string, string>> = {
   "cropcycle.sop_not_deletable": "SOP đã phát hành không xóa được — chỉ ngừng áp dụng được.",
   "cropcycle.sop_state": "Trạng thái quy trình không cho phép thao tác này (bản đã phát hành không sửa được — hãy tạo phiên bản mới).",
   "cropcycle.sop_not_published": "Quy trình chưa được ban hành — không áp dụng vào vụ được.",
+  "cropcycle.sop_import_invalid": "Tệp nhập SOP không đúng mẫu — hãy tải file mẫu và thử lại.",
+  "cropcycle.sop_import_rows": "Tệp có dòng lỗi — chưa tạo SOP. Sửa các dòng bên dưới rồi nhập lại.",
   "cropcycle.no_sop_for_variety": "Chưa có quy trình SOP chuẩn đã ban hành cho giống lúa này — chọn quy trình khi mở vụ.",
   "cropcycle.binding_invalid": "Chỉ gắn giống với mẫu SOP hệ thống đã ban hành, chưa ngừng dùng.",
   "cropcycle.season_not_found": "Không tìm thấy vụ trong phạm vi được phân quyền.",
@@ -584,7 +588,7 @@ export function parseRetryAfter(value: string | null | undefined, now: number = 
 }
 
 /** Thông báo cho người dùng: ưu tiên bảng mã; mã lạ thì dùng detail/title của server. */
-const PREFER_DETAIL: ReadonlySet<string> = new Set(["party.out_of_scope", "party.import_invalid", "hrm.report_blocked", "hrm.promotion_export_blocked", "hrm.nlth_quota_exceeded", "hrm.decision_warnings", "hrm.decision_stale", "hrm.decision_cancel_order", "hrm.promotion_conflict", "masterdata.crop_type_has_visible_varieties"]);
+const PREFER_DETAIL: ReadonlySet<string> = new Set(["party.out_of_scope", "party.import_invalid", "hrm.report_blocked", "hrm.promotion_export_blocked", "hrm.nlth_quota_exceeded", "hrm.decision_warnings", "hrm.decision_stale", "hrm.decision_cancel_order", "hrm.promotion_conflict", "masterdata.crop_type_has_visible_varieties", "cropcycle.sop_import_invalid"]);
 
 export function problemMessage(p: Pick<ProblemDetails, "code" | "status" | "detail" | "title">): string {
   // Thông báo nghiệp vụ của 422 (vd "Vui lòng nhập đầy đủ Tên tuyến và Phân loại." — docs/errors.md) nằm ở `detail`.
@@ -630,6 +634,7 @@ export function toProblem(body: unknown, response?: Pick<Response, "status" | "h
           reason: typeof e.reason === "string" ? e.reason : undefined,
         }))
       : undefined;
+    const rows = Array.isArray(body.rows) ? body.rows.filter(isRecord) : undefined;
     return {
       type: typeof body.type === "string" ? body.type : `https://errors.agrigreen.vn/${body.code}`,
       title: typeof body.title === "string" ? body.title : "",
@@ -639,6 +644,7 @@ export function toProblem(body: unknown, response?: Pick<Response, "status" | "h
       instance: typeof body.instance === "string" ? body.instance : undefined,
       trace_id: typeof body.trace_id === "string" ? body.trace_id : headerTrace,
       errors,
+      ...(rows ? { rows } : {}),
       retry_after_s: retryAfter,
     };
   }

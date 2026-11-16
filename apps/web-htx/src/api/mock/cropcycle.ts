@@ -1471,7 +1471,56 @@ function autoCode(): string {
   return `SOP-${uuidv7().slice(-8).toUpperCase()}`;
 }
 
+/** Ba dòng lỗi mẫu của tệp nhập SOP (AH-38): thiếu cột bắt buộc, Từ > Đến, loại cửa sổ sai. */
+const MOCK_SOP_IMPORT_ROWS = [
+  { sheet: "Giai đoạn", row: 3, column: "Tên giai đoạn", reason: "bắt buộc, tối đa 200 ký tự" },
+  { sheet: "Việc", row: 5, column: "Đến", reason: "Đến phải lớn hơn hoặc bằng Từ" },
+  { sheet: "Việc", row: 7, column: "Loại cửa sổ", reason: 'Loại cửa sổ "Hàng tuần" không hợp lệ — chọn Theo ngày, Mở, Theo giai đoạn, Không ngày' },
+];
+
 export const cropcycleAdminRoutes: Route[] = [
+  // AH-38: nhập SOP từ Excel. Giả lập không đọc được .xlsx nên theo quy ước: thân là tệp .xlsx (bắt đầu "PK") → thành công,
+  // tạo SOP Nháp minh hoạ; thân rỗng → 422 sop_import_invalid; thân khác → 422 sop_import_rows với ba dòng lỗi mẫu.
+  {
+    method: "GET",
+    pattern: /^\/v1\/cropcycle\/sop-imports\/template\.xlsx$/,
+    handler: ({ persona }) => {
+      const d = sopAdminDenied(persona, true);
+      if (d) return d;
+      // Giả lập: CSV UTF-8 (BOM) có tiêu đề sheet Việc, như tệp mẫu .xlsx thật.
+      const header = ["Giai đoạn", "Thứ tự", "Nội dung việc", "Loại việc", "Loại cửa sổ", "Mốc", "Từ", "Đến"];
+      return new Response(`﻿${header.join(",")}\r\n`, {
+        status: 200,
+        headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": 'attachment; filename="mau-nhap-sop-gia-lap.csv"', "Cache-Control": "no-store" },
+      });
+    },
+  },
+  {
+    method: "POST",
+    pattern: /^\/v1\/cropcycle\/sop-imports$/,
+    handler: ({ body, persona }) => {
+      ensure();
+      const d = sopAdminDenied(persona, true);
+      if (d) return d;
+      if (isZip(body)) {
+        const n = SOPS.filter((x) => x.t.name.startsWith("SOP nhập từ Excel (giả lập)")).length + 1;
+        const c = content(
+          [["Chuẩn bị", -3, 1], ["Chăm sóc", 2, 100]],
+          [
+            [0, "Làm đất, san phẳng mặt ruộng", "lam_dat", dr(-3, -1)],
+            [1, "Bón thúc lần 1", "bon_phan", dr(10, 13), { materials: [UREA] }],
+            [1, "Thu hoạch", "thu_hoach", dr(95, 100)],
+          ],
+        );
+        const rec = newTemplate(persona, { code: autoCode(), name: `SOP nhập từ Excel (giả lập) ${n}`, crop: "LUA", variety: null, anchor: "Ngày xuống giống", scope: "system", coop: null, standard: null, description: null, content: c, note: "Nhập từ Excel", source: null });
+        return json(sopOut(rec, false), 201);
+      }
+      if (body === undefined || body === null || body === "" || (body instanceof Uint8Array && body.length === 0)) {
+        return problem(422, "cropcycle.sop_import_invalid", "Tệp nhập SOP không đúng mẫu", { detail: "Tệp không đúng mẫu quy định, vui lòng tải mẫu chuẩn và thử lại" });
+      }
+      return problem(422, "cropcycle.sop_import_rows", "Tệp có dòng lỗi — chưa tạo SOP", { detail: `${MOCK_SOP_IMPORT_ROWS.length} lỗi — sửa file rồi nhập lại`, rows: MOCK_SOP_IMPORT_ROWS });
+    },
+  },
   {
     method: "GET",
     pattern: /^\/v1\/cropcycle\/sops$/,

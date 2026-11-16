@@ -20,6 +20,7 @@ import (
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/ids"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/mass"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/problem"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/tabular"
 )
 
 // Handler gói Service cho HTTP.
@@ -73,6 +74,10 @@ func (h Handler) RegisterAdmin(rg *gin.RouterGroup) {
 	rg.GET("/cropcycle/sop-versions/:id", h.getVersion(true))
 	rg.POST("/cropcycle/sop-versions/:id/steps", h.updateDraft)
 	rg.POST("/cropcycle/sop-versions/:id/publish", h.publish)
+	// AH-38: nhập SOP từ Excel; đặt dưới /sop-imports để không đụng route tham số /sops/:ref.
+	httpx.AllowBody(rg, http.MethodPost, "/cropcycle/sop-imports", app.MaxSOPImportBytes)
+	rg.POST("/cropcycle/sop-imports", h.importSOP)
+	rg.GET("/cropcycle/sop-imports/template.xlsx", h.sopImportTemplate)
 	rg.POST("/cropcycle/variety-bindings", h.bind)
 	rg.POST("/cropcycle/projections/rebuild", h.rebuild)
 	rg.GET("/cropcycle/stats/cooperatives/:ref", h.coopStats)
@@ -401,6 +406,29 @@ func (h Handler) updateDraft(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, sopOut(v))
+}
+
+// importSOP: thân request là chính tệp .xlsx; kết quả là SOP Nháp (AH-38).
+func (h Handler) importSOP(c *gin.Context) {
+	v, err := h.Svc.ImportSOP(c.Request.Context(), c.Request.Body, idem(c))
+	if err != nil {
+		httpx.Fail(c, err)
+		return
+	}
+	c.Header("Location", "/v1/cropcycle/sops/"+v.Template.Ref.String())
+	c.JSON(http.StatusCreated, sopOut(v))
+}
+
+// sopImportTemplate: tệp .xlsx mẫu do máy chủ sinh (AH-38).
+func (h Handler) sopImportTemplate(c *gin.Context) {
+	data, err := h.Svc.SOPImportTemplate(c.Request.Context())
+	if err != nil {
+		httpx.Fail(c, err)
+		return
+	}
+	c.Header("Content-Disposition", `attachment; filename="mau-nhap-sop.xlsx"`)
+	c.Header("Cache-Control", "no-store")
+	c.Data(http.StatusOK, tabular.ContentTypeXLSX, data)
 }
 
 type sopInfoReq struct {

@@ -17,10 +17,20 @@ const (
 	minUnzipLimit = 16 << 20
 )
 
-// readXLSX đọc trang tính đầu tiên. Giá trị lấy dạng thô (không áp định dạng số)
-// để số không bị làm tròn theo định dạng hiển thị; ô định dạng ngày được đổi
-// sang YYYY-MM-DD. Ô có công thức làm cả tệp bị từ chối.
-func readXLSX(data []byte, lim Limits) (*Table, error) {
+// MissingSheetError: tệp .xlsx không có trang tính tên Name.
+type MissingSheetError struct{ Name string }
+
+func (e *MissingSheetError) Error() string {
+	return "tabular: tệp thiếu sheet " + strconv.Quote(e.Name)
+}
+
+// Message trả câu tiếng Việt cho người dùng.
+func (e *MissingSheetError) Message() string {
+	return "Tệp thiếu sheet \"" + e.Name + "\" — hãy tải mẫu chuẩn và thử lại"
+}
+
+// openXLSX mở tệp .xlsx trong bộ nhớ với giới hạn giải nén chống zip bomb.
+func openXLSX(data []byte) (*excelize.File, error) {
 	unzip := int64(len(data)) * unzipFactor
 	if unzip < minUnzipLimit {
 		unzip = minUnzipLimit
@@ -34,12 +44,71 @@ func readXLSX(data []byte, lim Limits) (*Table, error) {
 		}
 		return nil, ErrFormat
 	}
+	return f, nil
+}
+
+// readXLSX đọc trang tính đầu tiên. Giá trị lấy dạng thô (không áp định dạng số)
+// để số không bị làm tròn theo định dạng hiển thị; ô định dạng ngày được đổi
+// sang YYYY-MM-DD. Ô có công thức làm cả tệp bị từ chối.
+func readXLSX(data []byte, lim Limits) (*Table, error) {
+	f, err := openXLSX(data)
+	if err != nil {
+		return nil, err
+	}
 	defer func() { _ = f.Close() }()
 	sheets := f.GetSheetList()
 	if len(sheets) == 0 {
 		return nil, ErrEmpty
 	}
-	sheet := sheets[0]
+	return readSheet(f, sheets[0], lim)
+}
+
+// ReadXLSXSheets đọc các trang tính theo tên (so sau khi cắt khoảng trắng) của một tệp .xlsx,
+// với cùng các kiểm an toàn của readXLSX. Thiếu trang tính → *MissingSheetError; trang tính
+// không có dòng tiêu đề → ErrEmpty. Không nhận CSV.
+func ReadXLSXSheets(data []byte, lim Limits, names ...string) (map[string]*Table, error) {
+	lim = lim.withDefaults()
+	if int64(len(data)) > lim.MaxBytes {
+		return nil, ErrTooLarge
+	}
+	switch Detect(data) {
+	case FormatXLSX:
+	case "xls":
+		return nil, ErrLegacyExcel
+	default:
+		return nil, ErrFormat
+	}
+	f, err := openXLSX(data)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	actual := map[string]string{}
+	for _, n := range f.GetSheetList() {
+		if _, dup := actual[strings.TrimSpace(n)]; !dup {
+			actual[strings.TrimSpace(n)] = n
+		}
+	}
+	out := make(map[string]*Table, len(names))
+	for _, name := range names {
+		real, ok := actual[strings.TrimSpace(name)]
+		if !ok {
+			return nil, &MissingSheetError{Name: name}
+		}
+		t, err := readSheet(f, real, lim)
+		if err != nil {
+			return nil, &SheetError{Sheet: name, Err: err}
+		}
+		t.Keys = make([]string, len(t.Header))
+		for i, h := range t.Header {
+			t.Keys[i] = NormalizeHeader(h)
+		}
+		out[name] = t
+	}
+	return out, nil
+}
+
+func readSheet(f *excelize.File, sheet string, lim Limits) (*Table, error) {
 	raw, err := f.GetRows(sheet, excelize.Options{RawCellValue: true})
 	if err != nil {
 		return nil, ErrFormat

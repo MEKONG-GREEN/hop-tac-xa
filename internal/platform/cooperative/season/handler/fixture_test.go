@@ -60,6 +60,7 @@ type fixture struct {
 	orgs     *fakeOrgs
 	params   *fakeParams
 	farmers  *fakeFarmers
+	catalogs *fakeCatalogs
 	tenant   uuid.UUID
 	mkg      uuid.UUID         // tenant MKG riêng (ADR-0020) — tenant phong bì van, tenant tài khoản mkg_sync
 	share    *porttest.Sharing // cấp quyền chia sẻ giả tenant → mkg (pf/party)
@@ -102,9 +103,10 @@ func newFixture(t *testing.T) *fixture {
 	}}
 	f.params = &fakeParams{vals: map[string]decimal.Decimal{}}
 	f.farmers = &fakeFarmers{links: map[uuid.UUID][]uuid.UUID{}}
+	f.catalogs = newFakeCatalogs()
 	f.db = shareddb.ForModule(pool, shareddb.Module("pf/cooperative"))
 	f.mod = seasonMod{svc: &app.Service{DB: f.db, Clock: f.clk, Scope: sc, Orgs: f.orgs, Plots: f.plots, Params: f.params,
-		Catalogs: newFakeCatalogs(), Farmers: f.farmers, Names: fakeNames{}}}
+		Catalogs: f.catalogs, Farmers: f.farmers, Names: fakeNames{}}}
 	f.share.Grant(f.tenant, f.mkg, partyport.ShareKinds...) // ADR-0020: tenant chương trình → tenant MKG, mọi loại
 	f.mod.UseSharing(f.share, f.share)
 	log := telemetry.NewLogger("test", io.Discard)
@@ -204,6 +206,12 @@ func (c caller) adminPostKey(path string, body any, idemKey string) resp {
 	c.f.t.Helper()
 	b, _ := json.Marshal(body)
 	return c.do(c.f.admin.URL, http.MethodPost, path, idemKey, "application/json", b)
+}
+
+// adminPostRaw gửi thân thô (vd tệp .xlsx) tới Admin API với Idempotency-Key cho trước ("" = không gửi header).
+func (c caller) adminPostRaw(path, ctype string, body []byte, idemKey string) resp {
+	c.f.t.Helper()
+	return c.do(c.f.admin.URL, http.MethodPost, path, idemKey, ctype, body)
 }
 
 func (c caller) adminGet(path string) resp {

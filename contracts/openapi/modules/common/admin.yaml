@@ -2756,6 +2756,58 @@ paths:
         "403": {$ref: "#/components/responses/Problem"}
         "409": {$ref: "#/components/responses/Problem"}
         "422": {$ref: "#/components/responses/Problem"}
+# @ag-order: 174
+  /v1/cropcycle/sop-imports:
+    post:
+      summary: Nhập một SOP Nháp từ tệp Excel mẫu (AH-38, FN-01.4); thân request là chính tệp .xlsx
+      description: |
+        Vai soạn SOP (sop_admin, platform_admin). Mỗi tệp một SOP; kết quả luôn là SOP Nháp phiên bản 1, phát hành như SOP soạn tay.
+        Tối đa 2 MB, 30 giai đoạn, 100 việc. Dùng đúng bộ luật kiểm của soạn SOP; đọc và kiểm xong cả tệp rồi mới ghi.
+        Tệp sai định dạng (không phải .xlsx, thiếu sheet hoặc cột, ô công thức, vượt giới hạn) → 422 cropcycle.sop_import_invalid
+        với detail riêng, không có danh sách dòng. Tệp có lỗi theo dòng → 422 cropcycle.sop_import_rows, không tạo SOP, trường mở rộng
+        rows liệt kê đủ mọi lỗi (sheet, row = số dòng trong tệp, column, reason). Tên SOP trùng → lỗi ở ô Tên SOP.
+      operationId: importCropSOP
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+            schema: {type: string, format: binary}
+      responses:
+        "201":
+          description: Đã tạo SOP Nháp
+          headers:
+            Location: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/CropSOP"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422":
+          description: cropcycle.sop_import_invalid (tệp sai mẫu) hoặc cropcycle.sop_import_rows (có dòng lỗi, kèm rows)
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      rows:
+                        type: array
+                        items: {$ref: "#/components/schemas/CropSOPImportRowError"}
+# @ag-order: 174
+  /v1/cropcycle/sop-imports/template.xlsx:
+    get:
+      summary: Tải tệp Excel mẫu nhập SOP (AH-38) — có cột Loại cửa sổ, Từ, Đến, danh sách chọn và sheet hướng dẫn
+      operationId: cropSOPImportTemplate
+      responses:
+        "200":
+          description: Tệp mẫu do máy chủ sinh (cùng đặc tả cột với bộ đọc)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: {type: string, format: binary}
+        "403": {$ref: "#/components/responses/Problem"}
 # @ag-order: 175
   /v1/cropcycle/variety-bindings:
     post:
@@ -4288,6 +4340,15 @@ components:
           required: [versions]
           properties:
             versions: {type: array, items: {$ref: "#/components/schemas/CropSOPVersion"}}
+# @ag-order: 352
+    CropSOPImportRowError:
+      type: object
+      required: [sheet, row, column, reason]
+      properties:
+        sheet: {type: string, description: Tên sheet của tệp}
+        row: {type: integer, description: Số dòng trong tệp (dòng tiêu đề là 1)}
+        column: {type: string, description: Tên cột trong dòng tiêu đề}
+        reason: {type: string}
 # @ag-order: 353
     CropVarietyBinding:
       type: object

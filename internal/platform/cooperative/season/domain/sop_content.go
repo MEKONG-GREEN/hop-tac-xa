@@ -82,17 +82,23 @@ func idx(prefix string, i int, rest string) string {
 }
 
 type contentCheck struct {
-	errs  FieldErrors
-	order *StepOrderError
+	errs   FieldErrors
+	orders []StepOrderError
 }
 
 func (k *contentCheck) add(field, reason string) { k.errs = append(k.errs, FieldError{field, reason}) }
 
 func (k *contentCheck) orderAt(i int, field string) {
-	if k.order == nil {
-		k.order = &StepOrderError{Index: i, Field: field}
-	}
+	k.orders = append(k.orders, StepOrderError{Index: i, Field: field})
 }
+
+// Lý do lỗi dùng chung: nơi khác (nhập Excel) đổi sang cách gọi của người dùng dựa vào các hằng này.
+const (
+	MsgActivityChoice   = "phải là lam_dat, gieo_sa, tuoi_nuoc, bon_phan, phun_thuoc, kiem_tra, thu_hoach, cat_tia hoặc khac"
+	MsgWindowKindNeeded = "bắt buộc: date_range, open, stage hoặc none"
+	MsgWindowKindChoice = "phải là date_range, open, stage hoặc none"
+	MsgAnchorChoice     = "bắt buộc: nxg, nth hoặc ntt"
+)
 
 func inRange(d int) bool { return d >= MinOffsetDay && d <= MaxOffsetDay }
 
@@ -105,11 +111,29 @@ func NormalizeContent(c Content) (Content, error) {
 	k := &contentCheck{}
 	out := Content{Stages: k.normalizeStages(c.Stages)}
 	out.Steps = k.normalizeSteps(c.Steps, out.Stages)
-	if k.order != nil {
-		return Content{}, *k.order
+	if len(k.orders) > 0 {
+		return Content{}, k.orders[0]
 	}
 	if len(k.errs) > 0 {
 		return Content{}, k.errs
+	}
+	computeLegacy(out)
+	return out, nil
+}
+
+// CheckContent chạy đúng bộ luật của NormalizeContent nhưng trả mọi lỗi một lần: lỗi thứ tự
+// (MsgStepOrder) đứng cùng lỗi theo trường. Không có lỗi thì trả nội dung đã chuẩn hóa.
+func CheckContent(c Content) (Content, FieldErrors) {
+	k := &contentCheck{}
+	out := Content{Stages: k.normalizeStages(c.Stages)}
+	out.Steps = k.normalizeSteps(c.Steps, out.Stages)
+	errs := make(FieldErrors, 0, len(k.orders)+len(k.errs))
+	for _, o := range k.orders {
+		errs = append(errs, FieldError{o.Field, MsgStepOrder})
+	}
+	errs = append(errs, k.errs...)
+	if len(errs) > 0 {
+		return Content{}, errs
 	}
 	computeLegacy(out)
 	return out, nil
@@ -197,7 +221,7 @@ func (k *contentCheck) normalizeSteps(in []Step, stages []Stage) []Step {
 		}
 		s.ActivityCode = strings.TrimSpace(s.ActivityCode)
 		if !KnownActivity(s.ActivityCode) {
-			k.add(f+"activity_code", "phải là lam_dat, gieo_sa, tuoi_nuoc, bon_phan, phun_thuoc, kiem_tra, thu_hoach, cat_tia hoặc khac")
+			k.add(f+"activity_code", MsgActivityChoice)
 		}
 		s.StageCode = strings.TrimSpace(s.StageCode)
 		if s.StageCode != "" && !ValidCode(s.StageCode) {
@@ -246,7 +270,7 @@ func (k *contentCheck) evidence(f string, in []string) []string {
 
 func (k *contentCheck) window(f string, in *Window, stages []Stage, stageSeq int, validStage bool) *Window {
 	if in == nil {
-		k.add(f+"window.kind", "bắt buộc: date_range, open, stage hoặc none")
+		k.add(f+"window.kind", MsgWindowKindNeeded)
 		return nil
 	}
 	w := *in
@@ -254,7 +278,7 @@ func (k *contentCheck) window(f string, in *Window, stages []Stage, stageSeq int
 	f += "window."
 	anchorOK := func() {
 		if w.Anchor != AnchorNXG && w.Anchor != AnchorNTH && w.Anchor != AnchorNTT {
-			k.add(f+"anchor", "bắt buộc: nxg, nth hoặc ntt")
+			k.add(f+"anchor", MsgAnchorChoice)
 		}
 	}
 	fromOK := func() {
@@ -300,7 +324,7 @@ func (k *contentCheck) window(f string, in *Window, stages []Stage, stageSeq int
 	case WindowNone:
 		absent("anchor", "from", "to")
 	default:
-		k.add(f+"kind", "phải là date_range, open, stage hoặc none")
+		k.add(f+"kind", MsgWindowKindChoice)
 	}
 	return &w
 }
