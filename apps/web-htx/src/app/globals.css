@@ -559,6 +559,11 @@ fieldset.plain legend { font-size: 12.5px; font-weight: 600; color: var(--ink2);
 .login-error b { display: block; }
 .login-help { text-align: center; color: var(--slate-500); font-size: 13px; }
 .login-help a { color: var(--primary-ink); }
+.login-help .link-btn { background: none; border: 0; padding: 0; font: inherit; color: var(--primary-ink); text-decoration: underline; cursor: pointer; }
+.support-contact { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0 0 12px; font-size: 14px; }
+.support-contact dt { color: var(--slate-500); }
+.support-contact dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.support-contact a { color: var(--primary-ink); }
 .login-note { font-size: 12.5px; color: var(--slate-600); background: var(--slate-50); border: 1px solid var(--slate-200); border-radius: 10px; padding: 10px 12px; }
 .persona-card { background: rgba(255,255,255,.96); color: var(--slate-900); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
 .persona-card h2 { font-size: 15px; }

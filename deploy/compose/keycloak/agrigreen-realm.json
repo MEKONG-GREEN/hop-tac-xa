@@ -219,7 +219,7 @@
       ]
     },
     {
-      "alias": "agrigreen direct grant", "description": "Chỉ-dev seed: password + OTP đã cấu hình; AMR chỉ từ execution thành công",
+      "alias": "agrigreen direct grant", "description": "Direct grant có OTP: mật khẩu, rồi OTP khi người dùng đã cấu hình; AMR chỉ từ execution thành công. Dùng cho agrigreen-htx-login (FN-01) và agrigreen-seed (chỉ dev)",
       "providerId": "basic-flow", "topLevel": true, "builtIn": false,
       "authenticationExecutions": [
         { "authenticator": "direct-grant-validate-username", "authenticatorFlow": false, "requirement": "REQUIRED", "priority": 10 },
@@ -232,6 +232,15 @@
       "authenticationExecutions": [
         { "authenticator": "conditional-user-configured", "authenticatorFlow": false, "requirement": "REQUIRED", "priority": 10 },
         { "authenticator": "direct-grant-validate-otp", "authenticatorConfig": "agrigreen-amr-otp", "authenticatorFlow": false, "requirement": "REQUIRED", "priority": 20 }
+      ]
+    },
+    {
+      "id": "6f1d3c52-8a47-4e0b-9a2e-5b7c4d9e1f30",
+      "alias": "agrigreen htx password check", "description": "FN-01: chỉ kiểm tên đăng nhập và mật khẩu (không OTP) cho client agrigreen-htx-login-check; máy chủ thu hồi phiên ngay",
+      "providerId": "basic-flow", "topLevel": true, "builtIn": false,
+      "authenticationExecutions": [
+        { "authenticator": "direct-grant-validate-username", "authenticatorFlow": false, "requirement": "REQUIRED", "priority": 10 },
+        { "authenticator": "direct-grant-validate-password", "authenticatorConfig": "agrigreen-amr-pwd", "authenticatorFlow": false, "requirement": "REQUIRED", "priority": 20 }
       ]
     },
     {
@@ -460,6 +469,38 @@
       "attributes": { "pkce.code.challenge.method": "S256", "client.session.idle.timeout": "3600" },
       "defaultClientScopes": ["basic", "roles", "web-origins", "profile", "agrigreen-claims"],
       "optionalClientScopes": ["offline_access"]
+    },
+    {
+      "clientId": "agrigreen-htx-login",
+      "name": "Màn đăng nhập App HTX (FN-01) — máy chủ pf/accounts đổi mật khẩu lấy token",
+      "description": "Client bí mật, chỉ máy chủ pf/accounts gọi (direct grant, luồng có OTP). Bí mật lấy từ AG_KC_LOGIN_CLIENT_SECRET lúc nhập realm. Không có luồng trình duyệt.",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${AG_KC_LOGIN_CLIENT_SECRET}",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "attributes": { "client.session.idle.timeout": "14400", "client.session.max.lifespan": "36000" },
+      "defaultClientScopes": ["basic", "roles", "web-origins", "profile", "agrigreen-claims"]
+    },
+    {
+      "clientId": "agrigreen-htx-login-check",
+      "name": "Kiểm mật khẩu của màn đăng nhập App HTX (FN-01) — token không dùng được",
+      "description": "Client bí mật, chỉ máy chủ pf/accounts gọi để biết mật khẩu đúng trước khi hỏi OTP. Token không có aud, vai hay tenant nên API không nhận; máy chủ thu hồi phiên ngay. Bí mật từ AG_KC_LOGIN_CHECK_CLIENT_SECRET.",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${AG_KC_LOGIN_CHECK_CLIENT_SECRET}",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "fullScopeAllowed": false,
+      "authenticationFlowBindingOverrides": { "direct_grant": "6f1d3c52-8a47-4e0b-9a2e-5b7c4d9e1f30" },
+      "defaultClientScopes": ["basic"],
+      "optionalClientScopes": []
     },
     {
       "clientId": "agrigreen-mkg-field-app",

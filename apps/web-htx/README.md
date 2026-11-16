@@ -56,6 +56,7 @@ Bản build production thật: `next build` **dừng** nếu thiếu `NEXT_PUBLI
 | `NEXT_PUBLIC_OIDC_ISSUER` | `http://localhost:8180/realms/agrigreen` (chỉ dev) | Issuer Keycloak (Compose mở Keycloak ở 8180; 8081 là API nội bộ MKG) |
 | `NEXT_PUBLIC_OIDC_CLIENT_ID` | `agrigreen-web-ops` | Client công khai, PKCE S256 |
 | `NEXT_PUBLIC_MAP_STYLE_URL` | rỗng | Style MapLibre của nhà cung cấp tile trong lãnh thổ (ADR-0007). Rỗng = nền trơn, không gọi tile ngoài |
+| `NEXT_PUBLIC_SUPPORT_NAME`, `NEXT_PUBLIC_SUPPORT_PHONE`, `NEXT_PUBLIC_SUPPORT_EMAIL` | rỗng | Hộp "Liên hệ quản trị viên" ở màn đăng nhập (FN-01, QTPQ-Q-04): tên đơn vị hỗ trợ, số điện thoại, email. Thiếu bất kỳ giá trị nào thì ẩn liên kết |
 | `NEXT_PUBLIC_SURFACE` | `auto` | `auto`: tài khoản có vai trò KN v7.7 (`GET /v1/me/contexts` trả lần gán) dùng menu theo cấu hình; còn lại menu cũ `src/nav/nav.ts`. `legacy`: luôn menu cũ |
 | `NEXT_PUBLIC_KN_LEGACY_MENU` | rỗng | `1` = thêm nhóm "Chức năng khác" (menu cũ theo vai realm) dưới menu KN — cho tính năng đã rút khỏi Trồng trọt |
 

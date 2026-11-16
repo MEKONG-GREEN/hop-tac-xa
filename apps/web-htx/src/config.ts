@@ -38,6 +38,21 @@ export function resolveOidcConfig(
   };
 }
 
+/** Thông tin hỗ trợ của hộp "Liên hệ quản trị viên" (FN-01, QTPQ-Q-04): tên đơn vị, SĐT, email lấy từ cấu hình triển khai. */
+export interface SupportInfo {
+  name: string;
+  phone: string;
+  email: string;
+}
+
+/** Thiếu bất kỳ giá trị nào thì null — ẩn liên kết "Liên hệ quản trị viên", không hiện hộp rỗng hoặc dở dang. */
+export function resolveSupport(values: { name?: string; phone?: string; email?: string }): SupportInfo | null {
+  const name = values.name?.trim();
+  const phone = values.phone?.trim();
+  const email = values.email?.trim();
+  return name && phone && email ? { name, phone, email } : null;
+}
+
 export const config = {
   /** Bật chế độ dữ liệu giả lập (không gọi backend, không cần Keycloak) — tắt cứng ở bản production thật. */
   mock: isMockEnabled(env),
@@ -59,6 +74,12 @@ export const config = {
    * dùng menu theo cấu hình, còn lại menu cũ; "legacy" = luôn menu cũ (nav.ts).
    */
   surface: process.env.NEXT_PUBLIC_SURFACE === "legacy" ? ("legacy" as const) : ("auto" as const),
+  /** Đầu mối hỗ trợ (cấu hình triển khai, không ghi cứng); null khi chưa cấu hình đủ ba giá trị. Next.js chỉ nhúng tham chiếu viết tường minh. */
+  support: resolveSupport({
+    name: process.env.NEXT_PUBLIC_SUPPORT_NAME,
+    phone: process.env.NEXT_PUBLIC_SUPPORT_PHONE,
+    email: process.env.NEXT_PUBLIC_SUPPORT_EMAIL,
+  }),
   /** 1 = thêm nhóm "Chức năng khác" (menu cũ theo vai realm) dưới menu KN — tính năng bị rút khỏi Trồng trọt. */
   knLegacyMenu: process.env.NEXT_PUBLIC_KN_LEGACY_MENU === "1",
 } as const;

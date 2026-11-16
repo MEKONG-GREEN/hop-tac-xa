@@ -4834,6 +4834,118 @@ paths:
         "404": {description: "reports.link_not_found", $ref: "#/components/responses/Problem"}
         "410": {description: "reports.link_expired | reports.link_revoked", $ref: "#/components/responses/Problem"}
         "429": {description: "metering.egress_quota_exceeded (AG_EGRESS_MODE=enforce)", $ref: "#/components/responses/Problem"}
+  /v1/public/auth/login:
+    post:
+      summary: "FN-01 Đăng nhập bằng tên đăng nhập hoặc số điện thoại + mật khẩu (ADR-0060) — KHÔNG đăng nhập trước, KHÔNG Idempotency-Key"
+      description: >-
+        Máy chủ tra tài khoản (khớp đúng tên đăng nhập trước, không có mới tra theo SĐT; SĐT khớp từ hai tài khoản coi như
+        sai), kiểm mật khẩu qua Keycloak (direct grant) và trả token của Keycloak. Mật khẩu không được lưu hay ghi log. Bộ đếm
+        lần sai và khóa tạm do máy chủ giữ: Keycloak đếm cho tài khoản có thật (5 lần sai → khóa 15 phút; hai lần sai cách nhau
+        dưới 1 giây → khóa 60 giây), bộ đếm HMAC riêng cho mã định danh không tồn tại — phản hồi giống hệt nhau. Tài khoản đã
+        bị khóa (FN-07) → 403 accounts.account_locked dù mật khẩu đúng hay sai. Tài khoản đã đăng ký OTP: gửi không kèm otp →
+        200 otp_required (chưa có token), gửi lại kèm otp. Tài khoản còn việc lần đầu (đổi mật khẩu tạm, đăng ký TOTP) hoặc
+        có vai bắt TOTP mà chưa đăng ký → 403 accounts.login_setup_required, không bao giờ phát token. Giới hạn theo IP (dồn
+        10, sau đó 10/phút) → 429. Cache-Control no-store.
+      operationId: passwordLogin
+      tags: [accounts]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [identifier, password]
+              properties:
+                identifier: {type: string, maxLength: 254, description: "Tên đăng nhập hoặc số điện thoại"}
+                password: {type: string, format: password, maxLength: 256}
+                otp: {type: string, pattern: "^[0-9]{6}$", description: "Mã OTP 6 số khi tài khoản đã đăng ký OTP"}
+      responses:
+        "200":
+          description: "authenticated (kèm token) hoặc otp_required (chưa có token)"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: {type: string, enum: [authenticated, otp_required]}
+                  access_token: {type: string}
+                  refresh_token: {type: string}
+                  expires_in: {type: integer}
+                  refresh_expires_in: {type: integer}
+                  token_type: {type: string, enum: [Bearer]}
+        "400": {description: "bad_request (thân không phải JSON)", $ref: "#/components/responses/Problem"}
+        "401":
+          description: "accounts.login_failed (EX-02): extension remaining_attempts"
+          $ref: "#/components/responses/Problem"
+        "403": {description: "accounts.account_locked (EX-03) | accounts.login_setup_required", $ref: "#/components/responses/Problem"}
+        "422": {description: "validation_failed (EX-01: thiếu identifier hoặc password)", $ref: "#/components/responses/Problem"}
+        "423":
+          description: "accounts.login_temporarily_locked: extension retry_after_minutes, header Retry-After (giây)"
+          $ref: "#/components/responses/Problem"
+        "429": {description: rate_limited, $ref: "#/components/responses/Problem"}
+        "503": {description: "accounts.login_unavailable | accounts.dependency_unavailable", $ref: "#/components/responses/Problem"}
+  /v1/public/auth/logout:
+    post:
+      summary: "FN-01 Đăng xuất: thu hồi phiên ở Keycloak — KHÔNG Idempotency-Key"
+      description: >-
+        Phiên đã hết coi như đã đăng xuất (204). Keycloak không phản hồi → 503 accounts.dependency_unavailable (phiên chưa thu
+        hồi). Cache-Control no-store.
+      operationId: passwordLogout
+      tags: [accounts]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: {type: string}
+      responses:
+        "204": {description: Đã thu hồi phiên}
+        "400": {description: "bad_request (thân không phải JSON)", $ref: "#/components/responses/Problem"}
+        "422": {description: "validation_failed (thiếu refresh_token)", $ref: "#/components/responses/Problem"}
+        "503": {description: "accounts.login_unavailable | accounts.dependency_unavailable", $ref: "#/components/responses/Problem"}
+  /v1/public/auth/refresh:
+    post:
+      summary: "FN-01 Làm mới token bằng refresh token của màn đăng nhập riêng — KHÔNG Idempotency-Key"
+      description: >-
+        Đi qua máy chủ tới Keycloak. Phiên đã hết hoặc đã bị thu hồi (đăng xuất, khóa tài khoản) → 401
+        accounts.session_expired. Cache-Control no-store.
+      operationId: passwordRefresh
+      tags: [accounts]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: {type: string}
+      responses:
+        "200":
+          description: Token mới
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, access_token, expires_in, token_type]
+                properties:
+                  status: {type: string, enum: [authenticated]}
+                  access_token: {type: string}
+                  refresh_token: {type: string}
+                  expires_in: {type: integer}
+                  refresh_expires_in: {type: integer}
+                  token_type: {type: string, enum: [Bearer]}
+        "400": {description: "bad_request (thân không phải JSON)", $ref: "#/components/responses/Problem"}
+        "401": {description: accounts.session_expired, $ref: "#/components/responses/Problem"}
+        "422": {description: "validation_failed (thiếu refresh_token)", $ref: "#/components/responses/Problem"}
+        "503": {description: "accounts.login_unavailable | accounts.dependency_unavailable", $ref: "#/components/responses/Problem"}
   /v1/public/password-reset:
     post:
       summary: "BRD 2.0 FN-CH-00.01 \"Quên mật khẩu?\": gửi liên kết tự đặt lại mật khẩu qua email (#255, ADR-0057) — KHÔNG đăng nhập"

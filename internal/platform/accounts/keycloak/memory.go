@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/domain"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/port"
 )
 
@@ -33,16 +34,30 @@ type Memory struct {
 	sessions map[uuid.UUID][]port.Session
 	events   map[uuid.UUID][]port.LoginEvent
 	now      func() time.Time
+	// loginSessions: phiên direct grant (FN-01) theo refresh token; grants: số lần kiểm mật khẩu thật sự chạy.
+	loginSessions map[string]loginSession
+	grants        map[uuid.UUID]int
+	failLag       time.Duration
 }
 
 type memUser struct {
 	u     port.User
 	roles []string
 	otp   bool
-	// bruteForce: khóa do đăng nhập sai nhiều lần — enabled vẫn true. Khóa tạm (P0-VPS-OPS #131):
-	// tự hết ở bruteForceUntil theo đồng hồ m.now.
-	bruteForce      bool
-	bruteForceUntil time.Time
+	// otpCode: mã TOTP đúng của người dùng khi otp = true (SetOTPCode); rỗng → không mã nào đúng.
+	otpCode string
+	// probe: bộ đếm lần sai và khóa tạm như brute-force MULTIPLE của Keycloak (domain.LoginProbe). enabled vẫn true
+	// khi khóa; khóa tạm tự hết theo đồng hồ m.now. shown là phần LoginLockStatus nhìn thấy: Keycloak có thể ghi
+	// nhận lần sai chậm một nhịp (LagFailureVisibility) — pending thành shown khi tới pendingAt.
+	probe     domain.LoginProbe
+	shown     domain.LoginProbe
+	pending   *domain.LoginProbe
+	pendingAt time.Time
+}
+
+type loginSession struct {
+	user   uuid.UUID
+	client port.LoginClient
 }
 
 // SentEmail là một lần gửi liên kết hành động (không chứa địa chỉ email).
@@ -76,7 +91,7 @@ func NewMemory(realmRoles ...string) *Memory {
 	}
 	return &Memory{
 		realm: realmRoles, users: map[uuid.UUID]*memUser{}, logout: map[uuid.UUID]int{}, passwords: map[uuid.UUID][32]byte{},
-		failFor: map[string]error{}, now: time.Now,
+		failFor: map[string]error{}, now: time.Now, loginSessions: map[string]loginSession{}, grants: map[uuid.UUID]int{},
 	}
 }
 
@@ -456,6 +471,11 @@ func (m *Memory) Logout(_ context.Context, id uuid.UUID) error {
 	}
 	m.logout[id]++
 	delete(m.sessions, id)
+	for rt, ls := range m.loginSessions {
+		if ls.user == id {
+			delete(m.loginSessions, rt)
+		}
+	}
 	return nil
 }
 
@@ -495,7 +515,16 @@ func (m *Memory) LockByBruteForce(id uuid.UUID) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if u, err := m.get(id); err == nil {
-		u.bruteForce, u.bruteForceUntil = true, m.now().Add(DefaultLockoutWait)
+		now := m.now()
+		u.probe = domain.LoginProbe{Failures: domain.LoginMaxFailures, LastFailure: now, LockedUntil: now.Add(DefaultLockoutWait)}
+		u.shown, u.pending = u.probe, nil
+	}
+}
+
+// flush đưa lần sai chờ ghi nhận thành phần LoginLockStatus nhìn thấy khi tới hạn.
+func (m *Memory) flush(u *memUser) {
+	if u.pending != nil && !m.now().Before(u.pendingAt) {
+		u.shown, u.pending = *u.pending, nil
 	}
 }
 
@@ -509,11 +538,17 @@ func (m *Memory) loginLock(op string, id uuid.UUID) (port.LoginLock, error) {
 	if err != nil {
 		return port.LoginLock{}, err
 	}
-	if !u.bruteForce || !m.now().Before(u.bruteForceUntil) {
-		return port.LoginLock{}, nil
+	m.flush(u)
+	out := port.LoginLock{Failures: u.shown.Failures}
+	if !u.shown.LastFailure.IsZero() {
+		last := u.shown.LastFailure.UTC()
+		out.LastFailure = &last
 	}
-	until := u.bruteForceUntil.UTC()
-	return port.LoginLock{Locked: true, Until: &until}, nil
+	if locked, _ := u.shown.Locked(m.now()); locked {
+		until := u.shown.LockedUntil.UTC()
+		out.Locked, out.Until = true, &until
+	}
+	return out, nil
 }
 
 // BruteForceLocked thực hiện port.Directory.
@@ -538,6 +573,6 @@ func (m *Memory) ClearBruteForce(_ context.Context, id uuid.UUID) error {
 	if err != nil {
 		return err
 	}
-	u.bruteForce = false
+	u.probe, u.shown, u.pending = domain.LoginProbe{}, domain.LoginProbe{}, nil
 	return nil
 }

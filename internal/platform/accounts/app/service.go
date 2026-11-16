@@ -105,6 +105,10 @@ type Service struct {
 	// port.PasswordResetConsumer (cmd/worker). Thiếu → consumer lỗi, sự kiện giao lại rồi vào DLQ.
 	ResetMailer ResetMailer
 	ResetURL    string
+	// PwLogin, LoginIDKey (FN-01, ADR-0060): cổng direct grant của Keycloak và khóa HMAC cho bộ đếm mã định danh không
+	// tồn tại. Thiếu một trong hai (hoặc Dir) → route đăng nhập trả 503 accounts.login_unavailable (fail-closed).
+	PwLogin    port.PasswordLogin
+	LoginIDKey []byte `json:"-"`
 	// Log: nhật ký vận hành (không PII, không mã/mật khẩu). Nil → slog.Default().
 	Log *slog.Logger
 }

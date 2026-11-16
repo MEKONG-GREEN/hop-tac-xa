@@ -114,6 +114,10 @@ type LoginLock struct {
 	// Until: thời điểm khóa tạm dự kiến tự hết (lần sai cuối + thời gian chờ của realm). nil khi không khóa
 	// hoặc không suy được (vd Keycloak không trả lần sai cuối) — không đoán.
 	Until *time.Time
+	// Failures, LastFailure: số lần sai liên tiếp (numFailures) và lần sai cuối Keycloak đang ghi. FN-01 chỉ dùng
+	// làm số đọc TRƯỚC lần kiểm mật khẩu (Keycloak có thể ghi nhận lần sai chậm một nhịp).
+	Failures    int
+	LastFailure *time.Time
 }
 
 // Session là một phiên đăng nhập đang hoạt động (Keycloak GET /users/{id}/sessions).

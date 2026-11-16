@@ -3446,6 +3446,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/public/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * FN-01 Đăng nhập bằng tên đăng nhập hoặc số điện thoại + mật khẩu (ADR-0060) — KHÔNG đăng nhập trước, KHÔNG Idempotency-Key
+         * @description Máy chủ tra tài khoản (khớp đúng tên đăng nhập trước, không có mới tra theo SĐT; SĐT khớp từ hai tài khoản coi như sai), kiểm mật khẩu qua Keycloak (direct grant) và trả token của Keycloak. Mật khẩu không được lưu hay ghi log. Bộ đếm lần sai và khóa tạm do máy chủ giữ: Keycloak đếm cho tài khoản có thật (5 lần sai → khóa 15 phút; hai lần sai cách nhau dưới 1 giây → khóa 60 giây), bộ đếm HMAC riêng cho mã định danh không tồn tại — phản hồi giống hệt nhau. Tài khoản đã bị khóa (FN-07) → 403 accounts.account_locked dù mật khẩu đúng hay sai. Tài khoản đã đăng ký OTP: gửi không kèm otp → 200 otp_required (chưa có token), gửi lại kèm otp. Tài khoản còn việc lần đầu (đổi mật khẩu tạm, đăng ký TOTP) hoặc có vai bắt TOTP mà chưa đăng ký → 403 accounts.login_setup_required, không bao giờ phát token. Giới hạn theo IP (dồn 10, sau đó 10/phút) → 429. Cache-Control no-store.
+         */
+        post: operations["passwordLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/public/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * FN-01 Đăng xuất: thu hồi phiên ở Keycloak — KHÔNG Idempotency-Key
+         * @description Phiên đã hết coi như đã đăng xuất (204). Keycloak không phản hồi → 503 accounts.dependency_unavailable (phiên chưa thu hồi). Cache-Control no-store.
+         */
+        post: operations["passwordLogout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/public/auth/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * FN-01 Làm mới token bằng refresh token của màn đăng nhập riêng — KHÔNG Idempotency-Key
+         * @description Đi qua máy chủ tới Keycloak. Phiên đã hết hoặc đã bị thu hồi (đăng xuất, khóa tài khoản) → 401 accounts.session_expired. Cache-Control no-store.
+         */
+        post: operations["passwordRefresh"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/public/password-reset": {
         parameters: {
             query?: never;
@@ -34049,6 +34109,133 @@ export interface operations {
             410: components["responses"]["Problem"];
             /** @description metering.egress_quota_exceeded (AG_EGRESS_MODE=enforce) */
             429: components["responses"]["Problem"];
+        };
+    };
+    passwordLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Tên đăng nhập hoặc số điện thoại */
+                    identifier: string;
+                    /** Format: password */
+                    password: string;
+                    /** @description Mã OTP 6 số khi tài khoản đã đăng ký OTP */
+                    otp?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description authenticated (kèm token) hoặc otp_required (chưa có token) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        status: "authenticated" | "otp_required";
+                        access_token?: string;
+                        refresh_token?: string;
+                        expires_in?: number;
+                        refresh_expires_in?: number;
+                        /** @enum {string} */
+                        token_type?: "Bearer";
+                    };
+                };
+            };
+            /** @description bad_request (thân không phải JSON) */
+            400: components["responses"]["Problem"];
+            /** @description accounts.login_failed (EX-02): extension remaining_attempts */
+            401: components["responses"]["Problem"];
+            /** @description accounts.account_locked (EX-03) | accounts.login_setup_required */
+            403: components["responses"]["Problem"];
+            /** @description validation_failed (EX-01: thiếu identifier hoặc password) */
+            422: components["responses"]["Problem"];
+            /** @description accounts.login_temporarily_locked: extension retry_after_minutes, header Retry-After (giây) */
+            423: components["responses"]["Problem"];
+            /** @description rate_limited */
+            429: components["responses"]["Problem"];
+            /** @description accounts.login_unavailable | accounts.dependency_unavailable */
+            503: components["responses"]["Problem"];
+        };
+    };
+    passwordLogout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    refresh_token: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Đã thu hồi phiên */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description bad_request (thân không phải JSON) */
+            400: components["responses"]["Problem"];
+            /** @description validation_failed (thiếu refresh_token) */
+            422: components["responses"]["Problem"];
+            /** @description accounts.login_unavailable | accounts.dependency_unavailable */
+            503: components["responses"]["Problem"];
+        };
+    };
+    passwordRefresh: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    refresh_token: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Token mới */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        status: "authenticated";
+                        access_token: string;
+                        refresh_token?: string;
+                        expires_in: number;
+                        refresh_expires_in?: number;
+                        /** @enum {string} */
+                        token_type: "Bearer";
+                    };
+                };
+            };
+            /** @description bad_request (thân không phải JSON) */
+            400: components["responses"]["Problem"];
+            /** @description accounts.session_expired */
+            401: components["responses"]["Problem"];
+            /** @description validation_failed (thiếu refresh_token) */
+            422: components["responses"]["Problem"];
+            /** @description accounts.login_unavailable | accounts.dependency_unavailable */
+            503: components["responses"]["Problem"];
         };
     };
     requestPasswordReset: {

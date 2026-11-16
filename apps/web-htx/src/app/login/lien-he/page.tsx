@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { config } from "@/config";
 import { BrandMark } from "@/shell/BrandMark";
 import { BRAND } from "@/shell/brand";
+import { SupportContact } from "@/shell/SupportContact";
 
 /**
  * "Liên hệ quản trị viên" (FN-CH-00.01): yêu cầu hỗ trợ tài khoản. Quên mật khẩu tự đặt lại qua email ở /login/quen-mat-khau
- * (#255). Đầu mối liên hệ là TẠM — chờ khách cung cấp (Q-03, Q-19).
+ * (#255). Đầu mối hỗ trợ (tên đơn vị, SĐT, email) lấy từ cấu hình triển khai (FN-01, QTPQ-Q-04); chưa cấu hình thì không hiện.
  */
 export default function ContactAdminPage() {
   return (
@@ -19,10 +21,14 @@ export default function ContactAdminPage() {
           </div>
           <h1>Liên hệ quản trị viên</h1>
           <p>Cần hỗ trợ tài khoản (chưa có vai trò, phòng ban; tài khoản bị khóa; đổi đơn vị công tác)? Liên hệ quản trị viên hệ thống.</p>
-          <p className="login-note">
-            Đầu mối hỗ trợ (tạm, chờ khách): quản trị viên Mekong Green và cán bộ phụ trách tài khoản của {BRAND.orgFull}. Khi gọi, cung cấp email
-            hoặc số điện thoại đăng nhập — không bao giờ đọc mật khẩu cho người khác.
-          </p>
+          {config.support ? (
+            <>
+              <SupportContact info={config.support} />
+              <p className="login-note">Khi gọi, cung cấp tên đăng nhập hoặc số điện thoại đăng nhập — không bao giờ đọc mật khẩu cho người khác.</p>
+            </>
+          ) : (
+            <p className="login-note">Chưa có thông tin hỗ trợ được cấu hình. Liên hệ người đã cấp tài khoản cho bạn.</p>
+          )}
           <Link className="btn btn-p btn-block" href="/login">
             Quay lại đăng nhập
           </Link>

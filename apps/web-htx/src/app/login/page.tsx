@@ -2,7 +2,6 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
-import { LOCK_MINUTES } from "@/api/mock/kn";
 import { MOCK_PERSONAS } from "@/api/mock/personas";
 import { useAuth } from "@/auth/AuthProvider";
 import { safeReturnTo } from "@/auth/oidc";
@@ -11,16 +10,18 @@ import { config } from "@/config";
 import { canSee, findNavItem, homeFor } from "@/nav/nav";
 import { BrandMark } from "@/shell/BrandMark";
 import { BRAND } from "@/shell/brand";
-import { LoginCard, type LoginError } from "@/shell/LoginCard";
+import { LoginCard, type LoginError, type LoginSubmit } from "@/shell/LoginCard";
 import { menuAllows } from "@/shell/menu";
 import { purgeLegacyIdentifier, rememberIdentifier, useRememberedIdentifier } from "@/lib/rememberLogin";
 
 function LoginInner() {
-  const { status, principal, kn, dataConsent, login, loginWithPassword, loginAsPersona } = useAuth();
+  const { status, principal, kn, dataConsent, login, signIn, loginAsPersona } = useAuth();
   const router = useRouter();
   const params = useSearchParams();
   const returnTo = safeReturnTo(params.get("returnTo"));
   const [busy, setBusy] = useState(false);
+  // Máy chủ đã xác nhận mật khẩu đúng và đòi mã OTP (tài khoản đã đăng ký OTP).
+  const [otpRequired, setOtpRequired] = useState(false);
   const [error, setError] = useState<LoginError | null>(() =>
     params.get("error") ? { kind: "message", text: "Không hoàn tất được đăng nhập. Vui lòng thử lại hoặc liên hệ quản trị viên." } : null,
   );
@@ -49,22 +50,56 @@ function LoginInner() {
     router.replace(allowed ? returnTo : homeFor(principal));
   }, [status, principal, kn, dataConsent, returnTo, router]);
 
-  const submit = async (v: { identifier: string; password: string; remember: boolean }) => {
+  const submit = async (v: LoginSubmit) => {
     setBusy(true);
     setError(null);
     rememberIdentifier(v.identifier, v.remember);
     try {
-      if (config.mock) {
-        const r = await loginWithPassword(v.identifier, v.password);
-        if (!r.ok) setError(r.error === "locked" ? { kind: "locked", minutes: LOCK_MINUTES } : { kind: "invalid", remaining: r.remaining });
-        setBusy(false);
-        return;
+      const r = await signIn(v.identifier, v.password, v.otp || undefined);
+      switch (r.kind) {
+        case "authenticated":
+          // Điều hướng vào trang đầu tiên được xem do useEffect ở trên đảm nhiệm khi phiên đã thiết lập.
+          return;
+        case "otp_required":
+          setOtpRequired(true);
+          break;
+        case "invalid":
+          setError({ kind: "invalid", remaining: r.remaining });
+          break;
+        case "locked":
+          setOtpRequired(false);
+          setError({ kind: "locked", minutes: r.minutes });
+          break;
+        case "account_locked":
+          setOtpRequired(false);
+          setError({ kind: "account_locked" });
+          break;
+        case "setup_required":
+          setOtpRequired(false);
+          setError({ kind: "setup_required" });
+          break;
+        case "rate_limited":
+          setError({ kind: "message", text: "Bạn thử đăng nhập quá nhanh. Vui lòng đợi một lát rồi thử lại." });
+          break;
+        case "network":
+          setError({ kind: "message", text: "Không kết nối được máy chủ đăng nhập. Vui lòng thử lại sau." });
+          break;
+        default:
+          setError({ kind: "message", text: "Đăng nhập tạm thời chưa dùng được. Vui lòng thử lại sau hoặc liên hệ quản trị viên." });
       }
-      await login(returnTo, v.identifier);
     } catch {
       setError({ kind: "message", text: "Không kết nối được máy chủ đăng nhập. Vui lòng thử lại sau." });
-      setBusy(false);
     }
+    setBusy(false);
+  };
+
+  // Việc lần đầu (đổi mật khẩu tạm, đăng ký OTP) hoàn tất ở trang xác thực của Keycloak cho tới khi có AH-269.
+  const finishSetup = (identifier: string) => {
+    setBusy(true);
+    login(returnTo, identifier).catch(() => {
+      setError({ kind: "message", text: "Không kết nối được máy chủ đăng nhập. Vui lòng thử lại sau." });
+      setBusy(false);
+    });
   };
 
   return (
@@ -88,12 +123,17 @@ function LoginInner() {
         <section className="login-side">
           {remembered !== undefined ? (
             <LoginCard
-              mode={config.mock ? "password" : "oidc"}
               busy={busy || status === "loading"}
               error={error}
+              otpRequired={otpRequired}
               initialIdentifier={remembered ?? ""}
               initialRemember={!!remembered}
               onSubmit={(v) => void submit(v)}
+              onBack={() => {
+                setOtpRequired(false);
+                setError(null);
+              }}
+              onSetup={finishSetup}
             />
           ) : null}
           {config.mock ? (

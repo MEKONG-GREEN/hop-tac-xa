@@ -1,12 +1,12 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { knMenuFor } from "@/api/mock/kn";
 import { KN_ACCOUNTS } from "@/api/mock/kn-accounts";
 import type { MenuTree } from "@/kn/contract";
-import type { KnSessionState } from "@/auth/AuthProvider";
+import { AuthContextForTests, type AuthContextValue, type KnSessionState } from "@/auth/AuthProvider";
 import { buildPrincipal } from "@/auth/principal";
-import { activeMenu, isAllowed, isBareRoute, isKnRemovedTool } from "@/components/AppShell";
+import { activeMenu, AppShell, isAllowed, isBareRoute, isKnRemovedTool } from "@/components/AppShell";
 import { AccountMenu } from "./AccountMenu";
 import { Breadcrumb } from "./Breadcrumb";
 import { LoginCard } from "./LoginCard";
@@ -14,7 +14,8 @@ import { badgeOf, crumbsFor, findActive, legacyMenu, menuAllows, menuLinks } fro
 import { RoleContextPicker } from "./RoleContextPicker";
 import { Sidebar } from "./Sidebar";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/", useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }));
+const nav = vi.hoisted(() => ({ replace: vi.fn(), pathname: "/" }));
+vi.mock("next/navigation", () => ({ usePathname: () => nav.pathname, useRouter: () => ({ replace: nav.replace, push: vi.fn() }) }));
 
 const xa = knMenuFor("kn_xa", "trong_trot");
 const tinh = knMenuFor("kn_tinh", "trong_trot");
@@ -272,15 +273,18 @@ describe("<Breadcrumb>", () => {
   });
 });
 
-describe("<LoginCard> (Hình 3a)", () => {
-  it("Hiện/Ẩn mật khẩu, bắt buộc trường, gửi giá trị", async () => {
+const SUPPORT = { name: "Trung tâm Khuyến nông An Giang", phone: "0296 3852 000", email: "ho-tro@angiang.vn" };
+
+describe("<LoginCard> (FN-01)", () => {
+  it("AC-N1: bỏ trống → hai câu tại trường, không gửi; có giá trị → gửi, Hiện/Ẩn mật khẩu", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn();
-    render(<LoginCard mode="password" onSubmit={onSubmit} />);
+    render(<LoginCard support={null} onSubmit={onSubmit} />);
     await user.click(screen.getByRole("button", { name: "Đăng nhập" }));
-    expect(screen.getByText("Nhập email hoặc số điện thoại.")).toBeInTheDocument();
+    expect(screen.getByText("Nhập tên đăng nhập hoặc số điện thoại")).toBeInTheDocument();
+    expect(screen.getByText("Nhập mật khẩu")).toBeInTheDocument();
     expect(onSubmit).not.toHaveBeenCalled();
-    await user.type(screen.getByLabelText(/Email hoặc số điện thoại/), "an.nv@angiang.gov.vn");
+    await user.type(screen.getByLabelText(/Tên đăng nhập hoặc số điện thoại/), "0912345678");
     const pw = screen.getByLabelText(/^Mật khẩu/);
     await user.type(pw, "abc");
     expect(pw).toHaveAttribute("type", "password");
@@ -288,22 +292,73 @@ describe("<LoginCard> (Hình 3a)", () => {
     expect(pw).toHaveAttribute("type", "text");
     await user.click(screen.getByLabelText("Ghi nhớ đăng nhập"));
     await user.click(screen.getByRole("button", { name: "Đăng nhập" }));
-    expect(onSubmit).toHaveBeenCalledWith({ identifier: "an.nv@angiang.gov.vn", password: "abc", remember: true });
+    expect(onSubmit).toHaveBeenCalledWith({ identifier: "0912345678", password: "abc", otp: "", remember: true });
   });
 
-  it("banner lỗi ghi số lần thử còn lại; khóa tạm; Quên mật khẩu và Liên hệ quản trị viên", () => {
-    const { rerender } = render(<LoginCard mode="password" error={{ kind: "invalid", remaining: 4 }} onSubmit={() => undefined} />);
-    expect(screen.getByRole("alert")).toHaveTextContent("Sai tài khoản hoặc mật khẩu.Kiểm tra lại thông tin. Còn 4 lần thử.");
-    rerender(<LoginCard mode="password" error={{ kind: "locked", minutes: 15 }} onSubmit={() => undefined} />);
-    expect(screen.getByRole("alert")).toHaveTextContent("tạm khóa 15 phút");
+  it("luôn có ô mật khẩu (không còn chế độ OIDC), Quên mật khẩu", () => {
+    render(<LoginCard support={null} onSubmit={() => undefined} />);
+    expect(screen.getByLabelText(/^Mật khẩu/)).toBeInTheDocument();
+    expect(screen.queryByText(/nhập ở trang xác thực/)).toBeNull();
     expect(screen.getByRole("link", { name: "Quên mật khẩu?" })).toHaveAttribute("href", "/login/quen-mat-khau");
-    expect(screen.getByRole("link", { name: "Liên hệ quản trị viên" })).toHaveAttribute("href", "/login/lien-he");
   });
 
-  it("chế độ OIDC: không có ô mật khẩu (mật khẩu nhập ở Keycloak)", () => {
-    render(<LoginCard mode="oidc" onSubmit={() => undefined} />);
-    expect(screen.queryByLabelText(/^Mật khẩu/)).toBeNull();
-    expect(screen.getByText(/nhập ở trang xác thực/)).toBeInTheDocument();
+  it("banner lỗi: EX-02 số lần thử còn lại, khóa tạm, EX-03, việc lần đầu", async () => {
+    const user = userEvent.setup();
+    const onSetup = vi.fn();
+    const { rerender } = render(<LoginCard support={null} error={{ kind: "invalid", remaining: 4 }} onSubmit={() => undefined} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("Sai tài khoản hoặc mật khẩu. Còn 4 lần thử.");
+    expect(screen.getByRole("alert")).toHaveTextContent("Quên mật khẩu?");
+    rerender(<LoginCard support={null} error={{ kind: "invalid", remaining: 1 }} onSubmit={() => undefined} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("Còn 1 lần thử.");
+    rerender(<LoginCard support={null} error={{ kind: "locked", minutes: 15 }} onSubmit={() => undefined} />);
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Tài khoản tạm khóa đăng nhập do nhập sai nhiều lần. Thử lại sau 15 phút hoặc dùng Quên mật khẩu?",
+    );
+    rerender(<LoginCard support={null} error={{ kind: "account_locked" }} onSubmit={() => undefined} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("Tài khoản đã bị khóa. Liên hệ người đã cấp tài khoản để mở khóa.");
+    rerender(<LoginCard support={null} error={{ kind: "setup_required" }} onSubmit={() => undefined} onSetup={onSetup} />);
+    await user.type(screen.getByLabelText(/Tên đăng nhập hoặc số điện thoại/), " an.nv ");
+    await user.click(screen.getByRole("button", { name: "Hoàn tất trên trang xác thực" }));
+    expect(onSetup).toHaveBeenCalledWith("an.nv");
+  });
+
+  it("bước OTP: giữ tên đăng nhập và mật khẩu, đòi 6 số, gửi kèm mã, Quay lại", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    const onBack = vi.fn();
+    const { rerender } = render(<LoginCard support={null} onSubmit={onSubmit} onBack={onBack} />);
+    await user.type(screen.getByLabelText(/Tên đăng nhập hoặc số điện thoại/), "admin");
+    await user.type(screen.getByLabelText(/^Mật khẩu/), "Mat-khau-12!");
+    await user.click(screen.getByRole("button", { name: "Đăng nhập" }));
+    rerender(<LoginCard support={null} otpRequired onSubmit={onSubmit} onBack={onBack} />);
+    expect(screen.getByLabelText(/^Mật khẩu/)).toHaveValue("Mat-khau-12!");
+    await user.type(screen.getByLabelText("Mã OTP"), "12ab34");
+    expect(screen.getByLabelText("Mã OTP")).toHaveValue("1234");
+    await user.click(screen.getByRole("button", { name: "Đăng nhập" }));
+    expect(screen.getByText("Nhập mã OTP gồm 6 chữ số")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Mã OTP"), "56");
+    await user.click(screen.getByRole("button", { name: "Đăng nhập" }));
+    expect(onSubmit).toHaveBeenLastCalledWith({ identifier: "admin", password: "Mat-khau-12!", otp: "123456", remember: false });
+    await user.click(screen.getByRole("button", { name: "Quay lại" }));
+    expect(onBack).toHaveBeenCalled();
+    rerender(<LoginCard support={null} otpRequired error={{ kind: "invalid", remaining: 4 }} onSubmit={onSubmit} onBack={onBack} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("Mã OTP không đúng. Còn 4 lần thử.");
+  });
+
+  it("Liên hệ quản trị viên: hộp thông tin tĩnh có tên đơn vị, SĐT, email; ẩn khi chưa cấu hình", async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(<LoginCard support={SUPPORT} onSubmit={() => undefined} />);
+    await user.click(screen.getByRole("button", { name: "Liên hệ quản trị viên" }));
+    const dlg = screen.getByRole("dialog", { name: "Liên hệ quản trị viên" });
+    expect(within(dlg).getByText(SUPPORT.name)).toBeInTheDocument();
+    expect(within(dlg).getByRole("link", { name: SUPPORT.phone })).toHaveAttribute("href", "tel:02963852000");
+    expect(within(dlg).getByRole("link", { name: SUPPORT.email })).toHaveAttribute("href", `mailto:${SUPPORT.email}`);
+    expect(within(dlg).queryByRole("textbox")).toBeNull(); // không có biểu mẫu gửi
+    await user.click(within(dlg).getByRole("button", { name: "Đóng" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    unmount();
+    render(<LoginCard support={null} onSubmit={() => undefined} />);
+    expect(screen.queryByText("Liên hệ quản trị viên")).toBeNull();
   });
 });
 
@@ -402,4 +457,33 @@ describe("HRM v4.0: gỡ tự đánh giá, giữ route lãnh đạo/HCTH",()=>{
   const absent=center();absent.groups[0]!.items=[];expect(menuAllows(absent,canonical)).toBe(false);
   for(const path of [canonical+"/extra",canonical+"?x=1",canonical.replace(period,"not-a-uuid"),canonical.replace(staff,"%2F"),"/kn/nhan-su/danh-gia/unknown"])expect(menuAllows(center(),path)).toBe(false);
  });
+});
+
+describe("AppShell: chặn truy cập khi chưa đăng nhập (FN-01/AC-05, EX-04)", () => {
+  beforeEach(() => nav.replace.mockClear());
+
+  it("mở đường dẫn của ứng dụng khi chưa đăng nhập → về màn hình đăng nhập, kèm returnTo", () => {
+    nav.pathname = "/htx/san-luong";
+    const value = {
+      status: "anonymous",
+      principal: null,
+      scopeWarning: null,
+      kn: { status: "legacy", assignments: [], context: null, menu: null, badges: null } satisfies KnSessionState,
+      dataConsent: { status: "unknown" },
+      api: {},
+      logout: vi.fn(),
+      selectContext: vi.fn(),
+      changePassword: vi.fn(),
+    } as unknown as AuthContextValue;
+    render(
+      <AuthContextForTests.Provider value={value}>
+        <AppShell>
+          <p>Nội dung cần đăng nhập</p>
+        </AppShell>
+      </AuthContextForTests.Provider>,
+    );
+    expect(nav.replace).toHaveBeenCalledWith("/login?returnTo=%2Fhtx%2Fsan-luong");
+    expect(screen.queryByText("Nội dung cần đăng nhập")).toBeNull();
+    nav.pathname = "/";
+  });
 });
