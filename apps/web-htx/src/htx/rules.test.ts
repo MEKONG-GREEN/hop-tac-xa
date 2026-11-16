@@ -218,6 +218,24 @@ describe("soạn SOP — thân gửi máy chủ và đọc lại", () => {
     expect(toSopPayload(back).steps.map((s) => s.name)).toEqual(["Làm đất", "Bón thúc", "Kiểm tra"]);
   });
 
+  it("đọc rồi gửi lại một phiên bản không làm mất instruction, evidence_kinds, stage_code", () => {
+    const p = toSopPayload(draft);
+    const steps = p.steps.map((s, i) => ({
+      ...s,
+      day_offset: 0,
+      window_days: 0,
+      mandatory: s.mandatory ?? false,
+      ...(i === 1 ? { instruction: "Bón khi lúa đẻ nhánh", evidence_kinds: ["anh_hien_truong", "hoa_don_vat_tu"], stage_code: "de_nhanh" } : {}),
+    }));
+    const version = { stages: p.stages, steps } as unknown as Parameters<typeof fromSopVersion>[1];
+    const back = fromSopVersion({ code: "SOP-A", name: "SOP lúa", crop: "LUA", variety_code: null, anchor_name: "Ngày xuống giống" }, version);
+    const again = toSopPayload(back).steps;
+    expect(again[1]).toMatchObject({ instruction: "Bón khi lúa đẻ nhánh", evidence_kinds: ["anh_hien_truong", "hoa_don_vat_tu"], stage_code: "de_nhanh" });
+    expect(again[0]).not.toHaveProperty("instruction");
+    expect(again[0]).not.toHaveProperty("evidence_kinds");
+    expect(again[0]).not.toHaveProperty("stage_code");
+  });
+
   it("moveItem đổi chỗ, ngoài biên giữ nguyên", () => {
     expect(moveItem(["a", "b", "c"], 2, -1)).toEqual(["a", "c", "b"]);
     expect(moveItem(["a", "b"], 0, -1)).toEqual(["a", "b"]);

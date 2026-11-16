@@ -118,6 +118,10 @@ export interface SopTaskDraft {
   seasonSummary: boolean;
   mandatory: boolean;
   phiDays: string;
+  // Chưa sửa được trên màn nhưng phải giữ nguyên qua lần đọc–lưu (bảo toàn dữ liệu; app di động hiện hướng dẫn).
+  instruction: string;
+  evidenceKinds: NonNullable<CropSOPStepInput["evidence_kinds"]>;
+  stageCode: string;
 }
 export interface SopStageDraft {
   name: string;
@@ -148,6 +152,9 @@ export const blankTask = (): SopTaskDraft => ({
   seasonSummary: false,
   mandatory: false,
   phiDays: "",
+  instruction: "",
+  evidenceKinds: [],
+  stageCode: "",
 });
 export const blankStage = (): SopStageDraft => ({ name: "", from: "", to: "", tasks: [] });
 export const blankSop = (): SopDraft => ({ code: "", name: "", crop: "", varietyCode: "", anchorName: "", stages: [blankStage()] });
@@ -316,6 +323,9 @@ export function toSopPayload(d: SopDraft): { stages: CropSOPStage[]; steps: Crop
         season_summary: t.seasonSummary,
         mandatory: t.mandatory,
         ...(phi !== null && !Number.isNaN(phi) ? { phi_days: phi } : {}),
+        ...(t.instruction !== "" ? { instruction: t.instruction } : {}),
+        ...(t.evidenceKinds.length > 0 ? { evidence_kinds: t.evidenceKinds } : {}),
+        ...(t.stageCode !== "" ? { stage_code: t.stageCode } : {}),
       });
     }),
   );
@@ -341,6 +351,9 @@ export function fromSopVersion(template: Pick<AdminCropSOP, "code" | "name" | "c
       seasonSummary: st.season_summary === true,
       mandatory: st.mandatory,
       phiDays: st.phi_days == null ? "" : String(st.phi_days),
+      instruction: st.instruction ?? "",
+      evidenceKinds: st.evidence_kinds ?? [],
+      stageCode: st.stage_code ?? "",
     });
   }
   return { code: template.code, name: template.name, crop: template.crop, varietyCode: template.variety_code ?? "", anchorName: template.anchor_name, stages };
