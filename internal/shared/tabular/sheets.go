@@ -2,6 +2,7 @@ package tabular
 
 import (
 	"io"
+	"strconv"
 
 	"github.com/shopspring/decimal"
 	"github.com/xuri/excelize/v2"
@@ -16,11 +17,22 @@ type Cell struct {
 	Title bool // chữ đậm cỡ 13 (tiêu đề)
 }
 
+// DropList là danh sách chọn của một cột: ô từ FirstRow đến LastRow (đánh số từ 1) của cột Col
+// (đánh số từ 1) chọn trong vùng ô Source, vd `'Danh sách'!$A$2:$A$5`. Không ghi công thức vào ô.
+type DropList struct {
+	Col      int
+	FirstRow int
+	LastRow  int
+	Source   string
+}
+
 // Sheet là một trang tính.
 type Sheet struct {
-	Name   string
-	Rows   [][]Cell // dòng nil = dòng trống
-	Widths []int    // độ rộng cột (ký tự), theo thứ tự cột; thiếu = mặc định
+	Name         string
+	Rows         [][]Cell   // dòng nil = dòng trống
+	Widths       []int      // độ rộng cột (ký tự), theo thứ tự cột; thiếu = mặc định
+	Lists        []DropList // danh sách chọn theo cột
+	FreezeHeader bool       // cố định dòng đầu khi cuộn
 }
 
 // WriteSheetsXLSX ghi nhiều trang tính (W11.44 tệp chia sẻ Chi cục CNTS). Ô số ghi kiểu số (không công thức).
@@ -96,6 +108,23 @@ func WriteSheetsXLSX(w io.Writer, sheets []Sheet) error {
 				return err
 			}
 			if err := f.SetColWidth(sh.Name, col, col, float64(wd)); err != nil {
+				return err
+			}
+		}
+		for _, l := range sh.Lists {
+			col, err := excelize.ColumnNumberToName(l.Col)
+			if err != nil {
+				return err
+			}
+			dv := excelize.NewDataValidation(true)
+			dv.Sqref = col + strconv.Itoa(l.FirstRow) + ":" + col + strconv.Itoa(l.LastRow)
+			dv.SetSqrefDropList(l.Source)
+			if err := f.AddDataValidation(sh.Name, dv); err != nil {
+				return err
+			}
+		}
+		if sh.FreezeHeader {
+			if err := f.SetPanes(sh.Name, &excelize.Panes{Freeze: true, YSplit: 1, TopLeftCell: "A2", ActivePane: "bottomLeft"}); err != nil {
 				return err
 			}
 		}

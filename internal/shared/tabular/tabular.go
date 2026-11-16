@@ -263,7 +263,10 @@ func (r Row) Get(col map[string]int, name string) string {
 func Message(err error, lim Limits) string {
 	lim = lim.withDefaults()
 	var fe *FormulaError
+	var ms *MissingSheetError
 	switch {
+	case errors.As(err, &ms):
+		return ms.Message()
 	case errors.As(err, &fe):
 		return "Ô " + fe.Cell + " chứa công thức — hệ thống không tính công thức; hãy dán giá trị (Paste Values) rồi tải lên lại"
 	case errors.Is(err, ErrTooLarge):

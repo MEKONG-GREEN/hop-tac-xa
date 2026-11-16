@@ -79,24 +79,34 @@ func (s *Service) checkCatalogScope(ctx context.Context, crop, variety string) e
 }
 
 // cleanTemplateInfo chuẩn hóa và kiểm dạng các trường thông tin chung (chưa tra danh mục).
+// Gom mọi lỗi theo trường vào một problem.Validation.
 func cleanTemplateInfo(name, crop, variety, anchor *string) error {
 	*name, *crop, *variety = strings.TrimSpace(*name), strings.TrimSpace(*crop), strings.TrimSpace(*variety)
+	p := problem.Validation
 	a, err := domain.CleanText("anchor_name", *anchor, MaxAnchorNameLen)
 	if err != nil {
-		return fieldProblem(err)
+		if fe, ok := domain.AsFieldError(err); ok {
+			p = p.WithField(fe.Field, fe.Reason)
+		}
+	} else {
+		*anchor = a
 	}
-	*anchor = a
-	switch {
-	case *name == "" || len([]rune(*name)) > 200:
-		return problem.Validation.WithField("name", "bắt buộc, tối đa 200 ký tự")
-	case *crop == "" || !domain.ValidCatalogCode(*crop):
-		return problem.Validation.WithField("crop", "bắt buộc, chọn loại cây trong danh mục")
-	case *variety != "" && !domain.ValidCatalogCode(*variety):
-		return problem.Validation.WithField("variety_code", "mã giống không hợp lệ")
-	case *anchor == "":
-		return problem.Validation.WithField("anchor_name", "bắt buộc, vd Ngày xuống giống")
+	if *name == "" || len([]rune(*name)) > 200 {
+		p = p.WithField("name", "bắt buộc, tối đa 200 ký tự")
 	}
-	return nil
+	if *crop == "" || !domain.ValidCatalogCode(*crop) {
+		p = p.WithField("crop", "bắt buộc, chọn loại cây trong danh mục")
+	}
+	if *variety != "" && !domain.ValidCatalogCode(*variety) {
+		p = p.WithField("variety_code", "mã giống không hợp lệ")
+	}
+	if err == nil && *anchor == "" {
+		p = p.WithField("anchor_name", "bắt buộc, vd Ngày xuống giống")
+	}
+	if len(p.Errors) == 0 {
+		return nil
+	}
+	return p
 }
 
 func (s *Service) checkTemplateFields(ctx context.Context, in *CreateSOPInput) error {

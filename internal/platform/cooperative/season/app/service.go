@@ -74,6 +74,8 @@ var (
 	ErrYieldAnomaly       = problem.New(http.StatusConflict, "cropcycle.yield_anomaly", "Sản lượng bất thường — xác nhận lại trước khi lưu")
 	ErrHarvestNotFound    = problem.New(http.StatusNotFound, "cropcycle.harvest_not_found", "Không tìm thấy khai báo sản lượng")
 	ErrImportInvalid      = problem.New(http.StatusUnprocessableEntity, "cropcycle.import_invalid", "Tệp nhập không hợp lệ")
+	ErrSOPImportInvalid   = problem.New(http.StatusUnprocessableEntity, "cropcycle.sop_import_invalid", "Tệp nhập SOP không đúng mẫu — hãy tải file mẫu và thử lại")
+	ErrSOPImportRows      = problem.New(http.StatusUnprocessableEntity, "cropcycle.sop_import_rows", "Tệp có dòng lỗi — chưa tạo SOP")
 	ErrIDReused           = problem.New(http.StatusConflict, "cropcycle.id_reused", "id đã dùng cho bản ghi khác")
 	ErrDependency         = problem.New(http.StatusServiceUnavailable, "cropcycle.dependency_unavailable", "Dịch vụ phụ thuộc chưa sẵn sàng")
 	ErrBindingTemplateBad = problem.New(http.StatusUnprocessableEntity, "cropcycle.binding_invalid", "Chỉ gắn giống với mẫu SOP hệ thống đã ban hành, chưa ngừng dùng")

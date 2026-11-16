@@ -140,6 +140,11 @@ func newFakeCatalogs() *fakeCatalogs {
 	return f
 }
 
+// put thêm (hoặc thay) một mục danh mục có tên tiếng Việt.
+func (f *fakeCatalogs) put(cat, code, name string, attrs map[string]string, active bool) {
+	f.items[cat+"/"+code] = mdport.CatalogItem{Catalog: cat, Code: code, Name: name, Attrs: attrs, Active: active}
+}
+
 func (f *fakeCatalogs) Get(_ context.Context, catalog, code string) (mdport.CatalogItem, error) {
 	it, ok := f.items[catalog+"/"+code]
 	if !ok {
