@@ -420,6 +420,9 @@ func (s *Service) PublishSOP(ctx context.Context, versionID uuid.UUID) (SOPView,
 		if err != nil {
 			return err
 		}
+		if t == nil { // mẫu bị đánh dấu xóa giữa hai transaction
+			return ErrSOPNotFound
+		}
 		if v.Status != domain.VersionDraft || t.Status == domain.TemplateRetired {
 			return ErrSOPState.WithDetail("chỉ phát hành được bản nháp của mẫu chưa ngừng dùng")
 		}

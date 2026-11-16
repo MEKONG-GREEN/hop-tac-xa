@@ -74,6 +74,25 @@ func TestCatalogUsage_CropAndVarietyInSOPTemplate(t *testing.T) {
 	}
 }
 
+// AH-21: SOP nháp đã đánh dấu xóa biến mất với người dùng nên không còn chặn việc xóa giống và loại cây.
+func TestCatalogUsage_DeletedSOPDoesNotCount_AH21(t *testing.T) {
+	f := newFixture(t)
+	ctx := tenant.WithID(context.Background(), f.tenant)
+	tmpl, _ := f.createDraft("SOP nháp rồi xóa", map[string]any{"variety_code": "ST25"})
+	if used, err := f.mod.svc.VarietyInUse(ctx, "ST25"); err != nil || !used {
+		t.Fatalf("trước khi xóa giống phải đang dùng: %v %v", used, err)
+	}
+	if r := f.sopAdmin.adminPost(sopsPath+"/"+tmpl+"/delete", nil); r.status != http.StatusOK {
+		t.Fatalf("xóa SOP nháp: %d %s", r.status, r.raw)
+	}
+	if used, err := f.mod.svc.VarietyInUse(ctx, "ST25"); err != nil || used {
+		t.Fatalf("SOP đã xóa không được chặn giống: %v %v", used, err)
+	}
+	if used, err := f.mod.svc.CropInUse(ctx, "LUA"); err != nil || used {
+		t.Fatalf("SOP đã xóa không được chặn loại cây: %v %v", used, err)
+	}
+}
+
 // AH-7 AC4: mùa vụ đã có vụ được tính là đang được tham chiếu (chỉ ẩn, không xóa), không phân biệt hoa thường;
 // cột "Đang dùng" đếm số vụ.
 func TestCatalogUsage_SeasonInSeasonEvent(t *testing.T) {

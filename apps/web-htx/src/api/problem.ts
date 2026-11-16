@@ -447,7 +447,7 @@ export const PROBLEM_MESSAGES: Readonly<Record<string, string>> = {
   "cropcycle.sop_empty": "Quy trình chưa có giai đoạn hoặc việc — chưa phát hành được.",
   "cropcycle.sop_harvest_window": "Việc Thu hoạch cuối phải có cửa sổ Theo ngày so với mốc gốc hoặc Theo giai đoạn.",
   "cropcycle.sop_not_deletable": "SOP đã phát hành không xóa được — chỉ ngừng áp dụng được.",
-  "cropcycle.sop_state":"Trạng thái quy trình không cho phép thao tác này (bản đã phát hành không sửa được — hãy tạo phiên bản mới).",
+  "cropcycle.sop_state": "Trạng thái quy trình không cho phép thao tác này (bản đã phát hành không sửa được — hãy tạo phiên bản mới).",
   "cropcycle.sop_not_published": "Quy trình chưa được ban hành — không áp dụng vào vụ được.",
   "cropcycle.no_sop_for_variety": "Chưa có quy trình SOP chuẩn đã ban hành cho giống lúa này — chọn quy trình khi mở vụ.",
   "cropcycle.binding_invalid": "Chỉ gắn giống với mẫu SOP hệ thống đã ban hành, chưa ngừng dùng.",
