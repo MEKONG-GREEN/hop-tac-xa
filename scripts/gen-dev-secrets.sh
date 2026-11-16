@@ -14,8 +14,8 @@ if [ -f "$target" ] && [ "${1:-}" != "--force" ]; then
 ')" >> "$target"
     echo "Đã bổ sung AG_KC_CLIENT_SECRET vào $target (giá trị không in ra). Tạo lại container keycloak để nhập lại realm."
   fi
-  # FN-01 (ADR-0060): bí mật hai client đăng nhập riêng và khóa HMAC bộ đếm mã định danh không tồn tại.
-  for v in AG_KC_LOGIN_CLIENT_SECRET AG_KC_LOGIN_CHECK_CLIENT_SECRET AG_LOGIN_ID_KEY; do
+  # FN-01 (ADR-0060): bí mật client đăng nhập riêng và khóa HMAC bộ đếm mã định danh không tồn tại.
+  for v in AG_KC_LOGIN_CLIENT_SECRET AG_LOGIN_ID_KEY; do
     if ! grep -q "^$v=" "$target"; then
       [ -z "$(tail -c1 "$target")" ] || echo >> "$target"
       if [ "$v" = AG_LOGIN_ID_KEY ]; then
@@ -64,9 +64,8 @@ tmp="$target.tmp.$$"
   echo "AG_VAULT_BLIND_KEY='$(b64 32)'"
   echo "AG_ANCHOR_SIGNING_KEY='$(b64 32)'"
   echo "AG_KC_CLIENT_SECRET=$(hex 32)"
-  # FN-01 (ADR-0060): bí mật hai client đăng nhập riêng; khóa HMAC bộ đếm mã định danh không tồn tại (base64 32 byte).
+  # FN-01 (ADR-0060): bí mật client đăng nhập riêng; khóa HMAC bộ đếm mã định danh không tồn tại (base64 32 byte).
   echo "AG_KC_LOGIN_CLIENT_SECRET=$(hex 32)"
-  echo "AG_KC_LOGIN_CHECK_CLIENT_SECRET=$(hex 32)"
   echo "AG_LOGIN_ID_KEY='$(b64 32)'"
   # Public API (G5, docker compose --profile phasek): pepper HMAC khóa API phiên bản 1 (ADR-0022 mục 4, ≥ 32 byte).
   echo "AG_APIKEY_PEPPER_V1=$(hex 32)"

@@ -69,10 +69,6 @@ func (h Handler) login(c *gin.Context) {
 		httpx.Fail(c, err)
 		return
 	}
-	if res.Status == app.LoginOTPRequired {
-		c.JSON(http.StatusOK, gin.H{"status": res.Status})
-		return
-	}
 	c.JSON(http.StatusOK, tokenBody(res.Status, res.Tokens))
 }
 

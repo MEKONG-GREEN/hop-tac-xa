@@ -20,8 +20,6 @@ function LoginInner() {
   const params = useSearchParams();
   const returnTo = safeReturnTo(params.get("returnTo"));
   const [busy, setBusy] = useState(false);
-  // Máy chủ đã xác nhận mật khẩu đúng và đòi mã OTP (tài khoản đã đăng ký OTP).
-  const [otpRequired, setOtpRequired] = useState(false);
   const [error, setError] = useState<LoginError | null>(() =>
     params.get("error") ? { kind: "message", text: "Không hoàn tất được đăng nhập. Vui lòng thử lại hoặc liên hệ quản trị viên." } : null,
   );
@@ -60,22 +58,16 @@ function LoginInner() {
         case "authenticated":
           // Điều hướng vào trang đầu tiên được xem do useEffect ở trên đảm nhiệm khi phiên đã thiết lập.
           return;
-        case "otp_required":
-          setOtpRequired(true);
-          break;
         case "invalid":
           setError({ kind: "invalid", remaining: r.remaining });
           break;
         case "locked":
-          setOtpRequired(false);
           setError({ kind: "locked", minutes: r.minutes });
           break;
         case "account_locked":
-          setOtpRequired(false);
           setError({ kind: "account_locked" });
           break;
         case "setup_required":
-          setOtpRequired(false);
           setError({ kind: "setup_required" });
           break;
         case "rate_limited":
@@ -125,14 +117,9 @@ function LoginInner() {
             <LoginCard
               busy={busy || status === "loading"}
               error={error}
-              otpRequired={otpRequired}
               initialIdentifier={remembered ?? ""}
               initialRemember={!!remembered}
               onSubmit={(v) => void submit(v)}
-              onBack={() => {
-                setOtpRequired(false);
-                setError(null);
-              }}
               onSetup={finishSetup}
             />
           ) : null}

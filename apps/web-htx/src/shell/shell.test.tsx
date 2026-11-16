@@ -322,27 +322,29 @@ describe("<LoginCard> (FN-01)", () => {
     expect(onSetup).toHaveBeenCalledWith("an.nv");
   });
 
-  it("bước OTP: giữ tên đăng nhập và mật khẩu, đòi 6 số, gửi kèm mã, Quay lại", async () => {
+  it("ô Mã OTP tùy chọn: bỏ trống vẫn gửi được, chỉ nhận 6 số, gửi kèm mã khi có nhập, ghi chú và gợi ý khi sai", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn();
-    const onBack = vi.fn();
-    const { rerender } = render(<LoginCard support={null} onSubmit={onSubmit} onBack={onBack} />);
+    const { rerender } = render(<LoginCard support={null} onSubmit={onSubmit} />);
+    expect(screen.getByText("Chỉ nhập khi tài khoản đã bật xác thực hai bước")).toBeInTheDocument();
     await user.type(screen.getByLabelText(/Tên đăng nhập hoặc số điện thoại/), "admin");
     await user.type(screen.getByLabelText(/^Mật khẩu/), "Mat-khau-12!");
     await user.click(screen.getByRole("button", { name: "Đăng nhập" }));
-    rerender(<LoginCard support={null} otpRequired onSubmit={onSubmit} onBack={onBack} />);
-    expect(screen.getByLabelText(/^Mật khẩu/)).toHaveValue("Mat-khau-12!");
-    await user.type(screen.getByLabelText("Mã OTP"), "12ab34");
-    expect(screen.getByLabelText("Mã OTP")).toHaveValue("1234");
+    expect(onSubmit).toHaveBeenLastCalledWith({ identifier: "admin", password: "Mat-khau-12!", otp: "", remember: false });
+    // Máy chủ trả lời (busy bật rồi tắt) thì thẻ cho gửi lại.
+    rerender(<LoginCard support={null} busy onSubmit={onSubmit} />);
+    rerender(<LoginCard support={null} onSubmit={onSubmit} />);
+    await user.type(screen.getByLabelText(/^Mã OTP/), "12ab34");
+    expect(screen.getByLabelText(/^Mã OTP/)).toHaveValue("1234");
     await user.click(screen.getByRole("button", { name: "Đăng nhập" }));
     expect(screen.getByText("Nhập mã OTP gồm 6 chữ số")).toBeInTheDocument();
-    await user.type(screen.getByLabelText("Mã OTP"), "56");
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    await user.type(screen.getByLabelText(/^Mã OTP/), "56");
     await user.click(screen.getByRole("button", { name: "Đăng nhập" }));
     expect(onSubmit).toHaveBeenLastCalledWith({ identifier: "admin", password: "Mat-khau-12!", otp: "123456", remember: false });
-    await user.click(screen.getByRole("button", { name: "Quay lại" }));
-    expect(onBack).toHaveBeenCalled();
-    rerender(<LoginCard support={null} otpRequired error={{ kind: "invalid", remaining: 4 }} onSubmit={onSubmit} onBack={onBack} />);
-    expect(screen.getByRole("alert")).toHaveTextContent("Mã OTP không đúng. Còn 4 lần thử.");
+    rerender(<LoginCard support={null} error={{ kind: "invalid", remaining: 4 }} onSubmit={onSubmit} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("Sai tài khoản hoặc mật khẩu. Còn 4 lần thử.");
+    expect(screen.getByRole("alert")).toHaveTextContent("Nếu tài khoản đã bật xác thực hai bước, hãy nhập cả mã OTP.");
   });
 
   it("Liên hệ quản trị viên: hộp thông tin tĩnh có tên đơn vị, SĐT, email; ẩn khi chưa cấu hình", async () => {

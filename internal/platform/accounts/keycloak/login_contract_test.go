@@ -39,7 +39,7 @@ func runLoginContract(t *testing.T, l port.PasswordLogin, d port.Directory, mem 
 
 	// Đúng mật khẩu → token có roles và amr.
 	idA := seed("tai-khoan-a", "coop_manager")
-	ts, err := l.PasswordGrant(ctx, port.LoginMain, "tai-khoan-a", loginPassword, "")
+	ts, err := l.PasswordGrant(ctx, "tai-khoan-a", loginPassword, "")
 	if err != nil || ts.AccessToken == "" || ts.RefreshToken == "" || ts.ExpiresIn <= 0 {
 		t.Fatalf("đăng nhập đúng: %v", err)
 	}
@@ -48,43 +48,47 @@ func runLoginContract(t *testing.T, l port.PasswordLogin, d port.Directory, mem 
 	}
 
 	// Sai mật khẩu → ErrInvalidGrant và Keycloak tăng bộ đếm.
-	if _, err := l.PasswordGrant(ctx, port.LoginMain, "tai-khoan-a", "sai-mat-khau", ""); !errors.Is(err, port.ErrInvalidGrant) {
+	if _, err := l.PasswordGrant(ctx, "tai-khoan-a", "sai-mat-khau", ""); !errors.Is(err, port.ErrInvalidGrant) {
 		t.Fatalf("sai mật khẩu: %v", err)
 	}
 	if st, err := d.LoginLockStatus(ctx, idA); err != nil || st.Failures != 1 || st.LastFailure == nil || st.Locked {
 		t.Fatalf("sau lần sai đầu: %+v %v", st, err)
 	}
 	// Đăng nhập đúng xóa bộ đếm.
-	if _, err := l.PasswordGrant(ctx, port.LoginMain, "tai-khoan-a", loginPassword, ""); err != nil {
+	if _, err := l.PasswordGrant(ctx, "tai-khoan-a", loginPassword, ""); err != nil {
 		t.Fatal(err)
 	}
 	if st, _ := d.LoginLockStatus(ctx, idA); st.Failures != 0 {
 		t.Fatalf("đăng nhập đúng phải xóa bộ đếm: %+v", st)
 	}
-	if _, err := l.PasswordGrant(ctx, port.LoginMain, "khong-co-ai", loginPassword, ""); !errors.Is(err, port.ErrInvalidGrant) {
+	if _, err := l.PasswordGrant(ctx, "khong-co-ai", loginPassword, ""); !errors.Is(err, port.ErrInvalidGrant) {
 		t.Fatalf("tên không có: %v", err)
 	}
 
-	// OTP: client chính thiếu hoặc sai mã → sai; đúng mã → amr có otp. Client kiểm bỏ qua OTP, không vai.
+	// OTP: thiếu hoặc sai mã → sai; đúng mã → amr có otp.
 	idB := seed("tai-khoan-b", "kn_officer")
 	mem.SetOTP(idB, true)
 	mem.SetOTPCode(idB, "123456")
 	for _, code := range []string{"", "000000"} {
 		clock = clock.Add(2 * time.Second)
-		if _, err := l.PasswordGrant(ctx, port.LoginMain, "tai-khoan-b", loginPassword, code); !errors.Is(err, port.ErrInvalidGrant) {
+		if _, err := l.PasswordGrant(ctx, "tai-khoan-b", loginPassword, code); !errors.Is(err, port.ErrInvalidGrant) {
 			t.Fatalf("OTP %q: %v", code, err)
 		}
 	}
-	ts, err = l.PasswordGrant(ctx, port.LoginMain, "tai-khoan-b", loginPassword, "123456")
+	ts, err = l.PasswordGrant(ctx, "tai-khoan-b", loginPassword, "123456")
 	if err != nil || !slices.Contains(ts.AMR, "otp") || !slices.Contains(ts.Roles, port.RoleLoginTOTP) {
 		t.Fatalf("đúng OTP: %v amr=%v roles=%v", err, ts.AMR, ts.Roles)
 	}
-	chk, err := l.PasswordGrant(ctx, port.LoginCheck, "tai-khoan-b", loginPassword, "")
-	if err != nil || len(chk.Roles) != 0 || !slices.Equal(chk.AMR, []string{"pwd"}) {
-		t.Fatalf("client kiểm: %v roles=%v amr=%v", err, chk.Roles, chk.AMR)
+	// Thiếu OTP ở tài khoản có OTP: không có đường kiểm mật khẩu riêng, nên Keycloak tính một lần sai (không về 0).
+	if st, _ := d.LoginLockStatus(ctx, idB); st.Failures != 0 {
+		t.Fatalf("đăng nhập đúng (có OTP) phải xóa bộ đếm: %+v", st)
 	}
-	if err := l.EndSession(ctx, port.LoginCheck, chk.RefreshToken); err != nil {
-		t.Fatal(err)
+	clock = clock.Add(2 * time.Second)
+	if _, err := l.PasswordGrant(ctx, "tai-khoan-b", loginPassword, ""); !errors.Is(err, port.ErrInvalidGrant) {
+		t.Fatalf("thiếu OTP: %v", err)
+	}
+	if st, _ := d.LoginLockStatus(ctx, idB); st.Failures != 1 {
+		t.Fatalf("thiếu OTP phải tăng bộ đếm một lần: %+v", st)
 	}
 
 	// Required action: chỉ báo sau khi mật khẩu đúng.
@@ -93,32 +97,32 @@ func runLoginContract(t *testing.T, l port.PasswordLogin, d port.Directory, mem 
 	if err := mem.SetPassword(ctx, idC, loginPassword); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := l.PasswordGrant(ctx, port.LoginCheck, "tai-khoan-c", loginPassword, ""); !errors.Is(err, port.ErrAccountNotSetUp) {
+	if _, err := l.PasswordGrant(ctx, "tai-khoan-c", loginPassword, ""); !errors.Is(err, port.ErrAccountNotSetUp) {
 		t.Fatalf("required action: %v", err)
 	}
-	if _, err := l.PasswordGrant(ctx, port.LoginCheck, "tai-khoan-c", "sai-mat-khau", ""); !errors.Is(err, port.ErrInvalidGrant) {
+	if _, err := l.PasswordGrant(ctx, "tai-khoan-c", "sai-mat-khau", ""); !errors.Is(err, port.ErrInvalidGrant) {
 		t.Fatalf("required action + sai mật khẩu: %v", err)
 	}
 
 	// Tài khoản bị khóa trong Keycloak.
 	_ = mem.SetEnabled(ctx, idA, false)
-	if _, err := l.PasswordGrant(ctx, port.LoginMain, "tai-khoan-a", loginPassword, ""); !errors.Is(err, port.ErrAccountDisabled) {
+	if _, err := l.PasswordGrant(ctx, "tai-khoan-a", loginPassword, ""); !errors.Is(err, port.ErrAccountDisabled) {
 		t.Fatalf("tài khoản khóa: %v", err)
 	}
 	_ = mem.SetEnabled(ctx, idA, true)
 
 	// Làm mới và thu hồi phiên.
-	ts, _ = l.PasswordGrant(ctx, port.LoginMain, "tai-khoan-a", loginPassword, "")
+	ts, _ = l.PasswordGrant(ctx, "tai-khoan-a", loginPassword, "")
 	if again, err := l.Refresh(ctx, ts.RefreshToken); err != nil || again.AccessToken == "" {
 		t.Fatalf("refresh: %v", err)
 	}
-	if err := l.EndSession(ctx, port.LoginMain, ts.RefreshToken); err != nil {
+	if err := l.EndSession(ctx, ts.RefreshToken); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := l.Refresh(ctx, ts.RefreshToken); !errors.Is(err, port.ErrSessionEnded) {
 		t.Fatalf("refresh sau đăng xuất: %v", err)
 	}
-	if err := l.EndSession(ctx, port.LoginMain, ts.RefreshToken); err != nil {
+	if err := l.EndSession(ctx, ts.RefreshToken); err != nil {
 		t.Fatalf("đăng xuất lại phiên đã hết phải coi như xong: %v", err)
 	}
 
@@ -126,7 +130,7 @@ func runLoginContract(t *testing.T, l port.PasswordLogin, d port.Directory, mem 
 	idD := seed("tai-khoan-d", "coop_manager")
 	for range 5 {
 		clock = clock.Add(2 * time.Second)
-		if _, err := l.PasswordGrant(ctx, port.LoginMain, "tai-khoan-d", "sai-mat-khau", ""); !errors.Is(err, port.ErrInvalidGrant) {
+		if _, err := l.PasswordGrant(ctx, "tai-khoan-d", "sai-mat-khau", ""); !errors.Is(err, port.ErrInvalidGrant) {
 			t.Fatal(err)
 		}
 	}
@@ -135,13 +139,13 @@ func runLoginContract(t *testing.T, l port.PasswordLogin, d port.Directory, mem 
 		t.Fatalf("khóa 15 phút: %+v %v", st, err)
 	}
 	grants := mem.PasswordGrants(idD)
-	if _, err := l.PasswordGrant(ctx, port.LoginMain, "tai-khoan-d", loginPassword, ""); !errors.Is(err, port.ErrInvalidGrant) || mem.PasswordGrants(idD) != grants {
+	if _, err := l.PasswordGrant(ctx, "tai-khoan-d", loginPassword, ""); !errors.Is(err, port.ErrInvalidGrant) || mem.PasswordGrants(idD) != grants {
 		t.Fatalf("đang khóa phải từ chối mà không kiểm mật khẩu: %v", err)
 	}
 	if err := d.ClearBruteForce(ctx, idD); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := l.PasswordGrant(ctx, port.LoginMain, "tai-khoan-d", loginPassword, ""); err != nil {
+	if _, err := l.PasswordGrant(ctx, "tai-khoan-d", loginPassword, ""); err != nil {
 		t.Fatalf("sau khi mở khóa: %v", err)
 	}
 
@@ -149,7 +153,7 @@ func runLoginContract(t *testing.T, l port.PasswordLogin, d port.Directory, mem 
 	idE := seed("tai-khoan-e", "coop_manager")
 	for range 2 {
 		clock = clock.Add(100 * time.Millisecond)
-		_, _ = l.PasswordGrant(ctx, port.LoginMain, "tai-khoan-e", "sai-mat-khau", "")
+		_, _ = l.PasswordGrant(ctx, "tai-khoan-e", "sai-mat-khau", "")
 	}
 	st, _ = d.LoginLockStatus(ctx, idE)
 	if !st.Locked || st.Failures != 2 || st.Until == nil || !near(*st.Until, clock.Add(domain.LoginQuickWait)) {
@@ -161,7 +165,7 @@ func runLoginContract(t *testing.T, l port.PasswordLogin, d port.Directory, mem 
 	mem.LagFailureVisibility(500 * time.Millisecond)
 	defer mem.LagFailureVisibility(0)
 	clock = clock.Add(2 * time.Second)
-	_, _ = l.PasswordGrant(ctx, port.LoginMain, "tai-khoan-f", "sai-mat-khau", "")
+	_, _ = l.PasswordGrant(ctx, "tai-khoan-f", "sai-mat-khau", "")
 	if st, _ := d.LoginLockStatus(ctx, idF); st.Failures != 0 {
 		t.Fatalf("đọc ngay sau lần sai phải thấy số cũ, thấy %d", st.Failures)
 	}
@@ -189,12 +193,12 @@ func TestLoginHTTPErrorsCarryNoSecrets(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	cfg := Config{BaseURL: srv.URL, Realm: emuRealm, ClientID: emuClient, ClientSecret: emuSecret, HTTP: srv.Client()}
-	l, err := NewLogin(cfg, LoginConfig{ClientID: emuLoginClient, ClientSecret: emuLoginSecret, CheckClientID: emuLoginCheckClient, CheckClientSecret: emuLoginCheckSecret})
+	l, err := NewLogin(cfg, LoginConfig{ClientID: emuLoginClient, ClientSecret: emuLoginSecret})
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	_, err = l.PasswordGrant(ctx, port.LoginMain, "tai-khoan-a", loginPassword, "123456")
+	_, err = l.PasswordGrant(ctx, "tai-khoan-a", loginPassword, "123456")
 	if !errors.Is(err, port.ErrUnavailable) {
 		t.Fatalf("phản hồi lạ phải là ErrUnavailable: %v", err)
 	}
@@ -206,14 +210,14 @@ func TestLoginHTTPErrorsCarryNoSecrets(t *testing.T) {
 	// Sai bí mật client → ErrUnavailable (cấu hình sai không phải sai mật khẩu của người dùng).
 	e := newEmulator(t)
 	bad, _ := NewLogin(Config{BaseURL: e.srv.URL, Realm: emuRealm, ClientID: emuClient, ClientSecret: emuSecret, HTTP: e.srv.Client()},
-		LoginConfig{ClientID: emuLoginClient, ClientSecret: "sai-bi-mat", CheckClientID: emuLoginCheckClient, CheckClientSecret: emuLoginCheckSecret})
-	if _, err := bad.PasswordGrant(ctx, port.LoginMain, "a", loginPassword, ""); !errors.Is(err, port.ErrUnavailable) || strings.Contains(err.Error(), "sai-bi-mat") {
+		LoginConfig{ClientID: emuLoginClient, ClientSecret: "sai-bi-mat"})
+	if _, err := bad.PasswordGrant(ctx, "a", loginPassword, ""); !errors.Is(err, port.ErrUnavailable) || strings.Contains(err.Error(), "sai-bi-mat") {
 		t.Fatalf("sai bí mật client: %v", err)
 	}
 }
 
 func TestLoginConfigFromEnv(t *testing.T) {
-	names := []string{"AG_KC_LOGIN_CLIENT_ID", "AG_KC_LOGIN_CLIENT_SECRET", "AG_KC_LOGIN_CHECK_CLIENT_ID", "AG_KC_LOGIN_CHECK_CLIENT_SECRET"}
+	names := []string{"AG_KC_LOGIN_CLIENT_ID", "AG_KC_LOGIN_CLIENT_SECRET"}
 	for _, n := range names {
 		t.Setenv(n, "")
 	}
@@ -221,15 +225,13 @@ func TestLoginConfigFromEnv(t *testing.T) {
 		t.Fatalf("không đặt biến nào → tắt: %v %v", ok, err)
 	}
 	t.Setenv(names[0], "agrigreen-htx-login")
-	t.Setenv(names[1], "x")
 	_, ok, err := LoginConfigFromEnv()
-	if ok || err == nil || !strings.Contains(err.Error(), names[2]) || !strings.Contains(err.Error(), names[3]) || strings.Contains(err.Error(), names[0]) {
+	if ok || err == nil || !strings.Contains(err.Error(), names[1]) || strings.Contains(err.Error(), names[0]) {
 		t.Fatalf("đặt thiếu → lỗi nêu tên biến thiếu: %v %v", ok, err)
 	}
-	t.Setenv(names[2], "agrigreen-htx-login-check")
-	t.Setenv(names[3], "y")
+	t.Setenv(names[1], "y")
 	lc, ok, err := LoginConfigFromEnv()
-	if !ok || err != nil || lc.ClientID != "agrigreen-htx-login" || lc.CheckClientSecret != "y" {
+	if !ok || err != nil || lc.ClientID != "agrigreen-htx-login" || lc.ClientSecret != "y" {
 		t.Fatalf("đủ biến: %v %v", ok, err)
 	}
 }

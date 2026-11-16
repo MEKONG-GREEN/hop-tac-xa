@@ -19,7 +19,6 @@ export interface LoginTokens {
 /** Kết quả đăng nhập theo mã problem của máy chủ (docs/errors.md, pf/accounts). */
 export type LoginOutcome =
   | { kind: "authenticated"; tokens: LoginTokens }
-  | { kind: "otp_required" }
   /** accounts.login_failed (EX-02): `remaining` = số lần thử còn lại. */
   | { kind: "invalid"; remaining: number }
   /** accounts.login_temporarily_locked: `minutes` = số phút còn lại (làm tròn lên). */
@@ -86,7 +85,6 @@ export function createPasswordLoginApi(opts: { baseUrl: string; fetch?: (input: 
       const problem = (res.error ?? {}) as ProblemBody;
       switch (response.status) {
         case 200: {
-          if (data?.status === "otp_required") return { kind: "otp_required" };
           const tokens = data?.status === "authenticated" ? toTokens(data) : null;
           return tokens ? { kind: "authenticated", tokens } : { kind: "unavailable" };
         }

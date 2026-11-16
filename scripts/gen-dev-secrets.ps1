@@ -21,8 +21,8 @@ if ((Test-Path $target) -and -not $Force) {
         [System.IO.File]::AppendAllText($target, $add, (New-Object System.Text.UTF8Encoding $false))
         Write-Host "Đã bổ sung AG_KC_CLIENT_SECRET vào $target (giá trị không in ra). Tạo lại container keycloak để nhập lại realm."
     }
-    # FN-01 (ADR-0060): bí mật hai client đăng nhập riêng và khóa HMAC bộ đếm mã định danh không tồn tại.
-    foreach ($v in 'AG_KC_LOGIN_CLIENT_SECRET', 'AG_KC_LOGIN_CHECK_CLIENT_SECRET', 'AG_LOGIN_ID_KEY') {
+    # FN-01 (ADR-0060): bí mật client đăng nhập riêng và khóa HMAC bộ đếm mã định danh không tồn tại.
+    foreach ($v in 'AG_KC_LOGIN_CLIENT_SECRET', 'AG_LOGIN_ID_KEY') {
         $have = [System.IO.File]::ReadAllText($target)
         if ($have -notmatch "(?m)^$v=") {
             $val = if ($v -eq 'AG_LOGIN_ID_KEY') { "'$(New-B64 32)'" } else { New-Hex 32 }
@@ -64,7 +64,7 @@ $lines = @(
     "AG_VAULT_BLIND_KEY='$(New-B64 32)'"
     "AG_ANCHOR_SIGNING_KEY='$(New-B64 32)'"
     "AG_KC_CLIENT_SECRET=$(New-Hex 32)"
-    '# FN-01 (ADR-0060): bí mật hai client đăng nhập riêng; khóa HMAC bộ đếm mã định danh không tồn tại (base64 32 byte).'
+    '# FN-01 (ADR-0060): bí mật client đăng nhập riêng; khóa HMAC bộ đếm mã định danh không tồn tại (base64 32 byte).'
     "AG_KC_LOGIN_CLIENT_SECRET=$(New-Hex 32)"
     "AG_KC_LOGIN_CHECK_CLIENT_SECRET=$(New-Hex 32)"
     "AG_LOGIN_ID_KEY='$(New-B64 32)'"

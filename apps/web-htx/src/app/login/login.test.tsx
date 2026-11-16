@@ -98,21 +98,19 @@ describe("Trang Đăng nhập (FN-01)", () => {
     await waitFor(() => expect(nav.replace).toHaveBeenCalledWith(homeFor(auth.principal!)));
   });
 
-  it("bước OTP: otp_required → hiện ô OTP, giữ mật khẩu, gửi lại kèm mã", async () => {
+  it("ô OTP tùy chọn: không nhập thì gửi không kèm mã; có nhập thì gửi kèm mã; sai thì nhắc nhập cả mã OTP", async () => {
     const user = userEvent.setup();
     render(<LoginPage />);
     await fill(user, "admin", "Mat-khau-12!");
-    signIn.mockResolvedValueOnce({ kind: "otp_required" });
-    await submit(user);
-    const otp = await screen.findByLabelText("Mã OTP");
-    expect(screen.getByLabelText(/^Mật khẩu/)).toHaveValue("Mat-khau-12!");
-    await user.type(otp, "123456");
     signIn.mockResolvedValueOnce({ kind: "invalid", remaining: 4 });
     await submit(user);
+    expect(signIn).toHaveBeenLastCalledWith("admin", "Mat-khau-12!", undefined);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Nếu tài khoản đã bật xác thực hai bước, hãy nhập cả mã OTP.");
+    await user.type(screen.getByLabelText(/^Mã OTP/), "123456");
+    signIn.mockResolvedValueOnce({ kind: "invalid", remaining: 3 });
+    await submit(user);
     expect(signIn).toHaveBeenLastCalledWith("admin", "Mat-khau-12!", "123456");
-    expect(await screen.findByRole("alert")).toHaveTextContent("Mã OTP không đúng. Còn 4 lần thử.");
-    await user.click(screen.getByRole("button", { name: "Quay lại" }));
-    expect(screen.queryByLabelText("Mã OTP")).toBeNull();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Sai tài khoản hoặc mật khẩu. Còn 3 lần thử.");
   });
 
   it("việc lần đầu: setup_required → nút gọi login(returnTo, tên đăng nhập) sang trang xác thực", async () => {

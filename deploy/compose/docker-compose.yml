@@ -51,11 +51,9 @@ x-kc-admin-env: &kc-admin-env
   AG_KC_CLIENT_SECRET: ${AG_KC_CLIENT_SECRET:?chạy scripts/gen-dev-secrets để bổ sung AG_KC_CLIENT_SECRET vào deploy/compose/.env}
   AG_KC_ACTIONS_CLIENT_ID: agrigreen-web-ops
   AG_KC_ACTIONS_REDIRECT_URI: http://localhost:3000/
-  # FN-01 (ADR-0060): màn đăng nhập riêng của App HTX — máy chủ đổi mật khẩu lấy token qua hai client bí mật.
+  # FN-01 (ADR-0060): màn đăng nhập riêng của App HTX — máy chủ đổi mật khẩu lấy token qua client bí mật.
   AG_KC_LOGIN_CLIENT_ID: agrigreen-htx-login
   AG_KC_LOGIN_CLIENT_SECRET: ${AG_KC_LOGIN_CLIENT_SECRET:?chạy scripts/gen-dev-secrets để bổ sung bí mật đăng nhập vào deploy/compose/.env}
-  AG_KC_LOGIN_CHECK_CLIENT_ID: agrigreen-htx-login-check
-  AG_KC_LOGIN_CHECK_CLIENT_SECRET: ${AG_KC_LOGIN_CHECK_CLIENT_SECRET:?chạy scripts/gen-dev-secrets để bổ sung bí mật đăng nhập vào deploy/compose/.env}
 
 x-s3-env: &s3-env
   AG_S3_ENDPOINT: seaweedfs:9000
@@ -181,9 +179,8 @@ services:
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?chạy scripts/gen-dev-secrets}
       # Thay placeholder ${AG_KC_CLIENT_SECRET} của client agrigreen-accounts khi nhập realm.
       AG_KC_CLIENT_SECRET: ${AG_KC_CLIENT_SECRET:?chạy scripts/gen-dev-secrets}
-      # Thay placeholder bí mật của hai client agrigreen-htx-login và agrigreen-htx-login-check (FN-01).
+      # Thay placeholder bí mật của client agrigreen-htx-login (FN-01).
       AG_KC_LOGIN_CLIENT_SECRET: ${AG_KC_LOGIN_CLIENT_SECRET:?chạy scripts/gen-dev-secrets}
-      AG_KC_LOGIN_CHECK_CLIENT_SECRET: ${AG_KC_LOGIN_CHECK_CLIENT_SECRET:?chạy scripts/gen-dev-secrets}
       # Issuer cố định theo địa chỉ trình duyệt; container khác gọi keycloak:8080 (backchannel).
       KC_HOSTNAME: http://localhost:8180
       KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"

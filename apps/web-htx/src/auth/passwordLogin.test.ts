@@ -39,12 +39,12 @@ describe("passwordLogin.login", () => {
     expect(await sent[0]!.json()).toEqual({ identifier: "an", password: "x" });
   });
 
-  it("200 authenticated → token; 200 otp_required → otp_required", async () => {
+  it("200 authenticated → token; 200 không có token → unavailable", async () => {
     expect(await harness(reply(200, TOKENS)).api.login("a", "b")).toEqual({
       kind: "authenticated",
       tokens: { accessToken: "at", refreshToken: "rt", expiresIn: 300, refreshExpiresIn: 36000 },
     });
-    expect(await harness(reply(200, { status: "otp_required" })).api.login("a", "b")).toEqual({ kind: "otp_required" });
+    expect(await harness(reply(200, { status: "authenticated" })).api.login("a", "b")).toEqual({ kind: "unavailable" });
   });
 
   it("ánh xạ mã problem sang kết quả", async () => {

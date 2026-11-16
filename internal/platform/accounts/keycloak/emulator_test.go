@@ -32,11 +32,9 @@ const (
 	emuClient = "agrigreen-accounts"
 	emuSecret = "s3cr3t"
 
-	// Hai client của màn đăng nhập riêng (FN-01): chính (có OTP) và kiểm mật khẩu.
-	emuLoginClient      = "agrigreen-htx-login"
-	emuLoginSecret      = "login-s3cr3t"
-	emuLoginCheckClient = "agrigreen-htx-login-check"
-	emuLoginCheckSecret = "check-s3cr3t"
+	// Client của màn đăng nhập riêng (FN-01): direct grant có OTP.
+	emuLoginClient = "agrigreen-htx-login"
+	emuLoginSecret = "login-s3cr3t"
 )
 
 func newEmulator(t *testing.T) *emulator {
@@ -368,14 +366,8 @@ func (e *emulator) clearBruteForce(w http.ResponseWriter, r *http.Request, id uu
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (e *emulator) loginClient(id, secret string, ok bool) (port.LoginClient, bool) {
-	switch {
-	case ok && id == emuLoginClient && secret == emuLoginSecret:
-		return port.LoginMain, true
-	case ok && id == emuLoginCheckClient && secret == emuLoginCheckSecret:
-		return port.LoginCheck, true
-	}
-	return 0, false
+func (e *emulator) loginClient(id, secret string, ok bool) bool {
+	return ok && id == emuLoginClient && secret == emuLoginSecret
 }
 
 func oidcError(w http.ResponseWriter, status int, code, desc string) {
@@ -384,10 +376,9 @@ func oidcError(w http.ResponseWriter, status int, code, desc string) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": code, "error_description": desc})
 }
 
-// loginToken: grant_type=password và refresh_token cho hai client đăng nhập, lỗi đúng dạng dây của Keycloak.
+// loginToken: grant_type=password và refresh_token cho client đăng nhập, lỗi đúng dạng dây của Keycloak.
 func (e *emulator) loginToken(w http.ResponseWriter, r *http.Request, id, secret string, ok bool) {
-	c, valid := e.loginClient(id, secret, ok)
-	if !valid {
+	if !e.loginClient(id, secret, ok) {
 		oidcError(w, http.StatusUnauthorized, "unauthorized_client", "Invalid client or Invalid client credentials")
 		return
 	}
@@ -396,7 +387,7 @@ func (e *emulator) loginToken(w http.ResponseWriter, r *http.Request, id, secret
 		err error
 	)
 	if r.Form.Get("grant_type") == "password" {
-		ts, err = e.mem.PasswordGrant(r.Context(), c, r.Form.Get("username"), r.Form.Get("password"), r.Form.Get("totp"))
+		ts, err = e.mem.PasswordGrant(r.Context(), r.Form.Get("username"), r.Form.Get("password"), r.Form.Get("totp"))
 	} else {
 		ts, err = e.mem.Refresh(r.Context(), r.Form.Get("refresh_token"))
 	}
@@ -421,12 +412,11 @@ func (e *emulator) loginToken(w http.ResponseWriter, r *http.Request, id, secret
 func (e *emulator) endSession(w http.ResponseWriter, r *http.Request) {
 	id, secret, ok := r.BasicAuth()
 	_ = r.ParseForm()
-	c, valid := e.loginClient(id, secret, ok)
-	if !valid {
+	if !e.loginClient(id, secret, ok) {
 		oidcError(w, http.StatusUnauthorized, "unauthorized_client", "Invalid client or Invalid client credentials")
 		return
 	}
-	if err := e.mem.EndSession(r.Context(), c, r.Form.Get("refresh_token")); err != nil {
+	if err := e.mem.EndSession(r.Context(), r.Form.Get("refresh_token")); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -435,7 +425,7 @@ func (e *emulator) endSession(w http.ResponseWriter, r *http.Request) {
 
 func (e *emulator) login(t *testing.T) *Login {
 	l, err := NewLogin(Config{BaseURL: e.srv.URL, Realm: emuRealm, ClientID: emuClient, ClientSecret: emuSecret, HTTP: e.srv.Client()},
-		LoginConfig{ClientID: emuLoginClient, ClientSecret: emuLoginSecret, CheckClientID: emuLoginCheckClient, CheckClientSecret: emuLoginCheckSecret})
+		LoginConfig{ClientID: emuLoginClient, ClientSecret: emuLoginSecret})
 	if err != nil {
 		t.Fatal(err)
 	}

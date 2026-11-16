@@ -424,30 +424,41 @@ func TestLogin_ACN1_ThieuTruong(t *testing.T) {
 	}
 }
 
+func (f *loginFixture) failures(id uuid.UUID) int {
+	f.t.Helper()
+	st, err := f.mem.LoginLockStatus(context.Background(), id)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	return st.Failures
+}
+
+// Ràng buộc 2: không có đường nào vào được bằng mật khẩu đơn thuần khi tài khoản có OTP hoặc vai bắt TOTP.
 func TestLogin_MFA_KhongVaoBangMatKhauDonThuan(t *testing.T) {
 	f := newLoginFixture(t, true)
 	id := f.account("co.otp", "", "coop_manager")
 	f.mem.SetOTP(id, true)
 	f.mem.SetOTPCode(id, loginOTP)
 
-	// Có OTP, thiếu mã → hỏi OTP, không có token, không để lại phiên.
+	// Có OTP, chỉ gửi mật khẩu đúng → sai tài khoản hoặc mật khẩu, không token, không phiên, Keycloak tăng đếm đúng một.
+	f.step()
 	r := f.login("co.otp", loginPwd, "")
-	if r.status != http.StatusOK || r.body["status"] != "otp_required" || r.body["access_token"] != nil || r.body["refresh_token"] != nil {
+	if r.status != http.StatusUnauthorized || r.code() != "accounts.login_failed" || r.num("remaining_attempts") != 4 ||
+		r.body["access_token"] != nil || r.body["refresh_token"] != nil {
 		t.Fatalf("thiếu OTP: %d %s", r.status, r.raw)
 	}
 	if n := f.mem.ActiveLoginSessions(id); n != 0 {
-		t.Fatalf("lần kiểm mật khẩu phải thu hồi phiên, còn %d", n)
+		t.Fatalf("không được để lại phiên, còn %d", n)
 	}
-	// Sai mật khẩu ở bước đầu vẫn là sai tài khoản hoặc mật khẩu.
-	f.step()
-	if r := f.login("co.otp", "sai-mat-khau", ""); r.status != http.StatusUnauthorized || r.code() != "accounts.login_failed" {
-		t.Fatalf("sai mật khẩu khi có OTP: %d %s", r.status, r.raw)
+	if n := f.failures(id); n != 1 {
+		t.Fatalf("Keycloak phải ghi một lần sai, ghi %d", n)
 	}
-	// Sai OTP → 401; đúng OTP → token có amr otp.
+	// Sai OTP → 401, không token.
 	f.step()
 	if r := f.login("co.otp", loginPwd, "000000"); r.status != http.StatusUnauthorized || r.code() != "accounts.login_failed" || r.body["access_token"] != nil {
 		t.Fatalf("sai OTP: %d %s", r.status, r.raw)
 	}
+	// Đúng OTP → token có amr otp.
 	f.step()
 	r = f.login("co.otp", loginPwd, loginOTP)
 	if r.status != http.StatusOK || r.body["status"] != "authenticated" {
@@ -465,11 +476,75 @@ func TestLogin_MFA_KhongVaoBangMatKhauDonThuan(t *testing.T) {
 		t.Fatalf("vai bắt TOTP chưa có OTP: %d %s", r.status, r.raw)
 	}
 	if n := f.mem.ActiveLoginSessions(admin); n != 0 {
-		t.Fatalf("phiên kiểm phải được thu hồi, còn %d", n)
+		t.Fatalf("phiên bị từ chối phải được thu hồi, còn %d", n)
 	}
 	f.step()
 	if r := f.login("quan.tri", "sai-mat-khau", ""); r.status != http.StatusUnauthorized {
 		t.Fatalf("sai mật khẩu của vai bắt TOTP: %d", r.status)
+	}
+}
+
+// Mật khẩu đúng kèm OTP sai 5 lần → lần 5 khóa 15 phút. Xen các lượt chỉ gửi mật khẩu đúng không làm bộ đếm về 0 (lượt
+// đó cũng là một lần sai); chỉ đăng nhập trọn vẹn mới xóa bộ đếm.
+func TestLogin_MFA_SaiOTP5LanThiKhoa(t *testing.T) {
+	f := newLoginFixture(t, true)
+	id := f.account("co.otp.khoa", "", "coop_manager")
+	f.mem.SetOTP(id, true)
+	f.mem.SetOTPCode(id, loginOTP)
+	otps := []string{"000000", "", "000000", "", "000000"} // lượt 2 và 4 chỉ gửi mật khẩu đúng
+	for i, otp := range otps {
+		f.clk.Advance(12 * time.Second)
+		r := f.login("co.otp.khoa", loginPwd, otp)
+		if i < 4 {
+			if r.status != http.StatusUnauthorized || r.num("remaining_attempts") != 4-i {
+				t.Fatalf("lượt %d: %d %s", i+1, r.status, r.raw)
+			}
+			if n := f.failures(id); n != i+1 {
+				t.Fatalf("lượt %d: bộ đếm Keycloak phải là %d, là %d (không được về 0)", i+1, i+1, n)
+			}
+			continue
+		}
+		if r.status != http.StatusLocked || r.num("retry_after_minutes") != 15 || r.header.Get("Retry-After") != "900" {
+			t.Fatalf("lần sai thứ 5 phải khóa 15 phút: %d %s", r.status, r.raw)
+		}
+	}
+	// Đang khóa: dù mật khẩu và OTP đúng vẫn bị chặn và không kiểm mật khẩu.
+	grants := f.mem.PasswordGrants(id)
+	f.clk.Advance(12 * time.Second)
+	if r := f.login("co.otp.khoa", loginPwd, loginOTP); r.status != http.StatusLocked || r.body["access_token"] != nil || f.mem.PasswordGrants(id) != grants {
+		t.Fatalf("đang khóa tạm: %d %s", r.status, r.raw)
+	}
+	// Hết 15 phút, đăng nhập trọn vẹn thành công mới xóa bộ đếm.
+	f.clk.Advance(15 * time.Minute)
+	if r := f.login("co.otp.khoa", loginPwd, loginOTP); r.status != http.StatusOK {
+		t.Fatalf("sau 15 phút: %d %s", r.status, r.raw)
+	}
+	if n := f.failures(id); n != 0 {
+		t.Fatalf("đăng nhập trọn vẹn phải xóa bộ đếm, còn %d", n)
+	}
+}
+
+// Phản hồi của tài khoản có OTP thiếu mã, tài khoản không OTP sai mật khẩu và mã định danh không tồn tại giống hệt nhau
+// ở mọi lượt, kể cả lúc khóa tạm: không lộ tài khoản nào có OTP.
+func TestLogin_MFA_PhanHoiGiongHetKhiThieuOTP(t *testing.T) {
+	f := newLoginFixture(t, true)
+	withOTP := f.account("co.otp.a", "", "coop_manager")
+	f.mem.SetOTP(withOTP, true)
+	f.mem.SetOTPCode(withOTP, loginOTP)
+	f.account("khong.otp.b", "", "coop_manager")
+	for i := 1; i <= 7; i++ {
+		f.clk.Advance(20 * time.Second)
+		a := f.login("co.otp.a", loginPwd, "")
+		b := f.login("khong.otp.b", "sai-mat-khau", "")
+		c := f.login("khong.ton.tai.c", "sai-mat-khau", "")
+		for name, r := range map[string]reply{"không OTP sai mật khẩu": b, "không tồn tại": c} {
+			if a.status != r.status || !reflect.DeepEqual(a.comparable(), r.comparable()) || a.header.Get("Retry-After") != r.header.Get("Retry-After") {
+				t.Fatalf("lượt %d: OTP thiếu mã khác %s: %d %s | %d %s", i, name, a.status, a.raw, r.status, r.raw)
+			}
+		}
+		if i == 6 && a.status != http.StatusLocked {
+			t.Fatalf("lượt 6 phải là khóa tạm: %d", a.status)
+		}
 	}
 }
 
@@ -570,7 +645,7 @@ func TestLogin_KhongLoMatKhauTrongLogVaLoi(t *testing.T) {
 		}
 		return r
 	}
-	try(secretName, secretPwd, "")               // otp_required
+	try(secretName, secretPwd, "")               // thiếu OTP
 	try(secretName, "sai-"+secretPwd, "")        // sai mật khẩu
 	try(secretName, secretPwd, "000000")         // sai OTP
 	try("ten.khac.tt"+secretName, "x", "")       // mã không tồn tại

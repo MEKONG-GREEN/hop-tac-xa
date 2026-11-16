@@ -5,29 +5,26 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 )
 
-// FN-01 (ADR-0060): hai client bí mật của màn đăng nhập riêng. Đọc dạng triển khai: client kiểm mật khẩu phải gắn flow
-// KHÔNG có OTP và token không có aud/vai (API không nhận), client chính dùng direct grant có nhánh OTP.
+// FN-01 (ADR-0060): realm chỉ có MỘT client đăng nhập bằng mật khẩu (agrigreen-htx-login, direct grant có nhánh OTP).
+// Không còn client hay luồng chỉ kiểm mật khẩu: mỗi lần kiểm mật khẩu đúng sẽ xóa bộ đếm lần sai của Keycloak, nên một
+// đường kiểm không OTP cho phép đoán OTP không giới hạn (nới xác thực hai yếu tố).
 func TestRealmHTXLoginClients(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join(repoRoot, "deploy", "compose", "keycloak", "agrigreen-realm.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	type execution struct {
-		Authenticator       string `json:"authenticator"`
-		AuthenticatorConfig string `json:"authenticatorConfig"`
-		FlowAlias           string `json:"flowAlias"`
-		Requirement         string `json:"requirement"`
+		Authenticator string `json:"authenticator"`
+		FlowAlias     string `json:"flowAlias"`
 	}
 	var realm struct {
 		DirectGrantFlow string `json:"directGrantFlow"`
 		Flows           []struct {
-			ID         string      `json:"id"`
 			Alias      string      `json:"alias"`
-			TopLevel   bool        `json:"topLevel"`
-			Provider   string      `json:"providerId"`
 			Executions []execution `json:"authenticationExecutions"`
 		} `json:"authenticationFlows"`
 		Clients []struct {
@@ -39,10 +36,8 @@ func TestRealmHTXLoginClients(t *testing.T) {
 			ImplicitFlow    bool              `json:"implicitFlowEnabled"`
 			DirectGrants    bool              `json:"directAccessGrantsEnabled"`
 			ServiceAccounts bool              `json:"serviceAccountsEnabled"`
-			FullScope       *bool             `json:"fullScopeAllowed"`
 			Secret          string            `json:"secret"`
 			DefaultScopes   []string          `json:"defaultClientScopes"`
-			OptionalScopes  []string          `json:"optionalClientScopes"`
 			Attributes      map[string]string `json:"attributes"`
 			FlowOverrides   map[string]string `json:"authenticationFlowBindingOverrides"`
 		} `json:"clients"`
@@ -51,69 +46,51 @@ func TestRealmHTXLoginClients(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var checkFlowID string
+	// Luồng direct grant của realm có nhánh OTP đã cấu hình.
+	var hasOTP bool
 	for _, f := range realm.Flows {
-		if f.Alias != "agrigreen htx password check" {
-			continue
+		if strings.Contains(f.Alias, "password check") {
+			t.Errorf("realm không còn luồng chỉ kiểm mật khẩu: %q", f.Alias)
 		}
-		checkFlowID = f.ID
-		if !f.TopLevel || f.Provider != "basic-flow" || f.ID == "" || len(f.Executions) != 2 {
-			t.Fatalf("flow kiểm mật khẩu: %+v", f)
-		}
-		for _, e := range f.Executions {
-			if e.Requirement != "REQUIRED" || e.FlowAlias != "" || (e.Authenticator != "direct-grant-validate-username" && e.Authenticator != "direct-grant-validate-password") {
-				t.Errorf("flow kiểm mật khẩu chỉ gồm tên đăng nhập và mật khẩu (không OTP): %+v", e)
-			}
-		}
-	}
-	if checkFlowID == "" {
-		t.Fatal("thiếu flow 'agrigreen htx password check'")
-	}
-	// Flow direct grant của realm (client chính) phải có nhánh OTP đã cấu hình.
-	var mainHasOTP bool
-	for _, f := range realm.Flows {
 		if f.Alias == "agrigreen direct grant otp" {
-			mainHasOTP = slices.ContainsFunc(f.Executions, func(e execution) bool { return e.Authenticator == "direct-grant-validate-otp" })
+			hasOTP = slices.ContainsFunc(f.Executions, func(e execution) bool { return e.Authenticator == "direct-grant-validate-otp" })
 		}
 	}
-	if realm.DirectGrantFlow != "agrigreen direct grant" || !mainHasOTP {
-		t.Fatalf("directGrantFlow=%q, nhánh OTP=%v", realm.DirectGrantFlow, mainHasOTP)
+	if realm.DirectGrantFlow != "agrigreen direct grant" || !hasOTP {
+		t.Fatalf("directGrantFlow=%q, nhánh OTP=%v", realm.DirectGrantFlow, hasOTP)
 	}
 
-	seen := map[string]bool{}
+	// Direct grant chỉ bật ở client có trước ticket này (agrigreen-seed, chỉ dev) và client đăng nhập mới.
+	allowedDirect := []string{"agrigreen-seed", "agrigreen-htx-login"}
+	var found bool
 	for _, c := range realm.Clients {
-		switch c.ClientID {
-		case "agrigreen-htx-login":
-			seen[c.ClientID] = true
-			if c.Secret != "${AG_KC_LOGIN_CLIENT_SECRET}" || c.PublicClient || !c.Enabled || !c.DirectGrants || c.StandardFlow || c.ImplicitFlow || c.ServiceAccounts {
-				t.Errorf("%s: phải là client bí mật chỉ direct grant, bí mật từ biến môi trường: %+v", c.ClientID, c)
-			}
-			if len(c.FlowOverrides) != 0 {
-				t.Errorf("%s dùng directGrantFlow của realm (có OTP), không ghi đè: %v", c.ClientID, c.FlowOverrides)
-			}
-			if !slices.Equal(c.DefaultScopes, []string{"basic", "roles", "web-origins", "profile", "agrigreen-claims"}) {
-				t.Errorf("%s scope: %v", c.ClientID, c.DefaultScopes)
-			}
-			if c.Attributes["client.session.idle.timeout"] != "14400" || c.Attributes["client.session.max.lifespan"] != "36000" {
-				t.Errorf("%s phiên idle/max: %v", c.ClientID, c.Attributes)
-			}
-		case "agrigreen-htx-login-check":
-			seen[c.ClientID] = true
-			if c.Secret != "${AG_KC_LOGIN_CHECK_CLIENT_SECRET}" || c.PublicClient || !c.Enabled || !c.DirectGrants || c.StandardFlow || c.ImplicitFlow || c.ServiceAccounts {
-				t.Errorf("%s: phải là client bí mật chỉ direct grant, bí mật từ biến môi trường: %+v", c.ClientID, c)
-			}
-			if c.FlowOverrides["direct_grant"] != checkFlowID {
-				t.Errorf("%s phải gắn flow kiểm mật khẩu (không OTP): %v", c.ClientID, c.FlowOverrides)
-			}
-			if !slices.Equal(c.DefaultScopes, []string{"basic"}) || len(c.OptionalScopes) != 0 || c.FullScope == nil || *c.FullScope {
-				t.Errorf("%s: chỉ scope basic, không scope tùy chọn, fullScopeAllowed=false để token không có aud/vai/tenant: %+v", c.ClientID, c)
-			}
+		if strings.Contains(c.ClientID, "login-check") || len(c.FlowOverrides) != 0 && strings.HasPrefix(c.ClientID, "agrigreen-htx") {
+			t.Errorf("client %q không được tồn tại hoặc ghi đè luồng", c.ClientID)
 		}
-		if (c.ClientID == "agrigreen-htx-login" || c.ClientID == "agrigreen-htx-login-check") && len(c.Description) > 255 {
+		if c.DirectGrants && !slices.Contains(allowedDirect, c.ClientID) {
+			t.Errorf("client %q bật direct grant ngoài danh sách cho phép %v", c.ClientID, allowedDirect)
+		}
+		if c.ClientID != "agrigreen-htx-login" {
+			continue
+		}
+		found = true
+		if c.Secret != "${AG_KC_LOGIN_CLIENT_SECRET}" || c.PublicClient || !c.Enabled || !c.DirectGrants || c.StandardFlow || c.ImplicitFlow || c.ServiceAccounts {
+			t.Errorf("%s: phải là client bí mật chỉ direct grant, bí mật từ biến môi trường: %+v", c.ClientID, c)
+		}
+		if len(c.FlowOverrides) != 0 {
+			t.Errorf("%s dùng directGrantFlow của realm (có OTP), không ghi đè: %v", c.ClientID, c.FlowOverrides)
+		}
+		if !slices.Equal(c.DefaultScopes, []string{"basic", "roles", "web-origins", "profile", "agrigreen-claims"}) {
+			t.Errorf("%s scope: %v", c.ClientID, c.DefaultScopes)
+		}
+		if c.Attributes["client.session.idle.timeout"] != "14400" || c.Attributes["client.session.max.lifespan"] != "36000" {
+			t.Errorf("%s phiên idle/max: %v", c.ClientID, c.Attributes)
+		}
+		if len(c.Description) > 255 {
 			t.Errorf("%s: mô tả %d ký tự > 255", c.ClientID, len(c.Description))
 		}
 	}
-	if len(seen) != 2 {
-		t.Fatalf("thiếu client đăng nhập: %v", seen)
+	if !found {
+		t.Fatal("thiếu client agrigreen-htx-login")
 	}
 }

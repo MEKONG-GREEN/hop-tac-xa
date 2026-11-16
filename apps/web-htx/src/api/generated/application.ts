@@ -3457,7 +3457,7 @@ export interface paths {
         put?: never;
         /**
          * FN-01 Đăng nhập bằng tên đăng nhập hoặc số điện thoại + mật khẩu (ADR-0060) — KHÔNG đăng nhập trước, KHÔNG Idempotency-Key
-         * @description Máy chủ tra tài khoản (khớp đúng tên đăng nhập trước, không có mới tra theo SĐT; SĐT khớp từ hai tài khoản coi như sai), kiểm mật khẩu qua Keycloak (direct grant) và trả token của Keycloak. Mật khẩu không được lưu hay ghi log. Bộ đếm lần sai và khóa tạm do máy chủ giữ: Keycloak đếm cho tài khoản có thật (5 lần sai → khóa 15 phút; hai lần sai cách nhau dưới 1 giây → khóa 60 giây), bộ đếm HMAC riêng cho mã định danh không tồn tại — phản hồi giống hệt nhau. Tài khoản đã bị khóa (FN-07) → 403 accounts.account_locked dù mật khẩu đúng hay sai. Tài khoản đã đăng ký OTP: gửi không kèm otp → 200 otp_required (chưa có token), gửi lại kèm otp. Tài khoản còn việc lần đầu (đổi mật khẩu tạm, đăng ký TOTP) hoặc có vai bắt TOTP mà chưa đăng ký → 403 accounts.login_setup_required, không bao giờ phát token. Giới hạn theo IP (dồn 10, sau đó 10/phút) → 429. Cache-Control no-store.
+         * @description Máy chủ tra tài khoản (khớp đúng tên đăng nhập trước, không có mới tra theo SĐT; SĐT khớp từ hai tài khoản coi như sai), kiểm mật khẩu qua Keycloak (direct grant) và trả token của Keycloak. Mật khẩu không được lưu hay ghi log. Bộ đếm lần sai và khóa tạm do máy chủ giữ: Keycloak đếm cho tài khoản có thật (5 lần sai → khóa 15 phút; hai lần sai cách nhau dưới 1 giây → khóa 60 giây), bộ đếm HMAC riêng cho mã định danh không tồn tại — phản hồi giống hệt nhau. Tài khoản đã bị khóa (FN-07) → 403 accounts.account_locked dù mật khẩu đúng hay sai. Đăng nhập MỘT bước: mỗi lượt gọi Keycloak đúng một lần, gửi mật khẩu kèm otp nếu có. Tài khoản đã đăng ký OTP mà không gửi otp (hoặc gửi sai) → 401 accounts.login_failed giống hệt sai mật khẩu và tính một lần sai (không lộ tài khoản nào có OTP). Tài khoản còn việc lần đầu (đổi mật khẩu tạm, đăng ký TOTP) hoặc có vai bắt TOTP mà chưa đăng ký → 403 accounts.login_setup_required, không bao giờ phát token. Giới hạn theo IP (dồn 10, sau đó 10/phút) → 429. Cache-Control no-store.
          */
         post: operations["passwordLogin"];
         delete?: never;
@@ -34125,13 +34125,13 @@ export interface operations {
                     identifier: string;
                     /** Format: password */
                     password: string;
-                    /** @description Mã OTP 6 số khi tài khoản đã đăng ký OTP */
+                    /** @description Mã OTP 6 số, chỉ cần khi tài khoản đã bật xác thực hai bước */
                     otp?: string;
                 };
             };
         };
         responses: {
-            /** @description authenticated (kèm token) hoặc otp_required (chưa có token) */
+            /** @description authenticated (kèm token) */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -34139,7 +34139,7 @@ export interface operations {
                 content: {
                     "application/json": {
                         /** @enum {string} */
-                        status: "authenticated" | "otp_required";
+                        status: "authenticated";
                         access_token?: string;
                         refresh_token?: string;
                         expires_in?: number;

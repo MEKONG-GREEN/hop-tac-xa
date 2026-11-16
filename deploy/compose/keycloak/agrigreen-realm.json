@@ -235,15 +235,6 @@
       ]
     },
     {
-      "id": "6f1d3c52-8a47-4e0b-9a2e-5b7c4d9e1f30",
-      "alias": "agrigreen htx password check", "description": "FN-01: chỉ kiểm tên đăng nhập và mật khẩu (không OTP) cho client agrigreen-htx-login-check; máy chủ thu hồi phiên ngay",
-      "providerId": "basic-flow", "topLevel": true, "builtIn": false,
-      "authenticationExecutions": [
-        { "authenticator": "direct-grant-validate-username", "authenticatorFlow": false, "requirement": "REQUIRED", "priority": 10 },
-        { "authenticator": "direct-grant-validate-password", "authenticatorConfig": "agrigreen-amr-pwd", "authenticatorFlow": false, "requirement": "REQUIRED", "priority": 20 }
-      ]
-    },
-    {
       "alias": "agrigreen browser",
       "description": "D24: browser flow — cookie hoặc mật khẩu + TOTP có điều kiện theo vai đánh dấu login_totp_required",
       "providerId": "basic-flow",
@@ -484,23 +475,6 @@
       "directAccessGrantsEnabled": true,
       "attributes": { "client.session.idle.timeout": "14400", "client.session.max.lifespan": "36000" },
       "defaultClientScopes": ["basic", "roles", "web-origins", "profile", "agrigreen-claims"]
-    },
-    {
-      "clientId": "agrigreen-htx-login-check",
-      "name": "Kiểm mật khẩu của màn đăng nhập App HTX (FN-01) — token không dùng được",
-      "description": "Client bí mật, chỉ máy chủ pf/accounts gọi để biết mật khẩu đúng trước khi hỏi OTP. Token không có aud, vai hay tenant nên API không nhận; máy chủ thu hồi phiên ngay. Bí mật từ AG_KC_LOGIN_CHECK_CLIENT_SECRET.",
-      "enabled": true,
-      "publicClient": false,
-      "clientAuthenticatorType": "client-secret",
-      "secret": "${AG_KC_LOGIN_CHECK_CLIENT_SECRET}",
-      "standardFlowEnabled": false,
-      "implicitFlowEnabled": false,
-      "serviceAccountsEnabled": false,
-      "directAccessGrantsEnabled": true,
-      "fullScopeAllowed": false,
-      "authenticationFlowBindingOverrides": { "direct_grant": "6f1d3c52-8a47-4e0b-9a2e-5b7c4d9e1f30" },
-      "defaultClientScopes": ["basic"],
-      "optionalClientScopes": []
     },
     {
       "clientId": "agrigreen-mkg-field-app",

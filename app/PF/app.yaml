@@ -63,4 +63,4 @@ deployment_units:
   - migrate
   - bootstrap-admin
 frontends: [apps/web-htx]
-clients: [agrigreen-web-ops, agrigreen-accounts, agrigreen-api, agrigreen-seed, agrigreen-tms, agrigreen-htx-login, agrigreen-htx-login-check]
+clients: [agrigreen-web-ops, agrigreen-accounts, agrigreen-api, agrigreen-seed, agrigreen-tms, agrigreen-htx-login]

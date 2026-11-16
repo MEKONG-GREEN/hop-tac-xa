@@ -15,17 +15,13 @@ import (
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/port"
 )
 
-// LoginConfig là hai client bí mật của màn đăng nhập riêng (FN-01, ADR-0060): ClientID phát token thật (luồng
-// direct grant có OTP); CheckClientID chỉ kiểm mật khẩu (token không có aud/vai, bị thu hồi ngay).
+// LoginConfig là client bí mật của màn đăng nhập riêng (FN-01, ADR-0060): phát token thật qua luồng direct grant có OTP.
 type LoginConfig struct {
-	ClientID          string
-	ClientSecret      string `json:"-"`
-	CheckClientID     string
-	CheckClientSecret string `json:"-"`
+	ClientID     string
+	ClientSecret string `json:"-"`
 }
 
-// LoginConfigFromEnv đọc AG_KC_LOGIN_CLIENT_ID, AG_KC_LOGIN_CLIENT_SECRET, AG_KC_LOGIN_CHECK_CLIENT_ID,
-// AG_KC_LOGIN_CHECK_CLIENT_SECRET. Fail-closed: không đặt biến nào → ok=false (đăng nhập tắt); đặt thiếu → lỗi nêu tên biến.
+// LoginConfigFromEnv đọc AG_KC_LOGIN_CLIENT_ID, AG_KC_LOGIN_CLIENT_SECRET. Fail-closed: không đặt biến nào → ok=false (đăng nhập tắt); đặt thiếu → lỗi nêu tên biến.
 func LoginConfigFromEnv() (lc LoginConfig, ok bool, err error) {
 	vars := []struct {
 		name string
@@ -33,8 +29,6 @@ func LoginConfigFromEnv() (lc LoginConfig, ok bool, err error) {
 	}{
 		{"AG_KC_LOGIN_CLIENT_ID", &lc.ClientID},
 		{"AG_KC_LOGIN_CLIENT_SECRET", &lc.ClientSecret},
-		{"AG_KC_LOGIN_CHECK_CLIENT_ID", &lc.CheckClientID},
-		{"AG_KC_LOGIN_CHECK_CLIENT_SECRET", &lc.CheckClientSecret},
 	}
 	var missing []string
 	for _, v := range vars {
@@ -63,7 +57,7 @@ var _ port.PasswordLogin = (*Login)(nil)
 
 // NewLogin dựng Login dùng chung BaseURL, Realm, HTTP client và Timeout với Client.
 func NewLogin(cfg Config, lc LoginConfig) (*Login, error) {
-	if lc.ClientID == "" || lc.ClientSecret == "" || lc.CheckClientID == "" || lc.CheckClientSecret == "" {
+	if lc.ClientID == "" || lc.ClientSecret == "" {
 		return nil, errors.New("keycloak: thiếu client hoặc bí mật của đăng nhập")
 	}
 	c, err := New(cfg)
@@ -72,13 +66,6 @@ func NewLogin(cfg Config, lc LoginConfig) (*Login, error) {
 	}
 	root := strings.TrimRight(cfg.BaseURL, "/") + "/realms/" + url.PathEscape(cfg.Realm) + "/protocol/openid-connect"
 	return &Login{lc: lc, hc: c, tokenURL: root + "/token", logout: root + "/logout"}, nil
-}
-
-func (l *Login) credentials(c port.LoginClient) (id, secret string) {
-	if c == port.LoginCheck {
-		return l.lc.CheckClientID, l.lc.CheckClientSecret
-	}
-	return l.lc.ClientID, l.lc.ClientSecret
 }
 
 // post gửi form tới Keycloak bằng Basic auth của client. Thân phản hồi lỗi chỉ được đọc để phân loại, không bao giờ
@@ -165,13 +152,12 @@ func tokenClaims(access string) (roles, amr []string) {
 }
 
 // PasswordGrant thực hiện port.PasswordLogin.
-func (l *Login) PasswordGrant(ctx context.Context, c port.LoginClient, username, password, otp string) (port.TokenSet, error) {
-	id, secret := l.credentials(c)
+func (l *Login) PasswordGrant(ctx context.Context, username, password, otp string) (port.TokenSet, error) {
 	form := url.Values{"grant_type": {"password"}, "username": {username}, "password": {password}, "scope": {"openid"}}
-	if otp != "" && c == port.LoginMain {
+	if otp != "" {
 		form.Set("totp", otp)
 	}
-	res, err := l.post(ctx, "đăng nhập", l.tokenURL, id, secret, form)
+	res, err := l.post(ctx, "đăng nhập", l.tokenURL, l.lc.ClientID, l.lc.ClientSecret, form)
 	if err != nil {
 		return port.TokenSet{}, err
 	}
@@ -197,9 +183,8 @@ func (l *Login) Refresh(ctx context.Context, refresh string) (port.TokenSet, err
 }
 
 // EndSession thực hiện port.PasswordLogin: phiên đã hết (400 invalid_grant) coi như thành công.
-func (l *Login) EndSession(ctx context.Context, c port.LoginClient, refresh string) error {
-	id, secret := l.credentials(c)
-	res, err := l.post(ctx, "đăng xuất", l.logout, id, secret, url.Values{"refresh_token": {refresh}})
+func (l *Login) EndSession(ctx context.Context, refresh string) error {
+	res, err := l.post(ctx, "đăng xuất", l.logout, l.lc.ClientID, l.lc.ClientSecret, url.Values{"refresh_token": {refresh}})
 	if err != nil {
 		return err
 	}

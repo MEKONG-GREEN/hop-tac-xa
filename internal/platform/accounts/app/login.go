@@ -8,7 +8,9 @@ package app
 //     khẩu rồi cộng lần vừa sai (Keycloak có thể ghi nhận lần sai chậm một nhịp), không đọc lại sau lần sai.
 //   - Mã định danh không khớp tài khoản nào dùng bộ đếm HMAC riêng (pf_accounts.login_probe) cùng ngưỡng để phản hồi giống hệt.
 //   - Tài khoản "Đã khóa" (FN-07) báo EX-03 dù mật khẩu đúng hay sai (trả lời lượt 2 #1).
-//   - Tài khoản bắt TOTP không vào được bằng mật khẩu đơn thuần: hỏi OTP (client chính) hoặc báo cần thiết lập lần đầu.
+//   - Đăng nhập một bước: mỗi lượt gọi Keycloak đúng một lần, gửi mật khẩu kèm OTP nếu người dùng nhập. Không có đường
+//     kiểm mật khẩu mà bỏ qua yếu tố thứ hai; tài khoản có OTP mà thiếu mã bị từ chối như sai mật khẩu (không lộ tài
+//     khoản nào có OTP) và bị Keycloak tính là một lần sai. Chưa đăng ký OTP mà vai bắt TOTP thì không bao giờ có token.
 //   - Mật khẩu, OTP, token và mã định danh không vào log, lỗi hay kho idempotency.
 
 import (
@@ -41,11 +43,8 @@ var (
 	ErrSessionExpired     = problem.New(http.StatusUnauthorized, "accounts.session_expired", "Phiên đăng nhập đã hết")
 )
 
-// Trạng thái kết quả đăng nhập.
-const (
-	LoginAuthenticated = "authenticated"
-	LoginOTPRequired   = "otp_required"
-)
+// LoginAuthenticated là trạng thái duy nhất của đăng nhập thành công.
+const LoginAuthenticated = "authenticated"
 
 const loginKeyContext = "pf/accounts login v1\x00"
 
@@ -58,7 +57,7 @@ type LoginInput struct {
 	OTP        string `pii:"true"`
 }
 
-// LoginResult: Status authenticated kèm Tokens, hoặc otp_required (chưa có token).
+// LoginResult: Status authenticated kèm Tokens.
 type LoginResult struct {
 	Status string
 	Tokens port.TokenSet
@@ -215,38 +214,11 @@ func (s *Service) loginKnown(ctx context.Context, u port.User, in LoginInput) (L
 		}
 		return LoginResult{}, "temp_locked", loginTempLocked(left)
 	}
-	hasOTP, err := s.Dir.HasOTP(ctx, u.ID)
-	if err != nil {
-		return LoginResult{}, "dependency_error", dirErr(err)
-	}
-	roles, err := s.Dir.RealmRoles(ctx, u.ID)
-	if err != nil {
-		return LoginResult{}, "dependency_error", dirErr(err)
-	}
-	needsTOTP := s.RoleCatalog().NeedsLoginTOTP(roles)
-
-	var ts port.TokenSet
-	switch {
-	case hasOTP && in.OTP == "":
-		ts, err = s.PwLogin.PasswordGrant(ctx, port.LoginCheck, u.Username, in.Password, "")
-		if err == nil {
-			s.endCheckSession(ctx, port.LoginCheck, ts.RefreshToken)
-			return LoginResult{Status: LoginOTPRequired}, "otp_required", nil
-		}
-	case !hasOTP && needsTOTP:
-		ts, err = s.PwLogin.PasswordGrant(ctx, port.LoginCheck, u.Username, in.Password, "")
-		if err == nil {
-			// Mật khẩu đúng nhưng chưa có TOTP: không bao giờ phát token, chỉ báo thiết lập lần đầu.
-			s.endCheckSession(ctx, port.LoginCheck, ts.RefreshToken)
-			return LoginResult{}, "setup_required", ErrLoginSetupRequired
-		}
-	default:
-		ts, err = s.PwLogin.PasswordGrant(ctx, port.LoginMain, u.Username, in.Password, in.OTP)
-		if err == nil && s.missingSecondFactor(ts) {
-			// Kiểm lại claim: vai bắt TOTP mà token không có amr otp thì thu hồi, không trả token.
-			s.endCheckSession(ctx, port.LoginMain, ts.RefreshToken)
-			return LoginResult{}, "setup_required", ErrLoginSetupRequired
-		}
+	ts, err := s.PwLogin.PasswordGrant(ctx, u.Username, in.Password, in.OTP)
+	if err == nil && s.missingSecondFactor(ts) {
+		// Kiểm lại claim: vai bắt TOTP mà token không có amr otp thì thu hồi, không trả token.
+		s.endSession(ctx, ts.RefreshToken)
+		return LoginResult{}, "setup_required", ErrLoginSetupRequired
 	}
 	switch {
 	case err == nil:
@@ -273,13 +245,13 @@ func (s *Service) missingSecondFactor(ts port.TokenSet) bool {
 	return slices.Contains(ts.Roles, port.RoleLoginTOTP) || s.RoleCatalog().NeedsLoginTOTP(ts.Roles)
 }
 
-// endCheckSession thu hồi phiên Keycloak của lần kiểm; lỗi chỉ ghi cảnh báo, không đổi kết quả.
-func (s *Service) endCheckSession(ctx context.Context, c port.LoginClient, refresh string) {
+// endSession thu hồi phiên Keycloak vừa phát mà không được trả cho người dùng; lỗi chỉ ghi cảnh báo.
+func (s *Service) endSession(ctx context.Context, refresh string) {
 	if refresh == "" {
 		return
 	}
-	if err := s.PwLogin.EndSession(ctx, c, refresh); err != nil {
-		s.log().Warn("không thu hồi được phiên kiểm mật khẩu", "event", "accounts.login", "outcome", "end_session_failed")
+	if err := s.PwLogin.EndSession(ctx, refresh); err != nil {
+		s.log().Warn("không thu hồi được phiên đăng nhập bị từ chối", "event", "accounts.login", "outcome", "end_session_failed")
 	}
 }
 
@@ -309,7 +281,7 @@ func (s *Service) Logout(ctx context.Context, refresh string) error {
 	if s.PwLogin == nil {
 		return ErrLoginUnavailable
 	}
-	err := s.PwLogin.EndSession(ctx, port.LoginMain, refresh)
+	err := s.PwLogin.EndSession(ctx, refresh)
 	if err == nil || errors.Is(err, port.ErrSessionEnded) {
 		return nil
 	}

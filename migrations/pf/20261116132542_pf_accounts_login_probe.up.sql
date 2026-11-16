@@ -21,26 +21,34 @@ COMMENT ON TABLE pf_accounts.login_probe IS 'ag:no-rls không có tenant: bộ �
 REVOKE ALL ON pf_accounts.login_probe FROM PUBLIC;
 
 -- Khóa dòng của mã định danh (tạo dòng rỗng nếu chưa có) và trả trạng thái hiện tại. Gọi trong giao dịch ngắn, không I/O mạng.
+-- Dòng của mình được khóa ngay trong lệnh chèn (ON CONFLICT DO UPDATE khóa dòng đã có), không chèn rồi mới đọc: hai yêu
+-- cầu cùng mã không xóa dòng của nhau. Lệnh dọn chạy sau đó và bỏ qua dòng đang bị khóa (SKIP LOCKED) nên hai yêu cầu
+-- cùng lúc không chờ chéo nhau.
 CREATE FUNCTION pf_accounts.login_probe_lock(p_key bytea)
 RETURNS TABLE (failures int, last_failure_at timestamptz, locked_until timestamptz)
 LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = pg_catalog, pf_accounts
 AS $$
+DECLARE
+  v_failures int;
+  v_last     timestamptz;
+  v_locked   timestamptz;
 BEGIN
   IF p_key IS NULL OR octet_length(p_key) <> 32 THEN
     RAISE EXCEPTION 'login_probe_lock: khóa phải là 32 byte' USING ERRCODE = 'check_violation';
   END IF;
-  INSERT INTO pf_accounts.login_probe (key_hash, failures) VALUES (p_key, 0) ON CONFLICT (key_hash) DO NOTHING;
+  INSERT INTO pf_accounts.login_probe AS lp (key_hash, failures) VALUES (p_key, 0)
+  ON CONFLICT (key_hash) DO UPDATE SET failures = lp.failures
+  RETURNING lp.failures, lp.last_failure_at, lp.locked_until INTO v_failures, v_last, v_locked;
   DELETE FROM pf_accounts.login_probe d
    WHERE d.key_hash IN (
      SELECT p.key_hash FROM pf_accounts.login_probe p
       WHERE p.key_hash <> p_key
         AND p.last_failure_at < now() - interval '24 hours'
         AND (p.locked_until IS NULL OR p.locked_until < now())
-      LIMIT 100);
-  RETURN QUERY
-    SELECT p.failures, p.last_failure_at, p.locked_until
-      FROM pf_accounts.login_probe p WHERE p.key_hash = p_key FOR UPDATE;
+      LIMIT 100
+      FOR UPDATE SKIP LOCKED);
+  RETURN QUERY SELECT v_failures, v_last, v_locked;
 END;
 $$;
 

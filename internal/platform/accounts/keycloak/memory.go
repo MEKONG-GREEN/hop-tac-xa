@@ -56,8 +56,7 @@ type memUser struct {
 }
 
 type loginSession struct {
-	user   uuid.UUID
-	client port.LoginClient
+	user uuid.UUID
 }
 
 // SentEmail là một lần gửi liên kết hành động (không chứa địa chỉ email).
