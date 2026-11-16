@@ -55,6 +55,8 @@ type Deps struct {
 	Units   partyport.AdminUnits    // mở rộng tỉnh → xã cho thông báo chủ đề
 	// Farmers: tài khoản nông dân có thửa trong địa bàn (cảnh báo khẩn HTX US-NEWS-03); nil → chỉ chủ đề.
 	Farmers port.AreaFarmers
+	// Members (AH-22): kiểm người nhận của cổng MemberNotifier; nil → cổng trả 503 (fail-closed).
+	Members port.MemberDirectory
 	Pusher  channel.Pusher // chỉ worker cần
 	Mailer  channel.Mailer // nil → tắt email tóm tắt
 	// DigestTo: hộp thư công vụ nhận email tóm tắt chỉ đạo khẩn (AG_SMTP_DIGEST_TO).

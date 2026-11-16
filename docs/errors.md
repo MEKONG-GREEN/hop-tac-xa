@@ -447,7 +447,9 @@ Nhãn vị trí (HTX US-GPS-01/02): `location_status` = `match` (≤ `cropcycle.
 | 404 | `notify.nudge_target_not_found` | pf/notify: `device_id` không có token đẩy đang dùng hoặc ngoài phạm vi (trừ vai `device_admin`, `platform_admin`) |
 | 429 | `notify.nudge_rate_limited` | pf/notify: đích đã được yêu cầu đồng bộ trong 5 phút qua, hoặc người gọi vượt 30 lần/giờ; có `retry_after_s` và header `Retry-After` |
 | 422 | `notify.nudge_entity_unknown` | pf/notify: `entities[]` của `POST /v1/sync/nudge` có tên không phải entity chiều xuống của pf/sync (KN US-SYNC-02) |
-| 503 | `notify.dependency_unavailable` | pf/notify: chưa nối sổ thiết bị của pf/sync |
+| 503 | `notify.dependency_unavailable` | pf/notify: chưa nối sổ thiết bị của pf/sync; hoặc chưa nối danh bạ Thành viên HTX (pf/accounts) cho cổng `MemberNotifier` (AH-22) |
+| 422 | `notify.member_notice_invalid` | pf/notify: cổng `MemberNotifier` (AH-22) từ chối nội dung thông báo cho Thành viên HTX; `errors[].field` nêu trường sai. Bên phát sinh hiện lỗi cho người thao tác |
+| 422 | `notify.recipient_not_member` | pf/notify: cổng `MemberNotifier` (AH-22) có người nhận không phải Thành viên HTX đang hoạt động của HTX; cả lần gọi bị từ chối, không tạo thông báo nào |
 
 Consumer `pf.notify.egress_anomaly` (G5, ADR-0024) không trả mã HTTP: payload `pf.metering.egress.anomaly_detected` hỏng → lỗi consumer, giao lại rồi vào `pf.notify.egress_anomaly.dlq` (R-62); giao lặp → inbox bỏ qua (R-61).
 ### pf/accounts

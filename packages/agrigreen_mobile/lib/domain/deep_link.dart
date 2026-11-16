@@ -3,7 +3,10 @@
 /// `/extension/tasks/{id}`, `/sync/conflicts/{id}`, `/orgs/{ref}`; G2 (App
 /// HTX, pf/notify `cropcycle.go`): `/cropcycle/farm-logs/{id}` (kind
 /// `farm_log_pending` / `farm_log_reviewed`), `/cropcycle/seasons/{ref}` (kind
-/// `season_opened`). Cảnh báo khẩn cấp (`alert`) dùng `/documents/{ref}`.
+/// `season_opened`, `season_log_missing`, `season_process_changed`),
+/// `/cropcycle/seasons/{ref}/tasks/{ref}` (kind `season_task_due`). Lịch thời
+/// vụ `/cropcycle/calendars/{ref}` chưa có màn đích nên ở lại hộp thư.
+/// Cảnh báo khẩn cấp (`alert`) dùng `/documents/{ref}`.
 sealed class DeepLink {
   const DeepLink();
 
@@ -31,6 +34,15 @@ sealed class DeepLink {
     if (seg.length == 3 && seg[0] == 'cropcycle' && isId(seg[2])) {
       if (seg[1] == 'farm-logs') return FarmLogLink(seg[2]);
       if (seg[1] == 'seasons') return SeasonLink(seg[2]);
+    }
+    // NTF.2 (AH-22): việc của vụ — màn việc chưa có nên đích vẫn là màn vụ.
+    if (seg.length == 5 &&
+        seg[0] == 'cropcycle' &&
+        seg[1] == 'seasons' &&
+        seg[3] == 'tasks' &&
+        isId(seg[2]) &&
+        isId(seg[4])) {
+      return SeasonLink(seg[2], taskRef: seg[4]);
     }
     if (seg.length == 1 && seg[0] == 'notifications') return const InboxLink();
     return const InboxLink();
@@ -91,12 +103,15 @@ class FarmLogLink extends DeepLink {
   int get hashCode => Object.hash('fl', id);
 }
 
-/// Vụ (`season_ref`) — G2 App HTX.
+/// Vụ (`season_ref`) — G2 App HTX; [taskRef] có khi thông báo gắn với một việc
+/// của vụ (kind `season_task_due`, AH-22).
 class SeasonLink extends DeepLink {
-  const SeasonLink(this.ref);
+  const SeasonLink(this.ref, {this.taskRef});
   final String ref;
+  final String? taskRef;
   @override
-  bool operator ==(Object other) => other is SeasonLink && other.ref == ref;
+  bool operator ==(Object other) =>
+      other is SeasonLink && other.ref == ref && other.taskRef == taskRef;
   @override
-  int get hashCode => Object.hash('se', ref);
+  int get hashCode => Object.hash('se', ref, taskRef);
 }

@@ -52,8 +52,62 @@ class InboxItem {
     'task_assigned' => 'Nhiệm vụ mới',
     'work_schedule_reviewed' => 'Kết quả duyệt lịch công tác',
     'work_schedule_due' => 'Nhắc đăng ký lịch công tác',
+    'season_calendar_published' => 'Lịch thời vụ',
+    'season_task_due' => 'Nhắc việc',
+    'season_log_missing' => 'Nhắc ghi nhật ký',
+    'season_process_changed' => 'Quy trình thay đổi',
     _ => 'Thông báo',
   };
+}
+
+/// Các thông báo cùng một ngày (giờ Việt Nam) trong trung tâm thông báo.
+class InboxDay {
+  const InboxDay(this.label, this.items);
+  final String label;
+  final List<InboxItem> items;
+}
+
+const _vnOffset = Duration(hours: 7); // Việt Nam không có giờ mùa hè
+
+DateTime _vn(DateTime t) => t.toUtc().add(_vnOffset);
+
+String _two(int v) => v.toString().padLeft(2, '0');
+
+/// Giờ Việt Nam dạng `HH:mm`.
+String inboxTime(DateTime t) {
+  final v = _vn(t);
+  return '${_two(v.hour)}:${_two(v.minute)}';
+}
+
+/// Nhóm theo ngày tạo (giờ Việt Nam): "Hôm nay", "Hôm qua", còn lại `dd/MM/yyyy`;
+/// giữ thứ tự đầu vào (mới nhất trước). Mục không có `createdAt` vào nhóm
+/// "Không rõ ngày" ở cuối.
+List<InboxDay> groupInboxByDay(List<InboxItem> items, DateTime now) {
+  final today = _vn(now);
+  final todayKey = DateTime.utc(today.year, today.month, today.day);
+  final groups = <String, List<InboxItem>>{};
+  final unknown = <InboxItem>[];
+  for (final n in items) {
+    final t = n.createdAt;
+    if (t == null) {
+      unknown.add(n);
+      continue;
+    }
+    final v = _vn(t);
+    final days = todayKey
+        .difference(DateTime.utc(v.year, v.month, v.day))
+        .inDays;
+    final label = days == 0
+        ? 'Hôm nay'
+        : days == 1
+        ? 'Hôm qua'
+        : '${_two(v.day)}/${_two(v.month)}/${v.year}';
+    groups.putIfAbsent(label, () => []).add(n);
+  }
+  return [
+    for (final e in groups.entries) InboxDay(e.key, e.value),
+    if (unknown.isNotEmpty) InboxDay('Không rõ ngày', unknown),
+  ];
 }
 
 /// Hộp thư trong app: đọc từ dữ liệu đồng bộ, đánh dấu đã đọc ngoại tuyến bằng

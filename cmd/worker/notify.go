@@ -81,6 +81,9 @@ func buildNotify(ctx context.Context, log *slog.Logger, base string, keep func(*
 	farmers := assembly.AreaFarmers{Households: coop.Households(), Accounts: acc.FarmerAccounts()}
 	d.Units, d.Farmers = md.AdminUnits(), farmers
 	d.Log, d.LinkBase = log, ch.LinkBase
+	if kc != nil {
+		d.Members = assembly.NotifyMembers{Dir: kc} // AH-22: job nhắc việc của worker dùng cổng MemberNotifier
+	}
 	if dir := acc.MailDirectory(); dir != nil {
 		d.Emails = assembly.NotifyEmails{Dir: dir}
 	} else {

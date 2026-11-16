@@ -7,6 +7,7 @@
 const UUID = "[0-9a-fA-F-]{8,64}";
 const KNQG_FORMS = "/kn/cnts/du-an-mau-bieu";
 const APPRAISALS = "/kn/nhan-su/danh-gia";
+const SEASONS = "/htx/mua-vu";
 
 type Rule = { re: RegExp; to: (id: string, kind: string | undefined) => string };
 
@@ -19,8 +20,14 @@ const RULES: readonly Rule[] = [
   { re: new RegExp(`^/orgs/(${UUID})$`), to: (id) => `/quan-tri/to-chuc?org=${id}` },
   // farm_log_pending → quản lý HTX duyệt (HTX US-LOG-05); farm_log_reviewed → người ghi xem nhật ký (AC-3).
   { re: new RegExp(`^/cropcycle/farm-logs/(${UUID})$`), to: (_id, kind) => (kind === "farm_log_reviewed" ? "/htx/nhat-ky" : "/htx/phe-duyet") },
-  // season_opened: nông dân tự mở vụ → quản lý HTX (HTX US-SEASON-01).
-  { re: new RegExp(`^/cropcycle/seasons/(${UUID})$`), to: () => "/htx/mua-vu" },
+  // season_task_due (NTF.2): màn việc của vụ chưa có → mở màn vụ (AH-22).
+  { re: new RegExp(`^/cropcycle/seasons/(${UUID})/tasks/${UUID}$`), to: (id) => `${SEASONS}?season=${id}` },
+  // season_opened: nông dân tự mở vụ → quản lý HTX (HTX US-SEASON-01), mở danh sách vụ.
+  // season_log_missing, season_process_changed (NTF.3, NTF.4): mở thẳng vụ liên quan (AH-22).
+  {
+    re: new RegExp(`^/cropcycle/seasons/(${UUID})$`),
+    to: (id, kind) => (kind === "season_log_missing" || kind === "season_process_changed" ? `${SEASONS}?season=${id}` : SEASONS),
+  },
   // household_registered / household_membership_changed (KN US-HTX-05): thông báo chỉ mang mã nông hộ
   // và mã xã (không có mã HTX) → danh sách HTX & nông hộ trong địa bàn của cán bộ.
   { re: new RegExp(`^/households/(${UUID})$`), to: () => "/htx" },
@@ -34,7 +41,11 @@ const RULES: readonly Rule[] = [
 const KIND_FALLBACK: Readonly<Record<string, string>> = {
   farm_log_pending: "/htx/phe-duyet",
   farm_log_reviewed: "/htx/nhat-ky",
-  season_opened: "/htx/mua-vu",
+  season_opened: SEASONS,
+  // AH-22: thông báo gắn với vụ; thông báo lịch (season_calendar_published) chưa có màn đích nên ở lại hộp thư.
+  season_task_due: SEASONS,
+  season_log_missing: SEASONS,
+  season_process_changed: SEASONS,
   household_registered: "/htx",
   household_membership_changed: "/htx",
   integration_dead_lettered: "/quan-tri/giam-sat-dong-bo",
