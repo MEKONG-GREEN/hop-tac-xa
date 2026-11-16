@@ -76,6 +76,11 @@ func (m *Module) RegisterApp(rg *gin.RouterGroup) { handler.Handler{Svc: m.svc}.
 // RegisterAdmin gắn route Admin API (danh mục trường, phê duyệt).
 func (m *Module) RegisterAdmin(rg *gin.RouterGroup) { handler.Handler{Svc: m.svc}.RegisterAdmin(rg) }
 
+// SeasonInUse cho pf/masterdata (AH-7, qua gốc lắp ráp): mùa vụ có đang được bằng chứng, liên kết vụ, ước tính dùng không.
+func (m *Module) SeasonInUse(ctx context.Context, code string) (bool, error) {
+	return m.svc.SeasonInUse(ctx, code)
+}
+
 // SyncSink cho pf/sync nhận entity "evidence" chiều lên.
 func (m *Module) SyncSink() syncport.Sink { return app.Sink{Svc: m.svc} }
 

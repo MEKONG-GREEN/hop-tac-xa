@@ -113,7 +113,7 @@ func TestCatalogImportPerRowErrors(t *testing.T) {
 		{"material", "BAD", "Thiếu ĐVT", "", ""},                     // 5: thiếu thuộc tính bắt buộc
 		{"khong_co", "X1", "Danh mục lạ", "", ""},                    // 6: danh mục không tồn tại
 		{"material", "VT9999", "Vật tư lặp", "kg", ""},               // 7: trùng dòng 2
-		{"season", "td", "Thu Đông", "", ""},                         // 8: mã vụ chuẩn hóa HOA → TD đã có, khác tên → rejected
+		{"season", "td", "Thu Đông", "", ""},                         // 8: AH-7: mùa vụ chỉ thêm ở màn Danh mục mùa vụ → rejected
 		{"rice_variety", "OM9998", "Giống thử", "", ""},              // 9: giống chỉ thêm ở màn mới → rejected
 	}); err != nil {
 		t.Fatal(err)
@@ -143,6 +143,9 @@ func TestCatalogImportPerRowErrors(t *testing.T) {
 	for _, r := range rows {
 		if m := r.(map[string]any); m["row"].(float64) == 9 && m["reason"] != "Thêm tại màn Danh mục cây trồng & giống" {
 			t.Fatalf("giống nhập từ Excel phải bị từ chối kèm lý do: %v", m)
+		}
+		if m := r.(map[string]any); m["row"].(float64) == 8 && m["reason"] != "Thêm tại màn Danh mục mùa vụ" {
+			t.Fatalf("mùa vụ nhập từ Excel phải bị từ chối kèm lý do: %v", m)
 		}
 	}
 	if _, err := f.mod.Catalogs().Get(tenantCtx(tid), port.CatalogRiceVariety, "OM9998"); err == nil {

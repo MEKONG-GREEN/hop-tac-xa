@@ -132,7 +132,7 @@ const (
 	CatalogRiceVariety = "rice_variety"
 	CatalogFarmStage   = "farm_stage"   // attrs: pilot ("true"/"false" — cờ thí điểm CGH BR-06), description
 	CatalogMachineType = "machine_type" // attrs: farm_stage (khâu tự gán theo chủng loại, CGH BR-02)
-	CatalogSeason      = "season"       // attrs: start_month, end_month (tùy chọn)
+	CatalogSeason      = "season"       // attrs: start_month, end_month, description (tùy chọn); mã do hệ thống sinh (AH-7)
 	CatalogPest        = "pest"         // attrs: kind (sau_hai | benh_hai | dong_vat_hai)
 	// CatalogVesselClass: lớp phương tiện thủy (G2 waterway/simulation). Mã: ghe_100,
 	// sa_lan_1000, sa_lan_2000. attrs (decimal, m hoặc tấn): capacity_t, beam_m, draft_m,
@@ -168,9 +168,16 @@ const (
 )
 
 // CatalogUsage (tùy chọn, module khác cung cấp qua gốc lắp ráp): mục danh mục có đang được dữ liệu của module đó
-// tham chiếu không — quyết định xóa hẳn hay chỉ ẩn (AH-2, BRD FN-01 BR-02, EX-03). Tenant lấy từ context.
+// tham chiếu không — quyết định xóa hẳn hay chỉ ẩn (AH-2 loại cây, giống; AH-7 mùa vụ; BRD FN-01 BR-02, EX-03).
+// Tenant lấy từ context.
 type CatalogUsage interface {
 	CatalogItemInUse(ctx context.Context, catalog, code string) (bool, error)
+}
+
+// SeasonUsage (tùy chọn, module vụ cung cấp qua gốc lắp ráp): AH-7 số vụ đang dùng mỗi mùa vụ, cột "Đang dùng" của
+// màn Danh mục mùa vụ. Tenant lấy từ context.
+type SeasonUsage interface {
+	SeasonsUsing(ctx context.Context, codes []string) (map[string]int, error)
 }
 
 // FormUsage (tùy chọn, P3) đếm số mẫu báo cáo đang dùng mỗi mục danh mục — cột "biểu đang dùng" của

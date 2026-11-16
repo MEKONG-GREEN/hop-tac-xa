@@ -63,6 +63,11 @@ func (m *Module) RegisterAdmin(rg *gin.RouterGroup) { handler.Handler{Svc: m.svc
 // nhận (partyport.CoopMachineCounts cùng chữ ký), W3.3 pf/cooperative (KN v7.7 FN-XA-03.03/03.04).
 func (m *Module) MachineCounts() coopport.MachineCounts { return app.MachineCounts{Svc: m.svc} }
 
+// SeasonInUse cho pf/masterdata (AH-7, qua gốc lắp ráp): mùa vụ có đang được diện tích vụ, cân đối, dự báo dùng không.
+func (m *Module) SeasonInUse(ctx context.Context, code string) (bool, error) {
+	return m.svc.SeasonInUse(ctx, code)
+}
+
 // DepartmentUsage cho pf/party (W11.02): số dòng máy móc HTX theo phòng ban (FN-AD-04.03).
 func (m *Module) DepartmentUsage() partyport.DepartmentUsage { return app.DepartmentUsage{Svc: m.svc} }
 

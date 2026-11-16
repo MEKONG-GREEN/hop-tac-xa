@@ -16,7 +16,8 @@ export function SeasonDetailDialog({ seasonRef, onClose }: { seasonRef: string; 
   const { api } = useAuth();
   const d = useAsync(() => unwrap(api.GET("/v1/cropcycle/seasons/{ref}", { params: { path: { ref: seasonRef } } })), [api, seasonRef]);
   const varietyName = useCatalogNames("rice_variety");
-  const title = d.data ? `Vụ ${d.data.season_code} ${d.data.season_year} — lô ${d.data.plot_code}` : "Chi tiết vụ";
+  const seasonName = useCatalogNames("season");
+  const title = d.data ? `Vụ ${seasonName.get(d.data.season_code) ?? d.data.season_code} ${d.data.season_year} — lô ${d.data.plot_code}` : "Chi tiết vụ";
   return (
     <Dialog title={title} onClose={onClose}>
       {d.error ? <ProblemAlert problem={d.error} /> : null}

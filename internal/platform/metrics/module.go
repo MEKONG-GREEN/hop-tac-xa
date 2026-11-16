@@ -89,6 +89,11 @@ func (m *Module) Source() port.Source { return m.svc }
 // LayerLog là nhật ký lớp GIS + phát lại.
 func (m *Module) LayerLog() port.LayerLog { return m.svc }
 
+// SeasonInUse cho pf/masterdata (AH-7, qua gốc lắp ráp): mùa vụ có đang được số liệu thống kê (chiều vụ) dùng không.
+func (m *Module) SeasonInUse(ctx context.Context, code string) (bool, error) {
+	return m.svc.SeasonInUse(ctx, code)
+}
+
 // Service cho kiểm thử và lệnh worker (backfill).
 func (m *Module) Service() *app.Service { return m.svc }
 

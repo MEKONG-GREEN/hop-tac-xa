@@ -1,5 +1,6 @@
 import type { AppGet, ParamVersion } from "../types";
 import { uuidv7 } from "../idempotency";
+import { seasonUseCount } from "./cropcycle";
 import { ADMIN_UNITS, CATALOGS, PARAM_VERSIONS, ACTOR_NAMES } from "./data";
 import { hasRole, json, paginate, problem, type Route } from "./http";
 import { checkDisplayProposal, DISPLAY_DEFAULTS, displayConfig, isColorKey, isPercentKey, PERCENT_TITLE, RESTORE_REASON } from "./display";
@@ -57,7 +58,10 @@ export const adminRoutes4: Route[] = [{
       const items = CATALOGS[params[0] as keyof typeof CATALOGS];
       if (!items) return problem(404, "masterdata.catalog_not_found", "Not found");
       const all = url.searchParams.get("include_inactive") !== "false";
-      return json(paginate(items.filter((i) => all || i.active), url));
+      const page = paginate(items.filter((i) => all || i.active), url);
+      // AH-7: danh mục mùa vụ kèm số vụ đang dùng (cột "Đang dùng"; chỉ Admin API).
+      if (params[0] === "season") page.items = page.items.map((i) => ({ ...i, seasons_in_use: seasonUseCount(i.code) }));
+      return json(page);
     },
   }];
 

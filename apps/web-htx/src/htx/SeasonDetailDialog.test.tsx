@@ -22,16 +22,17 @@ const auth = { api: clientWith(() => new Response("{}")) };
 vi.mock("@/auth/AuthProvider", () => ({ useAuth: () => auth }));
 
 describe("AH-22 AC2: mở vụ từ thông báo", () => {
-  it("AH22_AC2: mã vụ hợp lệ → hiện tiêu đề vụ và lịch sử, giống hiện theo tên trong danh mục", async () => {
+  it("AH22_AC2: mã vụ hợp lệ → hiện tiêu đề vụ và lịch sử, mùa vụ và giống hiện theo tên trong danh mục", async () => {
     const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
     auth.api = clientWith((req) => {
       const path = new URL(req.url).pathname;
       if (path === "/v1/masterdata/catalogs/rice_variety") return json({ items: [{ code: "ST25", name: "Lúa ST25" }] });
+      if (path === "/v1/masterdata/catalogs/season") return json({ items: [{ code: "DX", name: "Đông Xuân" }] });
       expect(path).toBe(`/v1/cropcycle/seasons/${SEASON}`);
       return json(detail);
     });
     render(<SeasonDetailDialog seasonRef={SEASON} onClose={() => {}} />);
-    expect(await screen.findByText("Vụ DX 2026 — lô L-01")).toBeTruthy();
+    expect(await screen.findByText("Vụ Đông Xuân 2026 — lô L-01")).toBeTruthy();
     expect(screen.getByLabelText("Lịch sử vụ").textContent).toContain("Mở vụ");
     await waitFor(() => expect(screen.getByLabelText("Lịch sử vụ").textContent).toContain("giống Lúa ST25"));
     expect(screen.getByLabelText("Lịch sử vụ").textContent).toContain("sạ 05/10/2026");

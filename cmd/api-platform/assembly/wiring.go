@@ -7,6 +7,7 @@ import (
 
 	accport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/port"
 	coopport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/port"
+	mdport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/masterdata/port"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/tenant"
 )
 
@@ -50,4 +51,19 @@ func (s SeasonActivity) CoopActivity(ctx context.Context, coop uuid.UUID) (int64
 	}
 	a := m[coop]
 	return a.OpenSeasons, a.PendingLogs, nil
+}
+
+// ---------------------------------------------------------------------------
+// Danh mục mùa vụ (AH-7): các module có dữ liệu theo mã mùa vụ → pf/masterdata
+// ---------------------------------------------------------------------------
+
+// SeasonUsage đổi hàm "mùa vụ có đang được dùng" của một module thành masterdata/port.CatalogUsage (AH-7).
+type SeasonUsage func(ctx context.Context, code string) (bool, error)
+
+// CatalogItemInUse thực hiện masterdata/port.CatalogUsage; chỉ trả lời cho danh mục mùa vụ.
+func (f SeasonUsage) CatalogItemInUse(ctx context.Context, catalog, code string) (bool, error) {
+	if catalog != mdport.CatalogSeason {
+		return false, nil
+	}
+	return f(ctx, code)
 }

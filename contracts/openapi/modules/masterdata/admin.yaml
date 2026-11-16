@@ -113,7 +113,7 @@ paths:
                   next_cursor: {type: [string, "null"]}
         "404": {$ref: "#/components/responses/Problem"}
     post:
-      summary: Thêm mục danh mục (vai masterdata_admin)
+      summary: Thêm mục danh mục (vai masterdata_admin). crop, rice_variety, season (AH-2, AH-7) — mã do hệ thống sinh, không gửi code
       operationId: createCatalogItem
       tags: [masterdata]
       parameters:
@@ -213,7 +213,7 @@ paths:
       - $ref: "#/components/parameters/Catalog"
       - $ref: "#/components/parameters/ItemCode"
     post:
-      summary: Xóa loại cây hoặc giống (AH-2) — chưa được dùng ở đâu thì đã xóa, đang được dùng thì chỉ ẩn
+      summary: Xóa loại cây, giống (AH-2) hoặc mùa vụ (AH-7) — chưa được dùng ở đâu thì đã xóa, đang được dùng thì chỉ ẩn
       operationId: deleteCatalogItem
       tags: [masterdata]
       parameters:
@@ -529,6 +529,7 @@ components:
         revision: {type: integer}
         updated_at: {type: string, format: date-time}
         forms_in_use: {type: integer, description: "KN v7.7 FN-AD-04.05: số mẫu báo cáo đang dùng mục (vắng khi chưa nối P3)"}
+        seasons_in_use: {type: integer, description: "AH-7: số vụ đang dùng mùa vụ (chỉ danh mục season, Admin API; vắng khi chưa nối nguồn)"}
         valid_from: {type: string, format: date, description: "W11.41 (danh mục cnts_*): ngày bắt đầu hiệu lực của giá trị trả về (đọc theo at hoặc vừa ghi)"}
 # @ag-order: 35111
     CatalogDeleteResult:
@@ -563,7 +564,7 @@ components:
         attrs: {type: object, additionalProperties: {type: string}}
         active: {type: boolean}
         deactivation_reason: {type: string}
-        deleted: {type: boolean, description: "AH-2: mục đã xóa (chỉ crop, rice_variety)"}
+        deleted: {type: boolean, description: "AH-2, AH-7: mục đã xóa (chỉ crop, rice_variety, season)"}
 # @ag-order: 270
     CatalogChange:
       type: object

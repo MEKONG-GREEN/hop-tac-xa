@@ -79,9 +79,11 @@ type Service struct {
 	Staff staffDirectory
 	// Forms (tùy chọn, P3): số mẫu báo cáo đang dùng mỗi mục — cột "biểu đang dùng" (FN-AD-04.05).
 	Forms port.FormUsage
-	// Usage (tùy chọn, AH-2): nguồn đếm tham chiếu của module khác (vụ, SOP, sản lượng, thẻ tài liệu) — quyết định xóa
-	// hay chỉ ẩn loại cây, giống. Thiếu thì xóa coi như đang được dùng (chỉ ẩn).
+	// Usage (tùy chọn, AH-2, AH-7): nguồn đếm tham chiếu của module khác (vụ, SOP, sản lượng, thẻ tài liệu, cơ giới
+	// hóa, MRV, thống kê) — quyết định xóa hay chỉ ẩn loại cây, giống, mùa vụ. Thiếu thì xóa coi như đang được dùng.
 	Usage []port.CatalogUsage
+	// Seasons (tùy chọn, AH-7): số vụ đang dùng mỗi mùa vụ — cột "Đang dùng" của màn Danh mục mùa vụ.
+	Seasons port.SeasonUsage
 	// Approvals (tùy chọn, W6.1): cap/workflow — gửi duyệt/duyệt/từ chối phiên bản tham số ghi thêm yêu cầu và
 	// quyết định vào sổ pf_workflow CÙNG giao dịch (bốn mắt kiểm lại ở DB). Nil → chỉ luồng cũ.
 	Approvals wfport.Approvals

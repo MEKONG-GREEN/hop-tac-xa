@@ -74,6 +74,8 @@ type itemDTO struct {
 	UpdatedAt          string            `json:"updated_at"`
 	// FormsInUse: số mẫu báo cáo đang dùng mục (KN v7.7 FN-AD-04.05 "biểu đang dùng"); vắng khi chưa nối P3.
 	FormsInUse *int `json:"forms_in_use,omitempty"`
+	// SeasonsInUse: AH-7 số vụ đang dùng mùa vụ; vắng khi chưa nối nguồn.
+	SeasonsInUse *int `json:"seasons_in_use,omitempty"`
 	// ValidFrom (W11.41, danh mục CNTS): ngày bắt đầu hiệu lực của giá trị trả về (đọc theo ?at= hoặc vừa ghi).
 	ValidFrom *string `json:"valid_from,omitempty"`
 }

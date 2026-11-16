@@ -1,0 +1,11 @@
+{
+  "id": "season-catalog",
+  "source": "./season-catalog",
+  "app": [],
+  "admin": [
+    {
+      "export": "seasonCatalogAdminRoutes",
+      "order": 121
+    }
+  ]
+}

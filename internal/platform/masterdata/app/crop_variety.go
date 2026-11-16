@@ -46,8 +46,11 @@ var legacyAttrs = map[string][]string{
 
 // scopeOf là phạm vi khóa của mục: loại cây "crop:<mã>", giống "crop:<mã loại cây>".
 func scopeOf(it domain.Item) string {
-	if it.Catalog == port.CatalogRiceVariety {
+	switch it.Catalog {
+	case port.CatalogRiceVariety:
 		return "crop:" + it.Attrs[port.AttrCropCode]
+	case port.CatalogSeason:
+		return "season"
 	}
 	return "crop:" + it.Code
 }
@@ -68,7 +71,11 @@ func (s *Service) prepareCreate(in domain.Item) (domain.Item, error) {
 	if in.Code != "" {
 		return in, problem.Validation.WithField("code", "Mã do hệ thống sinh — bỏ trống")
 	}
-	in.Code = ids.New().String()
+	if in.Catalog == port.CatalogSeason {
+		in.Code = newSeasonCode()
+	} else {
+		in.Code = ids.New().String()
+	}
 	if in.Catalog == port.CatalogCrop {
 		if err := checkCropShape(in.Attrs); err != nil {
 			return in, err
@@ -123,6 +130,10 @@ func (s *Service) nameTaken(ctx context.Context, tx pgx.Tx, tid uuid.UUID, it do
 	case port.CatalogRiceVariety:
 		if err = store.LockCatalogScope(ctx, tx, tid, scopeOf(it)); err == nil {
 			existing, err = store.VarietyNames(ctx, tx, it.Attrs[port.AttrCropCode], it.Code)
+		}
+	case port.CatalogSeason: // AH-7: toàn danh mục mùa vụ, kể cả mục đã ẩn
+		if err = store.LockCatalogScope(ctx, tx, tid, scopeOf(it)); err == nil {
+			existing, err = store.ItemNames(ctx, tx, port.CatalogSeason, it.Code)
 		}
 	default:
 		taken, e := store.ItemNameTaken(ctx, tx, it.Catalog, it.Name, it.Code)
@@ -207,7 +218,7 @@ func (s *Service) itemInUse(ctx context.Context, catalog, code string) (bool, er
 	return m[code] > 0, nil
 }
 
-// DeleteItem xóa loại cây hoặc giống: chưa được dùng ở đâu thì đánh dấu đã xóa (biến khỏi mọi danh sách, đồng bộ
+// DeleteItem xóa loại cây, giống hoặc mùa vụ: chưa được dùng ở đâu thì đánh dấu đã xóa (biến khỏi mọi danh sách, đồng bộ
 // phát tombstone, bản ghi và lịch sử giữ lại); đang được dùng thì chỉ ẩn. Gọi lặp cùng Idempotency-Key trả lại
 // kết quả cũ, replayed = true.
 func (s *Service) DeleteItem(ctx context.Context, catalog, code, key string) (DeleteResult, bool, error) {
@@ -221,7 +232,7 @@ func (s *Service) DeleteItem(ctx context.Context, catalog, code, key string) (De
 	if err := s.knownCatalog(catalog); err != nil {
 		return DeleteResult{}, false, err
 	}
-	if !cropVariety(catalog) {
+	if !adminManaged(catalog) {
 		return DeleteResult{}, false, ErrDeleteUnsupported
 	}
 	var res DeleteResult
@@ -311,9 +322,10 @@ func (s *Service) DeleteItem(ctx context.Context, catalog, code, key string) (De
 		}
 		next := *cur
 		next.Active, next.Revision, next.UpdatedBy, next.UpdatedAt = false, cur.Revision+1, p.ActorRef, now
-		action, reason, outcome := domain.ActionDeleted, systemDeleteReason, OutcomeDeleted
+		hideReason, deleteReason := systemReasons(catalog)
+		action, reason, outcome := domain.ActionDeleted, deleteReason, OutcomeDeleted
 		if inUse {
-			action, reason, outcome = domain.ActionDeactivated, systemHideReason, OutcomeHidden
+			action, reason, outcome = domain.ActionDeactivated, hideReason, OutcomeHidden
 		} else {
 			next.Deleted = true
 		}

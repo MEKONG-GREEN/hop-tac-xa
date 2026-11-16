@@ -259,8 +259,11 @@ func Build(ctx context.Context, open PoolOpener, clk clock.Clock, ext External) 
 	pty.UseDepartmentUsage(coop.DepartmentUsage())
 	pty.UseFormAvailability(rep.FormAvailability())
 	md.UseFormUsage(rep.FormUsage())
-	md.UseCatalogUsage(coop.CatalogUsage()) // AH-2: giống đã gắn vụ, SOP, sản lượng → chỉ ẩn
-	md.UseCatalogUsage(cnt.CatalogUsage())  // AH-2: thẻ tài liệu tin tức
+	md.UseCatalogUsage(coop.CatalogUsage())             // AH-2: giống đã gắn vụ, SOP, sản lượng → chỉ ẩn
+	md.UseCatalogUsage(cnt.CatalogUsage())              // AH-2: thẻ tài liệu tin tức
+	md.UseCatalogUsage(SeasonUsage(mech.SeasonInUse))   // AH-7: mùa vụ đã có diện tích vụ, cân đối, dự báo → chỉ ẩn
+	md.UseCatalogUsage(SeasonUsage(mrvMod.SeasonInUse)) // AH-7: mùa vụ đã có bằng chứng, ước tính MRV → chỉ ẩn
+	md.UseSeasonUsage(coop.SeasonUsage())               // AH-7: cột "Đang dùng" (số vụ) của màn Danh mục mùa vụ
 
 	// pf/waterway (G2): API ghi sổ đoạn/công trình, tạo job dựng và phát hành; worker dựng đồ thị (cmd/worker).
 	ww := waterway.New(unit, clk, waterway.Deps{Params: md.Params(), Catalogs: md.Catalogs()})
@@ -283,6 +286,7 @@ func Build(ctx context.Context, open PoolOpener, clk clock.Clock, ext External) 
 		mdeps.Replica = replica
 	}
 	met := metrics.New(unit, clk, mdeps)
+	md.UseCatalogUsage(SeasonUsage(met.SeasonInUse)) // AH-7: mùa vụ đã có số liệu thống kê (chiều vụ) → chỉ ẩn
 
 	// pf/metering (G5, ADR-0023/0024): sổ sử dụng Public API, điểm kiểm soát xuất (AG_EGRESS_MODE: observe | enforce),
 	// bảng kê (Admin API; worker dựng ảnh chụp). Tham số kênh/giá đọc pf/masterdata; gói hạn mức nối UsePlans (pf/apiclient).

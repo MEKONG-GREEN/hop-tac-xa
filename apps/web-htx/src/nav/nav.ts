@@ -199,9 +199,12 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     ],
   },
   {
-    // AH-2: loại cây và giống dùng chung cho mọi HTX (Admin quản lý; vai khác chỉ xem ở nơi chọn khi mở vụ).
+    // AH-2, AH-7: loại cây, giống và mùa vụ dùng chung cho mọi HTX (Admin quản lý; vai khác chỉ xem ở nơi chọn khi mở vụ).
     label: "7. Dữ liệu nền",
-    items: [{ href: "/du-lieu-nen/danh-muc-giong", module: "pf/masterdata", label: "Danh mục giống", icon: "sprout", roles: [ROLES.platformAdmin, ROLES.masterdataAdmin] }],
+    items: [
+      { href: "/du-lieu-nen/danh-muc-giong", module: "pf/masterdata", label: "Danh mục giống", icon: "sprout", roles: [ROLES.platformAdmin, ROLES.masterdataAdmin] },
+      { href: "/du-lieu-nen/danh-muc-mua-vu", module: "pf/masterdata", label: "Danh mục mùa vụ", icon: "season", roles: [ROLES.platformAdmin, ROLES.masterdataAdmin] },
+    ],
   },
 ];
 

@@ -488,6 +488,15 @@ export function varietyReferenced(code: string): boolean {
   ensure();
   return SEASONS.some((x) => x.s.variety_code === code) || BINDINGS.some((b) => b.variety_code === code);
 }
+/** AH-7: số vụ giả lập đang dùng mùa vụ (mọi trạng thái, so mã không phân biệt hoa thường) — cột "Đang dùng". */
+export function seasonUseCount(code: string): number {
+  ensure();
+  return SEASONS.filter((x) => x.s.season_code.toUpperCase() === code.toUpperCase()).length;
+}
+/** AH-7: mùa vụ có đang được vụ giả lập tham chiếu không (xóa chỉ ẩn khi có). */
+export function seasonReferenced(code: string): boolean {
+  return seasonUseCount(code) > 0;
+}
 export function cropLogsOf(coopRef: string): CropFarmLogState[] {
   ensure();
   return LOGS.filter((x) => x.state.cooperative_ref === coopRef).map((x) => x.state);

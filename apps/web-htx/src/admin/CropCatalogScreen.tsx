@@ -42,12 +42,12 @@ type Dlg =
   | { kind: "state"; item: CatalogItem; hide: boolean }
   | { kind: "delete"; item: CatalogItem };
 
-function Status({ item }: { item: CatalogItem }) {
+export function Status({ item }: { item: CatalogItem }) {
   return item.active ? <span className="chip c-ok">Đang hiện</span> : <span className="chip c-mute">Đã ẩn</span>;
 }
 
 /** Thân chung của hộp thoại ghi: lỗi chung của máy chủ (không gắn với ô nào) hiện trên cùng. */
-function SaveProblem({ problem, fieldErrors }: { problem: ApiProblem | null; fieldErrors: object }) {
+export function SaveProblem({ problem, fieldErrors }: { problem: ApiProblem | null; fieldErrors: object }) {
   if (!problem || Object.keys(fieldErrors).length > 0) return null;
   return <ProblemAlert problem={problem} />;
 }
@@ -205,7 +205,7 @@ function CropDialog({ item, onClose, onSaved }: { item?: CatalogItem; onClose: (
 }
 
 /** Hộp xác nhận ẩn/hiện và xóa: cùng một khung, khác lời gọi. */
-function ConfirmDialog({
+export function ConfirmDialog({
   title,
   confirmLabel,
   run,
@@ -250,7 +250,7 @@ function ConfirmDialog({
   );
 }
 
-function ItemActions({ item, onEdit, onState, onDelete }: { item: CatalogItem; onEdit: () => void; onState: () => void; onDelete: () => void }) {
+export function ItemActions({ item, onEdit, onState, onDelete }: { item: CatalogItem; onEdit: () => void; onState: () => void; onDelete: () => void }) {
   return (
     <div className="row" style={{ gap: 4 }}>
       <button type="button" className="btn btn-o btn-sm" aria-label={`Sửa ${item.name}`} onClick={onEdit}>

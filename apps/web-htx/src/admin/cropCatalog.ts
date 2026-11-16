@@ -9,6 +9,8 @@ import type { CatalogItem } from "@/api/types";
 import type { FieldRule } from "@/components/form";
 
 export type CropCatalogName = "crop" | "rice_variety";
+/** Danh mục Admin quản lý ở màn riêng: loại cây, giống (AH-2) và mùa vụ (AH-7). */
+export type ManagedCatalogName = CropCatalogName | "season";
 
 /** Loại cây: mục crop không có nhóm cha (mục cũ có parent_code không còn là loại cây, chỉ để xem). */
 export function isCropType(it: Pick<CatalogItem, "catalog" | "attrs">): boolean {
@@ -65,7 +67,7 @@ export function fieldErrorsFromProblem(p: ApiProblem, kind: "variety" | "crop"):
 }
 
 /** Gom mọi trang của một danh mục (cả mục đã ẩn) từ Admin API. */
-export function listAll(adminApi: AdminApiClient, catalog: CropCatalogName): Promise<CatalogItem[]> {
+export function listAll(adminApi: AdminApiClient, catalog: ManagedCatalogName): Promise<CatalogItem[]> {
   return collectPages((cursor) =>
     unwrap(adminApi.GET("/v1/masterdata/catalogs/{catalog}/items", { params: { path: { catalog }, query: { include_inactive: true, cursor, limit: 200 } } })),
   );

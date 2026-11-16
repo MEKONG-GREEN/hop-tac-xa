@@ -165,6 +165,11 @@ func Changes(ctx context.Context, tx pgx.Tx, catalog, code string, afterSeq int6
 		domain.CatalogStreamKey(catalog, domain.CanonicalCode(catalog, code)), afterSeq, limit))
 }
 
+// ItemNames lấy tên các mục chưa xóa của danh mục (kể cả đã ẩn) trừ mục mã exceptCode (AH-7: so trùng tên mùa vụ).
+func ItemNames(ctx context.Context, tx pgx.Tx, catalog, exceptCode string) ([]string, error) {
+	return names(tx.Query(ctx, `SELECT name FROM pf_masterdata.catalog_item WHERE catalog = $1 AND code <> $2 AND deleted_at IS NULL`, catalog, exceptCode))
+}
+
 // ItemNameTaken cho biết danh mục đã có mục khác (mã ≠ exceptCode) cùng tên, không phân biệt hoa thường
 // (KN v7.7 FN-AD-04.05: trùng tên → chặn). So khớp chữ hoa/thường tiếng Việt ở Go (lower() của DB phụ
 // thuộc LC_CTYPE, cụm "C" không hạ chữ có dấu); danh mục chỉ vài trăm mục.
