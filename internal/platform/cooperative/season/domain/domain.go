@@ -50,6 +50,29 @@ var activities = map[string]string{
 	ActPhunThuoc: "Phun thuốc - dưỡng", ActKiemTra: "Theo dõi", ActThuHoach: "Thu hoạch", ActCatTia: "Cắt tỉa", ActKhac: "Khác",
 }
 
+// activityOrder là thứ tự hiển thị của các mã hoạt động.
+var activityOrder = []string{ActLamDat, ActGieoSa, ActTuoiNuoc, ActBonPhan, ActPhunThuoc, ActKiemTra, ActThuHoach, ActCatTia, ActKhac}
+
+// ActivityLabels trả nhãn tiếng Việt của mọi loại việc theo thứ tự hiển thị.
+func ActivityLabels() []string {
+	out := make([]string, len(activityOrder))
+	for i, code := range activityOrder {
+		out[i] = activities[code]
+	}
+	return out
+}
+
+// ActivityByLabel trả mã hoạt động theo nhãn tiếng Việt (so bằng NameKey).
+func ActivityByLabel(label string) (string, bool) {
+	key := NameKey(label)
+	for _, code := range activityOrder {
+		if NameKey(activities[code]) == key {
+			return code, true
+		}
+	}
+	return "", false
+}
+
 // KnownActivity cho biết mã hoạt động có trong danh mục.
 func KnownActivity(code string) bool { _, ok := activities[code]; return ok }
 

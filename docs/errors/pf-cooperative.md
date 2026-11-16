@@ -16,3 +16,10 @@
 | 422 | `cooperative.htx_anchor_created_by` | `created_by` không phải `kn` hoặc `mkg` |
 
 | 503 | `cooperative.registrar_unavailable` | Tạo Neo với HTX mới nhưng assembly chưa nối CooperativeRegistrar |
+
+### pf/cooperative season (nhập SOP từ Excel — AH-38)
+
+| HTTP | code | Khi nào |
+|---|---|---|
+| 422 | `cropcycle.sop_import_invalid` | Tệp nhập SOP sai mẫu: không phải .xlsx (CSV, .xls cũ, byte rác), ô công thức, quá 2 MB, thiếu sheet hoặc cột bắt buộc, sheet "Thông tin chung" không đúng một dòng dữ liệu, sheet "Giai đoạn"/"Việc" không có dòng, quá 30 giai đoạn hoặc 100 việc. `detail` nêu lý do riêng; không có danh sách dòng |
+| 422 | `cropcycle.sop_import_rows` | Tệp đúng mẫu nhưng có dòng lỗi — không tạo SOP. Trường mở rộng `rows` liệt kê đủ mọi lỗi: `{sheet, row, column, reason}` (`row` là số dòng trong tệp), sắp theo sheet → dòng → cột |
