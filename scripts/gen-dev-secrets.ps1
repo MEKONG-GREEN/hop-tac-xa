@@ -66,7 +66,6 @@ $lines = @(
     "AG_KC_CLIENT_SECRET=$(New-Hex 32)"
     '# FN-01 (ADR-0060): bí mật client đăng nhập riêng; khóa HMAC bộ đếm mã định danh không tồn tại (base64 32 byte).'
     "AG_KC_LOGIN_CLIENT_SECRET=$(New-Hex 32)"
-    "AG_KC_LOGIN_CHECK_CLIENT_SECRET=$(New-Hex 32)"
     "AG_LOGIN_ID_KEY='$(New-B64 32)'"
     '# Public API (G5, docker compose --profile phasek): pepper HMAC khóa API phiên bản 1 (ADR-0022 mục 4, ≥ 32 byte).'
     "AG_APIKEY_PEPPER_V1=$(New-Hex 32)"
