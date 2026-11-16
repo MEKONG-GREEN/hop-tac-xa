@@ -244,6 +244,10 @@ func (s *Service) ConfirmPasswordReset(ctx context.Context, token, password stri
 	if err := s.Dir.Logout(ctx, r.UserRef); err != nil {
 		outcome = "reset_logout_failed"
 	}
+	// QTPQ-Q-03 (FN-01): đặt lại mật khẩu thành công thì bộ đếm lần sai và khóa tạm về 0.
+	if err := s.Dir.ClearBruteForce(ctx, r.UserRef); err != nil {
+		outcome = "reset_unlock_failed"
+	}
 	s.log().Info("đã đặt lại mật khẩu qua liên kết email", "event", "accounts.password_reset_confirm", "tenant_id", tid, "user_ref", r.UserRef,
 		"reset_id", id, "outcome", outcome)
 	return nil

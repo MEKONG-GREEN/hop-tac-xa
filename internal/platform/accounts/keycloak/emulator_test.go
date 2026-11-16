@@ -31,6 +31,10 @@ const (
 	emuRealm  = "agrigreen"
 	emuClient = "agrigreen-accounts"
 	emuSecret = "s3cr3t"
+
+	// Client của màn đăng nhập riêng (FN-01): direct grant có OTP.
+	emuLoginClient = "agrigreen-htx-login"
+	emuLoginSecret = "login-s3cr3t"
 )
 
 func newEmulator(t *testing.T) *emulator {
@@ -39,6 +43,7 @@ func newEmulator(t *testing.T) *emulator {
 	base := "/admin/realms/" + emuRealm
 	mux.HandleFunc("POST /realms/"+emuRealm+"/protocol/openid-connect/token", e.token)
 	mux.HandleFunc("GET "+base+"/users", e.auth(e.find))
+	mux.HandleFunc("POST /realms/"+emuRealm+"/protocol/openid-connect/logout", e.endSession)
 	mux.HandleFunc("POST "+base+"/users", e.auth(e.create))
 	mux.HandleFunc("GET "+base+"/users/{id}", e.auth(e.get))
 	mux.HandleFunc("PUT "+base+"/users/{id}", e.auth(e.put))
@@ -81,6 +86,10 @@ func (e *emulator) tokens() int {
 func (e *emulator) token(w http.ResponseWriter, r *http.Request) {
 	id, secret, ok := r.BasicAuth()
 	_ = r.ParseForm()
+	if gt := r.Form.Get("grant_type"); gt == "password" || gt == "refresh_token" {
+		e.loginToken(w, r, id, secret, ok)
+		return
+	}
 	if !ok || id != emuClient || secret != emuSecret || r.Form.Get("grant_type") != "client_credentials" {
 		w.WriteHeader(http.StatusUnauthorized)
 		_, _ = w.Write([]byte(`{"error":"unauthorized_client"}`))
@@ -341,9 +350,9 @@ func (e *emulator) bruteForce(w http.ResponseWriter, r *http.Request, id uuid.UU
 		fail(w, err)
 		return
 	}
-	out := map[string]any{"disabled": st.Locked, "numFailures": 0, "lastFailure": 0, "lastIPFailure": "n/a"}
-	if st.Until != nil {
-		out["numFailures"], out["lastFailure"] = 5, st.Until.Add(-DefaultLockoutWait).UnixMilli()
+	out := map[string]any{"disabled": st.Locked, "numFailures": st.Failures, "lastFailure": 0, "lastIPFailure": "n/a"}
+	if st.LastFailure != nil {
+		out["lastFailure"] = st.LastFailure.UnixMilli()
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(out)
@@ -355,4 +364,70 @@ func (e *emulator) clearBruteForce(w http.ResponseWriter, r *http.Request, id uu
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (e *emulator) loginClient(id, secret string, ok bool) bool {
+	return ok && id == emuLoginClient && secret == emuLoginSecret
+}
+
+func oidcError(w http.ResponseWriter, status int, code, desc string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": code, "error_description": desc})
+}
+
+// loginToken: grant_type=password và refresh_token cho client đăng nhập, lỗi đúng dạng dây của Keycloak.
+func (e *emulator) loginToken(w http.ResponseWriter, r *http.Request, id, secret string, ok bool) {
+	if !e.loginClient(id, secret, ok) {
+		oidcError(w, http.StatusUnauthorized, "unauthorized_client", "Invalid client or Invalid client credentials")
+		return
+	}
+	var (
+		ts  port.TokenSet
+		err error
+	)
+	if r.Form.Get("grant_type") == "password" {
+		ts, err = e.mem.PasswordGrant(r.Context(), r.Form.Get("username"), r.Form.Get("password"), r.Form.Get("totp"))
+	} else {
+		ts, err = e.mem.Refresh(r.Context(), r.Form.Get("refresh_token"))
+	}
+	switch {
+	case errors.Is(err, port.ErrInvalidGrant):
+		oidcError(w, http.StatusUnauthorized, "invalid_grant", "Invalid user credentials")
+	case errors.Is(err, port.ErrAccountNotSetUp):
+		oidcError(w, http.StatusBadRequest, "invalid_grant", "Account is not fully set up")
+	case errors.Is(err, port.ErrAccountDisabled):
+		oidcError(w, http.StatusBadRequest, "invalid_grant", "Account disabled")
+	case errors.Is(err, port.ErrSessionEnded):
+		oidcError(w, http.StatusBadRequest, "invalid_grant", "Token is not active")
+	case err != nil:
+		w.WriteHeader(http.StatusInternalServerError)
+	default:
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"access_token": ts.AccessToken, "refresh_token": ts.RefreshToken,
+			"expires_in": ts.ExpiresIn, "refresh_expires_in": ts.RefreshExpiresIn, "token_type": "Bearer"})
+	}
+}
+
+func (e *emulator) endSession(w http.ResponseWriter, r *http.Request) {
+	id, secret, ok := r.BasicAuth()
+	_ = r.ParseForm()
+	if !e.loginClient(id, secret, ok) {
+		oidcError(w, http.StatusUnauthorized, "unauthorized_client", "Invalid client or Invalid client credentials")
+		return
+	}
+	if err := e.mem.EndSession(r.Context(), r.Form.Get("refresh_token")); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (e *emulator) login(t *testing.T) *Login {
+	l, err := NewLogin(Config{BaseURL: e.srv.URL, Realm: emuRealm, ClientID: emuClient, ClientSecret: emuSecret, HTTP: e.srv.Client()},
+		LoginConfig{ClientID: emuLoginClient, ClientSecret: emuLoginSecret})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return l
 }

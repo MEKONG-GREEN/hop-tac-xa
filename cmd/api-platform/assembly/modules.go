@@ -226,6 +226,14 @@ func Build(ctx context.Context, open PoolOpener, clk clock.Clock, ext External) 
 		Households: coop.PartyHouseholds(), Vault: ext.Vault, Params: md.Params(),
 		Departments: pty.Departments(), Units: md.AdminUnits(),
 		Modules: pty.ModuleEnablement()}) // W1.4: vai của module đã tắt không cấp được
+	// FN-01 (ADR-0060): màn đăng nhập riêng của App HTX — thiếu cấu hình thì route đăng nhập trả 503, đặt thiếu thì lỗi khởi động.
+	pwLogin, loginKey, err := accounts.LoginFromEnv(dir)
+	if err != nil {
+		return Modules{}, pools, err
+	}
+	if pwLogin != nil {
+		acc.UseLogin(pwLogin, loginKey)
+	}
 	// KN v7.7 P1 ↔ P2: menu theo ngữ cảnh phiên, số tài khoản theo phòng ban (mở khóa "xóa" phòng ban),
 	// dòng tài khoản của bảng Ảnh hưởng, tên người thao tác trong Log (Keycloak, dự phòng danh bạ cán bộ).
 	pty.UseSessionContext(acc.SessionContext())

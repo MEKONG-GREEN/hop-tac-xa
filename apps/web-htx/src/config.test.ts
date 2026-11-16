@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { DEFAULT_OIDC_CLIENT_ID, DEV_OIDC_ISSUER, resolveOidcConfig } from "./config";
+import { DEFAULT_OIDC_CLIENT_ID, DEV_OIDC_ISSUER, resolveOidcConfig, resolveSupport } from "./config";
 
 // #86 KNSPLIT-3-CLIENT-ISSUER: issuer mặc định khi dev phải trùng issuer Keycloak mà Compose công bố
 // (cổng 8180), không phải 8081 (API nội bộ MKG). Bản production thật vẫn chỉ lấy từ biến môi trường.
@@ -62,5 +62,23 @@ describe("issuer dev khớp Keycloak Compose", () => {
     const readme = readFileSync(resolve(process.cwd(), "README.md"), "utf8");
     expect(readme).toContain(`\`NEXT_PUBLIC_OIDC_ISSUER\` | \`${DEV_OIDC_ISSUER}\``);
     expect(example + readme).not.toMatch(/localhost:8081\/realms/);
+  });
+});
+
+// FN-01 / QTPQ-Q-04: ba giá trị của hộp "Liên hệ quản trị viên" lấy từ cấu hình triển khai; thiếu bất kỳ giá trị nào thì ẩn.
+describe("resolveSupport", () => {
+  it("đủ ba giá trị → thông tin hỗ trợ (đã cắt khoảng trắng)", () => {
+    expect(resolveSupport({ name: " TTKN An Giang ", phone: "0296 3852 000", email: "ho-tro@angiang.vn" })).toEqual({
+      name: "TTKN An Giang",
+      phone: "0296 3852 000",
+      email: "ho-tro@angiang.vn",
+    });
+  });
+
+  it("thiếu hoặc rỗng bất kỳ giá trị nào → null (ẩn liên kết)", () => {
+    expect(resolveSupport({})).toBeNull();
+    expect(resolveSupport({ name: "A", phone: "1", email: "" })).toBeNull();
+    expect(resolveSupport({ name: "A", phone: "  ", email: "a@b.vn" })).toBeNull();
+    expect(resolveSupport({ phone: "1", email: "a@b.vn" })).toBeNull();
   });
 });

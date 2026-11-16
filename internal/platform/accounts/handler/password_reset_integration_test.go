@@ -353,3 +353,22 @@ func TestPasswordResetIPRateLimitSameForAnyEmail(t *testing.T) {
 	f.clk.Advance(time.Minute)
 	f.request("khong.ton.tai@kn.example.vn")
 }
+
+// QTPQ-Q-03 (FN-01): đặt lại mật khẩu thành công thì bộ đếm lần sai và khóa tạm về 0.
+func TestConfirmResetClearsLoginLock(t *testing.T) {
+	f := newResetFixture(t)
+	user := f.user("can.bo.khoa@kn.example.vn", true)
+	f.dir.SetNow(f.clk.Now)
+	f.dir.LockByBruteForce(user)
+	if st, err := f.dir.LoginLockStatus(context.Background(), user); err != nil || !st.Locked {
+		t.Fatalf("điều kiện đầu: đang khóa tạm: %+v %v", st, err)
+	}
+	tok := f.link("can.bo.khoa@kn.example.vn", user)
+	if st, code := f.confirm(tok, newPassword); st != http.StatusNoContent {
+		t.Fatalf("đặt lại: %d %s", st, code)
+	}
+	st, err := f.dir.LoginLockStatus(context.Background(), user)
+	if err != nil || st.Locked || st.Failures != 0 {
+		t.Fatalf("đặt lại mật khẩu phải xóa khóa tạm và bộ đếm: %+v %v", st, err)
+	}
+}

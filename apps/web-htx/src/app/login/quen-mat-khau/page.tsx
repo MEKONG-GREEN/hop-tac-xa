@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useId, useState, type FormEvent } from "react";
 import { useAuth } from "@/auth/AuthProvider";
 import { Icon } from "@/components/Icon";
+import { config } from "@/config";
 import { BrandMark } from "@/shell/BrandMark";
 import { BRAND } from "@/shell/brand";
 
@@ -95,7 +96,13 @@ export default function ForgotPasswordPage() {
                 </div>
               ) : null}
               <p className="login-help">
-                <Link href="/login">Quay lại đăng nhập</Link> · <Link href="/login/lien-he">Liên hệ quản trị viên</Link>
+                <Link href="/login">Quay lại đăng nhập</Link>
+                {config.support ? (
+                  <>
+                    {" · "}
+                    <Link href="/login/lien-he">Liên hệ quản trị viên</Link>
+                  </>
+                ) : null}
               </p>
             </form>
           )}

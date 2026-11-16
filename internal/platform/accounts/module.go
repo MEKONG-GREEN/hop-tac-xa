@@ -8,7 +8,13 @@ package accounts
 
 import (
 	"context"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"io"
 	"log/slog"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -283,6 +289,61 @@ func DirectoryFromEnv() (port.Directory, error) {
 	}
 	return c, nil
 }
+
+// EnvLoginIDKey là biến chứa khóa HMAC (base64 chuẩn, từ 32 byte) cho bộ đếm lần sai của mã định danh không tồn tại.
+const EnvLoginIDKey = "AG_LOGIN_ID_KEY"
+
+// LoginFromEnv dựng cổng đăng nhập riêng của App HTX (FN-01, ADR-0060) từ AG_KC_LOGIN_*, AG_LOGIN_ID_KEY và AG_KC_ADMIN_URL
+// (cùng Keycloak với Directory). Fail-closed: không đặt biến nào → (nil, nil, nil) và route đăng nhập trả 503; đặt thiếu một
+// phần, thiếu Keycloak Admin hoặc khóa sai dạng → lỗi khởi động nêu tên biến.
+func LoginFromEnv(dir port.Directory) (port.PasswordLogin, []byte, error) {
+	lc, ok, err := keycloak.LoginConfigFromEnv()
+	if err != nil {
+		return nil, nil, err
+	}
+	raw := strings.TrimSpace(os.Getenv(EnvLoginIDKey))
+	if !ok && raw == "" {
+		return nil, nil, nil
+	}
+	if !ok {
+		return nil, nil, fmt.Errorf("accounts: đã đặt %s nhưng thiếu cấu hình client đăng nhập AG_KC_LOGIN_*", EnvLoginIDKey)
+	}
+	if raw == "" {
+		return nil, nil, fmt.Errorf("accounts: đăng nhập thiếu cấu hình: %s", EnvLoginIDKey)
+	}
+	key, err := base64.StdEncoding.DecodeString(raw)
+	if err != nil {
+		return nil, nil, fmt.Errorf("accounts: %s phải là base64 chuẩn", EnvLoginIDKey)
+	}
+	if len(key) < 32 {
+		return nil, nil, fmt.Errorf("accounts: %s phải từ 32 byte", EnvLoginIDKey)
+	}
+	cfg, adminOK, err := keycloak.ConfigFromEnv()
+	if err != nil {
+		return nil, nil, err
+	}
+	if !adminOK || dir == nil {
+		return nil, nil, errors.New("accounts: đăng nhập cần cấu hình AG_KC_ADMIN_URL")
+	}
+	l, err := keycloak.NewLogin(cfg, lc)
+	if err != nil {
+		return nil, nil, err
+	}
+	return l, key, nil
+}
+
+// UseLogin nối cổng đăng nhập (LoginFromEnv) và khóa HMAC sau khi dựng module (gốc lắp ráp). Không nối → route đăng nhập
+// trả 503 accounts.login_unavailable.
+func (m *Module) UseLogin(l port.PasswordLogin, key []byte) { m.svc.PwLogin, m.svc.LoginIDKey = l, key }
+
+// BootstrapAdmin tạo tài khoản Admin đầu tiên (platform_admin, phải đổi mật khẩu và đăng ký TOTP ở lần đăng nhập đầu) cho
+// cmd/bootstrap-admin; trả (id, mật khẩu tạm — chỉ một lần). Tenant và đơn vị bắt buộc.
+func BootstrapAdmin(ctx context.Context, dir port.Directory, in app.BootstrapAdminInput, rnd io.Reader) (uuid.UUID, string, error) {
+	return app.BootstrapAdmin(ctx, dir, in, rnd)
+}
+
+// BootstrapAdminInput là tham số của BootstrapAdmin.
+type BootstrapAdminInput = app.BootstrapAdminInput
 
 // MemoryDirectory là Directory trong bộ nhớ cho kiểm thử và chạy thử.
 type MemoryDirectory = keycloak.Memory

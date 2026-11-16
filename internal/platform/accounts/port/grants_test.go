@@ -102,6 +102,11 @@ func TestRolesExistInRealm(t *testing.T) {
 			svc = !c.PublicClient && c.ServiceAccountsEnabled && !c.DirectAccessGrantsEnabled && c.Secret == "${AG_KC_CLIENT_SECRET}"
 		case "agrigreen-seed":
 			seed = c.PublicClient && c.DirectAccessGrantsEnabled
+		case "agrigreen-htx-login":
+			// FN-01 (ADR-0060): chỉ máy chủ gọi — client bí mật (bí mật từ env), không public, không dịch vụ.
+			if c.PublicClient || !c.DirectAccessGrantsEnabled || c.ServiceAccountsEnabled || !strings.HasPrefix(c.Secret, "${AG_KC_LOGIN_") {
+				t.Errorf("client %s phải là client bí mật (bí mật từ env) bật direct access grants cho máy chủ", c.ClientID)
+			}
 		default:
 			if c.DirectAccessGrantsEnabled {
 				t.Errorf("client %s không được bật direct access grants", c.ClientID)

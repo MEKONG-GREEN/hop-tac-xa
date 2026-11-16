@@ -1,64 +1,102 @@
 "use client";
 
 import Link from "next/link";
-import { useId, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { Dialog } from "@/components/Dialog";
 import { Icon } from "@/components/Icon";
+import { config, type SupportInfo } from "@/config";
+import { SupportContact } from "./SupportContact";
 
 export type LoginError =
   | { kind: "invalid"; remaining: number }
   | { kind: "locked"; minutes: number }
+  /** EX-03: tài khoản đã bị khóa (FN-07). */
+  | { kind: "account_locked" }
+  /** Còn việc lần đầu (đổi mật khẩu tạm, đăng ký OTP): hoàn tất ở trang xác thực. */
+  | { kind: "setup_required" }
   | { kind: "message"; text: string };
 
-export interface LoginCardProps {
-  /**
-   * "password": thẻ đủ trường (chế độ giả lập). "oidc": chỉ email/SĐT — mật khẩu nhập ở trang xác thực
-   * Keycloak (theme agrigreen của P1), web không bao giờ nhận mật khẩu (OIDC + PKCE).
-   */
-  mode: "password" | "oidc";
-  busy?: boolean;
-  error?: LoginError | null;
-  initialIdentifier?: string;
-  initialRemember?: boolean;
-  onSubmit: (v: { identifier: string; password: string; remember: boolean }) => void;
+export interface LoginSubmit {
+  identifier: string;
+  password: string;
+  /** Mã OTP 6 số, tùy chọn: chỉ tài khoản đã bật xác thực hai bước cần nhập; rỗng nếu không nhập. */
+  otp: string;
+  remember: boolean;
 }
 
-const HELP_HREF = "/login/lien-he";
-/** Tự đặt lại mật khẩu qua email (BRD 2.0 FN-CH-00.01, #255). */
+export interface LoginCardProps {
+  busy?: boolean;
+  error?: LoginError | null;
+  /** Hộp "Liên hệ quản trị viên"; mặc định lấy từ cấu hình triển khai, null thì ẩn liên kết (QTPQ-Q-04). */
+  support?: SupportInfo | null;
+  initialIdentifier?: string;
+  initialRemember?: boolean;
+  onSubmit: (v: LoginSubmit) => void;
+  /** Nút "Hoàn tất trên trang xác thực" (việc lần đầu); nhận tên đăng nhập/SĐT đã gõ làm gợi ý. */
+  onSetup?: (identifier: string) => void;
+}
+
+/** Câu thông báo của FN-01 (nguyên văn BRD và trả lời của nhóm dự án ngày 16/11/2026). */
+export const LOGIN_MESSAGES = {
+  identifierRequired: "Nhập tên đăng nhập hoặc số điện thoại",
+  passwordRequired: "Nhập mật khẩu",
+  accountLocked: "Tài khoản đã bị khóa. Liên hệ người đã cấp tài khoản để mở khóa.",
+  tempLocked: (minutes: number) => `Tài khoản tạm khóa đăng nhập do nhập sai nhiều lần. Thử lại sau ${minutes} phút hoặc dùng Quên mật khẩu?`,
+  failed: (remaining: number) => `Sai tài khoản hoặc mật khẩu. Còn ${remaining} lần thử.`,
+  twoFactorHint: "Nếu tài khoản đã bật xác thực hai bước, hãy nhập cả mã OTP.",
+  setupRequired: "Tài khoản cần hoàn tất thiết lập lần đầu (đổi mật khẩu tạm hoặc đăng ký mã OTP) trên trang xác thực.",
+} as const;
+
+const OTP_RE = /^[0-9]{6}$/;
 const FORGOT_HREF = "/login/quen-mat-khau";
 
-/** Thẻ "Đăng nhập" (Hình 3a): email/SĐT, mật khẩu + "Hiện", Ghi nhớ, Quên mật khẩu, banner lỗi, Liên hệ quản trị viên. */
-export function LoginCard({ mode, busy, error, initialIdentifier = "", initialRemember = false, onSubmit }: LoginCardProps) {
+/**
+ * Thẻ "Đăng nhập" (FN-01): tên đăng nhập hoặc số điện thoại, mật khẩu + "Hiện", mã OTP (tùy chọn), Ghi nhớ, Quên mật khẩu, banner lỗi,
+ * Liên hệ quản trị viên (hộp thông tin tĩnh). Mật khẩu chỉ nằm trong state của thẻ và đi tới máy chủ qua passwordLogin.
+ */
+export function LoginCard({ busy, error, support = config.support, initialIdentifier = "", initialRemember = false, onSubmit, onSetup }: LoginCardProps) {
   const id = useId();
   const [identifier, setIdentifier] = useState(initialIdentifier);
   const [password, setPassword] = useState("");
+  const [otp, setOtp] = useState("");
   const [show, setShow] = useState(false);
   const [remember, setRemember] = useState(initialRemember);
   const [touched, setTouched] = useState(false);
+  const [help, setHelp] = useState(false);
+  // Chặn gửi lại đồng bộ: hai lần bấm sát nhau (trước khi `busy` kịp render) chỉ gửi một yêu cầu, nên không thành hai lần sai.
+  const inFlight = useRef(false);
+  useEffect(() => {
+    // Có phản hồi (hết busy hoặc lỗi mới) thì cho gửi lại.
+    if (!busy) inFlight.current = false;
+  }, [busy, error]);
 
   const idMissing = touched && !identifier.trim();
-  const pwMissing = touched && mode === "password" && !password;
+  const pwMissing = touched && !password;
+  const otpBad = touched && otp !== "" && !OTP_RE.test(otp);
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
+    if (busy || inFlight.current) return;
     setTouched(true);
-    if (!identifier.trim() || (mode === "password" && !password)) return;
-    onSubmit({ identifier: identifier.trim(), password, remember });
+    if (!identifier.trim() || !password || (otp !== "" && !OTP_RE.test(otp))) return;
+    inFlight.current = true;
+    onSubmit({ identifier: identifier.trim(), password, otp, remember });
   };
 
   return (
+    <>
     <form className="login-card" onSubmit={submit} noValidate aria-labelledby={`${id}-h`}>
       <h1 id={`${id}-h`}>Đăng nhập</h1>
       <p className="sub">Nhập thông tin tài khoản để tiếp tục.</p>
       <div className="field">
         <label htmlFor={`${id}-u`} className="req">
-          Email hoặc số điện thoại
+          Tên đăng nhập hoặc số điện thoại
         </label>
         <input
           id={`${id}-u`}
           className="input"
           name="username"
           autoComplete="username"
-          inputMode="email"
           value={identifier}
           onChange={(e) => setIdentifier(e.target.value)}
           aria-invalid={idMissing || undefined}
@@ -66,40 +104,59 @@ export function LoginCard({ mode, busy, error, initialIdentifier = "", initialRe
         />
         {idMissing ? (
           <span className="err" id={`${id}-ue`}>
-            Nhập email hoặc số điện thoại.
+            {LOGIN_MESSAGES.identifierRequired}
           </span>
         ) : null}
       </div>
-      {mode === "password" ? (
-        <div className="field">
-          <label htmlFor={`${id}-p`} className="req">
-            Mật khẩu
-          </label>
-          <div className="pw-wrap">
-            <input
-              id={`${id}-p`}
-              className="input"
-              name="password"
-              type={show ? "text" : "password"}
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              aria-invalid={pwMissing || undefined}
-              aria-describedby={pwMissing ? `${id}-pe` : undefined}
-            />
-            <button type="button" className="pw-toggle" onClick={() => setShow((v) => !v)} aria-pressed={show} aria-controls={`${id}-p`}>
-              {show ? "Ẩn" : "Hiện"}
-            </button>
-          </div>
-          {pwMissing ? (
-            <span className="err" id={`${id}-pe`}>
-              Nhập mật khẩu.
-            </span>
-          ) : null}
+      <div className="field">
+        <label htmlFor={`${id}-p`} className="req">
+          Mật khẩu
+        </label>
+        <div className="pw-wrap">
+          <input
+            id={`${id}-p`}
+            className="input"
+            name="password"
+            type={show ? "text" : "password"}
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            aria-invalid={pwMissing || undefined}
+            aria-describedby={pwMissing ? `${id}-pe` : undefined}
+          />
+          <button type="button" className="pw-toggle" onClick={() => setShow((v) => !v)} aria-pressed={show} aria-controls={`${id}-p`}>
+            {show ? "Ẩn" : "Hiện"}
+          </button>
         </div>
-      ) : (
-        <p className="login-note">Mật khẩu (và mã OTP với tài khoản Admin) nhập ở trang xác thực của hệ thống sau khi bấm Đăng nhập.</p>
-      )}
+        {pwMissing ? (
+          <span className="err" id={`${id}-pe`}>
+            {LOGIN_MESSAGES.passwordRequired}
+          </span>
+        ) : null}
+      </div>
+      <div className="field">
+        <label htmlFor={`${id}-o`}>Mã OTP (nếu có)</label>
+        <input
+          id={`${id}-o`}
+          className="input"
+          name="otp"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          maxLength={6}
+          value={otp}
+          onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+          aria-invalid={otpBad || undefined}
+          aria-describedby={otpBad ? `${id}-oe ${id}-oh` : `${id}-oh`}
+        />
+        <span className="hint" id={`${id}-oh`}>
+          Chỉ nhập khi tài khoản đã bật xác thực hai bước
+        </span>
+        {otpBad ? (
+          <span className="err" id={`${id}-oe`}>
+            Nhập mã OTP gồm 6 chữ số
+          </span>
+        ) : null}
+      </div>
       <div className="login-opts">
         <label>
           <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
@@ -115,22 +172,45 @@ export function LoginCard({ mode, busy, error, initialIdentifier = "", initialRe
           <Icon name="xCircle" />
           {error.kind === "invalid" ? (
             <span>
-              <b>Sai tài khoản hoặc mật khẩu.</b>
-              Kiểm tra lại thông tin. Còn {error.remaining} lần thử.
+              <b>{LOGIN_MESSAGES.failed(error.remaining)}</b>
+              Nếu quên mật khẩu, hãy dùng “Quên mật khẩu?” để đặt lại. {LOGIN_MESSAGES.twoFactorHint}
             </span>
           ) : error.kind === "locked" ? (
             <span>
-              <b>Tài khoản tạm khóa {error.minutes} phút.</b>
-              Đã nhập sai 5 lần. Thử lại sau hoặc liên hệ quản trị viên.
+              <b>{LOGIN_MESSAGES.tempLocked(error.minutes)}</b>
+            </span>
+          ) : error.kind === "account_locked" ? (
+            <span>
+              <b>{LOGIN_MESSAGES.accountLocked}</b>
+            </span>
+          ) : error.kind === "setup_required" ? (
+            <span>
+              <b>{LOGIN_MESSAGES.setupRequired}</b>
+              {onSetup ? (
+                <button type="button" className="btn btn-o btn-sm" onClick={() => onSetup(identifier.trim())}>
+                  Hoàn tất trên trang xác thực
+                </button>
+              ) : null}
             </span>
           ) : (
             <span>{error.text}</span>
           )}
         </div>
       ) : null}
-      <p className="login-help">
-        Cần hỗ trợ? <Link href={HELP_HREF}>Liên hệ quản trị viên</Link>
-      </p>
+      {support ? (
+        <p className="login-help">
+          Cần hỗ trợ?{" "}
+          <button type="button" className="link-btn" onClick={() => setHelp(true)}>
+            Liên hệ quản trị viên
+          </button>
+        </p>
+      ) : null}
     </form>
+    {help && support ? (
+      <Dialog title="Liên hệ quản trị viên" onClose={() => setHelp(false)}>
+        <SupportContact info={support} />
+      </Dialog>
+    ) : null}
+    </>
   );
 }

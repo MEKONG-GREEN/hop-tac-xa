@@ -1,11 +1,12 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import type { User } from "oidc-client-ts";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createAdminApiClient, createApiClient, unwrap, type AdminApiClient, type ApiClient } from "@/api/client";
 import { newIdempotencyKey } from "@/api/idempotency";
 import { mockAdminFetch, mockFetch } from "@/api/mock/handler";
-import { mockKnLogin, type MockLoginResult } from "@/api/mock/kn";
+import { LOCK_MINUTES, mockKnLogin } from "@/api/mock/kn";
 import { findPersona, mockToken, type MockPersona } from "@/api/mock/personas";
 import { ApiProblem } from "@/api/problem";
 import type { Me } from "@/api/types";
@@ -18,6 +19,8 @@ import { autoSelection, isValidSelection } from "@/kn/session";
 import { forgetIdentifier } from "@/lib/rememberLogin";
 import { buildPrincipal, decodeAccessToken, type AccessTokenClaims, type Principal } from "./principal";
 import { getUserManager, safeReturnTo } from "./oidc";
+import { passwordLogin, type LoginOutcome } from "./passwordLogin";
+import { passwordSession } from "./passwordSession";
 import { tokenStore } from "./tokenStore";
 
 export type AuthStatus = "loading" | "anonymous" | "authenticated";
@@ -38,6 +41,12 @@ export interface KnSessionState {
   /** Chế độ hỗ trợ (FN-AD-04.07): đang thay cho ai — nhãn hiển thị trên dải vàng, lý do gửi kèm thao tác ghi. */
   support?: { target: string; reason: string } | null;
 }
+
+/**
+ * Kết quả `signIn`: như LoginOutcome, nhưng đăng nhập thành công không trả token (token chỉ nằm ở tokenStore và
+ * passwordSession, không đi ra màn hình).
+ */
+export type SignInOutcome = Exclude<LoginOutcome, { kind: "authenticated" }> | { kind: "authenticated" };
 
 const KN_LEGACY: KnSessionState = { status: "legacy", assignments: [], context: null, menu: null, badges: null };
 
@@ -86,10 +95,16 @@ export interface AuthContextValue {
   setSupportReason: (reason: string) => void;
   /** Chọn/đổi vai trò + phòng ban (không cần đăng nhập lại). Trả ngữ cảnh mới (default_route). */
   selectContext: (sel: SelectContextRequest) => Promise<SessionContext>;
-  /** Chuyển hướng tới Keycloak; `loginHint` = email/SĐT người dùng gõ ở thẻ Đăng nhập. */
+  /**
+   * Chuyển hướng tới Keycloak (luồng OIDC/PKCE); `loginHint` = tên đăng nhập/SĐT người dùng gõ ở thẻ Đăng nhập. Dùng cho
+   * nút hoàn tất việc lần đầu (đổi mật khẩu tạm, đăng ký OTP) trên trang xác thực.
+   */
   login: (returnTo?: string, loginHint?: string) => Promise<void>;
-  /** Chỉ chế độ giả lập: đăng nhập bằng email/SĐT + mật khẩu thử (tài khoản KN v7.7). */
-  loginWithPassword: (identifier: string, password: string) => Promise<MockLoginResult>;
+  /**
+   * Đăng nhập ở màn riêng (FN-01): tên đăng nhập hoặc SĐT + mật khẩu (+ OTP) gửi về máy chủ. `authenticated` → phiên đã
+   * thiết lập (trang đăng nhập tự điều hướng vào trang đầu tiên được xem). Chế độ giả lập: mật khẩu thử (tài khoản KN v7.7).
+   */
+  signIn: (identifier: string, password: string, otp?: string) => Promise<SignInOutcome>;
   /** Chỉ chế độ giả lập: đăng nhập bằng persona. */
   loginAsPersona: (personaId: string) => Promise<void>;
   /** Đổi mật khẩu: Keycloak kc_action=UPDATE_PASSWORD (chế độ giả lập: không làm gì). */
@@ -119,6 +134,7 @@ function writeMockPersona(id: string | null): void {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const router = useRouter();
   const [status, setStatus] = useState<AuthStatus>("loading");
   const [principal, setPrincipal] = useState<Principal | null>(null);
   const [scopeWarning, setScopeWarning] = useState<string | null>(null);
@@ -130,6 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [consentPing, setConsentPing] = useState(0);
 
   const onUnauthenticated = useCallback(() => {
+    passwordSession.stop();
     tokenStore.set(null);
     contextStore.set(null);
     setPrincipal(null);
@@ -363,14 +380,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [establish],
   );
 
-  const loginWithPassword = useCallback(
-    async (identifier: string, password: string): Promise<MockLoginResult> => {
-      if (!config.mock) return { ok: false, error: "invalid_credentials", remaining: 0 };
-      const r = mockKnLogin(identifier, password);
-      if (r.ok) await loginAsPersona(r.personaId);
-      return r;
+  const signIn = useCallback(
+    async (identifier: string, password: string, otp?: string): Promise<SignInOutcome> => {
+      if (config.mock) {
+        const r = mockKnLogin(identifier, password);
+        if (r.ok) {
+          await loginAsPersona(r.personaId);
+          return { kind: "authenticated" };
+        }
+        return r.error === "locked" ? { kind: "locked", minutes: LOCK_MINUTES } : { kind: "invalid", remaining: r.remaining };
+      }
+      const outcome = await passwordLogin.login(identifier, password, otp);
+      if (outcome.kind !== "authenticated") return outcome;
+      // Token (kể cả refresh token) chỉ ở bộ nhớ của tab; làm mới trước hạn, thất bại thì về màn đăng nhập.
+      passwordSession.start(outcome.tokens, { onAccessToken: tokenStore.set, onExpired: onUnauthenticated });
+      await establish(outcome.tokens.accessToken);
+      return { kind: "authenticated" };
     },
-    [loginAsPersona],
+    [loginAsPersona, establish, onUnauthenticated],
   );
 
   const selectContext = useCallback(
@@ -412,6 +439,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    // Phiên của màn đăng nhập riêng: thu hồi phiên ở Keycloak qua máy chủ (bỏ qua lỗi), rồi xóa trạng thái cục bộ.
+    const passwordRt = passwordSession.refreshToken();
+    if (passwordRt) await passwordLogin.logout(passwordRt);
+    passwordSession.stop();
     supportReasonStore.set(null);
     tokenStore.set(null);
     contextStore.set(null);
@@ -425,11 +456,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       writeMockPersona(null);
       return;
     }
+    if (passwordRt) {
+      // Token, refresh token và ngữ cảnh đã xóa ở trên; về màn đăng nhập (không có trang Keycloak để chuyển tới).
+      router.replace("/login");
+      return;
+    }
     const um = getUserManager();
     const user = await um.getUser();
     await um.removeUser();
     await um.signoutRedirect(user?.id_token ? { id_token_hint: user.id_token } : undefined);
-  }, []);
+  }, [router]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -451,12 +487,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSupportReason,
       selectContext,
       login,
-      loginWithPassword,
+      signIn,
       loginAsPersona,
       changePassword,
       logout,
     }),
-    [status, principal, scopeWarning, clients, kn, dataConsent, acceptDataConsent, refreshDataConsent, enterSupport, exitSupport, setSupportReason, selectContext, login, loginWithPassword, loginAsPersona, changePassword, logout],
+    [status, principal, scopeWarning, clients, kn, dataConsent, acceptDataConsent, refreshDataConsent, enterSupport, exitSupport, setSupportReason, selectContext, login, signIn, loginAsPersona, changePassword, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

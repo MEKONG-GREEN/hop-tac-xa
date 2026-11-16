@@ -483,6 +483,11 @@ Tài khoản cán bộ quản lý trong Keycloak qua Admin REST (KN US-ADM-01..0
 | 503 | `accounts.dependency_unavailable` | pf/accounts: chưa cấu hình `AG_KC_*`, Keycloak không phản hồi hoặc từ chối tài khoản dịch vụ, chưa nối pf/party |
 | 410 | `accounts.reset_link_invalid` | pf/accounts (#255, ADR-0057): `POST /v1/public/password-reset/confirm` — mã sai/bị sửa, đã dùng, hết hạn (30 phút), đang được xác nhận song song hoặc tài khoản đã bị khóa; một mã chung, không phân biệt lý do |
 | 422 | `accounts.password_policy` | pf/accounts (#255): mật khẩu mới không đạt chính sách realm (≥ 12 ký tự, khác tên đăng nhập, không trùng 5 mật khẩu gần nhất); liên kết đặt lại vẫn dùng lại được |
+| 401 | `accounts.login_failed` | pf/accounts (FN-01/EX-02, ADR-0060): `POST /v1/public/auth/login` — sai tên đăng nhập, SĐT, mật khẩu hoặc mã OTP, kể cả tài khoản có OTP mà không gửi mã (một mã chung, không phân biệt lý do; mã định danh không tồn tại và SĐT khớp nhiều tài khoản cho phản hồi giống hệt). Thân có `remaining_attempts` (số lần thử còn lại) và `detail` "Sai tài khoản hoặc mật khẩu. Còn n lần thử." |
+| 423 | `accounts.login_temporarily_locked` | pf/accounts (FN-01/BR-06, QTPQ-Q-03): khóa đăng nhập tạm — 5 lần sai liên tiếp khóa 15 phút, hai lần sai cách nhau dưới 1 giây khóa 60 giây. Thân có `retry_after_minutes` (làm tròn lên), header `Retry-After` (giây); không kiểm mật khẩu trong lúc khóa. Khác trạng thái "Đã khóa" của FN-07; Admin mở sớm bằng nút Mở khóa |
+| 403 | `accounts.login_setup_required` | pf/accounts (FN-01, ADR-0060): đăng nhập đúng mật khẩu nhưng tài khoản còn việc lần đầu (đổi mật khẩu tạm, đăng ký TOTP) hoặc có vai bắt TOTP mà chưa đăng ký OTP — không phát token; hoàn tất ở trang xác thực của Keycloak (đến khi có màn đổi mật khẩu lần đầu AH-269) |
+| 503 | `accounts.login_unavailable` | pf/accounts (FN-01, ADR-0060): đăng nhập riêng chưa cấu hình (thiếu `AG_KC_LOGIN_*`, `AG_LOGIN_ID_KEY` hoặc `AG_KC_ADMIN_URL`) — fail-closed, không chạy ở chế độ nới lỏng |
+| 401 | `accounts.session_expired` | pf/accounts (FN-01, ADR-0060): `POST /v1/public/auth/refresh` — phiên Keycloak đã hết hoặc bị thu hồi (đăng xuất, khóa tài khoản); đăng nhập lại |
 
 KN v7.7 gói P1 — gán vai trò nhiều vai × Nút × phòng ban × xã (FN-AD-04.04), ngữ cảnh phiên `X-AG-Context` (FN-CH-00.01), chế độ hỗ trợ (FN-AD-04.07):
 
@@ -506,7 +511,7 @@ KN v7.7 gói P1 — gán vai trò nhiều vai × Nút × phòng ban × xã (FN-A
 | 403 | `accounts.context_invalid` | `X-AG-Context` không phải UUID, không tồn tại trong tenant, hoặc thuộc người khác (chống giả header) |
 | 403 | `accounts.context_expired` | ngữ cảnh quá 24 giờ hoặc lần gán hết hiệu lực — chọn lại |
 | 403 | `accounts.context_revoked` | vai trò đã thu hồi/đổi vai, phòng ban không còn trong vai trò hoặc không còn Đang áp dụng, tài khoản bị khóa, phiên hỗ trợ đã kết thúc |
-| 403 | `accounts.account_locked` | tài khoản bị khóa — "Tài khoản đã bị khóa, vui lòng liên hệ Admin để mở khóa." |
+| 403 | `accounts.account_locked` | tài khoản bị khóa — "Tài khoản đã bị khóa, vui lòng liên hệ Admin để mở khóa." Ở `POST /v1/public/auth/login` (FN-01/EX-03): mã định danh khớp tài khoản đã bị khóa (FN-07) thì báo "Tài khoản đã bị khóa. Liên hệ người đã cấp tài khoản để mở khóa." dù mật khẩu đúng hay sai |
 | 403 | `mfa_required` | ngữ cảnh Admin và chế độ hỗ trợ bắt buộc token có yếu tố thứ hai |
 | 422 | `accounts.support_reason_required` | thao tác ghi trong chế độ hỗ trợ thiếu header `X-AG-Reason` (≥ 10 ký tự, UTF-8 mã hóa phần trăm) |
 | 404 | `accounts.support_session_not_found` | phiên hỗ trợ không có hoặc của Admin khác |

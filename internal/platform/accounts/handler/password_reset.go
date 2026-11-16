@@ -19,6 +19,7 @@ const (
 func (h Handler) RegisterPublic(rg *gin.RouterGroup) {
 	rg.POST("/password-reset", httpx.RateLimitByIP(h.Svc.Clock, resetPerMinute, resetBurst), h.requestPasswordReset)
 	rg.POST("/password-reset/confirm", h.confirmPasswordReset)
+	h.registerLogin(rg) // FN-01: /auth/login, /auth/refresh, /auth/logout
 }
 
 type passwordResetReq struct {

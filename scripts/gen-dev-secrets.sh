@@ -14,6 +14,20 @@ if [ -f "$target" ] && [ "${1:-}" != "--force" ]; then
 ')" >> "$target"
     echo "Đã bổ sung AG_KC_CLIENT_SECRET vào $target (giá trị không in ra). Tạo lại container keycloak để nhập lại realm."
   fi
+  # FN-01 (ADR-0060): bí mật client đăng nhập riêng và khóa HMAC bộ đếm mã định danh không tồn tại.
+  for v in AG_KC_LOGIN_CLIENT_SECRET AG_LOGIN_ID_KEY; do
+    if ! grep -q "^$v=" "$target"; then
+      [ -z "$(tail -c1 "$target")" ] || echo >> "$target"
+      if [ "$v" = AG_LOGIN_ID_KEY ]; then
+        echo "$v='$(head -c 32 /dev/urandom | base64 | tr -d '
+')'" >> "$target"
+      else
+        echo "$v=$(head -c 32 /dev/urandom | od -An -v -tx1 | tr -d ' 
+')" >> "$target"
+      fi
+      echo "Đã bổ sung $v vào $target (giá trị không in ra). Tạo lại container keycloak và api-platform."
+    fi
+  done
   # G3 (ADR-0018): tài khoản RabbitMQ riêng của vhost mkg.internal.
   if ! grep -q '^AMQP_INTERNAL_PASSWORD=' "$target"; then
     [ -z "$(tail -c1 "$target")" ] || echo >> "$target"
@@ -50,6 +64,9 @@ tmp="$target.tmp.$$"
   echo "AG_VAULT_BLIND_KEY='$(b64 32)'"
   echo "AG_ANCHOR_SIGNING_KEY='$(b64 32)'"
   echo "AG_KC_CLIENT_SECRET=$(hex 32)"
+  # FN-01 (ADR-0060): bí mật client đăng nhập riêng; khóa HMAC bộ đếm mã định danh không tồn tại (base64 32 byte).
+  echo "AG_KC_LOGIN_CLIENT_SECRET=$(hex 32)"
+  echo "AG_LOGIN_ID_KEY='$(b64 32)'"
   # Public API (G5, docker compose --profile phasek): pepper HMAC khóa API phiên bản 1 (ADR-0022 mục 4, ≥ 32 byte).
   echo "AG_APIKEY_PEPPER_V1=$(hex 32)"
   # Sao lưu (docker-compose.backup.yml): mã hóa kho pgBackRest, kho S3 thứ hai với danh tính ghi/đọc tách biệt.

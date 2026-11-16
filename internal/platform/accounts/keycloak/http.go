@@ -24,6 +24,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/domain"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/port"
 )
 
@@ -50,6 +51,9 @@ type Config struct {
 	// maxFailureWaitSeconds của realm (P0-VPS-OPS #131: 900 giây). Dùng để báo lúc khóa tự hết;
 	// 0 → DefaultLockoutWait. Đọc AG_KC_LOCKOUT_WAIT (vd 15m).
 	LockoutWait time.Duration
+	// QuickLoginWait: thời gian khóa nhanh khi hai lần sai cách nhau dưới quickLoginCheckMilliSeconds — phải bằng
+	// minimumQuickLoginWaitSeconds của realm (60 giây); 0 → DefaultQuickLoginWait. Đọc AG_KC_QUICK_LOGIN_WAIT (vd 60s).
+	QuickLoginWait time.Duration
 	// HTTP thay http.Client mặc định (kiểm thử).
 	HTTP *http.Client
 	// Now thay đồng hồ hệ thống khi tính hạn token (kiểm thử).
@@ -86,12 +90,22 @@ func ConfigFromEnv() (cfg Config, ok bool, err error) {
 		}
 		cfg.Timeout = d
 	}
+	if s := os.Getenv("AG_KC_QUICK_LOGIN_WAIT"); s != "" {
+		d, perr := time.ParseDuration(s)
+		if perr != nil || d <= 0 {
+			return cfg, false, errors.New("keycloak: AG_KC_QUICK_LOGIN_WAIT phải là khoảng thời gian dương, vd 60s")
+		}
+		cfg.QuickLoginWait = d
+	}
 	return cfg, true, nil
 }
 
 // DefaultLockoutWait là thời gian khóa tạm của realm (P0-VPS-OPS #131: waitIncrementSeconds =
 // maxFailureWaitSeconds = 900); cmd/api-platform realm_test và lockout_test giữ hai nơi khớp nhau.
 const DefaultLockoutWait = 15 * time.Minute
+
+// DefaultQuickLoginWait là thời gian khóa nhanh của realm (minimumQuickLoginWaitSeconds = 60).
+const DefaultQuickLoginWait = time.Minute
 
 // Client là Directory qua HTTP. An toàn khi dùng đồng thời.
 type Client struct {
@@ -128,6 +142,9 @@ func New(cfg Config) (*Client, error) {
 	}
 	if cfg.LockoutWait <= 0 {
 		cfg.LockoutWait = DefaultLockoutWait
+	}
+	if cfg.QuickLoginWait <= 0 {
+		cfg.QuickLoginWait = DefaultQuickLoginWait
 	}
 	hc := cfg.HTTP
 	if hc == nil {
@@ -670,22 +687,32 @@ func (c *Client) BruteForceLocked(ctx context.Context, id uuid.UUID) (bool, erro
 	return st.Locked, err
 }
 
-// LoginLockStatus đọc GET /attack-detection/brute-force/users/{id}: "disabled" là đang khóa; "lastFailure"
-// (mili giây epoch) + LockoutWait là thời điểm khóa tạm tự hết (realm MULTIPLE, waitIncrementSeconds =
-// maxFailureWaitSeconds — lần sai trong lúc đang khóa không được tính nên lần sai cuối là lần gây khóa).
-// Không suy được (lastFailure 0, mốc đã qua mà Keycloak vẫn báo khóa) → Until nil, không đoán.
+// LoginLockStatus đọc GET /attack-detection/brute-force/users/{id}: "disabled" là đang khóa; "numFailures" và
+// "lastFailure" (mili giây epoch) là số lần sai liên tiếp và lần sai cuối. Khóa tạm tự hết ở lastFailure + LockoutWait
+// khi numFailures chia hết cho 5 (realm MULTIPLE, waitIncrementSeconds = maxFailureWaitSeconds), ngược lại là khóa
+// nhanh nên hết ở lastFailure + QuickLoginWait. Không suy được (lastFailure 0, mốc đã qua mà Keycloak vẫn báo khóa)
+// → Until nil, không đoán.
 func (c *Client) LoginLockStatus(ctx context.Context, id uuid.UUID) (port.LoginLock, error) {
 	var st struct {
 		Disabled    bool  `json:"disabled"`
+		NumFailures int   `json:"numFailures"`
 		LastFailure int64 `json:"lastFailure"`
 	}
 	if _, err := c.do(ctx, "đọc trạng thái khóa đăng nhập sai", http.MethodGet, bruteForcePath(id), nil, nil, &st); err != nil {
 		return port.LoginLock{}, err
 	}
-	out := port.LoginLock{Locked: st.Disabled}
-	if st.Disabled && st.LastFailure > 0 && c.cfg.LockoutWait > 0 {
-		until := time.UnixMilli(st.LastFailure).Add(c.cfg.LockoutWait).UTC()
-		if until.After(c.cfg.Now()) {
+	out := port.LoginLock{Locked: st.Disabled, Failures: st.NumFailures}
+	var last time.Time
+	if st.LastFailure > 0 {
+		last = time.UnixMilli(st.LastFailure).UTC()
+		out.LastFailure = &last
+	}
+	if st.Disabled && st.LastFailure > 0 {
+		wait := c.cfg.QuickLoginWait
+		if st.NumFailures > 0 && st.NumFailures%domain.LoginMaxFailures == 0 {
+			wait = c.cfg.LockoutWait
+		}
+		if until := last.Add(wait); wait > 0 && until.After(c.cfg.Now()) {
 			out.Until = &until
 		}
 	}
