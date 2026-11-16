@@ -33,7 +33,7 @@ func TestOpenSeasonFarmer_HTX_US_SEASON_01(t *testing.T) {
 	expect(t, r, http.StatusCreated, "mở vụ")
 	s := get(r.body, "season")
 	if str(s, "sop_template_ref") != tmpl || str(s, "sop_version_id") != ver || str(s, "status") != "open" ||
-		str(s, "expected_harvest_date") != "2026-12-24" || str(s, "harvest_open_date") != "2026-12-19" ||
+		str(s, "expected_harvest_date") != "2026-12-24" || str(s, "harvest_open_date") != "2026-12-24" ||
 		str(s, "area_ha") != "1.5000" || str(s, "location_status") != "match" || get(s, "on_behalf") != false {
 		t.Fatalf("vụ mới: %s", r.raw)
 	}
@@ -142,7 +142,7 @@ func TestCopyPreviousSeason_HTX_US_SEASON_03(t *testing.T) {
 	expectCode(t, mgr.get("/v1/cropcycle/plots/"+f.p1.String()+"/previous-config"), http.StatusConflict,
 		"cropcycle.previous_season_not_completed", "đang canh tác")
 	expectCode(t, mgr.open(f.p1, map[string]any{"copy_previous": true}), http.StatusConflict, "cropcycle.previous_season_not_completed", "sao chép khi đang canh tác")
-	f.advanceDays(92)
+	f.advanceDays(97)
 	expect(t, mgr.post("/v1/cropcycle/seasons/"+season+"/harvest", map[string]any{"mass_kg": "9750"}), http.StatusCreated, "khai sản lượng")
 	r := mgr.get("/v1/cropcycle/plots/" + f.p1.String() + "/previous-config")
 	expect(t, r, http.StatusOK, "cấu hình vụ trước")

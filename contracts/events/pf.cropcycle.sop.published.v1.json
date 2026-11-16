@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://contracts.agrigreen.vn/events/pf.cropcycle.sop.published/v1",
   "title": "pf.cropcycle.sop.published — payload",
-  "description": "Một phiên bản quy trình SOP đã được phát hành (param_approver khác người soạn, R-56). Phiên bản đã phát hành bất biến; pf/sync đưa xuống thiết bị (entity sop_version).",
+  "description": "Một phiên bản quy trình SOP đã được phát hành (vai soạn sop_admin hoặc platform_admin phát hành một bước, AH-8). Phiên bản đã phát hành bất biến; pf/sync đưa xuống thiết bị (entity sop_version).",
   "x-event-type": "pf.cropcycle.sop.published",
   "x-schema-version": 1,
   "x-producer": "pf/cropcycle",

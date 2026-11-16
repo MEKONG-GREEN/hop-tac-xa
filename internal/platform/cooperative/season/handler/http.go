@@ -65,6 +65,7 @@ func (h Handler) RegisterAdmin(rg *gin.RouterGroup) {
 	rg.GET("/cropcycle/sops", h.listSOPs(true))
 	rg.POST("/cropcycle/sops", h.createSOP)
 	rg.GET("/cropcycle/sops/:ref", h.getSOP(true))
+	rg.POST("/cropcycle/sops/:ref/info", h.updateSOPInfo)
 	rg.POST("/cropcycle/sops/:ref/versions", h.newVersion)
 	rg.POST("/cropcycle/sops/:ref/clone", h.cloneSOP)
 	rg.POST("/cropcycle/sops/:ref/retire", h.retireSOP)
@@ -291,15 +292,18 @@ func (h Handler) bindings(c *gin.Context) {
 }
 
 type createSOPReq struct {
-	Code           string        `json:"code"`
-	Name           string        `json:"name"`
-	Crop           string        `json:"crop"`
-	Scope          string        `json:"scope"`
-	CooperativeRef *string       `json:"cooperative_ref"`
-	Standard       string        `json:"standard"`
-	Description    string        `json:"description"`
-	Steps          []domain.Step `json:"steps"`
-	ChangeNote     string        `json:"change_note"`
+	Code           string         `json:"code"`
+	Name           string         `json:"name"`
+	Crop           string         `json:"crop"`
+	VarietyCode    string         `json:"variety_code"`
+	AnchorName     string         `json:"anchor_name"`
+	Scope          string         `json:"scope"`
+	CooperativeRef *string        `json:"cooperative_ref"`
+	Standard       string         `json:"standard"`
+	Description    string         `json:"description"`
+	Stages         []domain.Stage `json:"stages"`
+	Steps          []domain.Step  `json:"steps"`
+	ChangeNote     string         `json:"change_note"`
 }
 
 func (h Handler) createSOP(c *gin.Context) {
@@ -308,8 +312,9 @@ func (h Handler) createSOP(c *gin.Context) {
 		return
 	}
 	f := newFields()
-	in := app.CreateSOPInput{Code: req.Code, Name: req.Name, Crop: req.Crop, Scope: req.Scope, CooperativeRef: f.ref("cooperative_ref", req.CooperativeRef),
-		Standard: req.Standard, Description: req.Description, Steps: req.Steps, ChangeNote: req.ChangeNote}
+	in := app.CreateSOPInput{Code: req.Code, Name: req.Name, Crop: req.Crop, VarietyCode: req.VarietyCode, AnchorName: req.AnchorName,
+		Scope: req.Scope, CooperativeRef: f.ref("cooperative_ref", req.CooperativeRef), Standard: req.Standard, Description: req.Description,
+		Stages: req.Stages, Steps: req.Steps, ChangeNote: req.ChangeNote}
 	if f.bad {
 		httpx.Fail(c, f.p)
 		return
@@ -324,8 +329,29 @@ func (h Handler) createSOP(c *gin.Context) {
 }
 
 type versionReq struct {
-	Steps      *[]domain.Step `json:"steps"`
-	ChangeNote string         `json:"change_note"`
+	Stages     *[]domain.Stage `json:"stages"`
+	Steps      *[]domain.Step  `json:"steps"`
+	ChangeNote string          `json:"change_note"`
+}
+
+// content trả nội dung gửi lên; thiếu stages hoặc steps thì báo lỗi theo trường.
+func (r versionReq) content() (domain.Content, *problem.Problem) {
+	var c domain.Content
+	var p *problem.Problem
+	if r.Stages == nil {
+		p = problem.Validation.WithField("stages", "bắt buộc")
+	} else {
+		c.Stages = *r.Stages
+	}
+	if r.Steps == nil {
+		if p == nil {
+			p = problem.Validation
+		}
+		p = p.WithField("steps", "bắt buộc")
+	} else {
+		c.Steps = *r.Steps
+	}
+	return c, p
 }
 
 func (h Handler) newVersion(c *gin.Context) {
@@ -337,9 +363,14 @@ func (h Handler) newVersion(c *gin.Context) {
 	if !bindJSON(c, &req) {
 		return
 	}
-	in := app.NewVersionInput{TemplateRef: ref, CopySteps: req.Steps == nil, ChangeNote: req.ChangeNote}
-	if req.Steps != nil {
-		in.Steps = *req.Steps
+	in := app.NewVersionInput{TemplateRef: ref, CopySteps: req.Stages == nil && req.Steps == nil, ChangeNote: req.ChangeNote}
+	if !in.CopySteps {
+		content, p := req.content()
+		if p != nil {
+			httpx.Fail(c, p)
+			return
+		}
+		in.Stages, in.Steps = content.Stages, content.Steps
 	}
 	v, err := h.Svc.NewVersion(c.Request.Context(), in)
 	if err != nil {
@@ -358,11 +389,37 @@ func (h Handler) updateDraft(c *gin.Context) {
 	if !bindJSON(c, &req) {
 		return
 	}
-	if req.Steps == nil {
-		httpx.Fail(c, problem.Validation.WithField("steps", "bắt buộc"))
+	content, p := req.content()
+	if p != nil {
+		httpx.Fail(c, p)
 		return
 	}
-	v, err := h.Svc.UpdateDraft(c.Request.Context(), id, *req.Steps, req.ChangeNote)
+	v, err := h.Svc.UpdateDraft(c.Request.Context(), id, content, req.ChangeNote)
+	if err != nil {
+		httpx.Fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, sopOut(v))
+}
+
+type sopInfoReq struct {
+	Name        string `json:"name"`
+	Crop        string `json:"crop"`
+	VarietyCode string `json:"variety_code"`
+	AnchorName  string `json:"anchor_name"`
+}
+
+func (h Handler) updateSOPInfo(c *gin.Context) {
+	ref, ok := pathID(c, "ref", app.ErrSOPNotFound)
+	if !ok {
+		return
+	}
+	var req sopInfoReq
+	if !bindJSON(c, &req) {
+		return
+	}
+	v, err := h.Svc.UpdateSOPInfo(c.Request.Context(), ref, app.SOPInfoInput{Name: req.Name, Crop: req.Crop,
+		VarietyCode: req.VarietyCode, AnchorName: req.AnchorName})
 	if err != nil {
 		httpx.Fail(c, err)
 		return

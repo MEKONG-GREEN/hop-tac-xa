@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"strconv"
 	"testing"
 
 	"github.com/shopspring/decimal"
@@ -9,48 +10,59 @@ import (
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/mass"
 )
 
-func step(seq int, act string, off, win int) Step {
-	return Step{Seq: seq, Name: "Bước " + act, ActivityCode: act, DayOffset: off, WindowDays: win, Mandatory: true}
+// task dựng một việc trong giai đoạn 1 với cửa sổ Theo ngày so với NXG.
+func task(seq int, act string, from, to int) Step {
+	return Step{Seq: seq, StageSeq: 1, TaskSeq: seq, Name: "Việc " + act + strconv.Itoa(seq), ActivityCode: act, Mandatory: true,
+		Window: &Window{Kind: WindowDateRange, Anchor: AnchorNXG, From: &from, To: &to}}
 }
 
-// HTX US-CAT-01 AC-6: thứ tự bước SOP phải liên tục 1..n.
-func TestNormalizeStepsContiguousSeq(t *testing.T) {
-	ok := []Step{step(1, ActLamDat, -5, 2), step(2, ActGieoSa, 0, 1), step(3, ActThuHoach, 95, 5)}
-	if _, err := NormalizeSteps(ok); err != nil {
-		t.Fatalf("bước hợp lệ bị từ chối: %v", err)
+func oneStage(steps ...Step) Content {
+	return Content{Stages: []Stage{{Seq: 1, Name: "Giai đoạn 1"}}, Steps: steps}
+}
+
+// HTX US-CAT-01 AC-6: thứ tự việc SOP phải liên tục 1..n.
+func TestNormalizeContentContiguousSeq(t *testing.T) {
+	ok := oneStage(task(1, ActLamDat, -5, -3), task(2, ActGieoSa, 0, 1), task(3, ActThuHoach, 95, 100))
+	if _, err := NormalizeContent(ok); err != nil {
+		t.Fatalf("việc hợp lệ bị từ chối: %v", err)
 	}
 	for name, steps := range map[string][]Step{
-		"nhảy số":    {step(1, ActLamDat, 0, 1), step(3, ActThuHoach, 90, 3)},
-		"bắt đầu 0":  {step(0, ActLamDat, 0, 1)},
-		"đảo thứ tự": {step(2, ActLamDat, 0, 1), step(1, ActThuHoach, 90, 3)},
-		"trùng số":   {step(1, ActLamDat, 0, 1), step(1, ActThuHoach, 90, 3)},
+		"nhảy số":    {task(1, ActLamDat, 0, 1), task(3, ActThuHoach, 90, 93)},
+		"bắt đầu 0":  {task(0, ActLamDat, 0, 1)},
+		"đảo thứ tự": {task(2, ActLamDat, 0, 1), task(1, ActThuHoach, 90, 93)},
+		"trùng số":   {task(1, ActLamDat, 0, 1), task(1, ActThuHoach, 90, 93)},
 	} {
-		_, err := NormalizeSteps(steps)
+		_, err := NormalizeContent(oneStage(steps...))
 		var se StepOrderError
 		if !errors.As(err, &se) {
 			t.Errorf("%s: muốn StepOrderError, có %v", name, err)
 		}
 	}
-	bad := []Step{{Seq: 1, Name: "x", ActivityCode: "nhay_mua", DayOffset: 0}}
-	if _, err := NormalizeSteps(bad); err == nil {
+	bad := oneStage(task(1, "nhay_mua", 0, 1))
+	if _, err := NormalizeContent(bad); err == nil {
 		t.Error("hoạt động lạ phải bị từ chối")
 	}
-	ev := []Step{{Seq: 1, Name: "x", ActivityCode: ActBonPhan, EvidenceKinds: []string{"anh_hien_truong", "anh_hien_truong"}}}
-	out, err := NormalizeSteps(ev)
-	if err != nil || len(out[0].EvidenceKinds) != 1 {
+	ev := oneStage(task(1, ActBonPhan, 0, 1))
+	ev.Steps[0].EvidenceKinds = []string{"anh_hien_truong", "anh_hien_truong"}
+	out, err := NormalizeContent(ev)
+	if err != nil || len(out.Steps[0].EvidenceKinds) != 1 {
 		t.Errorf("gộp loại bằng chứng trùng: %v %v", out, err)
 	}
 }
 
-// HTX US-YIELD-01 AC-1 (g2-conventions): cổng thu hoạch = sạ + offset − cửa sổ của bước thu hoạch.
+// HTX US-YIELD-01 AC-1: cổng thu hoạch = mốc gốc + Từ của việc Thu hoạch cuối (Q-06).
 func TestDatesForHarvestGate(t *testing.T) {
 	sow := Day(2026, 9, 1)
-	h, ok := HarvestStep([]Step{step(1, ActGieoSa, 0, 1), step(2, ActThuHoach, 95, 5), step(3, ActThuHoach, 100, 1)})
-	if !ok || h.Seq != 2 {
-		t.Fatalf("bước thu hoạch đầu tiên: %+v", h)
+	c, err := NormalizeContent(oneStage(task(1, ActGieoSa, 0, 1), task(2, ActThuHoach, 95, 98), task(3, ActThuHoach, 100, 105)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, ok := HarvestStep(c.Steps)
+	if !ok || h.Seq != 3 {
+		t.Fatalf("việc Thu hoạch cuối: %+v", h)
 	}
 	d := DatesFor(sow, h)
-	if FormatDay(d.ExpectedHarvest) != "2026-12-05" || FormatDay(d.HarvestOpen) != "2026-11-30" {
+	if FormatDay(d.ExpectedHarvest) != "2026-12-10" || FormatDay(d.HarvestOpen) != "2026-12-10" {
 		t.Errorf("mốc: %s %s", FormatDay(d.ExpectedHarvest), FormatDay(d.HarvestOpen))
 	}
 }

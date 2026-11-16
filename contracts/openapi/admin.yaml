@@ -4758,7 +4758,7 @@ paths:
                   next_cursor: {type: [string, "null"]}
         "403": {$ref: "#/components/responses/Problem"}
     post:
-      summary: Tạo mẫu SOP với bản nháp phiên bản 1 (sop_admin)
+      summary: Lưu nháp SOP — mẫu mới với bản nháp phiên bản 1 (sop_admin, platform_admin); kiểm toàn bộ ở máy chủ, lỗi chỉ rõ từng trường
       operationId: createCropSOP
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -4768,16 +4768,19 @@ paths:
           application/json:
             schema:
               type: object
-              required: [code, name, steps]
+              required: [name, crop, anchor_name, stages, steps]
               properties:
-                code: {type: string, pattern: "^[A-Z0-9][A-Z0-9_.-]{1,39}$"}
+                code: {type: string, pattern: "^[A-Z0-9][A-Z0-9_.-]{1,39}$", description: "Bỏ trống → hệ thống sinh mã"}
                 name: {type: string, maxLength: 200, description: "Duy nhất (không phân biệt hoa thường, khoảng trắng)"}
-                crop: {type: string, default: lua}
+                crop: {type: string, description: "Mã loại cây đang hiện trong danh mục crop (mục không có parent_code)"}
+                variety_code: {type: [string, "null"], description: "Giống, tùy chọn; phải thuộc loại cây đã chọn"}
+                anchor_name: {type: string, maxLength: 100, description: "Tên mốc gốc, vd Ngày xuống giống, Ngày xử lý ra hoa"}
                 scope: {type: string, enum: [system, htx], default: system}
                 cooperative_ref: {type: [string, "null"], format: uuid}
                 standard: {type: string}
                 description: {type: string, maxLength: 2000}
-                steps: {type: array, maxItems: 100, items: {$ref: "#/components/schemas/CropSOPStep"}}
+                stages: {type: array, maxItems: 30, items: {$ref: "#/components/schemas/CropSOPStage"}}
+                steps: {type: array, maxItems: 100, items: {$ref: "#/components/schemas/CropSOPStepInput"}}
                 change_note: {type: string}
       responses:
         "201": {description: Đã tạo, content: {application/json: {schema: {$ref: "#/components/schemas/CropSOP"}}}}
@@ -4792,9 +4795,34 @@ paths:
       responses:
         "200": {description: Mẫu, content: {application/json: {schema: {$ref: "#/components/schemas/CropSOP"}}}}
         "404": {$ref: "#/components/responses/Problem"}
+  /v1/cropcycle/sops/{ref}/info:
+    post:
+      summary: Sửa thông tin chung của SOP còn nháp (tên, loại cây, giống, tên mốc gốc); đã phát hành → 409 cropcycle.sop_state
+      operationId: updateCropSOPInfo
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, crop, anchor_name]
+              properties:
+                name: {type: string, maxLength: 200}
+                crop: {type: string}
+                variety_code: {type: [string, "null"]}
+                anchor_name: {type: string, maxLength: 100}
+      responses:
+        "200": {description: Đã sửa, content: {application/json: {schema: {$ref: "#/components/schemas/CropSOP"}}}}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
   /v1/cropcycle/sops/{ref}/versions:
     post:
-      summary: Tạo bản nháp phiên bản mới (steps bỏ trống = chép phiên bản mới nhất)
+      summary: Tạo bản nháp phiên bản mới (bỏ trống stages và steps = chép phiên bản mới nhất)
       operationId: newCropSOPVersion
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -4805,7 +4833,8 @@ paths:
             schema:
               type: object
               properties:
-                steps: {type: [array, "null"], items: {$ref: "#/components/schemas/CropSOPStep"}}
+                stages: {type: [array, "null"], items: {$ref: "#/components/schemas/CropSOPStage"}}
+                steps: {type: [array, "null"], items: {$ref: "#/components/schemas/CropSOPStepInput"}}
                 change_note: {type: string}
       responses:
         "201": {description: Đã tạo, content: {application/json: {schema: {$ref: "#/components/schemas/CropSOP"}}}}
@@ -4871,7 +4900,7 @@ paths:
         "404": {$ref: "#/components/responses/Problem"}
   /v1/cropcycle/sop-versions/{id}/steps:
     post:
-      summary: Thay bước của bản nháp (bản đã phát hành bất biến → 409 cropcycle.sop_state)
+      summary: Thay giai đoạn và việc của bản nháp (bản đã phát hành bất biến → 409 cropcycle.sop_state)
       operationId: updateCropSOPDraft
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -4882,9 +4911,10 @@ paths:
           application/json:
             schema:
               type: object
-              required: [steps]
+              required: [stages, steps]
               properties:
-                steps: {type: array, items: {$ref: "#/components/schemas/CropSOPStep"}}
+                stages: {type: array, maxItems: 30, items: {$ref: "#/components/schemas/CropSOPStage"}}
+                steps: {type: array, maxItems: 100, items: {$ref: "#/components/schemas/CropSOPStepInput"}}
                 change_note: {type: string}
       responses:
         "200": {description: Đã sửa, content: {application/json: {schema: {$ref: "#/components/schemas/CropSOP"}}}}
@@ -4892,7 +4922,7 @@ paths:
         "422": {$ref: "#/components/responses/Problem"}
   /v1/cropcycle/sop-versions/{id}/publish:
     post:
-      summary: Phát hành bản nháp — param_approver khác người soạn (R-56); phải có bước thu hoạch
+      summary: "Phát hành bản nháp một bước bởi vai soạn (sop_admin, platform_admin); chặn theo EX-05/Q-06: SOP rỗng → cropcycle.sop_empty, không có việc Thu hoạch → cropcycle.sop_harvest_step_missing, việc Thu hoạch cuối cửa sổ Mở/Không ngày/mốc NTH, NTT → cropcycle.sop_harvest_window"
       operationId: publishCropSOP
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -8086,28 +8116,79 @@ components:
     # --- hết pf/waterway ---
 
     # --- pf/cropcycle ---
+    CropSOPMaterial:
+      type: object
+      required: [dose_per_ha, unit]
+      properties:
+        material_code: {type: string, description: "Mã vật tư trong danh mục material; bỏ trống = nhập tên tự do"}
+        name: {type: string, maxLength: 200, description: "Tên tự do; vật tư chọn từ danh mục được máy chủ điền tên danh mục"}
+        dose_per_ha: {type: string, description: "Liều khuyến cáo theo ha, decimal > 0, tối đa 4 chữ số lẻ, ≤ 1.000.000"}
+        unit: {type: string, maxLength: 20, description: "Bắt buộc; bỏ trống khi chọn từ danh mục → điền đơn vị của danh mục"}
+    CropSOPStage:
+      type: object
+      required: [seq, name]
+      properties:
+        seq: {type: integer, minimum: 1, description: "Liên tục 1..n; sai thứ tự → 422 cropcycle.sop_step_order kèm field stages[i].seq"}
+        name: {type: string, maxLength: 200, description: "Bắt buộc, không trùng trong một SOP"}
+        from_day: {type: [integer, "null"], minimum: -365, maximum: 1825, description: "Từ so với mốc gốc; nhập cả Từ và Đến hoặc để trống cả hai"}
+        to_day: {type: [integer, "null"], minimum: -365, maximum: 1825, description: "Đến so với mốc gốc; Từ ≤ Đến"}
     CropSOPStep:
       type: object
       required: [seq, name, activity_code, day_offset, window_days, mandatory]
       properties:
         seq: {type: integer, minimum: 1, description: "Liên tục 1..n (HTX US-CAT-01 AC-6)"}
+        stage_seq: {type: integer, minimum: 1}
+        task_seq: {type: integer, minimum: 1}
         name: {type: string, maxLength: 200}
         stage_code: {type: string}
-        activity_code: {type: string, enum: [lam_dat, gieo_sa, tuoi_nuoc, bon_phan, phun_thuoc, kiem_tra, thu_hoach]}
-        day_offset: {type: integer, minimum: -60, maximum: 365, description: "Ngày so với ngày gieo sạ"}
-        window_days: {type: integer, minimum: 0, maximum: 60}
+        activity_code: {type: string, enum: [lam_dat, gieo_sa, tuoi_nuoc, bon_phan, phun_thuoc, kiem_tra, thu_hoach, cat_tia, khac]}
+        day_offset: {type: integer, description: "Máy chủ tính theo cửa sổ (tạm tới AH-71): ngày bắt đầu so với mốc gốc; không tính được → 0 và undated"}
+        window_days: {type: integer, minimum: 0, description: "Máy chủ ghi 0 (tạm tới AH-71)"}
+        undated: {type: boolean, description: "Việc chưa có ngày trước khi vụ chạy (cửa sổ Không ngày, mốc NTT, mốc NTH chưa có ngày thu hoạch)"}
+        window: {$ref: "#/components/schemas/CropSOPWindow"}
+        materials: {type: array, items: {$ref: "#/components/schemas/CropSOPMaterial"}}
+        season_summary: {type: boolean}
         mandatory: {type: boolean}
         evidence_kinds: {type: array, items: {type: string, enum: [anh_hien_truong, hoa_don_vat_tu, phieu_kiem_nghiem, ghi_chu, khac]}}
         phi_days: {type: integer, minimum: 0, maximum: 120, description: "Thời gian cách ly sau phun thuốc"}
         instruction: {type: string}
+    CropSOPStepInput:
+      type: object
+      required: [seq, stage_seq, task_seq, name, activity_code, window]
+      description: "Việc khi soạn. day_offset, window_days, undated do máy chủ tính; giá trị gửi lên bị bỏ qua."
+      properties:
+        seq: {type: integer, minimum: 1, description: "Số thứ tự toàn cục 1..n, các việc xếp theo giai đoạn"}
+        stage_seq: {type: integer, minimum: 1, description: "Giai đoạn chứa việc"}
+        task_seq: {type: integer, minimum: 1, description: "Thứ tự trong giai đoạn, liên tục 1..k"}
+        name: {type: string, maxLength: 200, description: "Không trùng trong cùng giai đoạn"}
+        stage_code: {type: string}
+        activity_code: {type: string, enum: [lam_dat, gieo_sa, tuoi_nuoc, bon_phan, phun_thuoc, kiem_tra, thu_hoach, cat_tia, khac]}
+        window: {$ref: "#/components/schemas/CropSOPWindow"}
+        materials: {type: array, maxItems: 20, items: {$ref: "#/components/schemas/CropSOPMaterial"}}
+        season_summary: {type: boolean, description: "Việc tổng kết vụ; tối đa một việc trong một SOP"}
+        mandatory: {type: boolean}
+        evidence_kinds: {type: array, items: {type: string, enum: [anh_hien_truong, hoa_don_vat_tu, phieu_kiem_nghiem, ghi_chu, khac]}}
+        phi_days: {type: integer, minimum: 0, maximum: 120, description: "Thời gian cách ly sau phun thuốc"}
+        instruction: {type: string}
+    CropSOPWindow:
+      type: object
+      required: [kind]
+      description: "Cửa sổ thực hiện của việc (BR-04): date_range (Theo ngày: anchor, from, to), open (Mở: anchor, from), stage (Theo giai đoạn: lấy khoảng ngày của giai đoạn chứa việc), none (Không ngày)"
+      properties:
+        kind: {type: string, enum: [date_range, open, stage, none]}
+        anchor: {type: string, enum: [nxg, nth, ntt], description: "NXG = mốc gốc của SOP, NTH = ngày thu hoạch dự kiến, NTT = ngày thu hoạch thực tế"}
+        from: {type: integer, minimum: -365, maximum: 1825}
+        to: {type: integer, minimum: -365, maximum: 1825}
     CropSOPTemplate:
       type: object
-      required: [ref, code, name, crop, scope, status, latest_version]
+      required: [ref, code, name, crop, anchor_name, scope, status, latest_version]
       properties:
         ref: {type: string, format: uuid}
         code: {type: string}
         name: {type: string}
-        crop: {type: string}
+        crop: {type: string, description: "Mã loại cây trong danh mục crop"}
+        variety_code: {type: [string, "null"], description: "Giống riêng (thuộc loại cây), tùy chọn"}
+        anchor_name: {type: string, description: "Tên mốc gốc, vd Ngày xuống giống"}
         scope: {type: string, enum: [system, htx]}
         cooperative_ref: {type: [string, "null"], format: uuid}
         standard: {type: [string, "null"]}
@@ -8121,12 +8202,13 @@ components:
         updated_at: {type: string, format: date-time}
     CropSOPVersion:
       type: object
-      required: [id, template_ref, version_no, status, steps]
+      required: [id, template_ref, version_no, status, stages, steps]
       properties:
         id: {type: string, format: uuid}
         template_ref: {type: string, format: uuid}
         version_no: {type: integer}
         status: {type: string, enum: [draft, published]}
+        stages: {type: array, items: {$ref: "#/components/schemas/CropSOPStage"}}
         steps: {type: array, items: {$ref: "#/components/schemas/CropSOPStep"}}
         harvest_day_offset: {type: [integer, "null"]}
         harvest_window_days: {type: [integer, "null"]}

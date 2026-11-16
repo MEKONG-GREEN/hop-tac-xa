@@ -318,8 +318,8 @@ func (k markers) MarkersInBBox(ctx context.Context, minLon, minLat, maxLon, maxL
 	return out, nil
 }
 
-// CatalogUsage cho pf/masterdata (AH-2, AH-7): giống đã gắn vụ, sản lượng hoặc quy trình SOP, mùa vụ đã có vụ hoặc
-// sản lượng thì chỉ được ẩn, không xóa.
+// CatalogUsage cho pf/masterdata (AH-2, AH-7, AH-8): giống đã gắn vụ, sản lượng hoặc quy trình SOP, loại cây đã là loại
+// cây của một mẫu SOP, mùa vụ đã có vụ hoặc sản lượng thì chỉ được ẩn, không xóa.
 func (m *Module) CatalogUsage() mdport.CatalogUsage { return seasonCatalogUsage{m.season} }
 
 type seasonCatalogUsage struct{ season *seasonapp.Service }
@@ -330,6 +330,8 @@ func (u seasonCatalogUsage) CatalogItemInUse(ctx context.Context, catalog, code 
 		return u.season.VarietyInUse(ctx, code)
 	case mdport.CatalogSeason:
 		return u.season.SeasonInUse(ctx, code)
+	case mdport.CatalogCrop:
+		return u.season.CropInUse(ctx, code)
 	}
 	return false, nil
 }

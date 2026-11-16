@@ -19,6 +19,8 @@ type Template struct {
 	Name              string
 	NameKey           string
 	Crop              string
+	VarietyCode       string
+	AnchorName        string
 	Scope             string
 	CooperativeRef    uuid.UUID
 	Standard          string
@@ -33,14 +35,15 @@ type Template struct {
 	UpdatedAt         time.Time
 }
 
-const templateCols = `ref, code, name, name_key, crop, scope, cooperative_ref, coalesce(standard, ''), coalesce(description, ''),
-  status, coalesce(status_reason, ''), source_template_ref, latest_version, published_version, created_by, created_at, updated_at`
+const templateCols = `ref, code, name, name_key, crop, coalesce(variety_code, ''), anchor_name, scope, cooperative_ref, coalesce(standard, ''),
+  coalesce(description, ''), status, coalesce(status_reason, ''), source_template_ref, latest_version, published_version, created_by,
+  created_at, updated_at`
 
 func scanTemplate(row pgx.Row) (Template, error) {
 	var t Template
 	var coop, src *uuid.UUID
-	err := row.Scan(&t.Ref, &t.Code, &t.Name, &t.NameKey, &t.Crop, &t.Scope, &coop, &t.Standard, &t.Description,
-		&t.Status, &t.StatusReason, &src, &t.LatestVersion, &t.PublishedVersion, &t.CreatedBy, &t.CreatedAt, &t.UpdatedAt)
+	err := row.Scan(&t.Ref, &t.Code, &t.Name, &t.NameKey, &t.Crop, &t.VarietyCode, &t.AnchorName, &t.Scope, &coop, &t.Standard,
+		&t.Description, &t.Status, &t.StatusReason, &src, &t.LatestVersion, &t.PublishedVersion, &t.CreatedBy, &t.CreatedAt, &t.UpdatedAt)
 	t.CooperativeRef, t.SourceTemplateRef = deref(coop), deref(src)
 	return t, err
 }
@@ -48,13 +51,29 @@ func scanTemplate(row pgx.Row) (Template, error) {
 // InsertTemplate ghi mẫu mới.
 func InsertTemplate(ctx context.Context, tx pgx.Tx, tid uuid.UUID, t Template) error {
 	_, err := tx.Exec(ctx, `INSERT INTO pf_coop.sop_template
-	    (tenant_id, ref, code, name, name_key, crop, scope, cooperative_ref, standard, description, status,
+	    (tenant_id, ref, code, name, name_key, crop, variety_code, anchor_name, scope, cooperative_ref, standard, description, status,
 	     source_template_ref, latest_version, created_by)
-	  VALUES ($1::uuid, $2::uuid, $3::text, $4::text, $5::text, $6::text, $7::text, $8::uuid, $9::text, $10::text, $11::text,
-	     $12::uuid, $13::int, $14::uuid)`,
-		tid, t.Ref, t.Code, t.Name, t.NameKey, t.Crop, t.Scope, nilIfZero(t.CooperativeRef), nilIfEmpty(t.Standard),
-		nilIfEmpty(t.Description), t.Status, nilIfZero(t.SourceTemplateRef), t.LatestVersion, t.CreatedBy)
+	  VALUES ($1::uuid, $2::uuid, $3::text, $4::text, $5::text, $6::text, $7::text, $8::text, $9::text, $10::uuid, $11::text, $12::text,
+	     $13::text, $14::uuid, $15::int, $16::uuid)`,
+		tid, t.Ref, t.Code, t.Name, t.NameKey, t.Crop, nilIfEmpty(t.VarietyCode), t.AnchorName, t.Scope, nilIfZero(t.CooperativeRef),
+		nilIfEmpty(t.Standard), nilIfEmpty(t.Description), t.Status, nilIfZero(t.SourceTemplateRef), t.LatestVersion, t.CreatedBy)
 	return err
+}
+
+// UpdateTemplateInfo cập nhật thông tin chung của mẫu chưa phát hành (trigger chặn đổi loại cây sau khi đã phát hành).
+func UpdateTemplateInfo(ctx context.Context, tx pgx.Tx, t Template) error {
+	_, err := tx.Exec(ctx, `UPDATE pf_coop.sop_template
+	  SET name = $2::text, name_key = $3::text, crop = $4::text, variety_code = $5::text, anchor_name = $6::text, updated_at = now()
+	  WHERE ref = $1::uuid`, t.Ref, t.Name, t.NameKey, t.Crop, nilIfEmpty(t.VarietyCode), t.AnchorName)
+	return err
+}
+
+// TemplateNameTaken cho biết tên (chuẩn hóa) đã thuộc về một mẫu khác except.
+func TemplateNameTaken(ctx context.Context, tx pgx.Tx, nameKey string, except uuid.UUID) (bool, error) {
+	var taken bool
+	err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pf_coop.sop_template WHERE name_key = $1::text AND ref <> $2::uuid)`,
+		nameKey, except).Scan(&taken)
+	return taken, err
 }
 
 // TemplateByRef đọc mẫu; forUpdate khóa dòng.
@@ -127,6 +146,7 @@ type Version struct {
 	VersionNo         int
 	Status            string
 	Steps             []domain.Step
+	Stages            []domain.Stage
 	HarvestDayOffset  *int
 	HarvestWindowDays *int
 	SourceVersionRef  uuid.UUID
@@ -139,30 +159,35 @@ type Version struct {
 	SyncSeq           int64
 }
 
-const versionCols = `id, template_ref, version_no, status, steps, harvest_day_offset, harvest_window_days, source_version_ref,
+const versionCols = `id, template_ref, version_no, status, steps, stages, harvest_day_offset, harvest_window_days, source_version_ref,
   coalesce(change_note, ''), authored_by, authored_at, updated_at, published_by, published_at, sync_seq`
 
 func scanVersion(row pgx.Row) (Version, error) {
 	var v Version
-	var raw []byte
+	var raw, rawStages []byte
 	var src, pub *uuid.UUID
-	if err := row.Scan(&v.ID, &v.TemplateRef, &v.VersionNo, &v.Status, &raw, &v.HarvestDayOffset, &v.HarvestWindowDays, &src,
+	if err := row.Scan(&v.ID, &v.TemplateRef, &v.VersionNo, &v.Status, &raw, &rawStages, &v.HarvestDayOffset, &v.HarvestWindowDays, &src,
 		&v.ChangeNote, &v.AuthoredBy, &v.AuthoredAt, &v.UpdatedAt, &pub, &v.PublishedAt, &v.SyncSeq); err != nil {
 		return v, err
 	}
 	v.SourceVersionRef, v.PublishedBy = deref(src), deref(pub)
-	if err := json.Unmarshal(raw, &v.Steps); err != nil {
-		return v, err
-	}
-	return v, nil
+	return v, decodeContent(&v, raw, rawStages)
 }
 
+func decodeContent(v *Version, steps, stages []byte) error {
+	if err := json.Unmarshal(steps, &v.Steps); err != nil {
+		return err
+	}
+	return json.Unmarshal(stages, &v.Stages)
+}
+
+// harvestOf trả (số ngày thu hoạch, độ dài cửa sổ thu hoạch): Từ của việc Thu hoạch cuối và 0.
 func harvestOf(steps []domain.Step) (*int, *int) {
 	h, ok := domain.HarvestStep(steps)
 	if !ok {
 		return nil, nil
 	}
-	off, win := h.DayOffset, h.WindowDays
+	off, win := h.DayOffset, 0
 	return &off, &win
 }
 
@@ -172,16 +197,20 @@ func InsertVersion(ctx context.Context, tx pgx.Tx, tid uuid.UUID, v Version) err
 	if err != nil {
 		return err
 	}
+	rawStages, err := json.Marshal(stagesOrEmpty(v.Stages))
+	if err != nil {
+		return err
+	}
 	off, win := harvestOf(v.Steps)
 	if err := lockSync(ctx, tx, "sop_version"); err != nil {
 		return err
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO pf_coop.sop_version
-	    (tenant_id, id, template_ref, version_no, status, steps, step_count, harvest_day_offset, harvest_window_days,
+	    (tenant_id, id, template_ref, version_no, status, steps, stages, step_count, harvest_day_offset, harvest_window_days,
 	     source_version_ref, change_note, authored_by, authored_at)
-	  VALUES ($1::uuid, $2::uuid, $3::uuid, $4::int, $5::text, $6::jsonb, $7::int, $8::int, $9::int, $10::uuid, $11::text,
-	     $12::uuid, $13::timestamptz)`,
-		tid, v.ID, v.TemplateRef, v.VersionNo, v.Status, string(raw), len(v.Steps), off, win, nilIfZero(v.SourceVersionRef),
+	  VALUES ($1::uuid, $2::uuid, $3::uuid, $4::int, $5::text, $6::jsonb, $7::jsonb, $8::int, $9::int, $10::int, $11::uuid, $12::text,
+	     $13::uuid, $14::timestamptz)`,
+		tid, v.ID, v.TemplateRef, v.VersionNo, v.Status, string(raw), string(rawStages), len(v.Steps), off, win, nilIfZero(v.SourceVersionRef),
 		nilIfEmpty(v.ChangeNote), v.AuthoredBy, v.AuthoredAt.UTC())
 	return err
 }
@@ -193,17 +222,28 @@ func stepsOrEmpty(s []domain.Step) []domain.Step {
 	return s
 }
 
-// UpdateDraft thay bước và ghi chú của bản nháp (trigger chặn bản đã phát hành).
+func stagesOrEmpty(s []domain.Stage) []domain.Stage {
+	if s == nil {
+		return []domain.Stage{}
+	}
+	return s
+}
+
+// UpdateDraft thay giai đoạn, việc và ghi chú của bản nháp (trigger chặn bản đã phát hành).
 func UpdateDraft(ctx context.Context, tx pgx.Tx, v Version) error {
 	raw, err := json.Marshal(stepsOrEmpty(v.Steps))
 	if err != nil {
 		return err
 	}
+	rawStages, err := json.Marshal(stagesOrEmpty(v.Stages))
+	if err != nil {
+		return err
+	}
 	off, win := harvestOf(v.Steps)
 	_, err = tx.Exec(ctx, `UPDATE pf_coop.sop_version
-	  SET steps = $2::jsonb, step_count = $3::int, harvest_day_offset = $4::int, harvest_window_days = $5::int,
-	      change_note = $6::text, updated_at = now()
-	  WHERE id = $1::uuid`, v.ID, string(raw), len(v.Steps), off, win, nilIfEmpty(v.ChangeNote))
+	  SET steps = $2::jsonb, stages = $3::jsonb, step_count = $4::int, harvest_day_offset = $5::int, harvest_window_days = $6::int,
+	      change_note = $7::text, updated_at = now()
+	  WHERE id = $1::uuid`, v.ID, string(raw), string(rawStages), len(v.Steps), off, win, nilIfEmpty(v.ChangeNote))
 	return err
 }
 
@@ -279,9 +319,10 @@ type PublishedVersionChange struct {
 // PublishedVersionsAfter trả phiên bản đã phát hành có sync_seq > after (mẫu hệ
 // thống, hoặc mẫu riêng của HTX trong coops; allCoops = mọi mẫu).
 func PublishedVersionsAfter(ctx context.Context, tx pgx.Tx, allCoops bool, coops []uuid.UUID, after int64, limit int) ([]PublishedVersionChange, error) {
-	rows, err := tx.Query(ctx, `SELECT v.id, v.template_ref, v.version_no, v.status, v.steps, v.harvest_day_offset, v.harvest_window_days,
+	rows, err := tx.Query(ctx, `SELECT v.id, v.template_ref, v.version_no, v.status, v.steps, v.stages, v.harvest_day_offset, v.harvest_window_days,
 	    v.source_version_ref, coalesce(v.change_note, ''), v.authored_by, v.authored_at, v.updated_at, v.published_by, v.published_at, v.sync_seq,
-	    t.ref, t.code, t.name, t.name_key, t.crop, t.scope, t.cooperative_ref, coalesce(t.standard, ''), coalesce(t.description, ''),
+	    t.ref, t.code, t.name, t.name_key, t.crop, coalesce(t.variety_code, ''), t.anchor_name, t.scope, t.cooperative_ref,
+	    coalesce(t.standard, ''), coalesce(t.description, ''),
 	    t.status, coalesce(t.status_reason, ''), t.source_template_ref, t.latest_version, t.published_version, t.created_by, t.created_at, t.updated_at
 	  FROM pf_coop.sop_version v JOIN pf_coop.sop_template t ON t.tenant_id = v.tenant_id AND t.ref = v.template_ref
 	  WHERE v.status = 'published' AND v.sync_seq > $1::bigint
@@ -294,18 +335,19 @@ func PublishedVersionsAfter(ctx context.Context, tx pgx.Tx, allCoops bool, coops
 	var out []PublishedVersionChange
 	for rows.Next() {
 		var c PublishedVersionChange
-		var raw []byte
+		var raw, rawStages []byte
 		var src, pub, coop, tsrc *uuid.UUID
-		if err := rows.Scan(&c.ID, &c.TemplateRef, &c.VersionNo, &c.Status, &raw, &c.HarvestDayOffset, &c.HarvestWindowDays, &src,
+		if err := rows.Scan(&c.ID, &c.TemplateRef, &c.VersionNo, &c.Status, &raw, &rawStages, &c.HarvestDayOffset, &c.HarvestWindowDays, &src,
 			&c.ChangeNote, &c.AuthoredBy, &c.AuthoredAt, &c.UpdatedAt, &pub, &c.PublishedAt, &c.SyncSeq,
-			&c.Template.Ref, &c.Template.Code, &c.Template.Name, &c.Template.NameKey, &c.Template.Crop, &c.Template.Scope, &coop,
+			&c.Template.Ref, &c.Template.Code, &c.Template.Name, &c.Template.NameKey, &c.Template.Crop, &c.Template.VarietyCode,
+			&c.Template.AnchorName, &c.Template.Scope, &coop,
 			&c.Template.Standard, &c.Template.Description, &c.Template.Status, &c.Template.StatusReason, &tsrc,
 			&c.Template.LatestVersion, &c.Template.PublishedVersion, &c.Template.CreatedBy, &c.Template.CreatedAt, &c.Template.UpdatedAt); err != nil {
 			return nil, err
 		}
 		c.SourceVersionRef, c.PublishedBy = deref(src), deref(pub)
 		c.Template.CooperativeRef, c.Template.SourceTemplateRef = deref(coop), deref(tsrc)
-		if err := json.Unmarshal(raw, &c.Steps); err != nil {
+		if err := decodeContent(&c.Version, raw, rawStages); err != nil {
 			return nil, err
 		}
 		out = append(out, c)

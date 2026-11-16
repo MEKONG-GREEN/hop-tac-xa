@@ -3192,7 +3192,7 @@ export interface paths {
         /** Mọi mẫu SOP, kể cả nháp (sop_admin, param_approver, platform_admin) */
         get: operations["adminListCropSOPs"];
         put?: never;
-        /** Tạo mẫu SOP với bản nháp phiên bản 1 (sop_admin) */
+        /** Lưu nháp SOP — mẫu mới với bản nháp phiên bản 1 (sop_admin, platform_admin); kiểm toàn bộ ở máy chủ, lỗi chỉ rõ từng trường */
         post: operations["createCropSOP"];
         delete?: never;
         options?: never;
@@ -3217,6 +3217,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/cropcycle/sops/{ref}/info": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sửa thông tin chung của SOP còn nháp (tên, loại cây, giống, tên mốc gốc); đã phát hành → 409 cropcycle.sop_state */
+        post: operations["updateCropSOPInfo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/cropcycle/sops/{ref}/versions": {
         parameters: {
             query?: never;
@@ -3226,7 +3243,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Tạo bản nháp phiên bản mới (steps bỏ trống = chép phiên bản mới nhất) */
+        /** Tạo bản nháp phiên bản mới (bỏ trống stages và steps = chép phiên bản mới nhất) */
         post: operations["newCropSOPVersion"];
         delete?: never;
         options?: never;
@@ -3294,7 +3311,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Thay bước của bản nháp (bản đã phát hành bất biến → 409 cropcycle.sop_state) */
+        /** Thay giai đoạn và việc của bản nháp (bản đã phát hành bất biến → 409 cropcycle.sop_state) */
         post: operations["updateCropSOPDraft"];
         delete?: never;
         options?: never;
@@ -3311,7 +3328,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Phát hành bản nháp — param_approver khác người soạn (R-56); phải có bước thu hoạch */
+        /** Phát hành bản nháp một bước bởi vai soạn (sop_admin, platform_admin); chặn theo EX-05/Q-06: SOP rỗng → cropcycle.sop_empty, không có việc Thu hoạch → cropcycle.sop_harvest_step_missing, việc Thu hoạch cuối cửa sổ Mở/Không ngày/mốc NTH, NTT → cropcycle.sop_harvest_window */
         post: operations["publishCropSOP"];
         delete?: never;
         options?: never;
@@ -6109,28 +6126,96 @@ export interface components {
             auto_fixed: boolean;
             message: string;
         };
+        CropSOPMaterial: {
+            /** @description Mã vật tư trong danh mục material; bỏ trống = nhập tên tự do */
+            material_code?: string;
+            /** @description Tên tự do; vật tư chọn từ danh mục được máy chủ điền tên danh mục */
+            name?: string;
+            /** @description Liều khuyến cáo theo ha, decimal > 0, tối đa 4 chữ số lẻ, ≤ 1.000.000 */
+            dose_per_ha: string;
+            /** @description Bắt buộc; bỏ trống khi chọn từ danh mục → điền đơn vị của danh mục */
+            unit: string;
+        };
+        CropSOPStage: {
+            /** @description Liên tục 1..n; sai thứ tự → 422 cropcycle.sop_step_order kèm field stages[i].seq */
+            seq: number;
+            /** @description Bắt buộc, không trùng trong một SOP */
+            name: string;
+            /** @description Từ so với mốc gốc; nhập cả Từ và Đến hoặc để trống cả hai */
+            from_day?: number | null;
+            /** @description Đến so với mốc gốc; Từ ≤ Đến */
+            to_day?: number | null;
+        };
         CropSOPStep: {
             /** @description Liên tục 1..n (HTX US-CAT-01 AC-6) */
             seq: number;
+            stage_seq?: number;
+            task_seq?: number;
             name: string;
             stage_code?: string;
             /** @enum {string} */
-            activity_code: "lam_dat" | "gieo_sa" | "tuoi_nuoc" | "bon_phan" | "phun_thuoc" | "kiem_tra" | "thu_hoach";
-            /** @description Ngày so với ngày gieo sạ */
+            activity_code: "lam_dat" | "gieo_sa" | "tuoi_nuoc" | "bon_phan" | "phun_thuoc" | "kiem_tra" | "thu_hoach" | "cat_tia" | "khac";
+            /** @description Máy chủ tính theo cửa sổ (tạm tới AH-71): ngày bắt đầu so với mốc gốc; không tính được → 0 và undated */
             day_offset: number;
+            /** @description Máy chủ ghi 0 (tạm tới AH-71) */
             window_days: number;
+            /** @description Việc chưa có ngày trước khi vụ chạy (cửa sổ Không ngày, mốc NTT, mốc NTH chưa có ngày thu hoạch) */
+            undated?: boolean;
+            window?: components["schemas"]["CropSOPWindow"];
+            materials?: components["schemas"]["CropSOPMaterial"][];
+            season_summary?: boolean;
             mandatory: boolean;
             evidence_kinds?: ("anh_hien_truong" | "hoa_don_vat_tu" | "phieu_kiem_nghiem" | "ghi_chu" | "khac")[];
             /** @description Thời gian cách ly sau phun thuốc */
             phi_days?: number;
             instruction?: string;
         };
+        /** @description Việc khi soạn. day_offset, window_days, undated do máy chủ tính; giá trị gửi lên bị bỏ qua. */
+        CropSOPStepInput: {
+            /** @description Số thứ tự toàn cục 1..n, các việc xếp theo giai đoạn */
+            seq: number;
+            /** @description Giai đoạn chứa việc */
+            stage_seq: number;
+            /** @description Thứ tự trong giai đoạn, liên tục 1..k */
+            task_seq: number;
+            /** @description Không trùng trong cùng giai đoạn */
+            name: string;
+            stage_code?: string;
+            /** @enum {string} */
+            activity_code: "lam_dat" | "gieo_sa" | "tuoi_nuoc" | "bon_phan" | "phun_thuoc" | "kiem_tra" | "thu_hoach" | "cat_tia" | "khac";
+            window: components["schemas"]["CropSOPWindow"];
+            materials?: components["schemas"]["CropSOPMaterial"][];
+            /** @description Việc tổng kết vụ; tối đa một việc trong một SOP */
+            season_summary?: boolean;
+            mandatory?: boolean;
+            evidence_kinds?: ("anh_hien_truong" | "hoa_don_vat_tu" | "phieu_kiem_nghiem" | "ghi_chu" | "khac")[];
+            /** @description Thời gian cách ly sau phun thuốc */
+            phi_days?: number;
+            instruction?: string;
+        };
+        /** @description Cửa sổ thực hiện của việc (BR-04): date_range (Theo ngày: anchor, from, to), open (Mở: anchor, from), stage (Theo giai đoạn: lấy khoảng ngày của giai đoạn chứa việc), none (Không ngày) */
+        CropSOPWindow: {
+            /** @enum {string} */
+            kind: "date_range" | "open" | "stage" | "none";
+            /**
+             * @description NXG = mốc gốc của SOP, NTH = ngày thu hoạch dự kiến, NTT = ngày thu hoạch thực tế
+             * @enum {string}
+             */
+            anchor?: "nxg" | "nth" | "ntt";
+            from?: number;
+            to?: number;
+        };
         CropSOPTemplate: {
             /** Format: uuid */
             ref: string;
             code: string;
             name: string;
+            /** @description Mã loại cây trong danh mục crop */
             crop: string;
+            /** @description Giống riêng (thuộc loại cây), tùy chọn */
+            variety_code?: string | null;
+            /** @description Tên mốc gốc, vd Ngày xuống giống */
+            anchor_name: string;
             /** @enum {string} */
             scope: "system" | "htx";
             /** Format: uuid */
@@ -6157,6 +6242,7 @@ export interface components {
             version_no: number;
             /** @enum {string} */
             status: "draft" | "published";
+            stages: components["schemas"]["CropSOPStage"][];
             steps: components["schemas"]["CropSOPStep"][];
             harvest_day_offset?: number | null;
             harvest_window_days?: number | null;
@@ -13419,11 +13505,16 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    code: string;
+                    /** @description Bỏ trống → hệ thống sinh mã */
+                    code?: string;
                     /** @description Duy nhất (không phân biệt hoa thường, khoảng trắng) */
                     name: string;
-                    /** @default lua */
-                    crop?: string;
+                    /** @description Mã loại cây đang hiện trong danh mục crop (mục không có parent_code) */
+                    crop: string;
+                    /** @description Giống, tùy chọn; phải thuộc loại cây đã chọn */
+                    variety_code?: string | null;
+                    /** @description Tên mốc gốc, vd Ngày xuống giống, Ngày xử lý ra hoa */
+                    anchor_name: string;
                     /**
                      * @default system
                      * @enum {string}
@@ -13433,7 +13524,8 @@ export interface operations {
                     cooperative_ref?: string | null;
                     standard?: string;
                     description?: string;
-                    steps: components["schemas"]["CropSOPStep"][];
+                    stages: components["schemas"]["CropSOPStage"][];
+                    steps: components["schemas"]["CropSOPStepInput"][];
                     change_note?: string;
                 };
             };
@@ -13475,6 +13567,43 @@ export interface operations {
             404: components["responses"]["Problem"];
         };
     };
+    updateCropSOPInfo: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name: string;
+                    crop: string;
+                    variety_code?: string | null;
+                    anchor_name: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Đã sửa */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CropSOP"];
+                };
+            };
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
     newCropSOPVersion: {
         parameters: {
             query?: never;
@@ -13489,7 +13618,8 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": {
-                    steps?: components["schemas"]["CropSOPStep"][] | null;
+                    stages?: components["schemas"]["CropSOPStage"][] | null;
+                    steps?: components["schemas"]["CropSOPStepInput"][] | null;
                     change_note?: string;
                 };
             };
@@ -13615,7 +13745,8 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    steps: components["schemas"]["CropSOPStep"][];
+                    stages: components["schemas"]["CropSOPStage"][];
+                    steps: components["schemas"]["CropSOPStepInput"][];
                     change_note?: string;
                 };
             };

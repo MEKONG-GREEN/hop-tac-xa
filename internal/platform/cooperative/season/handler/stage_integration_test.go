@@ -43,11 +43,12 @@ func TestStageMap_GIS_US_SEASON_01_US_YIELD_01(t *testing.T) {
 		t.Fatalf("thửa p1 hôm nay: %v", p1)
 	}
 
-	// 01/01/2027: đã qua cổng thu hoạch (28/12) → "sắp thu", còn 1 ngày → vùng chín rộ.
+	// 01/01/2027: cổng thu hoạch = ngày thu hoạch dự kiến (02/01) nên chưa tới cổng → còn "sinh trưởng",
+	// nhưng còn 1 ngày → vùng chín rộ.
 	r = f.platformAdmin().get("/v1/cropcycle/stage-map?date=2027-01-01")
 	expect(t, r, http.StatusOK, "tra ngày 01/01/2027")
 	p1 = stagePlots(t, r)[f.p1.String()]
-	if p1["stage"] != "sap_thu" || p1["ripening"] != true || num(p1, "days_to_harvest") != 1 {
+	if p1["stage"] != "sinh_truong" || p1["ripening"] != true || num(p1, "days_to_harvest") != 1 {
 		t.Fatalf("thửa p1 01/01/2027: %v", p1)
 	}
 	var coopA map[string]any
@@ -56,7 +57,7 @@ func TestStageMap_GIS_US_SEASON_01_US_YIELD_01(t *testing.T) {
 			coopA = m
 		}
 	}
-	if coopA == nil || coopA["dominant_stage"] != "sap_thu" || num(coopA, "plot_count") != 2 || num(coopA, "ripening_plot_count") != 2 ||
+	if coopA == nil || coopA["dominant_stage"] != "sinh_truong" || num(coopA, "plot_count") != 2 || num(coopA, "ripening_plot_count") != 2 ||
 		coopA["earliest_ripening_date"] != "2027-01-02" || coopA["ripening_area_ha"] != "3.0000" {
 		t.Fatalf("tổng hợp HTX A: %v", coopA)
 	}

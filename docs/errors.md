@@ -397,8 +397,10 @@ Cổng `geo.GpsLog.RecordFix` (module khác gọi, không qua HTTP) trả lỗi 
 | 404 | `cropcycle.sop_not_found` | pf/cropcycle: không có mẫu/phiên bản SOP, hoặc (Application API) mẫu chưa ban hành / mẫu riêng của HTX khác |
 | 409 | `cropcycle.sop_name_taken` | pf/cropcycle: "Tên SOP này đã tồn tại, vui lòng chọn tên khác." — so tên đã chuẩn hóa (chữ thường, gộp khoảng trắng), kể cả khi nhân bản (HTX US-CAT-01 AC-6, US-CAT-03 AC-3) |
 | 409 | `cropcycle.sop_code_taken` | pf/cropcycle: mã mẫu SOP đã dùng |
-| 422 | `cropcycle.sop_step_order` | pf/cropcycle: "Thứ tự bước không hợp lệ, vui lòng kiểm tra lại." — `seq` phải liên tục 1..n theo thứ tự gửi (HTX US-CAT-01 AC-6) |
-| 422 | `cropcycle.sop_harvest_step_missing` | pf/cropcycle: phát hành quy trình không có bước `thu_hoach` |
+| 422 | `cropcycle.sop_step_order` | pf/cropcycle: "Thứ tự bước không hợp lệ, vui lòng kiểm tra lại." — thứ tự giai đoạn (`stages[i].seq`), việc (`steps[j].seq`, `stage_seq` không giảm) hoặc `task_seq` trong giai đoạn không liên tục 1..n; `errors[].field` chỉ rõ trường sai (HTX US-CAT-01 AC-6, AH-8) |
+| 422 | `cropcycle.sop_harvest_step_missing` | pf/cropcycle: phát hành quy trình không có việc loại `thu_hoach` |
+| 422 | `cropcycle.sop_empty` | pf/cropcycle: phát hành quy trình chưa có giai đoạn hoặc việc nào, hoặc có giai đoạn chưa có việc (`errors[].field` = `stages` hoặc `stages[i]`; AH-8) |
+| 422 | `cropcycle.sop_harvest_window` | pf/cropcycle: việc Thu hoạch cuối (việc `thu_hoach` có thứ tự lớn nhất) có cửa sổ Mở, Không ngày hoặc mốc NTH/NTT nên không có ngày thu hoạch dự kiến (`errors[].field` = `steps[j].window`; BRD FN-01 EX-05, Q-06, AH-8) |
 | 409 | `cropcycle.sop_state` | pf/cropcycle: sửa phiên bản đã phát hành (tạo phiên bản mới), hai bản nháp cùng lúc, thao tác trên mẫu đã ngừng dùng |
 | 422 | `cropcycle.sop_not_published` | pf/cropcycle: ghim vào vụ một phiên bản chưa phát hành hoặc của mẫu đã ngừng dùng |
 | 422 | `cropcycle.no_sop_for_variety` | pf/cropcycle: giống chưa gắn mẫu SOP đã ban hành — chọn `sop_version_id` khi mở vụ (HTX US-SEASON-01 AC-1) |

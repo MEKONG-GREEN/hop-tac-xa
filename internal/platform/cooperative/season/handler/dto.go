@@ -53,6 +53,8 @@ type templateDTO struct {
 	Code              string  `json:"code"`
 	Name              string  `json:"name"`
 	Crop              string  `json:"crop"`
+	VarietyCode       *string `json:"variety_code"`
+	AnchorName        string  `json:"anchor_name"`
 	Scope             string  `json:"scope"`
 	CooperativeRef    *string `json:"cooperative_ref"`
 	Standard          *string `json:"standard"`
@@ -67,26 +69,28 @@ type templateDTO struct {
 }
 
 func templateOut(t store.Template) templateDTO {
-	return templateDTO{Ref: t.Ref.String(), Code: t.Code, Name: t.Name, Crop: t.Crop, Scope: t.Scope, CooperativeRef: ref(t.CooperativeRef),
+	return templateDTO{Ref: t.Ref.String(), Code: t.Code, Name: t.Name, Crop: t.Crop, VarietyCode: strOrNil(t.VarietyCode), AnchorName: t.AnchorName,
+		Scope: t.Scope, CooperativeRef: ref(t.CooperativeRef),
 		Standard: strOrNil(t.Standard), Description: strOrNil(t.Description), Status: t.Status, StatusReason: strOrNil(t.StatusReason),
 		SourceTemplateRef: ref(t.SourceTemplateRef), LatestVersion: t.LatestVersion, PublishedVersion: t.PublishedVersion,
 		CreatedAt: ts(t.CreatedAt), UpdatedAt: ts(t.UpdatedAt)}
 }
 
 type versionDTO struct {
-	ID                string        `json:"id"`
-	TemplateRef       string        `json:"template_ref"`
-	VersionNo         int           `json:"version_no"`
-	Status            string        `json:"status"`
-	Steps             []domain.Step `json:"steps"`
-	HarvestDayOffset  *int          `json:"harvest_day_offset"`
-	HarvestWindowDays *int          `json:"harvest_window_days"`
-	SourceVersionRef  *string       `json:"source_version_ref"`
-	ChangeNote        *string       `json:"change_note"`
-	AuthoredBy        string        `json:"authored_by"`
-	AuthoredAt        string        `json:"authored_at"`
-	PublishedBy       *string       `json:"published_by"`
-	PublishedAt       *string       `json:"published_at"`
+	ID                string         `json:"id"`
+	TemplateRef       string         `json:"template_ref"`
+	VersionNo         int            `json:"version_no"`
+	Status            string         `json:"status"`
+	Steps             []domain.Step  `json:"steps"`
+	Stages            []domain.Stage `json:"stages"`
+	HarvestDayOffset  *int           `json:"harvest_day_offset"`
+	HarvestWindowDays *int           `json:"harvest_window_days"`
+	SourceVersionRef  *string        `json:"source_version_ref"`
+	ChangeNote        *string        `json:"change_note"`
+	AuthoredBy        string         `json:"authored_by"`
+	AuthoredAt        string         `json:"authored_at"`
+	PublishedBy       *string        `json:"published_by"`
+	PublishedAt       *string        `json:"published_at"`
 }
 
 func versionOut(v store.Version) versionDTO {
@@ -98,8 +102,15 @@ func versionOut(v store.Version) versionDTO {
 		if steps[i].EvidenceKinds == nil {
 			steps[i].EvidenceKinds = []string{}
 		}
+		if steps[i].Materials == nil {
+			steps[i].Materials = []domain.Material{}
+		}
 	}
-	return versionDTO{ID: v.ID.String(), TemplateRef: v.TemplateRef.String(), VersionNo: v.VersionNo, Status: v.Status, Steps: steps,
+	stages := v.Stages
+	if stages == nil {
+		stages = []domain.Stage{}
+	}
+	return versionDTO{ID: v.ID.String(), TemplateRef: v.TemplateRef.String(), VersionNo: v.VersionNo, Status: v.Status, Steps: steps, Stages: stages,
 		HarvestDayOffset: v.HarvestDayOffset, HarvestWindowDays: v.HarvestWindowDays, SourceVersionRef: ref(v.SourceVersionRef),
 		ChangeNote: strOrNil(v.ChangeNote), AuthoredBy: v.AuthoredBy.String(), AuthoredAt: ts(v.AuthoredAt), PublishedBy: ref(v.PublishedBy),
 		PublishedAt: tsPtr(v.PublishedAt)}

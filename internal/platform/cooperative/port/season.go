@@ -14,7 +14,7 @@ const (
 	// RoleFarmer: nông dân — phạm vi là thửa của nông hộ mình (liên kết tài khoản ↔ nông hộ qua
 	// FarmerHouseholds). Tự mở vụ, ghi nhật ký, khai sản lượng.
 	RoleFarmer = "farmer"
-	// RoleSOPAdmin: soạn quy trình SOP (Admin API). Phát hành cần param_approver khác người soạn (R-56).
+	// RoleSOPAdmin: soạn và phát hành quy trình SOP (Admin API); phát hành một bước, không cần người thứ hai (AH-8).
 	RoleSOPAdmin = "sop_admin"
 	// RoleCoopManager là vai quản lý HTX: mở vụ hộ, ghi nhật ký hộ, duyệt nhật ký, nhập sản lượng hàng loạt,
 	// sửa hồ sơ HTX/hộ — chỉ HTX của mình (Principal.OrgRef).

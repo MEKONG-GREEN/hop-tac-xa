@@ -87,6 +87,10 @@ type SOPVersionSyncData struct {
 	HarvestDayOffset  *int          `json:"harvest_day_offset"`
 	HarvestWindowDays *int          `json:"harvest_window_days"`
 	PublishedAt       *string       `json:"published_at"`
+	// Chỉ thêm trường (AH-8): giai đoạn, tên mốc gốc và giống riêng của SOP.
+	Stages      []domain.Stage `json:"stages"`
+	AnchorName  string         `json:"anchor_name"`
+	VarietyCode *string        `json:"variety_code"`
 }
 
 // SeasonSyncData là dữ liệu một vụ gửi xuống máy (không có dữ liệu cá nhân).
@@ -212,7 +216,8 @@ func (src SyncSource) changes(ctx context.Context, a access, entity string, afte
 				data, err := json.Marshal(SOPVersionSyncData{ID: r.ID.String(), TemplateRef: r.TemplateRef.String(), Code: r.Template.Code,
 					Name: r.Template.Name, Crop: r.Template.Crop, Scope: r.Template.Scope, CooperativeRef: refStr(r.Template.CooperativeRef),
 					TemplateStatus: r.Template.Status, VersionNo: r.VersionNo, Steps: r.Steps, HarvestDayOffset: r.HarvestDayOffset,
-					HarvestWindowDays: r.HarvestWindowDays, PublishedAt: pub})
+					HarvestWindowDays: r.HarvestWindowDays, PublishedAt: pub, Stages: stagesOrEmpty(r.Stages),
+					AnchorName: r.Template.AnchorName, VarietyCode: strPtr(r.Template.VarietyCode)})
 				if err != nil {
 					return err
 				}
