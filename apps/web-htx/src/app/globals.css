@@ -1,5 +1,5 @@
 /* Giao diện theo Design Sample KN v7.7 (docs/brd/kn-v7.7-img, Design_Sample_Screens.pdf):
-   sidebar xanh đậm #123B24 → #1E5C39 (rộng 248 px, thu gọn 72 px), mục active nền #E6F6EA chữ #123B24
+   sidebar xanh đậm #123B24 → #1E5C39 (rộng 248 px, thu gọn 72 px), mục active nền #EEF7ED chữ #123B24
    vạch trái 3 px #1B7F18, nút chính #1B7F18 (màu chủ đạo BRD Mục VII, AH-292), nền trang #F7FAFB, viền #E2E8F0;
    toàn bộ chữ Roboto, kể cả tiêu đề (tự host ở public/fonts — không gọi Google Fonts lúc chạy, RB-7).
    Số đo lấy từ PDF (khung 1440 px): chữ thân 13 px, bảng/nhãn 12 px, mục menu ≥ 36 px, mục con 34 px,
@@ -349,7 +349,7 @@ fieldset.plain legend { font-size: 12.5px; font-weight: 600; color: var(--ink2);
 @media (max-width: 560px) {
   .grid4 { grid-template-columns: 1fr; }
   /* Khung hẹp (AC-N2, 360 px): thanh trên cao theo nội dung, breadcrumb chỉ giữ mắt xích cuối (h1 đã nêu tên trang). */
-  .top { height: auto; min-height: var(--top-h); gap: 8px; }
+  .top { height: auto; flex: 0 0 auto; min-height: var(--top-h); gap: 8px; }
   .crumb { min-width: 0; }
   .crumb li:not(:last-child) { display: none; }
   .crumb li + li::before { content: none; }

@@ -215,6 +215,15 @@ describe("Mẫu danh sách UX-01 (AH-292)", () => {
     expect(screen.getByText("2 kết quả")).toBeTruthy();
   });
 
+  it("tab rỗng khi chưa tìm hay lọc: báo theo mục, không nhắc tìm kiếm và bộ lọc", async () => {
+    render(<SeasonCatalog />);
+    await userEvent.click(await screen.findByRole("tab", { name: /^Đã ẩn 0$/ }));
+    expect(screen.getByText("Không có mùa vụ nào ở mục này.")).toBeTruthy();
+    expect(screen.queryByText("Không có mùa vụ phù hợp tìm kiếm và bộ lọc.")).toBeNull();
+    await userEvent.type(screen.getByRole("searchbox"), "dong");
+    expect(screen.getByText("Không có mùa vụ phù hợp tìm kiếm và bộ lọc.")).toBeTruthy();
+  });
+
   it("bấm ô mã mở hộp Sửa; bấm nút Xóa cuối dòng chỉ mở hộp Xóa", async () => {
     render(<SeasonCatalog />);
     await userEvent.click(await screen.findByText("DX"));

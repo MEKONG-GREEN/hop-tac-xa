@@ -168,6 +168,12 @@ export function SeasonCatalog() {
     set(v);
     setPage(1);
   };
+  const emptyText =
+    (data.data ?? []).length === 0
+      ? "Chưa có mùa vụ nào."
+      : !q.trim() && !usage
+        ? "Không có mùa vụ nào ở mục này."
+        : "Không có mùa vụ phù hợp tìm kiếm và bộ lọc.";
   const clearFilters = () => {
     setQ("");
     setUsage("");
@@ -250,7 +256,7 @@ export function SeasonCatalog() {
           onPage={setPage}
           sort={sort}
           onSort={reset(setSort)}
-          empty={data.data.length === 0 ? "Chưa có mùa vụ nào." : "Không có mùa vụ phù hợp tìm kiếm và bộ lọc."}
+          empty={emptyText}
         />
       ) : null}
       {dlg?.kind === "season" ? <SeasonDialog item={dlg.item} onClose={() => setDlg(null)} onSaved={done} /> : null}
