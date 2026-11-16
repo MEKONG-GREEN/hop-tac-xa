@@ -129,6 +129,8 @@ func newFakeCatalogs() *fakeCatalogs {
 	add(mdport.CatalogRiceVariety, "OM5451", map[string]string{"growth_days": "95", "expected_yield_t_per_ha": "6.75", "crop_code": "LUA"})
 	add(mdport.CatalogRiceVariety, "ST25", map[string]string{"growth_days": "105", "expected_yield_t_per_ha": "5.5", "crop_code": "LUA"})
 	add(mdport.CatalogRiceVariety, "ARA", map[string]string{"growth_days": "300", "crop_code": "CAF"})
+	f.items[mdport.CatalogRiceVariety+"/OLDV"] = mdport.CatalogItem{Catalog: mdport.CatalogRiceVariety, Code: "OLDV", Name: "OLDV",
+		Attrs: map[string]string{"crop_code": "LUA"}, Active: false} // giống đã ngừng hiện
 	add(mdport.CatalogMaterial, "URE", map[string]string{"unit": "kg", "group": "phan_bon"})
 	add(mdport.CatalogMaterial, "DAP", map[string]string{"unit": "kg", "group": "phan_bon"})
 	f.items[mdport.CatalogMaterial+"/OLD"] = mdport.CatalogItem{Catalog: mdport.CatalogMaterial, Code: "OLD", Name: "OLD", Active: false}
@@ -178,6 +180,17 @@ func (f *fakeParams) At(_ context.Context, key string, _ time.Time) (params.Para
 		return params.ParamValue{}, params.ErrParamNotFound
 	}
 	return params.ParamValue{Key: key, Value: v, Version: 1}, nil
+}
+
+// fakeNames thay partyport.ActorNames: tên hiển thị suy từ ref để test đối chiếu được.
+type fakeNames struct{}
+
+func (fakeNames) DisplayNames(_ context.Context, refs []uuid.UUID) (map[uuid.UUID]string, error) {
+	out := make(map[uuid.UUID]string, len(refs))
+	for _, r := range refs {
+		out[r] = "Người dùng " + r.String()[:8]
+	}
+	return out, nil
 }
 
 // fakeFarmers thay port.FarmerHouseholds (liên kết tài khoản ↔ nông hộ của pf/accounts).

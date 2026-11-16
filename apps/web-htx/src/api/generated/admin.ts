@@ -3260,8 +3260,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Nhân bản mẫu SOP giữ nguyên bước và thứ tự (HTX US-CAT-03) */
+        /** Nhân bản mẫu SOP giữ nguyên bước và thứ tự, sang giống hoặc loại cây khác (HTX US-CAT-03, AH-21) */
         post: operations["cloneCropSOP"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cropcycle/sops/{ref}/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Xóa SOP chưa phát hành lần nào (AH-21, Q-46) — đánh dấu đã xóa, không xóa dòng; SOP đã xóa biến mất khỏi danh sách và đọc trả 404; SOP đã phát hành chỉ ngừng áp dụng được */
+        post: operations["deleteCropSOP"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3277,7 +3294,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Ngừng dùng mẫu (không xóa; vụ đã ghim giữ phiên bản) */
+        /** Ngừng áp dụng mẫu (không xóa, không ẩn; được phép cả khi SOP đang gắn vụ — vụ giữ phiên bản đã ghim) */
         post: operations["retireCropSOP"];
         delete?: never;
         options?: never;
@@ -6242,6 +6259,11 @@ export interface components {
             version_no: number;
             /** @enum {string} */
             status: "draft" | "published";
+            /**
+             * @description Trạng thái hiển thị do máy chủ suy ra: draft = Nháp; active = Đang áp dụng (bản đã phát hành mới nhất của SOP chưa ngừng); retired = Ngừng áp dụng (các bản đã phát hành còn lại)
+             * @enum {string}
+             */
+            state: "draft" | "active" | "retired";
             stages: components["schemas"]["CropSOPStage"][];
             steps: components["schemas"]["CropSOPStep"][];
             harvest_day_offset?: number | null;
@@ -6255,6 +6277,8 @@ export interface components {
             authored_at?: string;
             /** Format: uuid */
             published_by?: string | null;
+            /** @description Tên người phát hành tra từ danh bạ; không tra được thì không có */
+            published_by_display?: string | null;
             /** Format: date-time */
             published_at?: string | null;
         };
@@ -13654,6 +13678,12 @@ export interface operations {
                     name: string;
                     /** @description Bỏ trống → tự sinh */
                     code?: string;
+                    /** @description Mã loại cây; không gửi → lấy của SOP nguồn */
+                    crop?: string;
+                    /** @description Không gửi hoặc null → lấy của SOP nguồn; chuỗi rỗng → SOP chung của loại cây */
+                    variety_code?: string | null;
+                    /** @description Tên mốc gốc; không gửi → lấy của SOP nguồn */
+                    anchor_name?: string;
                     /** @enum {string} */
                     scope?: "system" | "htx";
                     /** Format: uuid */
@@ -13671,6 +13701,40 @@ export interface operations {
                     "application/json": components["schemas"]["CropSOP"];
                 };
             };
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    deleteCropSOP: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Đã xóa */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        ref: string;
+                        deleted: boolean;
+                    };
+                };
+            };
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
         };
     };

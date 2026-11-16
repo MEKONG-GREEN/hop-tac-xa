@@ -88,7 +88,7 @@ describe("Màn Quy trình SOP (AH-8)", () => {
     expect((await screen.findByRole("status")).textContent).toContain("Đã lưu nháp");
     const info = await screen.findByRole("region", { name: "Thông tin chung" });
     expect(within(info).getByLabelText(/Tên SOP/)).toHaveProperty("value", "SOP thử màn hình AC1");
-    expect(screen.getByText("Nháp")).toBeTruthy();
+    expect(screen.getAllByText("Nháp").length).toBeGreaterThan(0); // chip đầu trang và dòng phiên bản 1 trong lịch sử
     // Chưa phát hành: nút Phát hành có nhưng SOP còn nháp; thông tin chung còn sửa được.
     expect(screen.getByLabelText(/Tên SOP/)).toHaveProperty("disabled", false);
   });
@@ -230,7 +230,7 @@ describe("Màn Quy trình SOP (AH-8)", () => {
     expect((await screen.findByRole("status")).textContent).toContain("Đã nhân bản");
     expect(await screen.findByLabelText("Tên giai đoạn 3")).toHaveProperty("value", "Thu hoạch");
     expect(screen.getByLabelText("Nội dung việc 3.1")).toHaveProperty("value", "Thu hoạch bằng máy gặt đập liên hợp");
-    expect(screen.getByText("Nháp")).toBeTruthy();
+    expect(screen.getAllByText("Nháp").length).toBeGreaterThan(0);
   });
 
   it("AC6: vai param_approver chỉ xem — không có nút soạn, lưu, phát hành", async () => {
@@ -243,8 +243,91 @@ describe("Màn Quy trình SOP (AH-8)", () => {
     expect(screen.queryByRole("button", { name: "Phát hành" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Tạo phiên bản mới" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Ngừng áp dụng" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Nhân bản" })).toBeNull(); // AH-21 AC4
+    expect(screen.queryByRole("button", { name: "Xóa" })).toBeNull();
     expect(screen.getByText(/chỉ xem SOP/)).toBeTruthy();
     expect(screen.getByLabelText("Nội dung việc 1.1")).toHaveProperty("disabled", true);
+  });
+
+  it("AH-21 AC1: nhân bản sang giống khác — hộp thoại lấy sẵn loại cây, giống, mốc gốc của nguồn; bản sao là Nháp đủ giai đoạn và việc", async () => {
+    render(<SopScreen />);
+    await openLibraryItem("Quy trình lúa thơm ST25");
+    await user.click(screen.getByRole("button", { name: "Nhân bản" }));
+    const dlg = await screen.findByRole("dialog");
+    expect(within(dlg).getByLabelText(/Loại cây/)).toHaveProperty("value", "LUA");
+    expect(within(dlg).getByLabelText(/Giống/)).toHaveProperty("value", ""); // nguồn là SOP chung của loại cây
+    expect(within(dlg).getByLabelText(/Tên mốc gốc/)).toHaveProperty("value", "Ngày xuống giống");
+    await user.selectOptions(within(dlg).getByLabelText(/Giống/), "OM5451");
+    await user.clear(within(dlg).getByLabelText("Tên SOP mới"));
+    await user.type(within(dlg).getByLabelText("Tên SOP mới"), "Quy trình ST25 cho OM5451");
+    await user.click(within(dlg).getByRole("button", { name: "Nhân bản" }));
+    expect((await screen.findByRole("status")).textContent).toContain("Đã nhân bản");
+    expect(await screen.findByLabelText(/Giống/)).toHaveProperty("value", "OM5451");
+    expect(screen.getByLabelText("Tên giai đoạn 3")).toHaveProperty("value", "Thu hoạch");
+    expect(screen.getAllByText("Nháp").length).toBeGreaterThan(0);
+    const nhanBan = sent.find((s) => s.url.endsWith("/clone"));
+    expect(nhanBan?.key).toBeTruthy();
+  });
+
+  it("AH-21 AC2: phiên bản mới → bản cũ Ngừng áp dụng, bản mới Đang áp dụng, có người phát hành; xem bản cũ ở chế độ chỉ đọc", async () => {
+    render(<SopScreen />);
+    await openLibraryItem("Quy trình lúa thơm ST25");
+    await user.click(screen.getByRole("button", { name: "Tạo phiên bản mới" }));
+    expect((await screen.findByRole("status")).textContent).toContain("Đã tạo bản nháp phiên bản mới");
+    await user.click(await screen.findByRole("button", { name: "Phát hành" }));
+    expect((await screen.findByRole("status")).textContent).toContain("Đã phát hành");
+
+    const hist = await screen.findByRole("region", { name: "Lịch sử phiên bản" });
+    const rows = within(hist).getAllByRole("row").slice(1);
+    expect(rows).toHaveLength(2);
+    expect(within(rows[0]!).getByText("v1")).toBeTruthy();
+    expect(within(rows[0]!).getByText("Ngừng áp dụng")).toBeTruthy();
+    expect(within(rows[1]!).getByText("v2")).toBeTruthy();
+    expect(within(rows[1]!).getByText("Đang áp dụng")).toBeTruthy();
+    expect(within(rows[1]!).getByText("Quản trị viên A")).toBeTruthy(); // tên người phát hành do máy chủ tra
+
+    await user.click(within(hist).getByRole("button", { name: "Xem phiên bản 1" }));
+    const dlg = await screen.findByRole("dialog");
+    expect(within(dlg).getByText("Phiên bản 1 (chỉ đọc)")).toBeTruthy();
+    expect(within(dlg).getByLabelText("Nội dung việc 1.1")).toHaveProperty("disabled", true);
+  });
+
+  it("AH-21 AC3: SOP không có thao tác Ẩn; Ngừng áp dụng có lý do thì SOP vẫn hiện trong thư viện với trạng thái Ngừng áp dụng", async () => {
+    render(<SopScreen />);
+    await openLibraryItem("Quy trình lúa thơm ST25");
+    expect(screen.queryByRole("button", { name: /^Ẩn/ })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Ngừng áp dụng" }));
+    const dlg = await screen.findByRole("dialog");
+    await user.type(within(dlg).getByLabelText(/Lý do/), "Thay bằng quy trình mới của vụ sau");
+    await user.click(within(dlg).getByRole("button", { name: "Ngừng áp dụng" }));
+    expect((await screen.findByRole("status")).textContent).toContain("Đã ngừng áp dụng");
+    await user.click(screen.getByRole("button", { name: /Thư viện SOP/ }));
+    const lib = await screen.findByRole("region", { name: "Thư viện SOP" });
+    const row = within(lib).getByText("Quy trình lúa thơm ST25").closest("tr")!;
+    expect(within(row).getByText("Ngừng áp dụng")).toBeTruthy();
+  });
+
+  it("AH-21 Q-46: chỉ SOP Nháp chưa phát hành mới có nút Xóa; xóa có xác nhận, một Idempotency-Key, SOP biến mất khỏi thư viện", async () => {
+    render(<SopScreen />);
+    await openLibraryItem("Quy trình lúa thơm ST25");
+    expect(screen.queryByRole("button", { name: "Xóa" })).toBeNull(); // đã phát hành
+    await user.click(screen.getByRole("button", { name: /Thư viện SOP/ }));
+
+    await user.click(await screen.findByRole("button", { name: "Soạn SOP" }));
+    await screen.findByRole("region", { name: "Thông tin chung" });
+    await fillInfo("SOP nháp sẽ xóa");
+    await user.click(screen.getByRole("button", { name: "Lưu nháp" }));
+    await screen.findByRole("status");
+    await user.click(await screen.findByRole("button", { name: "Xóa" }));
+    const dlg = await screen.findByRole("dialog");
+    expect(within(dlg).getByText(/Xóa hẳn SOP nháp này/)).toBeTruthy();
+    await user.click(within(dlg).getByRole("button", { name: "Xóa" }));
+    expect((await screen.findByRole("status")).textContent).toContain("Đã xóa SOP nháp");
+    const lib = await screen.findByRole("region", { name: "Thư viện SOP" });
+    expect(within(lib).queryByText("SOP nháp sẽ xóa")).toBeNull();
+    const del = sent.filter((s) => s.url.endsWith("/delete"));
+    expect(del).toHaveLength(1);
+    expect(del[0]!.key).toBeTruthy();
   });
 
   it("Idempotency: mất phản hồi sau khi máy chủ đã ghi → bấm lại gửi CÙNG khóa, không tạo SOP thứ hai; thao tác sau dùng khóa khác", async () => {

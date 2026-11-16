@@ -71,14 +71,14 @@ func UpdateTemplateInfo(ctx context.Context, tx pgx.Tx, t Template) error {
 // TemplateNameTaken cho biết tên (chuẩn hóa) đã thuộc về một mẫu khác except.
 func TemplateNameTaken(ctx context.Context, tx pgx.Tx, nameKey string, except uuid.UUID) (bool, error) {
 	var taken bool
-	err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pf_coop.sop_template WHERE name_key = $1::text AND ref <> $2::uuid)`,
+	err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pf_coop.sop_template WHERE name_key = $1::text AND ref <> $2::uuid AND deleted_at IS NULL)`,
 		nameKey, except).Scan(&taken)
 	return taken, err
 }
 
 // TemplateByRef đọc mẫu; forUpdate khóa dòng.
 func TemplateByRef(ctx context.Context, tx pgx.Tx, ref uuid.UUID, forUpdate bool) (*Template, error) {
-	q := "SELECT " + templateCols + " FROM pf_coop.sop_template WHERE ref = $1::uuid"
+	q := "SELECT " + templateCols + " FROM pf_coop.sop_template WHERE ref = $1::uuid AND deleted_at IS NULL"
 	if forUpdate {
 		q += " FOR UPDATE"
 	}
@@ -95,9 +95,24 @@ func TemplateByRef(ctx context.Context, tx pgx.Tx, ref uuid.UUID, forUpdate bool
 // TemplateTaken cho biết mã hoặc tên (chuẩn hóa) đã được dùng.
 func TemplateTaken(ctx context.Context, tx pgx.Tx, code, nameKey string) (codeTaken, nameTaken bool, err error) {
 	err = tx.QueryRow(ctx, `SELECT
-	    EXISTS (SELECT 1 FROM pf_coop.sop_template WHERE code = $1::text),
-	    EXISTS (SELECT 1 FROM pf_coop.sop_template WHERE name_key = $2::text)`, code, nameKey).Scan(&codeTaken, &nameTaken)
+	    EXISTS (SELECT 1 FROM pf_coop.sop_template WHERE code = $1::text AND deleted_at IS NULL),
+	    EXISTS (SELECT 1 FROM pf_coop.sop_template WHERE name_key = $2::text AND deleted_at IS NULL)`, code, nameKey).Scan(&codeTaken, &nameTaken)
 	return
+}
+
+// TemplateHasSeasons cho biết mẫu đã có vụ tham chiếu.
+func TemplateHasSeasons(ctx context.Context, tx pgx.Tx, ref uuid.UUID) (bool, error) {
+	var used bool
+	err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pf_coop.season_event WHERE sop_template_ref = $1::uuid)`, ref).Scan(&used)
+	return used, err
+}
+
+// MarkTemplateDeleted đánh dấu mẫu đã xóa (không xóa dòng, RB-1). Ràng buộc CHECK sop_template_deleted_draft của cơ sở
+// dữ liệu chỉ cho phép với mẫu nháp chưa phát hành lần nào.
+func MarkTemplateDeleted(ctx context.Context, tx pgx.Tx, ref uuid.UUID) error {
+	_, err := tx.Exec(ctx, `UPDATE pf_coop.sop_template SET deleted_at = now(), updated_at = now()
+	  WHERE ref = $1::uuid AND deleted_at IS NULL`, ref)
+	return err
 }
 
 // TemplateFilter lọc danh sách mẫu.
@@ -112,7 +127,7 @@ type TemplateFilter struct {
 // ListTemplates liệt kê mẫu theo ref (cursor).
 func ListTemplates(ctx context.Context, tx pgx.Tx, f TemplateFilter) ([]Template, error) {
 	rows, err := tx.Query(ctx, "SELECT "+templateCols+` FROM pf_coop.sop_template
-	  WHERE ($1::text = '' OR status = $1::text)
+	  WHERE deleted_at IS NULL AND ($1::text = '' OR status = $1::text)
 	    AND (NOT $2::boolean OR scope = 'system' OR cooperative_ref = $3::uuid)
 	    AND ref > $4::uuid
 	  ORDER BY ref LIMIT $5::int`, f.Status, f.OnlyVisibleTo, f.CooperativeRef, f.After, f.Limit)
@@ -278,6 +293,16 @@ func VersionByID(ctx context.Context, tx pgx.Tx, id uuid.UUID, forUpdate bool) (
 // VersionsOf liệt kê mọi phiên bản của mẫu theo số phiên bản.
 func VersionsOf(ctx context.Context, tx pgx.Tx, template uuid.UUID) ([]Version, error) {
 	rows, err := tx.Query(ctx, "SELECT "+versionCols+" FROM pf_coop.sop_version WHERE template_ref = $1::uuid ORDER BY version_no", template)
+	if err != nil {
+		return nil, err
+	}
+	return collectVersions(rows)
+}
+
+// LockVersionsOf khóa mọi phiên bản của mẫu theo số phiên bản — cùng thứ tự với PublishSOP (phiên bản trước, mẫu sau) để
+// xóa và phát hành chạy cùng lúc không deadlock.
+func LockVersionsOf(ctx context.Context, tx pgx.Tx, template uuid.UUID) ([]Version, error) {
+	rows, err := tx.Query(ctx, "SELECT "+versionCols+" FROM pf_coop.sop_version WHERE template_ref = $1::uuid ORDER BY version_no FOR UPDATE", template)
 	if err != nil {
 		return nil, err
 	}

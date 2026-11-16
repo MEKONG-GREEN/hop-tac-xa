@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -461,5 +462,346 @@ func TestSOPRoles_AH8_AC6(t *testing.T) {
 	}
 	if f.approver.adminGet(sopsPath).status != http.StatusOK {
 		t.Fatalf("%s xem danh sách quản trị được", authz.RoleParamApprover)
+	}
+}
+
+// publishDraft phát hành phiên bản nháp ver bằng vai soạn.
+func (f *fixture) publishDraft(ver string) {
+	f.t.Helper()
+	expect(f.t, f.sopAdmin.adminPost(versionsPath+ver+"/publish", nil), http.StatusOK, "phát hành "+ver)
+}
+
+// dbExec chạy câu lệnh trực tiếp vào DB bằng vai ứng dụng của module (r_cooperative), để kiểm trigger.
+func (f *fixture) dbExec(query string, args ...any) error {
+	f.t.Helper()
+	return tenant.WithTenantTx(context.Background(), f.db, f.tenant, func(tx pgx.Tx) error {
+		_, err := tx.Exec(context.Background(), query, args...)
+		return err
+	})
+}
+
+// AH-21 AC1: nhân bản sang giống hoặc loại cây khác → SOP Nháp mới đủ giai đoạn, việc, cửa sổ, vật tư, liều.
+func TestSOPCloneToVariety_AH21_AC1(t *testing.T) {
+	f := newFixture(t)
+	src, srcVer := f.createDraft("SOP nguồn OM5451", map[string]any{"variety_code": "OM5451"})
+	f.publishDraft(srcVer)
+	clonePath := sopsPath + "/" + src + "/clone"
+
+	idemKey := key()
+	body := map[string]any{"name": "SOP ST25 từ OM5451", "variety_code": "ST25", "anchor_name": "Ngày sạ"}
+	r := f.sopAdmin.adminPostKey(clonePath, body, idemKey)
+	expect(t, r, http.StatusCreated, "nhân bản sang giống ST25")
+	ver := list(r.body, "versions")[0]
+	if str(r.body, "status") != "draft" || str(r.body, "crop") != "LUA" || str(r.body, "variety_code") != "ST25" ||
+		str(r.body, "anchor_name") != "Ngày sạ" || str(r.body, "source_template_ref") != src || str(ver, "state") != "draft" {
+		t.Fatalf("bản sao: %s", r.raw)
+	}
+	steps := list(ver, "steps")
+	if len(list(ver, "stages")) != 3 || len(steps) != 5 {
+		t.Fatalf("bản sao phải đủ 3 giai đoạn, 5 việc: %s", r.raw)
+	}
+	mat := list(steps[2], "materials")
+	if len(mat) != 1 || str(mat[0], "material_code") != "URE" || str(mat[0], "dose_per_ha") != "50" || str(mat[0], "unit") != "kg" {
+		t.Fatalf("vật tư và liều phải được chép: %s", r.raw)
+	}
+	if num(steps[3], "phi_days") != 14 || str(steps[4], "window", "kind") != "date_range" || num(steps[4], "window", "from") != 95 || num(steps[4], "window", "to") != 100 {
+		t.Fatalf("cửa sổ và thời gian cách ly phải được chép: %s", r.raw)
+	}
+	// Gọi lặp cùng Idempotency-Key → cùng bản sao.
+	again := f.sopAdmin.adminPostKey(clonePath, body, idemKey)
+	if again.status != http.StatusCreated || str(again.body, "ref") != str(r.body, "ref") {
+		t.Fatalf("gọi lặp cùng khóa: %d %s", again.status, again.raw)
+	}
+	// Không giới hạn số SOP của một giống (KH-11): bản sao thứ hai cùng giống ST25 vẫn tạo được.
+	expect(t, f.sopAdmin.adminPost(clonePath, map[string]any{"name": "SOP ST25 thứ hai", "variety_code": "ST25"}), http.StatusCreated, "bản sao thứ hai cùng giống")
+
+	// Không gửi trường nào → lấy của nguồn.
+	r = f.sopAdmin.adminPost(clonePath, map[string]any{"name": "SOP lấy của nguồn"})
+	expect(t, r, http.StatusCreated, "nhân bản không gửi trường")
+	if str(r.body, "crop") != "LUA" || str(r.body, "variety_code") != "OM5451" || str(r.body, "anchor_name") != "Ngày xuống giống" {
+		t.Fatalf("mặc định lấy của nguồn: %s", r.raw)
+	}
+	// Giống là chuỗi rỗng → SOP chung của loại cây.
+	r = f.sopAdmin.adminPost(clonePath, map[string]any{"name": "SOP chung loại cây", "variety_code": ""})
+	expect(t, r, http.StatusCreated, "nhân bản thành SOP chung")
+	if get(r.body, "variety_code") != nil {
+		t.Fatalf("giống rỗng phải thành SOP chung (null): %s", r.raw)
+	}
+	// Sang loại cây khác.
+	r = f.sopAdmin.adminPost(clonePath, map[string]any{"name": "SOP cà phê", "crop": "CAF", "variety_code": "ARA"})
+	expect(t, r, http.StatusCreated, "nhân bản sang loại cây khác")
+	if str(r.body, "crop") != "CAF" || str(r.body, "variety_code") != "ARA" || len(list(list(r.body, "versions")[0], "steps")) != 5 {
+		t.Fatalf("bản sao sang loại cây khác: %s", r.raw)
+	}
+
+	// Kiểm như khi tạo SOP mới.
+	u := http.StatusUnprocessableEntity
+	expectField(t, f.sopAdmin.adminPost(clonePath, map[string]any{"name": "Giống sai loại", "variety_code": "ARA"}), u, "validation_failed", "variety_code", "giống không thuộc loại cây")
+	expectField(t, f.sopAdmin.adminPost(clonePath, map[string]any{"name": "Loại cây con", "crop": "CON"}), u, "cropcycle.catalog_invalid", "crop", "mục con không phải loại cây")
+	expectField(t, f.sopAdmin.adminPost(clonePath, map[string]any{"name": "Giống ngừng hiện", "variety_code": "OLDV"}), u, "cropcycle.catalog_invalid", "variety_code", "giống ngừng hiện")
+	expectField(t, f.sopAdmin.adminPost(clonePath, map[string]any{"name": "Thiếu mốc", "anchor_name": " "}), u, "validation_failed", "anchor_name", "mốc gốc rỗng")
+	expectCode(t, f.sopAdmin.adminPost(clonePath, map[string]any{"name": "SOP nguồn OM5451"}), http.StatusConflict, "cropcycle.sop_name_taken", "tên trùng")
+
+	// Nguồn không đổi.
+	r = f.sopAdmin.adminGet(sopsPath + "/" + src)
+	expect(t, r, http.StatusOK, "đọc nguồn")
+	if str(r.body, "status") != "published" || str(r.body, "variety_code") != "OM5451" || len(list(r.body, "versions")) != 1 {
+		t.Fatalf("nguồn không được đổi: %s", r.raw)
+	}
+}
+
+// AH-21 AC2: sửa SOP đang áp dụng bằng phiên bản mới → bản mới Đang áp dụng, bản cũ Ngừng áp dụng; vụ đã mở giữ bản cũ.
+func TestSOPVersionSnapshot_AH21_AC2(t *testing.T) {
+	f := newFixture(t)
+	tmpl, v1 := f.publishedSOP("SOP phiên bản", "OM5451")
+
+	season1 := f.farmer(f.h1).mustOpen(f.p1)
+	before := f.managerA().get("/v1/cropcycle/seasons/" + season1)
+	expect(t, before, http.StatusOK, "đọc vụ 1")
+	if str(before.body, "sop_version_id") != v1 || str(before.body, "expected_harvest_date") == "" || str(list(before.body, "steps")[0], "name") != "Làm đất" {
+		t.Fatalf("vụ 1 ghim phiên bản 1: %s", before.raw)
+	}
+
+	r := f.sopAdmin.adminPost(sopsPath+"/"+tmpl+"/versions", map[string]any{"change_note": "Kéo dài thu hoạch"})
+	expect(t, r, http.StatusCreated, "tạo phiên bản 2")
+	vs := list(r.body, "versions")
+	if len(vs) != 2 || str(vs[0], "state") != "active" || str(vs[1], "state") != "draft" {
+		t.Fatalf("sau tạo bản nháp: bản 1 Đang áp dụng, bản 2 Nháp: %s", r.raw)
+	}
+	v2 := str(vs[1], "id")
+	edited := sopSteps()
+	edited[0]["name"] = "Làm đất kỹ"
+	edited[4]["window"] = dateRange(105, 110)
+	stages := sopStages()
+	stages[2]["to_day"] = 110
+	expect(t, f.sopAdmin.adminPost(versionsPath+v2+"/steps", map[string]any{"stages": stages, "steps": edited, "change_note": "Kéo dài thu hoạch"}), http.StatusOK, "sửa bản nháp")
+	f.publishDraft(v2)
+
+	r = f.sopAdmin.adminGet(sopsPath + "/" + tmpl)
+	expect(t, r, http.StatusOK, "đọc SOP")
+	vs = list(r.body, "versions")
+	if len(vs) != 2 || str(vs[0], "state") != "retired" || str(vs[1], "state") != "active" || str(r.body, "status") != "published" || num(r.body, "published_version") != 2 {
+		t.Fatalf("bản cũ Ngừng áp dụng, bản mới Đang áp dụng: %s", r.raw)
+	}
+	if str(vs[1], "published_by_display") != "Người dùng "+f.sopAdmin.actor.String()[:8] || str(vs[1], "published_at") == "" || str(vs[1], "change_note") != "Kéo dài thu hoạch" {
+		t.Fatalf("lịch sử phiên bản thiếu người phát hành, ngày, ghi chú: %s", r.raw)
+	}
+
+	// Vụ đang chạy giữ bản chụp cũ: cùng phiên bản, cùng ngày dự kiến, cùng việc.
+	after := f.managerA().get("/v1/cropcycle/seasons/" + season1)
+	expect(t, after, http.StatusOK, "đọc lại vụ 1")
+	for _, k := range []string{"sop_version_id", "expected_harvest_date", "harvest_open_date"} {
+		if str(after.body, k) != str(before.body, k) {
+			t.Fatalf("vụ đang chạy đổi %s sau khi có phiên bản mới: %s", k, after.raw)
+		}
+	}
+	if len(list(after.body, "steps")) != 5 || str(list(after.body, "steps")[0], "name") != "Làm đất" || num(list(after.body, "steps")[4], "day_offset") != 95 {
+		t.Fatalf("các việc của vụ đang chạy phải giữ bản chụp cũ: %s", after.raw)
+	}
+	pinned := f.managerA().get(versionsPath + v1)
+	expect(t, pinned, http.StatusOK, "đọc phiên bản đã ghim")
+	if str(list(get(pinned.body, "version"), "steps")[0], "name") != "Làm đất" || str(pinned.body, "version", "state") != "retired" {
+		t.Fatalf("phiên bản 1 phải giữ nguyên nội dung: %s", pinned.raw)
+	}
+
+	// Vụ mở mới dùng phiên bản mới: ngày thu hoạch dự kiến = ngày sạ + 105.
+	r = f.farmer(f.h3).open(f.p3, nil)
+	expect(t, r, http.StatusCreated, "mở vụ 2")
+	sowing, _ := time.Parse(time.DateOnly, today)
+	if str(r.body, "season", "sop_version_id") != v2 || str(r.body, "season", "expected_harvest_date") != sowing.AddDate(0, 0, 105).Format(time.DateOnly) {
+		t.Fatalf("vụ mới phải dùng phiên bản 2: %s", r.raw)
+	}
+
+	// App API cũng trả state (chỉ các bản đã phát hành).
+	r = f.managerA().get(sopsPath + "/" + tmpl)
+	expect(t, r, http.StatusOK, "App API đọc SOP")
+	vs = list(r.body, "versions")
+	if len(vs) != 2 || str(vs[0], "state") != "retired" || str(vs[1], "state") != "active" {
+		t.Fatalf("App API: %s", r.raw)
+	}
+}
+
+// AH-21 AC3: SOP gắn vụ đang canh tác không có thao tác "Ẩn"; chỉ Ngừng áp dụng (vụ giữ phiên bản), và không xóa được.
+func TestSOPRetireInUse_AH21_AC3(t *testing.T) {
+	f := newFixture(t)
+	tmpl, v1 := f.publishedSOP("SOP đang dùng", "OM5451")
+	season := f.farmer(f.h1).mustOpen(f.p1)
+	before := f.managerA().get("/v1/cropcycle/seasons/" + season)
+
+	r := f.sopAdmin.adminPost(sopsPath+"/"+tmpl+"/retire", map[string]any{"reason": "Thay bằng quy trình mới của vụ sau"})
+	expect(t, r, http.StatusOK, "ngừng áp dụng SOP đang gắn vụ")
+	if str(r.body, "status") != "retired" || str(list(r.body, "versions")[0], "state") != "retired" {
+		t.Fatalf("sau ngừng áp dụng: %s", r.raw)
+	}
+	after := f.managerA().get("/v1/cropcycle/seasons/" + season)
+	if str(after.body, "sop_version_id") != v1 || str(after.body, "expected_harvest_date") != str(before.body, "expected_harvest_date") ||
+		str(after.body, "expected_harvest_date") == "" {
+		t.Fatalf("vụ phải giữ phiên bản đã ghim: %s", after.raw)
+	}
+	// Vẫn hiện trong thư viện Admin (trạng thái retired); App API không còn liệt kê để chọn.
+	status := ""
+	for _, it := range list(f.sopAdmin.adminGet(sopsPath).body, "items") {
+		if str(it, "ref") == tmpl {
+			status = str(it, "status")
+		}
+	}
+	if status != "retired" {
+		t.Fatalf("SOP đã ngừng vẫn phải hiện ở thư viện Admin với trạng thái retired: %q", status)
+	}
+	for _, it := range list(f.managerA().get(sopsPath).body, "items") {
+		if str(it, "ref") == tmpl {
+			t.Fatalf("App API không được liệt kê SOP đã ngừng áp dụng")
+		}
+	}
+	// Không có đường nào để ẩn hay xóa: xóa bị từ chối.
+	expectCode(t, f.sopAdmin.adminPost(sopsPath+"/"+tmpl+"/delete", nil), http.StatusConflict, "cropcycle.sop_not_deletable", "xóa SOP đang gắn vụ")
+}
+
+// AH-21 Q-46: chỉ SOP chưa phát hành lần nào được đánh dấu đã xóa; điều kiện giữ ở cả máy chủ và cơ sở dữ liệu.
+func TestSOPDelete_AH21_Q46(t *testing.T) {
+	f := newFixture(t)
+	conflict := http.StatusConflict
+	const notDeletable = "cropcycle.sop_not_deletable"
+
+	// SOP Nháp chưa phát hành: đánh dấu xóa được; gọi lặp cùng khóa phát lại phản hồi.
+	d1, d1Ver := f.createDraft("SOP nháp xóa", nil)
+	k := key()
+	r := f.sopAdmin.adminPostKey(sopsPath+"/"+d1+"/delete", nil, k)
+	expect(t, r, http.StatusOK, "xóa SOP nháp")
+	if str(r.body, "ref") != d1 || get(r.body, "deleted") != true {
+		t.Fatalf("phản hồi xóa: %s", r.raw)
+	}
+	expect(t, f.sopAdmin.adminPostKey(sopsPath+"/"+d1+"/delete", nil, k), http.StatusOK, "gọi lặp cùng khóa")
+
+	// SOP đã xóa biến mất: mọi đường đọc và ghi trả "không tìm thấy"; không hiện trong danh sách Admin lẫn App API.
+	const notFound = "cropcycle.sop_not_found"
+	expectCode(t, f.sopAdmin.adminGet(sopsPath+"/"+d1), http.StatusNotFound, notFound, "đọc SOP đã xóa")
+	expectCode(t, f.sopAdmin.adminGet(versionsPath+d1Ver), http.StatusNotFound, notFound, "đọc bản nháp của SOP đã xóa")
+	for who, items := range map[string][]any{
+		"Admin": list(f.sopAdmin.adminGet(sopsPath).body, "items"), "App": list(f.managerA().get(sopsPath).body, "items"),
+	} {
+		for _, it := range items {
+			if str(it, "ref") == d1 {
+				t.Fatalf("SOP đã xóa còn trong danh sách %s", who)
+			}
+		}
+	}
+	for path, body := range map[string]any{
+		sopsPath + "/" + d1 + "/info":     map[string]any{"name": "Đổi tên", "crop": "LUA", "anchor_name": "Ngày sạ"},
+		sopsPath + "/" + d1 + "/versions": nil,
+		sopsPath + "/" + d1 + "/clone":    map[string]any{"name": "Bản sao của SOP đã xóa"},
+		sopsPath + "/" + d1 + "/retire":   map[string]any{"reason": "Lý do đủ dài để ngừng"},
+		sopsPath + "/" + d1 + "/delete":   nil,
+		versionsPath + d1Ver + "/steps":   map[string]any{"stages": sopStages(), "steps": sopSteps()},
+		versionsPath + d1Ver + "/publish": nil,
+	} {
+		expectCode(t, f.sopAdmin.adminPost(path, body), http.StatusNotFound, notFound, "ghi "+path+" lên SOP đã xóa")
+	}
+
+	// Tên và mã dùng lại ngay.
+	f.createDraft("SOP nháp xóa", nil)
+	c1, _ := f.createDraft("SOP mã dùng lại", map[string]any{"code": "SOP-REUSE"})
+	expect(t, f.sopAdmin.adminPost(sopsPath+"/"+c1+"/delete", nil), http.StatusOK, "xóa SOP nháp có mã")
+	f.createDraft("SOP mã dùng lại 2", map[string]any{"code": "SOP-REUSE"})
+
+	// SOP đã phát hành (đang áp dụng hay đã ngừng) không xóa được; thông báo nêu rõ chỉ ngừng áp dụng được.
+	pub, _ := f.publishedSOP("SOP đã phát hành xóa", "")
+	r = f.sopAdmin.adminPost(sopsPath+"/"+pub+"/delete", nil)
+	expectCode(t, r, conflict, notDeletable, "xóa SOP đang áp dụng")
+	if !strings.Contains(string(r.raw), "ngừng áp dụng") {
+		t.Fatalf("thông báo phải nêu chỉ ngừng áp dụng được: %s", r.raw)
+	}
+	expect(t, f.sopAdmin.adminPost(sopsPath+"/"+pub+"/retire", map[string]any{"reason": "Không dùng nữa trong vụ này"}), http.StatusOK, "ngừng áp dụng")
+	expectCode(t, f.sopAdmin.adminPost(sopsPath+"/"+pub+"/delete", nil), conflict, notDeletable, "xóa SOP đã ngừng áp dụng")
+
+	// Đã phát hành và có bản nháp phiên bản 2: vẫn không xóa được.
+	pub2, _ := f.publishedSOP("SOP có bản nháp mới", "")
+	expect(t, f.sopAdmin.adminPost(sopsPath+"/"+pub2+"/versions", nil), http.StatusCreated, "bản nháp phiên bản 2")
+	expectCode(t, f.sopAdmin.adminPost(sopsPath+"/"+pub2+"/delete", nil), conflict, notDeletable, "xóa SOP đã phát hành có bản nháp mới")
+
+	// SOP Nháp đã ngừng áp dụng: từ chối.
+	d2, _ := f.createDraft("SOP nháp đã ngừng", nil)
+	expect(t, f.sopAdmin.adminPost(sopsPath+"/"+d2+"/retire", map[string]any{"reason": "Soạn nhầm loại cây"}), http.StatusOK, "ngừng SOP nháp")
+	expectCode(t, f.sopAdmin.adminPost(sopsPath+"/"+d2+"/delete", nil), conflict, notDeletable, "xóa SOP nháp đã ngừng")
+
+	// SOP Nháp đã được nhân bản vẫn xóa được: bản sao giữ nguyên nội dung và nguồn.
+	a, _ := f.createDraft("SOP nháp gốc", nil)
+	rc := f.sopAdmin.adminPost(sopsPath+"/"+a+"/clone", map[string]any{"name": "SOP nháp bản sao"})
+	expect(t, rc, http.StatusCreated, "nhân bản bản nháp")
+	b := str(rc.body, "ref")
+	expect(t, f.sopAdmin.adminPost(sopsPath+"/"+a+"/delete", nil), http.StatusOK, "xóa nguồn đã có bản sao")
+	rb := f.sopAdmin.adminGet(sopsPath + "/" + b)
+	expect(t, rb, http.StatusOK, "bản sao còn mở được")
+	if str(rb.body, "source_template_ref") != a || len(list(list(rb.body, "versions")[0], "steps")) == 0 {
+		t.Fatalf("bản sao phải giữ nguồn và nội dung: %s", rb.raw)
+	}
+
+	// Cơ sở dữ liệu: dòng đã xóa vẫn còn (RB-1) với deleted_at; DELETE bị chặn; chỉ mẫu nháp chưa phát hành mới đánh dấu được.
+	var deletedAt *time.Time
+	if err := tenant.WithTenantTx(context.Background(), f.db, f.tenant, func(tx pgx.Tx) error {
+		return tx.QueryRow(context.Background(), `SELECT deleted_at FROM pf_coop.sop_template WHERE ref = $1::uuid`, d1).Scan(&deletedAt)
+	}); err != nil || deletedAt == nil {
+		t.Fatalf("dòng SOP đã xóa phải còn trong bảng với deleted_at: %v %v", deletedAt, err)
+	}
+	for name, q := range map[string]string{
+		"mẫu đã phát hành":    `DELETE FROM pf_coop.sop_template WHERE ref = '` + pub2 + `'`,
+		"mẫu đã xóa":          `DELETE FROM pf_coop.sop_template WHERE ref = '` + d1 + `'`,
+		"phiên bản của nháp":  `DELETE FROM pf_coop.sop_version WHERE template_ref = '` + b + `'`,
+		"phiên bản phát hành": `DELETE FROM pf_coop.sop_version WHERE template_ref = '` + pub2 + `' AND status = 'published'`,
+	} {
+		if err := f.dbExec(q); !errors.Is(ledger.Classify(err), ledger.ErrImmutable) {
+			t.Fatalf("DELETE %s phải bị trigger chặn: %v", name, err)
+		}
+	}
+	if err := f.dbExec(`UPDATE pf_coop.sop_template SET deleted_at = now() WHERE ref = $1::uuid`, pub2); err == nil {
+		t.Fatal("đánh dấu xóa mẫu đã phát hành phải bị ràng buộc CHECK chặn")
+	} else if !strings.Contains(err.Error(), "sop_template_deleted_draft") {
+		t.Fatalf("lỗi không phải CHECK sop_template_deleted_draft: %v", err)
+	}
+	if err := f.dbExec(`UPDATE pf_coop.sop_template SET deleted_at = NULL WHERE ref = $1::uuid`, d1); !errors.Is(ledger.Classify(err), ledger.ErrImmutable) {
+		t.Fatalf("khôi phục mẫu đã xóa phải bị chặn: %v", err)
+	}
+	if err := f.dbExec(`UPDATE pf_coop.sop_template SET description = 'sửa' WHERE ref = $1::uuid`, d1); !errors.Is(ledger.Classify(err), ledger.ErrImmutable) {
+		t.Fatalf("sửa mẫu đã xóa phải bị chặn: %v", err)
+	}
+}
+
+// AH-21 AC4: Thành viên HTX và Đại diện HTX gọi mọi API ghi SOP đều bị từ chối; dữ liệu không đổi.
+func TestSOPWriteRoles_AH21_AC4(t *testing.T) {
+	f := newFixture(t)
+	draft, draftVer := f.createDraft("SOP quyền AH-21 nháp", nil)
+	pub, _ := f.publishedSOP("SOP quyền AH-21 đã phát hành", "")
+	writes := map[string]any{
+		sopsPath:                             sopBody("SOP do người không có quyền tạo", nil),
+		sopsPath + "/" + draft + "/info":     map[string]any{"name": "Đổi", "crop": "LUA", "anchor_name": "Ngày sạ"},
+		sopsPath + "/" + pub + "/versions":   nil,
+		sopsPath + "/" + pub + "/clone":      map[string]any{"name": "Bản sao trái phép", "variety_code": "ST25"},
+		sopsPath + "/" + pub + "/retire":     map[string]any{"reason": "Lý do đủ dài để ngừng"},
+		versionsPath + draftVer + "/steps":   map[string]any{"stages": sopStages(), "steps": sopSteps()},
+		versionsPath + draftVer + "/publish": nil,
+		sopsPath + "/" + draft + "/delete":   nil,
+	}
+	callers := map[string]caller{"Thành viên HTX": f.farmer(f.h1), "Đại diện HTX": f.managerA()}
+	for who, c := range callers {
+		for path, body := range writes {
+			expectCode(t, c.adminPost(path, body), http.StatusForbidden, "forbidden", who+" ghi "+path)
+		}
+	}
+	// Vai chỉ xem (param_approver) cũng không nhân bản, không xóa.
+	expectCode(t, f.approver.adminPost(sopsPath+"/"+pub+"/clone", map[string]any{"name": "Bản sao của approver"}), http.StatusForbidden, "forbidden", "param_approver nhân bản")
+	expectCode(t, f.approver.adminPost(sopsPath+"/"+draft+"/delete", nil), http.StatusForbidden, "forbidden", "param_approver xóa")
+
+	// Dữ liệu không đổi sau các lần bị từ chối.
+	r := f.sopAdmin.adminGet(sopsPath + "/" + draft)
+	expect(t, r, http.StatusOK, "SOP nháp còn nguyên")
+	if str(r.body, "status") != "draft" || str(r.body, "name") != "SOP quyền AH-21 nháp" || str(list(r.body, "versions")[0], "state") != "draft" {
+		t.Fatalf("SOP nháp bị đổi: %s", r.raw)
+	}
+	r = f.sopAdmin.adminGet(sopsPath + "/" + pub)
+	if str(r.body, "status") != "published" || len(list(r.body, "versions")) != 1 {
+		t.Fatalf("SOP đã phát hành bị đổi: %s", r.raw)
+	}
+	if n := len(list(f.sopAdmin.adminGet(sopsPath).body, "items")); n != 2 {
+		t.Fatalf("không SOP nào được tạo thêm: %d", n)
 	}
 }

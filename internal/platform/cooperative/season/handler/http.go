@@ -69,6 +69,7 @@ func (h Handler) RegisterAdmin(rg *gin.RouterGroup) {
 	rg.POST("/cropcycle/sops/:ref/versions", h.newVersion)
 	rg.POST("/cropcycle/sops/:ref/clone", h.cloneSOP)
 	rg.POST("/cropcycle/sops/:ref/retire", h.retireSOP)
+	rg.POST("/cropcycle/sops/:ref/delete", h.deleteSOP)
 	rg.GET("/cropcycle/sop-versions/:id", h.getVersion(true))
 	rg.POST("/cropcycle/sop-versions/:id/steps", h.updateDraft)
 	rg.POST("/cropcycle/sop-versions/:id/publish", h.publish)
@@ -274,7 +275,7 @@ func (h Handler) getVersion(admin bool) gin.HandlerFunc {
 			httpx.Fail(c, err)
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"version": versionOut(v), "template": templateOut(t)})
+		c.JSON(http.StatusOK, gin.H{"version": versionOut(v, t, nil), "template": templateOut(t)})
 	}
 }
 
@@ -443,6 +444,9 @@ func (h Handler) publish(c *gin.Context) {
 type cloneReq struct {
 	Code           string  `json:"code"`
 	Name           string  `json:"name"`
+	Crop           *string `json:"crop"`
+	VarietyCode    *string `json:"variety_code"`
+	AnchorName     *string `json:"anchor_name"`
 	Scope          string  `json:"scope"`
 	CooperativeRef *string `json:"cooperative_ref"`
 }
@@ -457,7 +461,8 @@ func (h Handler) cloneSOP(c *gin.Context) {
 		return
 	}
 	f := newFields()
-	in := app.CloneInput{SourceRef: ref, Code: req.Code, Name: req.Name, Scope: req.Scope, CooperativeRef: f.ref("cooperative_ref", req.CooperativeRef)}
+	in := app.CloneInput{SourceRef: ref, Code: req.Code, Name: req.Name, Crop: req.Crop, VarietyCode: req.VarietyCode, AnchorName: req.AnchorName,
+		Scope: req.Scope, CooperativeRef: f.ref("cooperative_ref", req.CooperativeRef)}
 	if f.bad {
 		httpx.Fail(c, f.p)
 		return
@@ -490,6 +495,18 @@ func (h Handler) retireSOP(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, sopOut(v))
+}
+
+func (h Handler) deleteSOP(c *gin.Context) {
+	ref, ok := pathID(c, "ref", app.ErrSOPNotFound)
+	if !ok {
+		return
+	}
+	if err := h.Svc.DeleteSOP(c.Request.Context(), ref); err != nil {
+		httpx.Fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ref": ref.String(), "deleted": true})
 }
 
 type bindReq struct {

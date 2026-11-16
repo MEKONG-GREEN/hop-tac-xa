@@ -77,23 +77,26 @@ func templateOut(t store.Template) templateDTO {
 }
 
 type versionDTO struct {
-	ID                string         `json:"id"`
-	TemplateRef       string         `json:"template_ref"`
-	VersionNo         int            `json:"version_no"`
-	Status            string         `json:"status"`
-	Steps             []domain.Step  `json:"steps"`
-	Stages            []domain.Stage `json:"stages"`
-	HarvestDayOffset  *int           `json:"harvest_day_offset"`
-	HarvestWindowDays *int           `json:"harvest_window_days"`
-	SourceVersionRef  *string        `json:"source_version_ref"`
-	ChangeNote        *string        `json:"change_note"`
-	AuthoredBy        string         `json:"authored_by"`
-	AuthoredAt        string         `json:"authored_at"`
-	PublishedBy       *string        `json:"published_by"`
-	PublishedAt       *string        `json:"published_at"`
+	ID                 string         `json:"id"`
+	TemplateRef        string         `json:"template_ref"`
+	VersionNo          int            `json:"version_no"`
+	Status             string         `json:"status"`
+	State              string         `json:"state"` // draft | active | retired — domain.VersionState
+	Steps              []domain.Step  `json:"steps"`
+	Stages             []domain.Stage `json:"stages"`
+	HarvestDayOffset   *int           `json:"harvest_day_offset"`
+	HarvestWindowDays  *int           `json:"harvest_window_days"`
+	SourceVersionRef   *string        `json:"source_version_ref"`
+	ChangeNote         *string        `json:"change_note"`
+	AuthoredBy         string         `json:"authored_by"`
+	AuthoredAt         string         `json:"authored_at"`
+	PublishedBy        *string        `json:"published_by"`
+	PublishedByDisplay *string        `json:"published_by_display,omitempty"`
+	PublishedAt        *string        `json:"published_at"`
 }
 
-func versionOut(v store.Version) versionDTO {
+// versionOut dựng phiên bản trả ra; names (tùy chọn) tra tên người phát hành.
+func versionOut(v store.Version, t store.Template, names map[uuid.UUID]string) versionDTO {
 	steps := v.Steps
 	if steps == nil {
 		steps = []domain.Step{}
@@ -110,10 +113,15 @@ func versionOut(v store.Version) versionDTO {
 	if stages == nil {
 		stages = []domain.Stage{}
 	}
-	return versionDTO{ID: v.ID.String(), TemplateRef: v.TemplateRef.String(), VersionNo: v.VersionNo, Status: v.Status, Steps: steps, Stages: stages,
+	var display *string
+	if n := names[v.PublishedBy]; n != "" {
+		display = &n
+	}
+	return versionDTO{ID: v.ID.String(), TemplateRef: v.TemplateRef.String(), VersionNo: v.VersionNo, Status: v.Status,
+		State: domain.VersionState(v.Status, v.VersionNo, t.Status, t.PublishedVersion), Steps: steps, Stages: stages,
 		HarvestDayOffset: v.HarvestDayOffset, HarvestWindowDays: v.HarvestWindowDays, SourceVersionRef: ref(v.SourceVersionRef),
 		ChangeNote: strOrNil(v.ChangeNote), AuthoredBy: v.AuthoredBy.String(), AuthoredAt: ts(v.AuthoredAt), PublishedBy: ref(v.PublishedBy),
-		PublishedAt: tsPtr(v.PublishedAt)}
+		PublishedByDisplay: display, PublishedAt: tsPtr(v.PublishedAt)}
 }
 
 type sopDTO struct {
@@ -124,7 +132,7 @@ type sopDTO struct {
 func sopOut(v app.SOPView) sopDTO {
 	out := sopDTO{templateDTO: templateOut(v.Template), Versions: make([]versionDTO, 0, len(v.Versions))}
 	for _, x := range v.Versions {
-		out.Versions = append(out.Versions, versionOut(x))
+		out.Versions = append(out.Versions, versionOut(x, v.Template, v.Names))
 	}
 	return out
 }

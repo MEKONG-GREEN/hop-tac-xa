@@ -7297,12 +7297,16 @@ components:
 # @ag-order: 745
     CropSOPVersion:
       type: object
-      required: [id, template_ref, version_no, status, stages, steps]
+      required: [id, template_ref, version_no, status, state, stages, steps]
       properties:
         id: {type: string, format: uuid}
         template_ref: {type: string, format: uuid}
         version_no: {type: integer}
         status: {type: string, enum: [draft, published]}
+        state:
+          type: string
+          enum: [draft, active, retired]
+          description: "Trạng thái hiển thị do máy chủ suy ra: draft = Nháp; active = Đang áp dụng (bản đã phát hành mới nhất của SOP chưa ngừng); retired = Ngừng áp dụng (các bản đã phát hành còn lại)"
         stages: {type: array, items: {$ref: "#/components/schemas/CropSOPStage"}}
         steps: {type: array, items: {$ref: "#/components/schemas/CropSOPStep"}}
         harvest_day_offset: {type: [integer, "null"]}

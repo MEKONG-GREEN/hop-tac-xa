@@ -16,3 +16,9 @@
 | 422 | `cooperative.htx_anchor_created_by` | `created_by` không phải `kn` hoặc `mkg` |
 
 | 503 | `cooperative.registrar_unavailable` | Tạo Neo với HTX mới nhưng assembly chưa nối CooperativeRegistrar |
+
+### pf/cooperative — quy trình SOP (AH-21)
+
+| HTTP | code | Khi nào |
+|---|---|---|
+| 409 | `cropcycle.sop_not_deletable` | Xóa SOP đã phát hành (đang áp dụng hay đã ngừng), SOP Nháp đã ngừng, hoặc đã có vụ tham chiếu — chỉ ngừng áp dụng được |

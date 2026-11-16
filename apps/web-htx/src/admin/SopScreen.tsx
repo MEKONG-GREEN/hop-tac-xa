@@ -47,11 +47,19 @@ import {
 } from "@/htx/rules";
 import { formatDateTime } from "@/lib/format";
 import { toApiProblem, useAsync } from "@/lib/useAsync";
+import { ConfirmDialog } from "./CropCatalogScreen";
 
 const TPL_STATUS: Record<string, { text: string; cls: string }> = {
   draft: { text: "Nháp", cls: "c-warn" },
   published: { text: "Đang áp dụng", cls: "c-ok" },
   retired: { text: "Ngừng áp dụng", cls: "c-mute" },
+};
+
+/** Trạng thái hiển thị của phiên bản — do máy chủ suy ra (`state`), màn hình chỉ đọc lại và gắn nhãn. */
+const VERSION_STATE: Record<string, { text: string; cls: string }> = {
+  draft: TPL_STATUS.draft!,
+  active: TPL_STATUS.published!,
+  retired: TPL_STATUS.retired!,
 };
 
 const IDEM = () => ({ "Idempotency-Key": newIdempotencyKey() });
@@ -74,9 +82,19 @@ function FieldError({ message }: { message?: string }) {
 // --------------------------------------------------------------------------------------------------------------------
 // Soạn SOP
 // --------------------------------------------------------------------------------------------------------------------
-type Dlg = "" | "retire" | "clone";
+type Dlg = "" | "retire" | "clone" | "delete";
 
-function Editor({ sop, onBack, onChanged }: { sop: AdminCropSOP | null; onBack: () => void; onChanged: (ref: string | null, notice?: string) => void }) {
+function Editor({
+  sop,
+  onBack,
+  onChanged,
+  onDeleted,
+}: {
+  sop: AdminCropSOP | null;
+  onBack: () => void;
+  onChanged: (ref: string | null, notice?: string) => void;
+  onDeleted: (notice: string) => void;
+}) {
   const { adminApi, principal } = useAuth();
   const action = useIdempotentAction();
   const crops = useCatalog("crop");
@@ -98,6 +116,10 @@ function Editor({ sop, onBack, onChanged }: { sop: AdminCropSOP | null; onBack: 
   const [notice, setNotice] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Dlg>("");
   const [cloneName, setCloneName] = useState("");
+  const [cloneCrop, setCloneCrop] = useState("");
+  const [cloneVariety, setCloneVariety] = useState("");
+  const [cloneAnchor, setCloneAnchor] = useState("");
+  const [viewNo, setViewNo] = useState<number | null>(null);
   const [publishIssues, setPublishIssues] = useState<SopIssue[]>([]);
   const dirty = JSON.stringify(draft) !== saved;
 
@@ -108,6 +130,9 @@ function Editor({ sop, onBack, onChanged }: { sop: AdminCropSOP | null; onBack: 
 
   const cropOptions = crops.filter((c) => !c.attrs.parent_code && (c.active || c.code === draft.crop));
   const varietyOptions = varieties.filter((v) => v.attrs.crop_code === draft.crop && (v.active || v.code === draft.varietyCode));
+  const cloneCropOptions = crops.filter((c) => !c.attrs.parent_code && (c.active || c.code === sop?.crop));
+  const cloneVarietyOptions = varieties.filter((v) => v.attrs.crop_code === cloneCrop && (v.active || v.code === sop?.variety_code));
+  const canDelete = canAuthor && !!sop && sop.status === "draft" && sop.published_version == null;
 
   const setStage = (si: number, patch: Partial<SopStageDraft>) => setDraft((d) => ({ ...d, stages: d.stages.map((s, i) => (i === si ? { ...s, ...patch } : s)) }));
   const setTask = (si: number, ti: number, patch: Partial<SopTaskDraft>) =>
@@ -380,7 +405,19 @@ function Editor({ sop, onBack, onChanged }: { sop: AdminCropSOP | null; onBack: 
           </button>
         ) : null}
         {canAuthor && sop && !retired ? (
-          <button type="button" className="btn btn-o btn-sm" onClick={() => { setCloneName(`${sop.name} (bản sao)`); setProblem(null); setDialog("clone"); }}>
+          <button
+            type="button"
+            className="btn btn-o btn-sm"
+            onClick={() => {
+              setCloneName(`${sop.name} (bản sao)`);
+              setCloneCrop(sop.crop);
+              setCloneVariety(sop.variety_code ?? "");
+              setCloneAnchor(sop.anchor_name);
+              setProblem(null);
+              setServer({});
+              setDialog("clone");
+            }}
+          >
             Nhân bản
           </button>
         ) : null}
@@ -389,20 +426,56 @@ function Editor({ sop, onBack, onChanged }: { sop: AdminCropSOP | null; onBack: 
             Ngừng áp dụng
           </button>
         ) : null}
+        {canDelete ? (
+          <button type="button" className="btn btn-o btn-sm" onClick={() => setDialog("delete")}>
+            Xóa
+          </button>
+        ) : null}
         {!canAuthor ? <span className="small mute">Bạn chỉ xem SOP; soạn và phát hành thuộc vai Admin.</span> : null}
       </div>
       {sop ? (
-        <details>
-          <summary className="small">Các phiên bản ({sop.versions.length})</summary>
-          <ul className="small" style={{ margin: "6px 0 0 18px" }}>
-            {sop.versions.map((v) => (
-              <li key={v.id}>
-                Phiên bản {v.version_no} — {v.status === "draft" ? "nháp" : "đã phát hành"} · {v.stages.length} giai đoạn · {v.steps.length} việc
-              </li>
-            ))}
-          </ul>
-        </details>
+        <section className="card sec" aria-label="Lịch sử phiên bản">
+          <div className="sec-h">
+            <h2>Lịch sử phiên bản</h2>
+          </div>
+          <div className="tbl-wrap">
+            <table className="tbl">
+              <caption className="sr-only">Lịch sử phiên bản</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Phiên bản</th>
+                  <th scope="col">Trạng thái</th>
+                  <th scope="col">Người phát hành</th>
+                  <th scope="col">Ngày phát hành</th>
+                  <th scope="col">Ghi chú thay đổi</th>
+                  <th scope="col">
+                    <span className="sr-only">Xem</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {sop.versions.map((v) => (
+                  <tr key={v.id}>
+                    <td>v{v.version_no}</td>
+                    <td>
+                      <span className={`chip ${VERSION_STATE[v.state]?.cls ?? "c-mute"}`}>{VERSION_STATE[v.state]?.text ?? v.state}</span>
+                    </td>
+                    <td>{v.published_by_display ?? "—"}</td>
+                    <td>{v.published_at ? formatDateTime(v.published_at) : "—"}</td>
+                    <td>{v.change_note ?? "—"}</td>
+                    <td>
+                      <button type="button" className="btn btn-o btn-sm" aria-label={`Xem phiên bản ${v.version_no}`} onClick={() => setViewNo(v.version_no)}>
+                        Xem
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
       ) : null}
+      {viewNo !== null && sop ? <VersionDialog sop={sop} versionNo={viewNo} materials={materials} onClose={() => setViewNo(null)} /> : null}
       {dialog === "clone" && sop ? (
         <Dialog
           title={`Nhân bản ${sop.name}`}
@@ -411,10 +484,18 @@ function Editor({ sop, onBack, onChanged }: { sop: AdminCropSOP | null; onBack: 
             <button
               type="button"
               className="btn btn-p btn-sm"
-              disabled={busy || !cloneName.trim()}
+              disabled={busy || !cloneName.trim() || !cloneCrop || !cloneAnchor.trim()}
               onClick={() =>
                 void guard(async () => {
-                  const res = await action.run(() => unwrap(adminApi.POST("/v1/cropcycle/sops/{ref}/clone", { params: { path: { ref: sop.ref }, header: IDEM() }, body: { name: cloneName.trim() } })));
+                  const res = await action.run(() =>
+                    unwrap(
+                      adminApi.POST("/v1/cropcycle/sops/{ref}/clone", {
+                        params: { path: { ref: sop.ref }, header: IDEM() },
+                        // Giống rỗng = SOP chung của loại cây (không gửi/null = lấy của SOP nguồn).
+                        body: { name: cloneName.trim(), crop: cloneCrop, variety_code: cloneVariety || "", anchor_name: cloneAnchor.trim() },
+                      }),
+                    ),
+                  );
                   setDialog("");
                   onChanged(res.ref, "Đã nhân bản — bản sao là bản nháp.");
                 })
@@ -424,13 +505,68 @@ function Editor({ sop, onBack, onChanged }: { sop: AdminCropSOP | null; onBack: 
             </button>
           }
         >
-          <p className="small mute">Bản sao giữ nguyên giai đoạn, việc và thứ tự; sửa bản sao không ảnh hưởng SOP nguồn.</p>
+          <p className="small mute">Bản sao là SOP Nháp, giữ nguyên giai đoạn, việc, cửa sổ, vật tư và liều; sửa bản sao không ảnh hưởng SOP nguồn.</p>
           <div className="field">
             <label htmlFor="clone-name">Tên SOP mới</label>
             <input id="clone-name" className="input" value={cloneName} onChange={(e) => setCloneName(e.target.value)} />
+            <FieldError message={server.name} />
+          </div>
+          <div className="field">
+            <label htmlFor="clone-crop">Loại cây *</label>
+            <select
+              id="clone-crop"
+              className="select"
+              value={cloneCrop}
+              onChange={(e) => {
+                setCloneCrop(e.target.value);
+                setCloneVariety("");
+              }}
+            >
+              <option value="">Chọn loại cây</option>
+              {cloneCropOptions.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            <FieldError message={server.crop} />
+          </div>
+          <div className="field">
+            <label htmlFor="clone-variety">Giống (tùy chọn)</label>
+            <select id="clone-variety" className="select" disabled={!cloneCrop} value={cloneVariety} onChange={(e) => setCloneVariety(e.target.value)}>
+              <option value="">Chung cho cả loại cây</option>
+              {cloneVarietyOptions.map((v) => (
+                <option key={v.code} value={v.code}>
+                  {v.name}
+                </option>
+              ))}
+            </select>
+            <FieldError message={server.variety_code} />
+          </div>
+          <div className="field">
+            <label htmlFor="clone-anchor">Tên mốc gốc *</label>
+            <input id="clone-anchor" className="input" maxLength={100} value={cloneAnchor} onChange={(e) => setCloneAnchor(e.target.value)} />
+            <FieldError message={server.anchor_name} />
           </div>
           {problem ? <ProblemAlert problem={problem} /> : null}
         </Dialog>
+      ) : null}
+      {dialog === "delete" && sop ? (
+        <ConfirmDialog
+          title={`Xóa ${sop.name}`}
+          confirmLabel="Xóa"
+          onClose={() => setDialog("")}
+          onDone={(msg) => {
+            setDialog("");
+            onDeleted(msg);
+          }}
+          run={async () => {
+            await unwrap(adminApi.POST("/v1/cropcycle/sops/{ref}/delete", { params: { path: { ref: sop.ref }, header: IDEM() } }));
+            return "Đã xóa SOP nháp.";
+          }}
+        >
+          Xóa hẳn SOP nháp này? Không khôi phục được.
+        </ConfirmDialog>
       ) : null}
       {dialog === "retire" && sop ? (
         <ReasonDialog
@@ -445,10 +581,47 @@ function Editor({ sop, onBack, onChanged }: { sop: AdminCropSOP | null; onBack: 
             onChanged(sop.ref, "Đã ngừng áp dụng.");
           }}
         >
-          <p className="small mute">SOP không bị xóa; vụ đã ghim phiên bản vẫn giữ nguyên.</p>
+          <p className="small mute">SOP không bị xóa, vẫn hiện trong thư viện với trạng thái Ngừng áp dụng; vụ đã ghim phiên bản vẫn giữ nguyên.</p>
         </ReasonDialog>
       ) : null}
     </div>
+  );
+}
+
+/** Xem một phiên bản ở chế độ chỉ đọc (mọi ô bị khóa). */
+function VersionDialog({ sop, versionNo, materials, onClose }: { sop: AdminCropSOP; versionNo: number; materials: CatalogItem[]; onClose: () => void }) {
+  const v = sop.versions.find((x) => x.version_no === versionNo);
+  const draft = useMemo(() => (v ? fromSopVersion(sop, v) : null), [sop, v]);
+  if (!v || !draft) return null;
+  const none = () => undefined;
+  return (
+    <Dialog title={`Phiên bản ${v.version_no} (chỉ đọc)`} onClose={onClose}>
+      <div className="stack" style={{ gap: 10 }}>
+        {draft.stages.map((s, si) => (
+          <section key={si} className="stack" style={{ gap: 8 }} aria-label={`Giai đoạn ${si + 1} của phiên bản ${v.version_no}`}>
+            <b>{s.name}</b>
+            {s.tasks.map((t, ti) => (
+              <TaskRow
+                key={ti}
+                n={`${si + 1}.${ti + 1}`}
+                path={`steps[${flatIndex(draft.stages, si, ti)}]`}
+                task={t}
+                stage={s}
+                editable={false}
+                materials={materials}
+                errOf={none}
+                onChange={none}
+                onMaterial={none}
+                onMove={none}
+                onRemove={none}
+                isFirst={ti === 0}
+                isLast={ti === s.tasks.length - 1}
+              />
+            ))}
+          </section>
+        ))}
+      </div>
+    </Dialog>
   );
 }
 
@@ -701,14 +874,26 @@ function Bindings({ templates, version }: { templates: CropSOPTemplate[]; versio
 // --------------------------------------------------------------------------------------------------------------------
 // Thư viện SOP + màn soạn
 // --------------------------------------------------------------------------------------------------------------------
-function EditorLoader({ refId, version, onBack, onChanged }: { refId: string; version: number; onBack: () => void; onChanged: (ref: string | null, notice?: string) => void }) {
+function EditorLoader({
+  refId,
+  version,
+  onBack,
+  onChanged,
+  onDeleted,
+}: {
+  refId: string;
+  version: number;
+  onBack: () => void;
+  onChanged: (ref: string | null, notice?: string) => void;
+  onDeleted: (notice: string) => void;
+}) {
   const { adminApi } = useAuth();
   const sop = useAsync(() => unwrap(adminApi.GET("/v1/cropcycle/sops/{ref}", { params: { path: { ref: refId } } })), [adminApi, refId, version]);
   if (sop.error) return <ProblemAlert problem={sop.error} onRetry={sop.reload} />;
   if (!sop.data) return <Loading />;
   // key theo phiên bản + cập nhật: nạp lại bản nháp sau mỗi lần lưu/phát hành.
   const latest = sop.data.versions.at(-1);
-  return <Editor key={`${sop.data.ref}:${latest?.id}:${latest?.status}:${sop.data.updated_at}`} sop={sop.data} onBack={onBack} onChanged={onChanged} />;
+  return <Editor key={`${sop.data.ref}:${latest?.id}:${latest?.status}:${sop.data.updated_at}`} sop={sop.data} onBack={onBack} onChanged={onChanged} onDeleted={onDeleted} />;
 }
 
 export function SopScreen(): ReactNode {
@@ -731,6 +916,12 @@ export function SopScreen(): ReactNode {
     setView({ kind: "edit", ref });
   };
 
+  const deleted = (msg: string) => {
+    setVersion((v) => v + 1);
+    setNotice(msg);
+    setView({ kind: "library" });
+  };
+
   return (
     <>
       <PageHead
@@ -749,9 +940,9 @@ export function SopScreen(): ReactNode {
       {notice ? <p role="status">{notice}</p> : null}
       {view.kind === "edit" ? (
         view.ref ? (
-          <EditorLoader key={view.ref} refId={view.ref} version={version} onBack={() => { setNotice(null); setView({ kind: "library" }); }} onChanged={changed} />
+          <EditorLoader key={view.ref} refId={view.ref} version={version} onBack={() => { setNotice(null); setView({ kind: "library" }); }} onChanged={changed} onDeleted={deleted} />
         ) : (
-          <Editor key="new" sop={null} onBack={() => setView({ kind: "library" })} onChanged={changed} />
+          <Editor key="new" sop={null} onBack={() => setView({ kind: "library" })} onChanged={changed} onDeleted={deleted} />
         )
       ) : (
         <>

@@ -16942,6 +16942,11 @@ export interface components {
             version_no: number;
             /** @enum {string} */
             status: "draft" | "published";
+            /**
+             * @description Trạng thái hiển thị do máy chủ suy ra: draft = Nháp; active = Đang áp dụng (bản đã phát hành mới nhất của SOP chưa ngừng); retired = Ngừng áp dụng (các bản đã phát hành còn lại)
+             * @enum {string}
+             */
+            state: "draft" | "active" | "retired";
             stages: components["schemas"]["CropSOPStage"][];
             steps: components["schemas"]["CropSOPStep"][];
             harvest_day_offset?: number | null;
