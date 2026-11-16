@@ -96,7 +96,9 @@ func TestA4_LinkTokenRoundTripAndTamper(t *testing.T) {
 	if tok2 == tok || TokenMatches(hash, hash2) {
 		t.Fatal("bí mật phải ngẫu nhiên")
 	}
-	if h := IPHash(hash, "203.0.113.7"); len(h) != 64 || h == IPHash(hash2, "203.0.113.7") || strings.Contains(h, "203") || IPHash(hash, "") != "" {
+	// Chuỗi băm là 64 ký tự hex: kiểm nó không chứa nguyên địa chỉ IP. Không kiểm từng cụm chữ số của IP ("203"),
+	// vì chuỗi hex ngẫu nhiên tình cờ chứa cụm đó ở khoảng 1,5% số lần chạy (AH-302).
+	if h := IPHash(hash, "203.0.113.7"); len(h) != 64 || h == IPHash(hash2, "203.0.113.7") || strings.Contains(h, "203.0.113.7") || IPHash(hash, "") != "" {
 		t.Fatalf("băm IP: %q", h)
 	}
 	if u := LinkURL("https://api.vi-du.vn/", tok); u != "https://api.vi-du.vn/v1/public/report-links/"+tok {
