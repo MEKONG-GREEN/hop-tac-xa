@@ -48,6 +48,32 @@ func TestCatalogUsage_VarietyInSeasonSopHarvest(t *testing.T) {
 	}
 }
 
+// AH-8: giống và loại cây đã là thông tin chung của một mẫu SOP (kể cả nháp, chưa gắn giống) được tính là đang được
+// tham chiếu — chỉ ẩn, không xóa.
+func TestCatalogUsage_CropAndVarietyInSOPTemplate(t *testing.T) {
+	f := newFixture(t)
+	ctx := tenant.WithID(context.Background(), f.tenant)
+	if used, err := f.mod.svc.CropInUse(ctx, "LUA"); err != nil || used {
+		t.Fatalf("loại cây chưa có SOP: %v %v", used, err)
+	}
+	if used, err := f.mod.svc.VarietyInUse(ctx, "ST25"); err != nil || used {
+		t.Fatalf("giống chưa có SOP: %v %v", used, err)
+	}
+	f.createDraft("SOP nháp cho ST25", map[string]any{"variety_code": "ST25"})
+	if used, err := f.mod.svc.CropInUse(ctx, "LUA"); err != nil || !used {
+		t.Fatalf("loại cây là loại cây của SOP phải đang dùng: %v %v", used, err)
+	}
+	if used, err := f.mod.svc.VarietyInUse(ctx, "ST25"); err != nil || !used {
+		t.Fatalf("giống riêng của SOP phải đang dùng: %v %v", used, err)
+	}
+	if used, err := f.mod.svc.CropInUse(ctx, "CAF"); err != nil || used {
+		t.Fatalf("loại cây khác chưa dùng: %v %v", used, err)
+	}
+	if used, err := f.mod.svc.CropInUse(tenant.WithID(context.Background(), ids.New()), "LUA"); err != nil || used {
+		t.Fatalf("tenant khác không thấy tham chiếu: %v %v", used, err)
+	}
+}
+
 // AH-7 AC4: mùa vụ đã có vụ được tính là đang được tham chiếu (chỉ ẩn, không xóa), không phân biệt hoa thường;
 // cột "Đang dùng" đếm số vụ.
 func TestCatalogUsage_SeasonInSeasonEvent(t *testing.T) {

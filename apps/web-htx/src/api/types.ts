@@ -142,6 +142,10 @@ export type ContentCategory = NonNullable<AS["ContentInput"]["category"]>;
 
 // pf/cropcycle (App HTX: SOP, vụ, nhật ký, duyệt, sản lượng, bảng điều hành)
 export type CropSOPStep = S["CropSOPStep"];
+export type CropSOPStage = AS["CropSOPStage"];
+export type CropSOPWindow = AS["CropSOPWindow"];
+export type CropSOPMaterial = AS["CropSOPMaterial"];
+export type CropSOPStepInput = AS["CropSOPStepInput"];
 export type CropActivity = CropSOPStep["activity_code"];
 export type CropSOPTemplate = S["CropSOPTemplate"];
 export type CropSOPVersion = S["CropSOPVersion"];

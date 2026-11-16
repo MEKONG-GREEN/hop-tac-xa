@@ -1,19 +1,21 @@
 // Quy tắc kiểm tra phía client cho màn hình App HTX (pf/cropcycle, pf/accounts).
 // CHỈ để báo lỗi sớm — backend vẫn kiểm lại mọi quy tắc và là nguồn sự thật (R-55).
-import type { CropActivity, CropSOPStep } from "@/api/types";
+import type { AdminCropSOP, CropActivity, CropSOPStepInput, CropSOPStage } from "@/api/types";
 
-export const MSG_STEP_ORDER = "Thứ tự bước không hợp lệ, vui lòng kiểm tra lại.";
 export const MSG_HARVEST_STEP = "Quy trình phải có bước thu hoạch để kế hoạch sản xuất có điểm kết thúc.";
 export const MSG_SOWING_WINDOW = "Ngày gieo sạ phải trong khoảng 15 ngày trước đến 30 ngày sau ngày hiện tại.";
 
+// Nhãn theo BRD FN-01 (AH-8); mã cũ giữ nguyên vì nhật ký và app đang dùng.
 export const ACTIVITY_LABEL: Record<CropActivity, string> = {
   lam_dat: "Làm đất",
-  gieo_sa: "Gieo sạ",
-  tuoi_nuoc: "Tưới nước",
+  gieo_sa: "Gieo trồng",
+  tuoi_nuoc: "Quản lý nước",
   bon_phan: "Bón phân",
-  phun_thuoc: "Phun thuốc",
-  kiem_tra: "Kiểm tra đồng ruộng",
+  phun_thuoc: "Phun thuốc - dưỡng",
+  kiem_tra: "Theo dõi",
   thu_hoach: "Thu hoạch",
+  cat_tia: "Cắt tỉa",
+  khac: "Khác",
 };
 export const ACTIVITIES = Object.keys(ACTIVITY_LABEL) as CropActivity[];
 
@@ -78,48 +80,279 @@ export function reasonError(value: string, min = 10): string | null {
   return null;
 }
 
-export interface StepIssue {
-  index: number;
-  field: keyof CropSOPStep | "steps";
+// ---------------------------------------------------------------------------------------------------------------------
+// Soạn SOP dạng checklist (AH-8, BRD FN-01 B3–B5): giai đoạn → việc → cửa sổ, vật tư. Bản nháp trên màn hình giữ số
+// dạng chuỗi (rỗng = chưa nhập); toSopPayload đổi sang thân gửi máy chủ (danh sách việc phẳng).
+// ---------------------------------------------------------------------------------------------------------------------
+export type SopWindowKind = "date_range" | "open" | "stage" | "none";
+export type SopAnchor = "nxg" | "nth" | "ntt";
+
+export const WINDOW_KIND_LABEL: Record<SopWindowKind, string> = { date_range: "Theo ngày", open: "Mở", stage: "Theo giai đoạn", none: "Không ngày" };
+export const WINDOW_KINDS = Object.keys(WINDOW_KIND_LABEL) as SopWindowKind[];
+export const ANCHOR_LABEL: Record<SopAnchor, string> = { nxg: "NXG — mốc gốc", nth: "NTH — ngày thu hoạch dự kiến", ntt: "NTT — ngày thu hoạch thực tế" };
+export const ANCHORS = Object.keys(ANCHOR_LABEL) as SopAnchor[];
+
+export const SOP_MIN_OFFSET = -365;
+export const SOP_MAX_OFFSET = 1825;
+export const SOP_MAX_STAGES = 30;
+export const SOP_MAX_STEPS = 100;
+export const SOP_MAX_MATERIALS = 20;
+
+export interface SopMaterialDraft {
+  materialCode: string;
+  name: string;
+  dose: string;
+  unit: string;
+}
+export interface SopWindowDraft {
+  kind: SopWindowKind;
+  anchor: SopAnchor;
+  from: string;
+  to: string;
+}
+export interface SopTaskDraft {
+  name: string;
+  activity: CropActivity;
+  window: SopWindowDraft;
+  materials: SopMaterialDraft[];
+  seasonSummary: boolean;
+  mandatory: boolean;
+  phiDays: string;
+}
+export interface SopStageDraft {
+  name: string;
+  from: string;
+  to: string;
+  tasks: SopTaskDraft[];
+}
+export interface SopDraft {
+  code: string;
+  name: string;
+  crop: string;
+  varietyCode: string;
+  anchorName: string;
+  stages: SopStageDraft[];
+}
+/** Lỗi theo trường; path cùng dạng đường dẫn của máy chủ (stages[0].name, steps[2].window.to, steps[2].materials[0].dose_per_ha). */
+export interface SopIssue {
+  path: string;
   message: string;
 }
 
+export const blankMaterial = (): SopMaterialDraft => ({ materialCode: "", name: "", dose: "", unit: "" });
+export const blankTask = (): SopTaskDraft => ({
+  name: "",
+  activity: "kiem_tra",
+  window: { kind: "none", anchor: "nxg", from: "", to: "" },
+  materials: [],
+  seasonSummary: false,
+  mandatory: false,
+  phiDays: "",
+});
+export const blankStage = (): SopStageDraft => ({ name: "", from: "", to: "", tasks: [] });
+export const blankSop = (): SopDraft => ({ code: "", name: "", crop: "", varietyCode: "", anchorName: "", stages: [blankStage()] });
+
+/** Số nguyên người gõ: "" → null, sai dạng → NaN. */
+function intOf(raw: string): number | null {
+  const s = raw.trim();
+  if (s === "") return null;
+  return /^-?\d+$/.test(s) ? Number(s) : Number.NaN;
+}
+const inOffsetRange = (n: number) => n >= SOP_MIN_OFFSET && n <= SOP_MAX_OFFSET;
+const MSG_OFFSET = `Trong khoảng ${SOP_MIN_OFFSET} … ${SOP_MAX_OFFSET} ngày so với mốc.`;
+const nameKey = (s: string) => s.trim().replace(/\s+/g, " ").toLowerCase();
+
+/** Chỉ số phẳng (steps[j]) của việc ti trong giai đoạn si. */
+export function flatIndex(stages: readonly SopStageDraft[], si: number, ti: number): number {
+  let j = 0;
+  for (let i = 0; i < si; i++) j += stages[i]?.tasks.length ?? 0;
+  return j + ti;
+}
+
+/** Giai đoạn đã có khoảng ngày Từ–Đến (điều kiện để việc chọn cửa sổ "Theo giai đoạn"). */
+export function stageHasRange(s: Pick<SopStageDraft, "from" | "to">): boolean {
+  return s.from.trim() !== "" && s.to.trim() !== "";
+}
+
 /**
- * Kiểm bước SOP trước khi lưu (HTX US-CAT-01 AC-6): seq liên tục 1..n theo thứ tự hiển thị,
- * tên bắt buộc, khoảng ngày trong giới hạn hợp đồng. `forPublish` thêm yêu cầu có bước thu hoạch.
+ * Kiểm bản nháp SOP trước khi gửi (AC2, AC3, AC5): cùng luật và cùng đường dẫn trường với máy chủ — máy chủ vẫn
+ * kiểm lại tất cả. forPublish thêm luật chặn phát hành (EX-05, Q-06).
  */
-export function validateSteps(steps: readonly CropSOPStep[], forPublish = false): StepIssue[] {
-  const out: StepIssue[] = [];
-  if (steps.length === 0) out.push({ index: -1, field: "steps", message: "Quy trình cần ít nhất một bước." });
-  if (steps.length > 100) out.push({ index: -1, field: "steps", message: "Tối đa 100 bước." });
-  steps.forEach((s, i) => {
-    if (s.seq !== i + 1) out.push({ index: i, field: "seq", message: MSG_STEP_ORDER });
-    if (!s.name.trim()) out.push({ index: i, field: "name", message: "Nhập tên bước." });
-    if (s.name.length > 200) out.push({ index: i, field: "name", message: "Tên bước tối đa 200 ký tự." });
-    if (!Number.isInteger(s.day_offset) || s.day_offset < -60 || s.day_offset > 365)
-      out.push({ index: i, field: "day_offset", message: "Ngày so với gieo sạ phải trong −60 … 365." });
-    if (!Number.isInteger(s.window_days) || s.window_days < 0 || s.window_days > 60)
-      out.push({ index: i, field: "window_days", message: "Cửa sổ thực hiện phải trong 0 … 60 ngày." });
-    if (s.phi_days !== undefined && (!Number.isInteger(s.phi_days) || s.phi_days < 0 || s.phi_days > 120))
-      out.push({ index: i, field: "phi_days", message: "Thời gian cách ly phải trong 0 … 120 ngày." });
+export function validateSop(d: SopDraft, forPublish = false): SopIssue[] {
+  const out: SopIssue[] = [];
+  const add = (path: string, message: string) => out.push({ path, message });
+  if (!d.name.trim()) add("name", "Nhập tên SOP.");
+  else if (d.name.trim().length > 200) add("name", "Tên SOP tối đa 200 ký tự.");
+  if (!d.crop.trim()) add("crop", "Chọn loại cây.");
+  if (!d.anchorName.trim()) add("anchor_name", "Nhập tên mốc gốc, ví dụ Ngày xuống giống.");
+  else if (d.anchorName.trim().length > 100) add("anchor_name", "Tên mốc gốc tối đa 100 ký tự.");
+  if (d.stages.length > SOP_MAX_STAGES) add("stages", `Tối đa ${SOP_MAX_STAGES} giai đoạn.`);
+  const total = d.stages.reduce((n, s) => n + s.tasks.length, 0);
+  if (total > SOP_MAX_STEPS) add("steps", `Tối đa ${SOP_MAX_STEPS} việc.`);
+
+  const stageNames = new Set<string>();
+  d.stages.forEach((s, i) => {
+    const f = `stages[${i}]`;
+    const nm = s.name.trim();
+    if (!nm || nm.length > 200) add(`${f}.name`, "Nhập tên giai đoạn (tối đa 200 ký tự).");
+    else if (stageNames.has(nameKey(nm))) add(`${f}.name`, "Tên giai đoạn trùng.");
+    else stageNames.add(nameKey(nm));
+    const from = intOf(s.from);
+    const to = intOf(s.to);
+    if ((from === null) !== (to === null)) add(from === null ? `${f}.from_day` : `${f}.to_day`, "Nhập cả Từ và Đến hoặc để trống cả hai.");
+    if (from !== null && Number.isNaN(from)) add(`${f}.from_day`, "Từ phải là số nguyên (cho phép số âm).");
+    else if (from !== null && !inOffsetRange(from)) add(`${f}.from_day`, MSG_OFFSET);
+    if (to !== null && Number.isNaN(to)) add(`${f}.to_day`, "Đến phải là số nguyên (cho phép số âm).");
+    else if (to !== null && !inOffsetRange(to)) add(`${f}.to_day`, MSG_OFFSET);
+    if (from !== null && to !== null && !Number.isNaN(from) && !Number.isNaN(to) && from > to) add(`${f}.to_day`, "Đến phải lớn hơn hoặc bằng Từ.");
   });
-  if (forPublish && steps.length > 0 && !steps.some((s) => s.activity_code === "thu_hoach"))
-    out.push({ index: -1, field: "steps", message: MSG_HARVEST_STEP });
+
+  let summary = false;
+  d.stages.forEach((s, si) => {
+    const taskNames = new Set<string>();
+    s.tasks.forEach((t, ti) => {
+      const f = `steps[${flatIndex(d.stages, si, ti)}]`;
+      const nm = t.name.trim();
+      if (!nm || nm.length > 200) add(`${f}.name`, "Nhập nội dung việc (tối đa 200 ký tự).");
+      else if (taskNames.has(nameKey(nm))) add(`${f}.name`, "Nội dung việc trùng trong cùng giai đoạn.");
+      else taskNames.add(nameKey(nm));
+      if (t.seasonSummary) {
+        if (summary) add(`${f}.season_summary`, "Chỉ một việc được đánh dấu tổng kết vụ.");
+        summary = true;
+      }
+      const phi = intOf(t.phiDays);
+      if (phi !== null && (Number.isNaN(phi) || phi < 0 || phi > 120)) add(`${f}.phi_days`, "Thời gian cách ly trong 0 … 120 ngày.");
+      validateWindow(t.window, s, f, add);
+      validateMaterials(t.materials, f, add);
+    });
+  });
+
+  if (forPublish) out.push(...publishIssues(d));
   return out;
 }
 
-/** Đánh số lại 1..n theo thứ tự hiện tại (sau khi thêm/xoá/đổi chỗ bước). */
-export function renumber(steps: readonly CropSOPStep[]): CropSOPStep[] {
-  return steps.map((s, i) => ({ ...s, seq: i + 1 }));
+function validateWindow(w: SopWindowDraft, stage: SopStageDraft, f: string, add: (p: string, m: string) => void): void {
+  const from = intOf(w.from);
+  const to = intOf(w.to);
+  const bad = (n: number | null) => n !== null && (Number.isNaN(n) || !inOffsetRange(n));
+  if (w.kind === "date_range" || w.kind === "open") {
+    if (from === null) add(`${f}.window.from`, "Nhập Từ (số nguyên, cho phép số âm).");
+    else if (bad(from)) add(`${f}.window.from`, Number.isNaN(from) ? "Từ phải là số nguyên." : MSG_OFFSET);
+  }
+  if (w.kind === "date_range") {
+    if (to === null) add(`${f}.window.to`, "Nhập Đến (số nguyên, cho phép số âm).");
+    else if (bad(to)) add(`${f}.window.to`, Number.isNaN(to) ? "Đến phải là số nguyên." : MSG_OFFSET);
+    else if (from !== null && !Number.isNaN(from) && from > to) add(`${f}.window.to`, "Đến phải lớn hơn hoặc bằng Từ.");
+  }
+  if (w.kind === "stage" && !stageHasRange(stage)) add(`${f}.window.kind`, "Giai đoạn chứa việc chưa có khoảng ngày Từ–Đến.");
 }
 
-/** Đổi chỗ bước i với bước i+delta rồi đánh số lại. Ngoài biên → giữ nguyên. */
-export function moveStep(steps: readonly CropSOPStep[], i: number, delta: -1 | 1): CropSOPStep[] {
+function validateMaterials(ms: readonly SopMaterialDraft[], f: string, add: (p: string, m: string) => void): void {
+  if (ms.length > SOP_MAX_MATERIALS) add(`${f}.materials`, `Tối đa ${SOP_MAX_MATERIALS} dòng vật tư.`);
+  const seen = new Set<string>();
+  ms.forEach((m, k) => {
+    const g = `${f}.materials[${k}]`;
+    const key = m.materialCode ? `c:${m.materialCode}` : m.name.trim() ? `n:${nameKey(m.name)}` : "";
+    if (!key) add(`${g}.name`, "Chọn vật tư trong danh mục hoặc nhập tên.");
+    else if (seen.has(key)) add(`${g}.material_code`, "Vật tư lặp lại trong cùng một việc.");
+    else seen.add(key);
+    const dose = parseDecimalInput(m.dose, 4);
+    if (dose === null) add(`${g}.dose_per_ha`, "Liều theo ha là số, tối đa 4 chữ số lẻ.");
+    else if (!/[1-9]/.test(dose)) add(`${g}.dose_per_ha`, "Liều phải lớn hơn 0.");
+    else if (Number(dose) > 1_000_000) add(`${g}.dose_per_ha`, "Liều tối đa 1.000.000.");
+    if (!m.unit.trim() || m.unit.trim().length > 20) add(`${g}.unit`, "Đơn vị bắt buộc, tối đa 20 ký tự.");
+  });
+}
+
+/** Luật chặn phát hành (AC5, EX-05, Q-06); đường dẫn trỏ tới việc hoặc giai đoạn cần sửa. */
+function publishIssues(d: SopDraft): SopIssue[] {
+  const total = d.stages.reduce((n, s) => n + s.tasks.length, 0);
+  if (d.stages.length === 0 || total === 0) return [{ path: "stages", message: "Quy trình chưa có giai đoạn hoặc việc — chưa phát hành được." }];
+  const empty = d.stages.findIndex((s) => s.tasks.length === 0);
+  if (empty >= 0) return [{ path: `stages[${empty}]`, message: `Giai đoạn ${empty + 1} chưa có việc nào — thêm việc hoặc xóa giai đoạn.` }];
+  let last: { j: number; t: SopTaskDraft; si: number } | null = null;
+  d.stages.forEach((s, si) =>
+    s.tasks.forEach((t, ti) => {
+      if (t.activity === "thu_hoach") last = { j: flatIndex(d.stages, si, ti), t, si };
+    }),
+  );
+  if (!last) return [{ path: "steps", message: MSG_HARVEST_STEP }];
+  const { j, t, si } = last as { j: number; t: SopTaskDraft; si: number };
+  const ok = t.window.kind === "stage" ? stageHasRange(d.stages[si]!) : t.window.kind === "date_range" && t.window.anchor === "nxg";
+  return ok ? [] : [{ path: `steps[${j}].window`, message: `Việc Thu hoạch cuối (${t.name.trim() || `việc ${j + 1}`}) cần cửa sổ Theo ngày so với mốc gốc hoặc Theo giai đoạn.` }];
+}
+
+/** Dựng thân gửi máy chủ: giai đoạn và danh sách việc phẳng, đánh seq, stage_seq, task_seq theo thứ tự trên màn hình. */
+export function toSopPayload(d: SopDraft): { stages: CropSOPStage[]; steps: CropSOPStepInput[] } {
+  const stages: CropSOPStage[] = d.stages.map((s, i) => ({
+    seq: i + 1,
+    name: s.name.trim(),
+    from_day: intOf(s.from),
+    to_day: intOf(s.to),
+  }));
+  const steps: CropSOPStepInput[] = [];
+  d.stages.forEach((s, si) =>
+    s.tasks.forEach((t, ti) => {
+      const w = t.window;
+      const window =
+        w.kind === "date_range"
+          ? { kind: w.kind, anchor: w.anchor, from: intOf(w.from) ?? 0, to: intOf(w.to) ?? 0 }
+          : w.kind === "open"
+            ? { kind: w.kind, anchor: w.anchor, from: intOf(w.from) ?? 0 }
+            : { kind: w.kind };
+      const phi = intOf(t.phiDays);
+      steps.push({
+        seq: steps.length + 1,
+        stage_seq: si + 1,
+        task_seq: ti + 1,
+        name: t.name.trim(),
+        activity_code: t.activity,
+        window,
+        materials: t.materials.map((m) => ({
+          ...(m.materialCode ? { material_code: m.materialCode } : { name: m.name.trim() }),
+          dose_per_ha: parseDecimalInput(m.dose, 4) ?? m.dose,
+          unit: m.unit.trim(),
+        })),
+        season_summary: t.seasonSummary,
+        mandatory: t.mandatory,
+        ...(phi !== null && !Number.isNaN(phi) ? { phi_days: phi } : {}),
+      });
+    }),
+  );
+  return { stages, steps };
+}
+
+/** Đọc một phiên bản đã lưu thành bản nháp trên màn hình (nhóm việc theo giai đoạn). */
+export function fromSopVersion(template: Pick<AdminCropSOP, "code" | "name" | "crop" | "variety_code" | "anchor_name">, version: AdminCropSOP["versions"][number]): SopDraft {
+  const stages: SopStageDraft[] = (version.stages.length > 0 ? version.stages : [{ seq: 1, name: "Giai đoạn 1", from_day: null, to_day: null }]).map((s) => ({
+    name: s.name,
+    from: s.from_day == null ? "" : String(s.from_day),
+    to: s.to_day == null ? "" : String(s.to_day),
+    tasks: [],
+  }));
+  for (const st of version.steps) {
+    const target = stages[Math.min(Math.max((st.stage_seq ?? 1) - 1, 0), stages.length - 1)]!;
+    const w = st.window;
+    target.tasks.push({
+      name: st.name,
+      activity: st.activity_code,
+      window: { kind: (w?.kind ?? "none") as SopWindowKind, anchor: (w?.anchor ?? "nxg") as SopAnchor, from: w?.from == null ? "" : String(w.from), to: w?.to == null ? "" : String(w.to) },
+      materials: (st.materials ?? []).map((m) => ({ materialCode: m.material_code ?? "", name: m.name ?? "", dose: m.dose_per_ha, unit: m.unit })),
+      seasonSummary: st.season_summary === true,
+      mandatory: st.mandatory,
+      phiDays: st.phi_days == null ? "" : String(st.phi_days),
+    });
+  }
+  return { code: template.code, name: template.name, crop: template.crop, varietyCode: template.variety_code ?? "", anchorName: template.anchor_name, stages };
+}
+
+/** Đổi chỗ phần tử i với i+delta. Ngoài biên → bản sao giữ nguyên. */
+export function moveItem<T>(items: readonly T[], i: number, delta: -1 | 1): T[] {
   const j = i + delta;
-  if (i < 0 || j < 0 || i >= steps.length || j >= steps.length) return [...steps];
-  const next = [...steps];
+  if (i < 0 || j < 0 || i >= items.length || j >= items.length) return [...items];
+  const next = [...items];
   [next[i], next[j]] = [next[j]!, next[i]!];
-  return renumber(next);
+  return next;
 }
 
 /**

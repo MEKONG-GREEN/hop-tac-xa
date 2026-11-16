@@ -151,7 +151,6 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     items: [
       { href: "/quan-tri/tai-khoan", label: "Tài khoản cán bộ", icon: "user", roles: [ROLES.platformAdmin, ROLES.accountAdmin, ROLES.accountAdminProvince] },
       { href: "/quan-tri/danh-muc", module: "pf/masterdata", label: "Danh mục dùng chung", icon: "catalog", roles: [ROLES.platformAdmin, ROLES.masterdataAdmin] },
-      { href: "/quan-tri/quy-trinh", module: "pf/cropcycle", label: "Quy trình SOP", icon: "sop", roles: [ROLES.platformAdmin, ROLES.sopAdmin, ROLES.paramApprover] },
       {
         href: "/quan-tri/tham-so", module: "pf/masterdata",
         label: "Tham số & phê duyệt",
@@ -199,11 +198,13 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     ],
   },
   {
-    // AH-2, AH-7: loại cây, giống và mùa vụ dùng chung cho mọi HTX (Admin quản lý; vai khác chỉ xem ở nơi chọn khi mở vụ).
+    // AH-2, AH-7, AH-8: loại cây, giống, mùa vụ và quy trình SOP dùng chung cho mọi HTX (Admin quản lý; vai khác chỉ xem ở nơi chọn khi mở vụ).
     label: "7. Dữ liệu nền",
     items: [
       { href: "/du-lieu-nen/danh-muc-giong", module: "pf/masterdata", label: "Danh mục giống", icon: "sprout", roles: [ROLES.platformAdmin, ROLES.masterdataAdmin] },
       { href: "/du-lieu-nen/danh-muc-mua-vu", module: "pf/masterdata", label: "Danh mục mùa vụ", icon: "season", roles: [ROLES.platformAdmin, ROLES.masterdataAdmin] },
+      // AH-8: soạn và phát hành SOP dạng checklist (Admin); vai param_approver chỉ xem.
+      { href: "/du-lieu-nen/quy-trinh-sop", module: "pf/cropcycle", label: "Quy trình SOP", icon: "sop", roles: [ROLES.platformAdmin, ROLES.sopAdmin, ROLES.paramApprover] },
     ],
   },
 ];

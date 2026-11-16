@@ -44,6 +44,8 @@ var (
 	ErrSOPCodeTaken       = problem.New(http.StatusConflict, "cropcycle.sop_code_taken", "Mã SOP đã tồn tại")
 	ErrSOPStepOrder       = problem.New(http.StatusUnprocessableEntity, "cropcycle.sop_step_order", domain.MsgStepOrder)
 	ErrSOPNoHarvestStep   = problem.New(http.StatusUnprocessableEntity, "cropcycle.sop_harvest_step_missing", "Quy trình phải có bước thu hoạch để kế hoạch sản xuất có điểm kết thúc.")
+	ErrSOPEmpty           = problem.New(http.StatusUnprocessableEntity, "cropcycle.sop_empty", "Quy trình chưa có giai đoạn hoặc việc — chưa phát hành được")
+	ErrSOPHarvestWindow   = problem.New(http.StatusUnprocessableEntity, "cropcycle.sop_harvest_window", "Việc Thu hoạch cuối phải có cửa sổ Theo ngày so với mốc gốc hoặc Theo giai đoạn")
 	ErrSOPState           = problem.New(http.StatusConflict, "cropcycle.sop_state", "Trạng thái quy trình không cho phép thao tác này")
 	ErrSOPNotPublished    = problem.New(http.StatusUnprocessableEntity, "cropcycle.sop_not_published", "Quy trình chưa được ban hành — không áp dụng vào vụ được")
 	ErrNoSOPForVariety    = problem.New(http.StatusUnprocessableEntity, "cropcycle.no_sop_for_variety", "Chưa có quy trình SOP chuẩn đã ban hành cho giống lúa này")
@@ -437,16 +439,49 @@ func newID(field string, id uuid.UUID) (uuid.UUID, error) {
 	return id, nil
 }
 
-// fieldProblem quy lỗi domain về problem.
+// fieldProblem quy lỗi domain về problem; FieldErrors thành một lỗi Validation chứa mọi trường sai.
 func fieldProblem(err error) error {
 	var so domain.StepOrderError
 	if errors.As(err, &so) {
-		return ErrSOPStepOrder.WithField("steps", domain.MsgStepOrder)
+		return ErrSOPStepOrder.WithField(so.Field, domain.MsgStepOrder)
+	}
+	var fes domain.FieldErrors
+	if errors.As(err, &fes) && len(fes) > 0 {
+		p := problem.Validation
+		for _, fe := range fes {
+			p = p.WithField(fe.Field, fe.Reason)
+		}
+		return p
 	}
 	if fe, ok := domain.AsFieldError(err); ok {
 		return problem.Validation.WithField(fe.Field, fe.Reason)
 	}
 	return err
+}
+
+// publishProblem quy lý do chặn phát hành về problem kèm trường cần sửa và việc cụ thể.
+func publishProblem(b domain.PublishBlock) error {
+	where := "giai đoạn " + itoa(b.StageSeq) + ", việc " + itoa(b.TaskSeq) + " (" + b.StepName + ")"
+	switch b.Kind {
+	case domain.BlockEmpty:
+		p := ErrSOPEmpty.WithField(b.Field, "chưa có giai đoạn hoặc việc")
+		if b.StageSeq > 0 {
+			return p.WithDetail("giai đoạn " + itoa(b.StageSeq) + " (" + b.StepName + ") chưa có việc nào — thêm việc hoặc xóa giai đoạn")
+		}
+		return p
+	case domain.BlockNoHarvest:
+		return ErrSOPNoHarvestStep.WithField(b.Field, "thiếu việc loại Thu hoạch")
+	default:
+		return ErrSOPHarvestWindow.WithField(b.Field, "cần cửa sổ Theo ngày so với mốc gốc hoặc Theo giai đoạn").
+			WithDetail("việc Thu hoạch cuối cần sửa: " + where)
+	}
+}
+
+func stagesOrEmpty(s []domain.Stage) []domain.Stage {
+	if s == nil {
+		return []domain.Stage{}
+	}
+	return s
 }
 
 // isUnique cho biết err là vi phạm ràng buộc duy nhất constraint.

@@ -4,7 +4,7 @@
 // backend để UI thể hiện đúng: phạm vi theo vai (coop_manager — HTX mình; KN — chỉ đọc theo xã;
 // platform_admin — tất cả), chặn mở vụ trùng, sao chép cấu hình vụ trước, ghi hộ/ghi hàng loạt
 // bỏ qua lô lỗi kèm lý do, người ghi không tự duyệt, sản lượng bất thường cần xác nhận,
-// phát hành SOP cần param_approver khác người soạn. DỮ LIỆU MINH HOẠ, không người thật.
+// phát hành SOP một bước bởi vai soạn (sop_admin, platform_admin). DỮ LIỆU MINH HOẠ, không người thật.
 // ============================================================================
 import { uuidv7 } from "../idempotency";
 import type {
@@ -14,6 +14,7 @@ import type {
   CropSeason,
   CropSeasonEvent,
   CropSOP,
+  CropSOPStage,
   CropSOPStep,
   CropSOPTemplate,
   CropSOPVersion,
@@ -70,53 +71,106 @@ const APPROVER = "mock-admin-approver";
 const SETTER = "mock-admin-setter";
 const HTX_ACTOR = "mock-htx-0001";
 
-const st = (seq: number, name: string, activity_code: CropSOPStep["activity_code"], day_offset: number, window_days: number, extra: Partial<CropSOPStep> = {}): CropSOPStep => ({
-  seq,
-  name,
-  activity_code,
-  day_offset,
-  window_days,
-  mandatory: true,
-  ...extra,
-});
+type Win = NonNullable<CropSOPStep["window"]>;
+type Activity = CropSOPStep["activity_code"];
+/** Cửa sổ Theo ngày (mặc định so với mốc gốc NXG). */
+const dr = (from: number, to: number, anchor: "nxg" | "nth" | "ntt" = "nxg"): Win => ({ kind: "date_range", anchor, from, to });
 
-const STEPS_CLC: CropSOPStep[] = [
-  st(1, "Làm đất, san phẳng mặt ruộng", "lam_dat", -3, 2, { stage_code: "lam_dat" }),
-  st(2, "Gieo sạ (máy sạ cụm / sạ hàng)", "gieo_sa", 0, 1, { stage_code: "gieo_sa", evidence_kinds: ["anh_hien_truong"] }),
-  st(3, "Bón thúc lần 1", "bon_phan", 10, 3, { stage_code: "cham_soc" }),
-  st(4, "Tưới ướt khô xen kẽ (AWD) — rút nước lần 1", "tuoi_nuoc", 18, 4, { stage_code: "cham_soc" }),
-  st(5, "Bón thúc lần 2", "bon_phan", 25, 3, { stage_code: "cham_soc" }),
-  st(6, "Phun thuốc phòng đạo ôn cổ bông", "phun_thuoc", 60, 5, { stage_code: "cham_soc", mandatory: false, phi_days: 14 }),
-  st(7, "Kiểm tra đồng ruộng trước thu hoạch", "kiem_tra", 80, 5, { stage_code: "cham_soc", mandatory: false }),
-  st(8, "Thu hoạch bằng máy gặt đập liên hợp", "thu_hoach", 95, 5, { stage_code: "thu_hoach" }),
+/** Ngày bắt đầu của việc so với mốc gốc theo quy ước tạm (tới AH-71) — khớp máy chủ (domain.computeLegacy). */
+function startDay(s: CropSOPStep, stages: CropSOPStage[], harvest: number | null): number | null {
+  const w = s.window;
+  if (!w) return null;
+  if (w.kind === "stage") return stages[(s.stage_seq ?? 1) - 1]?.from_day ?? null;
+  if ((w.kind === "date_range" || w.kind === "open") && w.from !== undefined) {
+    if (w.anchor === "nxg") return w.from;
+    if (w.anchor === "nth" && harvest !== null) return harvest + w.from;
+  }
+  return null;
+}
+
+function lastHarvestIndex(steps: CropSOPStep[]): number {
+  let last = -1;
+  steps.forEach((s, i) => {
+    if (s.activity_code === "thu_hoach" && (last < 0 || s.seq > steps[last]!.seq)) last = i;
+  });
+  return last;
+}
+
+/** Ghi day_offset, window_days = 0 và cờ undated cho mọi việc. */
+function withLegacy(stages: CropSOPStage[], steps: CropSOPStep[]): CropSOPStep[] {
+  const i = lastHarvestIndex(steps);
+  const harvest = i >= 0 ? startDay(steps[i]!, stages, null) : null;
+  return steps.map((s) => {
+    const d = startDay(s, stages, harvest);
+    const { undated: _drop, ...rest } = s;
+    void _drop;
+    return { ...rest, day_offset: d ?? 0, window_days: 0, ...(d === null ? { undated: true } : {}) };
+  });
+}
+
+interface SopContent {
+  stages: CropSOPStage[];
+  steps: CropSOPStep[];
+}
+
+/** Dựng nội dung SOP mẫu: mỗi việc [chỉ số giai đoạn 0-based, tên, loại việc, cửa sổ, trường thêm]. */
+function content(stageDefs: [string, number | null, number | null][], tasks: [number, string, Activity, Win, Partial<CropSOPStep>?][]): SopContent {
+  const stages: CropSOPStage[] = stageDefs.map(([name, from, to], i) => ({ seq: i + 1, name, from_day: from, to_day: to }));
+  const perStage = new Map<number, number>();
+  const steps = tasks.map(([si, name, activity_code, window, extra], i): CropSOPStep => {
+    const taskSeq = (perStage.get(si) ?? 0) + 1;
+    perStage.set(si, taskSeq);
+    return { seq: i + 1, stage_seq: si + 1, task_seq: taskSeq, name, activity_code, window, day_offset: 0, window_days: 0, mandatory: true, ...extra };
+  });
+  return { stages, steps: withLegacy(stages, steps) };
+}
+
+const UREA = { material_code: "phan_ure", name: "Phân urê", dose_per_ha: "0.12", unit: "tấn" };
+const CLC_STAGES: [string, number | null, number | null][] = [["Chuẩn bị", -3, 1], ["Chăm sóc", 2, 90], ["Thu hoạch", 91, 100]];
+const CLC_TASKS: [number, string, Activity, Win, Partial<CropSOPStep>?][] = [
+  [0, "Làm đất, san phẳng mặt ruộng", "lam_dat", dr(-3, -1), { stage_code: "lam_dat" }],
+  [0, "Gieo sạ (máy sạ cụm / sạ hàng)", "gieo_sa", dr(0, 1), { stage_code: "gieo_sa", evidence_kinds: ["anh_hien_truong"] }],
+  [1, "Bón thúc lần 1", "bon_phan", dr(10, 13), { stage_code: "cham_soc", materials: [UREA] }],
+  [1, "Tưới ướt khô xen kẽ (AWD) — rút nước lần 1", "tuoi_nuoc", dr(18, 22), { stage_code: "cham_soc" }],
+  [1, "Bón thúc lần 2", "bon_phan", dr(25, 28), { stage_code: "cham_soc" }],
+  [1, "Phun thuốc phòng đạo ôn cổ bông", "phun_thuoc", dr(60, 65), { stage_code: "cham_soc", mandatory: false, phi_days: 14 }],
+  [1, "Kiểm tra đồng ruộng trước thu hoạch", "kiem_tra", dr(80, 85), { stage_code: "cham_soc", mandatory: false }],
+  [2, "Thu hoạch bằng máy gặt đập liên hợp", "thu_hoach", dr(95, 100), { stage_code: "thu_hoach" }],
 ];
-const STEPS_ST25: CropSOPStep[] = [
-  st(1, "Làm đất", "lam_dat", -3, 2),
-  st(2, "Gieo sạ", "gieo_sa", 0, 1, { evidence_kinds: ["anh_hien_truong"] }),
-  st(3, "Bón lót hữu cơ", "bon_phan", 7, 3),
-  st(4, "Bón thúc", "bon_phan", 30, 3),
-  st(5, "Thu hoạch", "thu_hoach", 105, 5),
-];
+const STEPS_CLC: SopContent = content(CLC_STAGES, CLC_TASKS);
+const STEPS_ST25: SopContent = content(
+  [["Chuẩn bị", -3, 1], ["Chăm sóc", 2, 100], ["Thu hoạch", 101, 110]],
+  [
+    [0, "Làm đất", "lam_dat", dr(-3, -1)],
+    [0, "Gieo sạ", "gieo_sa", dr(0, 1), { evidence_kinds: ["anh_hien_truong"] }],
+    [1, "Bón lót hữu cơ", "bon_phan", dr(7, 10)],
+    [1, "Bón thúc", "bon_phan", dr(30, 33)],
+    [2, "Thu hoạch", "thu_hoach", dr(105, 110)],
+  ],
+);
 
 interface SopRec {
   t: CropSOPTemplate;
   versions: CropSOPVersion[];
 }
 
+/** Việc Thu hoạch cuối đã có ngày: số ngày thu hoạch = Từ của việc, độ dài cửa sổ thu hoạch = 0. */
 function harvestOf(steps: CropSOPStep[]): { off: number | null; win: number | null } {
-  const h = steps.find((s) => s.activity_code === "thu_hoach");
-  return { off: h?.day_offset ?? null, win: h?.window_days ?? null };
+  const i = lastHarvestIndex(steps.filter((s) => !s.undated));
+  const h = steps.filter((s) => !s.undated)[i];
+  return h ? { off: h.day_offset, win: 0 } : { off: null, win: null };
 }
 
-function version(template_ref: string, no: number, steps: CropSOPStep[], status: "draft" | "published", author: string, daysAgo: number, note: string | null): CropSOPVersion {
-  const h = harvestOf(steps);
+function version(template_ref: string, no: number, c: SopContent, status: "draft" | "published", author: string, daysAgo: number, note: string | null): CropSOPVersion {
+  const h = harvestOf(c.steps);
   const at = new Date(Date.now() - daysAgo * 86_400_000).toISOString();
   return {
     id: hexId(parseInt(template_ref.slice(-4), 16) * 10 + no, "50f7"),
     template_ref,
     version_no: no,
     status,
-    steps,
+    stages: c.stages,
+    steps: c.steps,
     harvest_day_offset: h.off,
     harvest_window_days: h.win,
     source_version_ref: null,
@@ -134,7 +188,9 @@ function template(n: number, code: string, name: string, scope: "system" | "htx"
     ref: hexId(n, "50b0"),
     code,
     name,
-    crop: "lua",
+    crop: "LUA",
+    variety_code: null,
+    anchor_name: "Ngày xuống giống",
     scope,
     cooperative_ref: coop,
     standard,
@@ -158,12 +214,14 @@ function seedSops(): void {
   const t3 = template(3, "SOP-OM18-NHAP", "Quy trình OM18 vùng ngập (bản nháp)", "system", null, "draft", 1, null, null);
   const htx = htxCoop();
   const t4 = template(4, "SOP-HTX-RIENG", `Quy trình riêng ${htx.api.name}`, "htx", htx.api.ref, "published", 1, 1, null);
+  const t3Tasks = CLC_TASKS.map((t): (typeof CLC_TASKS)[number] => (t[2] === "thu_hoach" ? [t[0], t[1], t[2], dr(97, 102), t[4]] : t));
+  const t4Tasks = [CLC_TASKS[0]!, CLC_TASKS[1]!, [1, CLC_TASKS[2]![1], CLC_TASKS[2]![2], CLC_TASKS[2]![3], CLC_TASKS[2]![4]], CLC_TASKS[7]!] as typeof CLC_TASKS;
   SOPS.push(
     { t: t1, versions: [version(t1.ref, 1, STEPS_CLC, "published", ADMIN_OTHER, 90, "Ban hành lần đầu")] },
     { t: t2, versions: [version(t2.ref, 1, STEPS_ST25, "published", ADMIN_OTHER, 80, "Ban hành lần đầu")] },
-    // Bản nháp do "Quản trị viên A" (persona setter) soạn — chính người này không được phát hành (R-56).
-    { t: t3, versions: [version(t3.ref, 1, STEPS_CLC.map((s) => (s.activity_code === "thu_hoach" ? { ...s, day_offset: 97 } : s)), "draft", SETTER, 2, "Điều chỉnh mốc thu hoạch theo OM18")] },
-    { t: t4, versions: [version(t4.ref, 1, STEPS_CLC.slice(0, 3).concat([{ ...STEPS_CLC[7]!, seq: 4 }]), "published", ADMIN_OTHER, 60, null)] },
+    // Bản nháp do "Quản trị viên A" (persona setter) soạn — chính người này phát hành được (một bước, AH-8).
+    { t: t3, versions: [version(t3.ref, 1, content(CLC_STAGES, t3Tasks), "draft", SETTER, 2, "Điều chỉnh mốc thu hoạch theo OM18")] },
+    { t: t4, versions: [version(t4.ref, 1, content(CLC_STAGES, t4Tasks), "published", ADMIN_OTHER, 60, null)] },
   );
   const at = new Date(Date.now() - 70 * 86_400_000).toISOString();
   for (const [variety, t] of [["OM5451", t1], ["OM18", t1], ["DT8", t1], ["ST25", t2]] as const) {
@@ -266,7 +324,7 @@ function newSeason(ref: PlotRef, o: { code: string; year: number; variety: strin
   const p = ref.plot.properties;
   const h = harvestOf(o.sop.steps);
   const off = h.off ?? 95;
-  const win = h.win ?? 5;
+  const win = h.win ?? 0;
   const at = o.at ?? nowIso();
   const tmpl = SOPS.find((x) => x.t.ref === o.sop.template_ref)!;
   const eventId = uuidv7();
@@ -486,7 +544,7 @@ export function cropSeasonsOf(coopRef: string): CropSeason[] {
 /** AH-2: giống có đang được vụ hoặc quy trình SOP giả lập tham chiếu không (xóa chỉ ẩn khi có). */
 export function varietyReferenced(code: string): boolean {
   ensure();
-  return SEASONS.some((x) => x.s.variety_code === code) || BINDINGS.some((b) => b.variety_code === code);
+  return SEASONS.some((x) => x.s.variety_code === code) || BINDINGS.some((b) => b.variety_code === code) || SOPS.some((x) => x.t.variety_code === code);
 }
 /** AH-7: số vụ giả lập đang dùng mùa vụ (mọi trạng thái, so mã không phân biệt hoa thường) — cột "Đang dùng". */
 export function seasonUseCount(code: string): number {
@@ -925,7 +983,7 @@ export const cropcycleAppRoutes: Route[] = [
           sop_template_ref: sop.template_ref,
           expected_yield_t_per_ha: expectedYieldOf(variety),
           expected_harvest_date: addDays(sowing, h.off ?? 95),
-          harvest_open_date: addDays(sowing, (h.off ?? 95) - (h.win ?? 5)),
+          harvest_open_date: addDays(sowing, (h.off ?? 95) - (h.win ?? 0)),
         });
       } else {
         rec.s.status = "cancelled";
@@ -1239,30 +1297,163 @@ export const cropcycleAppRoutes: Route[] = [
 // --------------------------------------------------------------------------
 // Admin API — soạn / phát hành SOP, gắn giống, thống kê HTX
 // --------------------------------------------------------------------------
+const ACTIVITY_CODES: string[] = ["lam_dat", "gieo_sa", "tuoi_nuoc", "bon_phan", "phun_thuoc", "kiem_tra", "thu_hoach", "cat_tia", "khac"];
 const CODE = /^[A-Z0-9][A-Z0-9_.-]{1,39}$/;
+const MIN_OFFSET = -365;
+const MAX_OFFSET = 1825;
 
-function stepsError(steps: unknown, required: boolean): Response | CropSOPStep[] {
-  if (!Array.isArray(steps)) return required ? validation([{ field: "steps", reason: "bắt buộc" }]) : [];
-  const list = steps as CropSOPStep[];
-  if (list.length > 100) return validation([{ field: "steps", reason: "tối đa 100 bước" }]);
-  if (list.some((s, i) => s.seq !== i + 1)) return problem(422, "cropcycle.sop_step_order", "Step order", { errors: [{ field: "steps", reason: "Thứ tự bước không hợp lệ, vui lòng kiểm tra lại." }] });
-  const bad = list.findIndex((s) => !s.name?.trim() || s.day_offset < -60 || s.day_offset > 365 || s.window_days < 0 || s.window_days > 60);
-  if (bad >= 0) return validation([{ field: `steps[${bad}]`, reason: "tên bắt buộc; ngày trong −60…365; cửa sổ 0…60" }]);
-  return list;
+type FieldErr = { field: string; reason: string };
+const inRange = (n: unknown): n is number => typeof n === "number" && Number.isInteger(n) && n >= MIN_OFFSET && n <= MAX_OFFSET;
+
+/** Kiểm giai đoạn và việc như máy chủ (domain.NormalizeContent), gom mọi lỗi theo trường; tính day_offset/window_days/undated. */
+function normalizeSop(stagesIn: unknown, stepsIn: unknown): Response | SopContent {
+  if (!Array.isArray(stagesIn) || !Array.isArray(stepsIn)) {
+    return validation([...(Array.isArray(stagesIn) ? [] : [{ field: "stages", reason: "bắt buộc" }]), ...(Array.isArray(stepsIn) ? [] : [{ field: "steps", reason: "bắt buộc" }])]);
+  }
+  const stagesRaw = stagesIn as CropSOPStage[];
+  const stepsRaw = stepsIn as CropSOPStep[];
+  if (stagesRaw.length > 30 || stepsRaw.length > 100) return validation([{ field: stagesRaw.length > 30 ? "stages" : "steps", reason: "vượt giới hạn số giai đoạn/việc" }]);
+  const order = (field: string) => problem(422, "cropcycle.sop_step_order", "Step order", { errors: [{ field, reason: "Thứ tự bước không hợp lệ, vui lòng kiểm tra lại." }] });
+  const errs: FieldErr[] = [];
+  const stageNames = new Set<string>();
+  const stages: CropSOPStage[] = [];
+  for (const [i, s] of stagesRaw.entries()) {
+    if (s.seq !== i + 1) return order(`stages[${i}].seq`);
+    const name = (s.name ?? "").trim();
+    if (!name || name.length > 200) errs.push({ field: `stages[${i}].name`, reason: "bắt buộc, tối đa 200 ký tự" });
+    else if (stageNames.has(normName(name))) errs.push({ field: `stages[${i}].name`, reason: "tên giai đoạn trùng trong quy trình" });
+    else stageNames.add(normName(name));
+    const from = s.from_day ?? null;
+    const to = s.to_day ?? null;
+    if ((from === null) !== (to === null)) errs.push({ field: from === null ? `stages[${i}].from_day` : `stages[${i}].to_day`, reason: "nhập cả Từ và Đến hoặc để trống cả hai" });
+    else if (from !== null && to !== null) {
+      if (!inRange(from)) errs.push({ field: `stages[${i}].from_day`, reason: "trong khoảng -365..1825" });
+      if (!inRange(to)) errs.push({ field: `stages[${i}].to_day`, reason: "trong khoảng -365..1825" });
+      if (from > to) errs.push({ field: `stages[${i}].to_day`, reason: "Đến phải lớn hơn hoặc bằng Từ" });
+    }
+    stages.push({ seq: i + 1, name, from_day: from, to_day: to });
+  }
+  const taskNext = new Map<number, number>();
+  const taskNames = new Set<string>();
+  let prevStage = 0;
+  let summary = false;
+  const steps: CropSOPStep[] = [];
+  for (const [j, s] of stepsRaw.entries()) {
+    const f = `steps[${j}]`;
+    if (s.seq !== j + 1) return order(`${f}.seq`);
+    const valid = Number.isInteger(s.stage_seq) && (s.stage_seq ?? 0) >= 1 && (s.stage_seq ?? 0) <= stages.length;
+    if (!valid) errs.push({ field: `${f}.stage_seq`, reason: "phải là một giai đoạn có trong quy trình" });
+    else {
+      if ((s.stage_seq ?? 0) < prevStage) return order(`${f}.stage_seq`);
+      prevStage = s.stage_seq ?? 0;
+      const next = (taskNext.get(prevStage) ?? 0) + 1;
+      taskNext.set(prevStage, next);
+      if (s.task_seq !== next) return order(`${f}.task_seq`);
+    }
+    const name = (s.name ?? "").trim();
+    const key = `${s.stage_seq}:${normName(name)}`;
+    if (!name || name.length > 200) errs.push({ field: `${f}.name`, reason: "bắt buộc, tối đa 200 ký tự" });
+    else if (taskNames.has(key)) errs.push({ field: `${f}.name`, reason: "nội dung việc trùng trong cùng giai đoạn" });
+    else taskNames.add(key);
+    if (!ACTIVITY_CODES.includes(s.activity_code)) errs.push({ field: `${f}.activity_code`, reason: "loại việc không hợp lệ" });
+    if (s.season_summary) {
+      if (summary) errs.push({ field: `${f}.season_summary`, reason: "chỉ một việc được đánh dấu tổng kết vụ" });
+      summary = true;
+    }
+    if (s.phi_days !== undefined && (!Number.isInteger(s.phi_days) || s.phi_days < 0 || s.phi_days > 120)) errs.push({ field: `${f}.phi_days`, reason: "trong khoảng 0..120 ngày" });
+    const w = s.window;
+    if (!w) errs.push({ field: `${f}.window.kind`, reason: "bắt buộc: date_range, open, stage hoặc none" });
+    else if (w.kind === "date_range" || w.kind === "open") {
+      if (!w.anchor || !["nxg", "nth", "ntt"].includes(w.anchor)) errs.push({ field: `${f}.window.anchor`, reason: "bắt buộc: nxg, nth hoặc ntt" });
+      if (!inRange(w.from)) errs.push({ field: `${f}.window.from`, reason: w.from === undefined ? "bắt buộc" : "trong khoảng -365..1825" });
+      if (w.kind === "open" && w.to !== undefined) errs.push({ field: `${f}.window.to`, reason: "không nhập cho loại cửa sổ này" });
+      if (w.kind === "date_range") {
+        if (!inRange(w.to)) errs.push({ field: `${f}.window.to`, reason: w.to === undefined ? "bắt buộc" : "trong khoảng -365..1825" });
+        else if (inRange(w.from) && w.from > w.to) errs.push({ field: `${f}.window.to`, reason: "Đến phải lớn hơn hoặc bằng Từ" });
+      }
+    } else if (w.kind === "stage") {
+      if (valid && stages[(s.stage_seq ?? 1) - 1]!.from_day === null) errs.push({ field: `${f}.window.kind`, reason: "giai đoạn chứa việc chưa có khoảng ngày Từ–Đến" });
+    } else if (w.kind !== "none") errs.push({ field: `${f}.window.kind`, reason: "phải là date_range, open, stage hoặc none" });
+    const ms = s.materials ?? [];
+    const seen = new Set<string>();
+    ms.forEach((m, k) => {
+      const g = `${f}.materials[${k}]`;
+      const mk = m.material_code ? `c:${m.material_code}` : (m.name ?? "").trim() ? `n:${normName(m.name ?? "")}` : "";
+      if (!mk) errs.push({ field: `${g}.name`, reason: "chọn vật tư trong danh mục hoặc nhập tên" });
+      else if (seen.has(mk)) errs.push({ field: `${g}.material_code`, reason: "vật tư lặp lại trong cùng một việc" });
+      else seen.add(mk);
+      if (!/^\d+(\.\d{1,4})?$/.test(m.dose_per_ha ?? "") || !/[1-9]/.test(m.dose_per_ha)) errs.push({ field: `${g}.dose_per_ha`, reason: "liều phải lớn hơn 0, tối đa 4 chữ số lẻ" });
+      if (!(m.unit ?? "").trim() || m.unit.length > 20) errs.push({ field: `${g}.unit`, reason: "đơn vị bắt buộc, tối đa 20 ký tự" });
+    });
+    steps.push({ ...s, name, materials: ms });
+  }
+  if (errs.length) return validation(errs);
+  return { stages, steps: withLegacy(stages, steps) };
 }
+
+/** Điền tên, đơn vị theo danh mục vật tư; mã không có hoặc đã ngừng dùng → 422 theo trường. */
+function resolveMock(c: SopContent): Response | SopContent {
+  for (const [j, s] of c.steps.entries()) {
+    for (const [k, m] of (s.materials ?? []).entries()) {
+      if (!m.material_code) continue;
+      const it = CATALOGS.material.find((x) => x.code === m.material_code && x.active);
+      if (!it) return problem(422, "cropcycle.catalog_invalid", "Catalog invalid", { errors: [{ field: `steps[${j}].materials[${k}].material_code`, reason: `không có mã ${m.material_code} đang dùng trong danh mục material` }] });
+      m.name = it.name;
+      if (!m.unit.trim()) m.unit = it.attrs.unit ?? "";
+    }
+  }
+  return c;
+}
+
+/** Thông tin chung: loại cây (mục không có parent_code), giống thuộc loại cây, tên mốc gốc, tên. */
+function infoErrors(b: Record<string, unknown>): Response | null {
+  const errors: FieldErr[] = [];
+  const name = typeof b.name === "string" ? b.name : "";
+  const crop = typeof b.crop === "string" ? b.crop.trim() : "";
+  const variety = typeof b.variety_code === "string" ? b.variety_code.trim() : "";
+  const anchor = typeof b.anchor_name === "string" ? b.anchor_name.trim() : "";
+  if (!name.trim() || name.length > 200) errors.push({ field: "name", reason: "bắt buộc, tối đa 200 ký tự" });
+  if (!anchor || anchor.length > 100) errors.push({ field: "anchor_name", reason: "bắt buộc, tối đa 100 ký tự" });
+  if (!crop) errors.push({ field: "crop", reason: "bắt buộc, chọn loại cây trong danh mục" });
+  if (errors.length) return validation(errors);
+  const c = CATALOGS.crop.find((x) => x.code === crop && x.active);
+  if (!c || c.attrs.parent_code) return problem(422, "cropcycle.catalog_invalid", "Catalog invalid", { errors: [{ field: "crop", reason: "chọn loại cây đang dùng trong danh mục" }] });
+  if (variety) {
+    const v = CATALOGS.rice_variety.find((x) => x.code === variety && x.active);
+    if (!v) return problem(422, "cropcycle.catalog_invalid", "Catalog invalid", { errors: [{ field: "variety_code", reason: "không có giống đang dùng" }] });
+    if (v.attrs.crop_code !== crop) return validation([{ field: "variety_code", reason: "Giống không thuộc loại cây đã chọn" }]);
+  }
+  return null;
+}
+
+/** Chặn phát hành (EX-05, Q-06): rỗng, giai đoạn chưa có việc, không có việc Thu hoạch, Thu hoạch cuối không có cửa sổ ngày. */
+function publishBlock(v: CropSOPVersion): Response | null {
+  if (v.stages.length === 0 || v.steps.length === 0) return problem(422, "cropcycle.sop_empty", "SOP empty", { errors: [{ field: "stages", reason: "chưa có giai đoạn hoặc việc" }] });
+  const empty = v.stages.findIndex((s) => !v.steps.some((x) => x.stage_seq === s.seq));
+  if (empty >= 0) return problem(422, "cropcycle.sop_empty", "SOP empty", { errors: [{ field: `stages[${empty}]`, reason: "giai đoạn chưa có việc" }] });
+  const j = lastHarvestIndex(v.steps);
+  if (j < 0) return problem(422, "cropcycle.sop_harvest_step_missing", "Harvest step missing", { errors: [{ field: "steps", reason: "thiếu việc loại Thu hoạch" }] });
+  const w = v.steps[j]!.window;
+  const ok = w?.kind === "stage" || (w?.kind === "date_range" && w.anchor === "nxg");
+  return ok ? null : problem(422, "cropcycle.sop_harvest_window", "Harvest window", { errors: [{ field: `steps[${j}].window`, reason: "cần cửa sổ Theo ngày so với mốc gốc hoặc Theo giai đoạn" }] });
+}
+
 function sopAdminDenied(p: MockPersona, write: boolean): Response | null {
   const ok = write ? hasRole(p, "sop_admin", "platform_admin") : hasRole(p, "sop_admin", "param_approver", "platform_admin");
   return ok ? null : problem(403, "forbidden", "Forbidden");
 }
-function newTemplate(p: MockPersona, o: { code: string; name: string; scope: "system" | "htx"; coop: string | null; standard: string | null; description: string | null; steps: CropSOPStep[]; note: string | null; source: string | null }): SopRec {
+function newTemplate(p: MockPersona, o: { code: string; name: string; crop: string; variety: string | null; anchor: string; scope: "system" | "htx"; coop: string | null; standard: string | null; description: string | null; content: SopContent; note: string | null; source: string | null }): SopRec {
   const at = nowIso();
   const ref = uuidv7();
-  const t: CropSOPTemplate = { ref, code: o.code, name: o.name.trim(), crop: "lua", scope: o.scope, cooperative_ref: o.coop, standard: o.standard, description: o.description, status: "draft", status_reason: null, source_template_ref: o.source, latest_version: 1, published_version: null, created_at: at, updated_at: at };
-  const h = harvestOf(o.steps);
-  const v: CropSOPVersion = { id: uuidv7(), template_ref: ref, version_no: 1, status: "draft", steps: o.steps, harvest_day_offset: h.off, harvest_window_days: h.win, source_version_ref: null, change_note: o.note, authored_by: p.me.actor_ref, authored_at: at, published_by: null, published_at: null };
+  const t: CropSOPTemplate = { ref, code: o.code, name: o.name.trim(), crop: o.crop, variety_code: o.variety, anchor_name: o.anchor, scope: o.scope, cooperative_ref: o.coop, standard: o.standard, description: o.description, status: "draft", status_reason: null, source_template_ref: o.source, latest_version: 1, published_version: null, created_at: at, updated_at: at };
+  const h = harvestOf(o.content.steps);
+  const v: CropSOPVersion = { id: uuidv7(), template_ref: ref, version_no: 1, status: "draft", stages: o.content.stages, steps: o.content.steps, harvest_day_offset: h.off, harvest_window_days: h.win, source_version_ref: null, change_note: o.note, authored_by: p.me.actor_ref, authored_at: at, published_by: null, published_at: null };
   const rec = { t, versions: [v] };
   SOPS.push(rec);
   return rec;
+}
+function autoCode(): string {
+  return `SOP-${uuidv7().slice(-8).toUpperCase()}`;
 }
 
 export const cropcycleAdminRoutes: Route[] = [
@@ -1285,25 +1476,29 @@ export const cropcycleAdminRoutes: Route[] = [
       const d = sopAdminDenied(persona, true);
       if (d) return d;
       const b = bodyOf(body);
-      const code = typeof b.code === "string" ? b.code.trim() : "";
-      const name = typeof b.name === "string" ? b.name : "";
-      const errors: { field: string; reason: string }[] = [];
-      if (!CODE.test(code)) errors.push({ field: "code", reason: "Mã chữ in hoa/số, 2–40 ký tự (A-Z 0-9 _ . -)" });
-      if (!name.trim() || name.length > 200) errors.push({ field: "name", reason: "Tên từ 1 đến 200 ký tự" });
-      if (errors.length) return validation(errors);
-      const steps = stepsError(b.steps, true);
-      if (steps instanceof Response) return steps;
+      const code = typeof b.code === "string" && b.code.trim() ? b.code.trim() : autoCode();
+      if (!CODE.test(code)) return validation([{ field: "code", reason: "Mã chữ in hoa/số, 2–40 ký tự (A-Z 0-9 _ . -)" }]);
+      const bad = infoErrors(b);
+      if (bad) return bad;
+      const norm = normalizeSop(b.stages, b.steps);
+      if (norm instanceof Response) return norm;
+      const c = resolveMock(norm);
+      if (c instanceof Response) return c;
+      const name = String(b.name);
       if (SOPS.some((x) => normName(x.t.name) === normName(name))) return problem(409, "cropcycle.sop_name_taken", "Name taken");
       if (SOPS.some((x) => x.t.code === code)) return problem(409, "cropcycle.sop_code_taken", "Code taken");
       const scope = b.scope === "htx" ? "htx" : "system";
       const rec = newTemplate(persona, {
         code,
         name,
+        crop: String(b.crop).trim(),
+        variety: typeof b.variety_code === "string" && b.variety_code.trim() ? b.variety_code.trim() : null,
+        anchor: String(b.anchor_name).trim(),
         scope,
         coop: scope === "htx" && typeof b.cooperative_ref === "string" ? b.cooperative_ref : null,
         standard: typeof b.standard === "string" && b.standard ? b.standard : null,
         description: typeof b.description === "string" && b.description ? b.description : null,
-        steps,
+        content: c,
         note: typeof b.change_note === "string" && b.change_note ? b.change_note : null,
         source: null,
       });
@@ -1323,6 +1518,31 @@ export const cropcycleAdminRoutes: Route[] = [
   },
   {
     method: "POST",
+    pattern: /^\/v1\/cropcycle\/sops\/([\w-]+)\/info$/,
+    handler: ({ params, body, persona }) => {
+      ensure();
+      const d = sopAdminDenied(persona, true);
+      if (d) return d;
+      const rec = SOPS.find((x) => x.t.ref === params[0]);
+      if (!rec) return problem(404, "cropcycle.sop_not_found", "Not found");
+      const b = bodyOf(body);
+      const bad = infoErrors(b);
+      if (bad) return bad;
+      if (rec.t.status !== "draft" || rec.t.published_version !== null) return problem(409, "cropcycle.sop_state", "SOP đã phát hành — thông tin chung không đổi; nội dung sửa bằng phiên bản mới");
+      const name = String(b.name);
+      if (SOPS.some((x) => x !== rec && normName(x.t.name) === normName(name))) return problem(409, "cropcycle.sop_name_taken", "Name taken");
+      Object.assign(rec.t, {
+        name: name.trim(),
+        crop: String(b.crop).trim(),
+        variety_code: typeof b.variety_code === "string" && b.variety_code.trim() ? b.variety_code.trim() : null,
+        anchor_name: String(b.anchor_name).trim(),
+        updated_at: nowIso(),
+      });
+      return json(sopOut(rec, false));
+    },
+  },
+  {
+    method: "POST",
     pattern: /^\/v1\/cropcycle\/sops\/([\w-]+)\/versions$/,
     handler: ({ params, body, persona }) => {
       ensure();
@@ -1332,12 +1552,16 @@ export const cropcycleAdminRoutes: Route[] = [
       if (!rec) return problem(404, "cropcycle.sop_not_found", "Not found");
       if (rec.t.status === "retired" || rec.versions.some((v) => v.status === "draft")) return problem(409, "cropcycle.sop_state", "SOP state");
       const b = bodyOf(body);
-      const steps = b.steps === null || b.steps === undefined ? rec.versions.at(-1)!.steps : stepsError(b.steps, true);
-      if (steps instanceof Response) return steps;
-      const at = nowIso();
-      const h = harvestOf(steps);
       const prev = rec.versions.at(-1)!;
-      rec.versions.push({ id: uuidv7(), template_ref: rec.t.ref, version_no: prev.version_no + 1, status: "draft", steps, harvest_day_offset: h.off, harvest_window_days: h.win, source_version_ref: prev.id, change_note: typeof b.change_note === "string" ? b.change_note : null, authored_by: persona.me.actor_ref, authored_at: at, published_by: null, published_at: null });
+      let c: SopContent | Response = { stages: prev.stages, steps: prev.steps };
+      if (b.steps !== null && b.steps !== undefined) {
+        const norm = normalizeSop(b.stages, b.steps);
+        c = norm instanceof Response ? norm : resolveMock(norm);
+      }
+      if (c instanceof Response) return c;
+      const at = nowIso();
+      const h = harvestOf(c.steps);
+      rec.versions.push({ id: uuidv7(), template_ref: rec.t.ref, version_no: prev.version_no + 1, status: "draft", stages: c.stages, steps: c.steps, harvest_day_offset: h.off, harvest_window_days: h.win, source_version_ref: prev.id, change_note: typeof b.change_note === "string" ? b.change_note : null, authored_by: persona.me.actor_ref, authored_at: at, published_by: null, published_at: null });
       Object.assign(rec.t, { latest_version: prev.version_no + 1, updated_at: at });
       return json(sopOut(rec, false), 201);
     },
@@ -1365,11 +1589,14 @@ export const cropcycleAdminRoutes: Route[] = [
       const rec = newTemplate(persona, {
         code,
         name,
+        crop: src.t.crop,
+        variety: src.t.variety_code ?? null,
+        anchor: src.t.anchor_name,
         scope: b.scope === "htx" ? "htx" : src.t.scope,
         coop: typeof b.cooperative_ref === "string" ? b.cooperative_ref : src.t.cooperative_ref ?? null,
         standard: src.t.standard ?? null,
         description: src.t.description ?? null,
-        steps: base.steps.map((s) => ({ ...s })),
+        content: { stages: base.stages.map((s) => ({ ...s })), steps: base.steps.map((s) => ({ ...s })) },
         note: `Nhân bản từ ${src.t.code} phiên bản ${base.version_no}`,
         source: src.t.ref,
       });
@@ -1415,10 +1642,12 @@ export const cropcycleAdminRoutes: Route[] = [
       if (!f) return problem(404, "cropcycle.sop_not_found", "Not found");
       if (f.v.status !== "draft" || f.rec.t.status === "retired") return problem(409, "cropcycle.sop_state", "Published is immutable");
       const b = bodyOf(body);
-      const steps = stepsError(b.steps, true);
-      if (steps instanceof Response) return steps;
-      const h = harvestOf(steps);
-      Object.assign(f.v, { steps, harvest_day_offset: h.off, harvest_window_days: h.win, change_note: typeof b.change_note === "string" ? b.change_note : f.v.change_note, authored_by: persona.me.actor_ref, authored_at: nowIso() });
+      const norm = normalizeSop(b.stages, b.steps);
+      if (norm instanceof Response) return norm;
+      const c = resolveMock(norm);
+      if (c instanceof Response) return c;
+      const h = harvestOf(c.steps);
+      Object.assign(f.v, { stages: c.stages, steps: c.steps, harvest_day_offset: h.off, harvest_window_days: h.win, change_note: typeof b.change_note === "string" ? b.change_note : f.v.change_note });
       f.rec.t.updated_at = nowIso();
       return json(sopOut(f.rec, false));
     },
@@ -1428,12 +1657,14 @@ export const cropcycleAdminRoutes: Route[] = [
     pattern: /^\/v1\/cropcycle\/sop-versions\/([\w-]+)\/publish$/,
     handler: ({ params, persona }) => {
       ensure();
-      if (!hasRole(persona, "param_approver")) return problem(403, "forbidden", "Forbidden");
+      // Phát hành một bước bởi vai soạn (AH-8): không còn luật người phát hành khác người soạn.
+      const d = sopAdminDenied(persona, true);
+      if (d) return d;
       const f = findVersion(params[0]);
       if (!f) return problem(404, "cropcycle.sop_not_found", "Not found");
-      if (f.v.authored_by === persona.me.actor_ref) return problem(403, "self_approval_forbidden", "Self approval forbidden");
       if (f.v.status !== "draft" || f.rec.t.status === "retired") return problem(409, "cropcycle.sop_state", "SOP state");
-      if (!f.v.steps.some((s) => s.activity_code === "thu_hoach")) return problem(422, "cropcycle.sop_harvest_step_missing", "Harvest step missing");
+      const block = publishBlock(f.v);
+      if (block) return block;
       const at = nowIso();
       Object.assign(f.v, { status: "published", published_by: persona.me.actor_ref, published_at: at });
       Object.assign(f.rec.t, { status: "published", published_version: f.v.version_no, updated_at: at });

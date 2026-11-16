@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"errors"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -18,12 +20,15 @@ import (
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/problem"
 )
 
-// Vai soạn SOP (Admin API) và vai phát hành.
+// Vai soạn và phát hành SOP (Admin API): phát hành là một bước của vai soạn (AH-8, thay luật R-56 cũ của SOP).
 var (
 	sopAuthorRoles  = []string{port.RoleSOPAdmin, authz.RolePlatformAdmin}
-	sopPublishRoles = []string{authz.RoleParamApprover}
+	sopPublishRoles = sopAuthorRoles
 	sopAdminRead    = []string{port.RoleSOPAdmin, authz.RoleParamApprover, authz.RolePlatformAdmin}
 )
+
+// MaxAnchorNameLen là độ dài tối đa của tên mốc gốc.
+const MaxAnchorNameLen = 100
 
 // SOPView là mẫu SOP kèm các phiên bản.
 type SOPView struct {
@@ -31,26 +36,74 @@ type SOPView struct {
 	Versions []store.Version
 }
 
-// CreateSOPInput tạo mẫu SOP mới với bản nháp phiên bản 1 (HTX US-CAT-01).
+// CreateSOPInput tạo mẫu SOP mới với bản nháp phiên bản 1 (HTX US-CAT-01). Code để trống thì hệ thống sinh mã.
 type CreateSOPInput struct {
 	Code           string
 	Name           string
 	Crop           string
+	VarietyCode    string
+	AnchorName     string
 	Scope          string
 	CooperativeRef uuid.UUID
 	Standard       string
 	Description    string
+	Stages         []domain.Stage
 	Steps          []domain.Step
 	ChangeNote     string
 }
 
+// autoSOPCode sinh mã SOP từ ref của mẫu.
+func autoSOPCode(ref uuid.UUID) string { return "SOP-" + strings.ToUpper(ref.String()[28:36]) }
+
+// checkCatalogScope kiểm loại cây (là mục không có parent_code) và giống (thuộc loại cây đó) trong danh mục.
+// Gọi danh mục là I/O nên phải chạy ngoài transaction (AGENTS.md §9 #1).
+func (s *Service) checkCatalogScope(ctx context.Context, crop, variety string) error {
+	it, err := s.catalogItem(ctx, mdport.CatalogCrop, "crop", crop)
+	if err != nil {
+		return err
+	}
+	if it != nil && it.Attrs[mdport.AttrParentCode] != "" {
+		return ErrCatalogInvalid.WithField("crop", "chọn loại cây, không chọn giống hoặc nhóm con")
+	}
+	if variety == "" {
+		return nil
+	}
+	v, err := s.catalogItem(ctx, mdport.CatalogRiceVariety, "variety_code", variety)
+	if err != nil {
+		return err
+	}
+	if v != nil && v.Attrs[mdport.AttrCropCode] != crop {
+		return problem.Validation.WithField("variety_code", "Giống không thuộc loại cây đã chọn")
+	}
+	return nil
+}
+
+// cleanTemplateInfo chuẩn hóa và kiểm dạng các trường thông tin chung (chưa tra danh mục).
+func cleanTemplateInfo(name, crop, variety, anchor *string) error {
+	*name, *crop, *variety = strings.TrimSpace(*name), strings.TrimSpace(*crop), strings.TrimSpace(*variety)
+	a, err := domain.CleanText("anchor_name", *anchor, MaxAnchorNameLen)
+	if err != nil {
+		return fieldProblem(err)
+	}
+	*anchor = a
+	switch {
+	case *name == "" || len([]rune(*name)) > 200:
+		return problem.Validation.WithField("name", "bắt buộc, tối đa 200 ký tự")
+	case *crop == "" || !domain.ValidCatalogCode(*crop):
+		return problem.Validation.WithField("crop", "bắt buộc, chọn loại cây trong danh mục")
+	case *variety != "" && !domain.ValidCatalogCode(*variety):
+		return problem.Validation.WithField("variety_code", "mã giống không hợp lệ")
+	case *anchor == "":
+		return problem.Validation.WithField("anchor_name", "bắt buộc, vd Ngày xuống giống")
+	}
+	return nil
+}
+
 func (s *Service) checkTemplateFields(ctx context.Context, in *CreateSOPInput) error {
 	in.Code = strings.ToUpper(strings.TrimSpace(in.Code))
-	in.Name = strings.TrimSpace(in.Name)
-	in.Crop = strings.TrimSpace(in.Crop)
 	in.Standard = strings.TrimSpace(in.Standard)
-	if in.Crop == "" {
-		in.Crop = "lua"
+	if err := cleanTemplateInfo(&in.Name, &in.Crop, &in.VarietyCode, &in.AnchorName); err != nil {
+		return err
 	}
 	if in.Scope == "" {
 		in.Scope = domain.ScopeSystem
@@ -58,10 +111,6 @@ func (s *Service) checkTemplateFields(ctx context.Context, in *CreateSOPInput) e
 	switch {
 	case !domain.ValidSOPCode(in.Code):
 		return problem.Validation.WithField("code", "2–40 ký tự A-Z, 0-9, _ . -")
-	case in.Name == "" || len([]rune(in.Name)) > 200:
-		return problem.Validation.WithField("name", "bắt buộc, tối đa 200 ký tự")
-	case !domain.ValidCode(in.Crop):
-		return problem.Validation.WithField("crop", "dạng [a-z][a-z0-9_]")
 	case in.Standard != "" && !domain.ValidCode(in.Standard):
 		return problem.Validation.WithField("standard", "dạng [a-z][a-z0-9_] (vd vietgap, srp)")
 	case in.Scope != domain.ScopeSystem && in.Scope != domain.ScopeHTX:
@@ -76,10 +125,58 @@ func (s *Service) checkTemplateFields(ctx context.Context, in *CreateSOPInput) e
 		return fieldProblem(err)
 	}
 	in.Description = desc
+	if err := s.checkCatalogScope(ctx, in.Crop, in.VarietyCode); err != nil {
+		return err
+	}
 	if in.Scope == domain.ScopeHTX {
 		return s.checkCoop(ctx, in.CooperativeRef)
 	}
 	return nil
+}
+
+// resolveMaterials tra vật tư chọn từ danh mục: điền tên theo danh mục, đơn vị trống thì lấy đơn vị của danh mục.
+// Vật tư nhập tên tự do (không có material_code) giữ nguyên. Chạy ngoài transaction (§9 #1); trả bản sao.
+func (s *Service) resolveMaterials(ctx context.Context, steps []domain.Step) ([]domain.Step, error) {
+	out := slices.Clone(steps)
+	for j := range out {
+		if len(out[j].Materials) == 0 {
+			continue
+		}
+		ms := slices.Clone(out[j].Materials)
+		for k := range ms {
+			code := strings.TrimSpace(ms[k].MaterialCode)
+			if code == "" {
+				continue
+			}
+			field := "steps[" + itoa(j) + "].materials[" + itoa(k) + "].material_code"
+			it, err := s.catalogItem(ctx, mdport.CatalogMaterial, field, code)
+			if err != nil {
+				return nil, err
+			}
+			if it == nil {
+				continue
+			}
+			ms[k].MaterialCode, ms[k].Name = code, it.Name
+			if strings.TrimSpace(ms[k].Unit) == "" {
+				ms[k].Unit = it.Attrs["unit"]
+			}
+		}
+		out[j].Materials = ms
+	}
+	return out, nil
+}
+
+// prepareContent tra vật tư rồi chuẩn hóa và kiểm nội dung SOP (ngoài transaction).
+func (s *Service) prepareContent(ctx context.Context, stages []domain.Stage, steps []domain.Step) (domain.Content, error) {
+	steps, err := s.resolveMaterials(ctx, steps)
+	if err != nil {
+		return domain.Content{}, err
+	}
+	c, err := domain.NormalizeContent(domain.Content{Stages: stages, Steps: steps})
+	if err != nil {
+		return domain.Content{}, fieldProblem(err)
+	}
+	return c, nil
 }
 
 // CreateSOP tạo mẫu SOP (nháp) — sop_admin.
@@ -88,12 +185,16 @@ func (s *Service) CreateSOP(ctx context.Context, in CreateSOPInput) (SOPView, er
 	if err != nil {
 		return SOPView{}, err
 	}
+	ref := ids.New()
+	if strings.TrimSpace(in.Code) == "" {
+		in.Code = autoSOPCode(ref)
+	}
 	if err := s.checkTemplateFields(ctx, &in); err != nil {
 		return SOPView{}, err
 	}
-	steps, err := domain.NormalizeSteps(in.Steps)
+	content, err := s.prepareContent(ctx, in.Stages, in.Steps)
 	if err != nil {
-		return SOPView{}, fieldProblem(err)
+		return SOPView{}, err
 	}
 	note, err := domain.CleanText("change_note", in.ChangeNote, 1000)
 	if err != nil {
@@ -101,12 +202,13 @@ func (s *Service) CreateSOP(ctx context.Context, in CreateSOPInput) (SOPView, er
 	}
 	now := s.now()
 	t := store.Template{
-		Ref: ids.New(), Code: in.Code, Name: in.Name, NameKey: domain.NameKey(in.Name), Crop: in.Crop, Scope: in.Scope,
+		Ref: ref, Code: in.Code, Name: in.Name, NameKey: domain.NameKey(in.Name), Crop: in.Crop, VarietyCode: in.VarietyCode,
+		AnchorName: in.AnchorName, Scope: in.Scope,
 		CooperativeRef: in.CooperativeRef, Standard: in.Standard, Description: in.Description, Status: domain.TemplateDraft,
 		LatestVersion: 1, CreatedBy: p.ActorRef,
 	}
-	v := store.Version{ID: ids.New(), TemplateRef: t.Ref, VersionNo: 1, Status: domain.VersionDraft, Steps: steps,
-		ChangeNote: note, AuthoredBy: p.ActorRef, AuthoredAt: now}
+	v := store.Version{ID: ids.New(), TemplateRef: t.Ref, VersionNo: 1, Status: domain.VersionDraft, Steps: content.Steps,
+		Stages: content.Stages, ChangeNote: note, AuthoredBy: p.ActorRef, AuthoredAt: now}
 	var view SOPView
 	err = s.inTx(ctx, p.TenantID, func(tx pgx.Tx) error {
 		if err := insertTemplate(ctx, tx, p.TenantID, t); err != nil {
@@ -157,9 +259,10 @@ func (s *Service) loadView(ctx context.Context, tx pgx.Tx, ref uuid.UUID, out *S
 	return nil
 }
 
-// NewVersionInput tạo bản nháp phiên bản mới. Steps nil → chép bước của phiên bản mới nhất.
+// NewVersionInput tạo bản nháp phiên bản mới. CopySteps → chép giai đoạn và việc của phiên bản mới nhất.
 type NewVersionInput struct {
 	TemplateRef uuid.UUID
+	Stages      []domain.Stage
 	Steps       []domain.Step
 	CopySteps   bool
 	ChangeNote  string
@@ -171,10 +274,10 @@ func (s *Service) NewVersion(ctx context.Context, in NewVersionInput) (SOPView, 
 	if err != nil {
 		return SOPView{}, err
 	}
-	var steps []domain.Step
+	var content domain.Content
 	if !in.CopySteps {
-		if steps, err = domain.NormalizeSteps(in.Steps); err != nil {
-			return SOPView{}, fieldProblem(err)
+		if content, err = s.prepareContent(ctx, in.Stages, in.Steps); err != nil {
+			return SOPView{}, err
 		}
 	}
 	note, err := domain.CleanText("change_note", in.ChangeNote, 1000)
@@ -202,10 +305,10 @@ func (s *Service) NewVersion(ctx context.Context, in NewVersionInput) (SOPView, 
 			return ErrSOPState.WithDetail("mẫu đang có bản nháp phiên bản " + itoa(latest.VersionNo) + " — sửa bản nháp đó")
 		}
 		if in.CopySteps {
-			steps = latest.Steps
+			content = domain.Content{Stages: latest.Stages, Steps: latest.Steps}
 		}
 		v := store.Version{ID: ids.New(), TemplateRef: t.Ref, VersionNo: latest.VersionNo + 1, Status: domain.VersionDraft,
-			Steps: steps, SourceVersionRef: latest.ID, ChangeNote: note, AuthoredBy: p.ActorRef, AuthoredAt: s.now()}
+			Steps: content.Steps, Stages: content.Stages, SourceVersionRef: latest.ID, ChangeNote: note, AuthoredBy: p.ActorRef, AuthoredAt: s.now()}
 		if err := store.InsertVersion(ctx, tx, p.TenantID, v); err != nil {
 			return err
 		}
@@ -218,15 +321,15 @@ func (s *Service) NewVersion(ctx context.Context, in NewVersionInput) (SOPView, 
 	return view, err
 }
 
-// UpdateDraft thay bước của bản nháp (HTX US-CAT-01 AC-1, AC-6).
-func (s *Service) UpdateDraft(ctx context.Context, versionID uuid.UUID, steps []domain.Step, changeNote string) (SOPView, error) {
+// UpdateDraft thay giai đoạn và việc của bản nháp (HTX US-CAT-01 AC-1, AC-6).
+func (s *Service) UpdateDraft(ctx context.Context, versionID uuid.UUID, in domain.Content, changeNote string) (SOPView, error) {
 	p, err := authz.Require(ctx, sopAuthorRoles...)
 	if err != nil {
 		return SOPView{}, err
 	}
-	steps, err = domain.NormalizeSteps(steps)
+	content, err := s.prepareContent(ctx, in.Stages, in.Steps)
 	if err != nil {
-		return SOPView{}, fieldProblem(err)
+		return SOPView{}, err
 	}
 	note, err := domain.CleanText("change_note", changeNote, 1000)
 	if err != nil {
@@ -244,7 +347,7 @@ func (s *Service) UpdateDraft(ctx context.Context, versionID uuid.UUID, steps []
 		if v.Status != domain.VersionDraft {
 			return ErrSOPState.WithDetail("phiên bản đã phát hành không sửa được — tạo phiên bản mới")
 		}
-		v.Steps, v.ChangeNote = steps, note
+		v.Steps, v.Stages, v.ChangeNote = content.Steps, content.Stages, note
 		if err := store.UpdateDraft(ctx, tx, *v); err != nil {
 			return err
 		}
@@ -253,11 +356,46 @@ func (s *Service) UpdateDraft(ctx context.Context, versionID uuid.UUID, steps []
 	return view, err
 }
 
-// PublishSOP phát hành bản nháp: param_approver, khác người soạn (R-56); phải có
-// bước thu hoạch. Phát pf.cropcycle.sop.published trong cùng giao dịch.
+// checkLiveCatalog kiểm loại cây, giống và vật tư của nội dung vẫn còn hiện trong danh mục (kiểm lại khi phát hành).
+func (s *Service) checkLiveCatalog(ctx context.Context, t store.Template, steps []domain.Step) error {
+	if err := s.checkCatalogScope(ctx, t.Crop, t.VarietyCode); err != nil {
+		return err
+	}
+	_, err := s.resolveMaterials(ctx, steps)
+	return err
+}
+
+// PublishSOP phát hành bản nháp một bước (vai soạn, không cần người thứ hai): nội dung phải hợp lệ, có việc
+// Thu hoạch cuối với cửa sổ ngày (EX-05, Q-06). Phát pf.cropcycle.sop.published trong cùng giao dịch.
+// Tra danh mục (I/O) nằm ngoài transaction: đọc → kiểm danh mục → khóa và ghi, UpdatedAt đổi giữa chừng thì từ chối.
 func (s *Service) PublishSOP(ctx context.Context, versionID uuid.UUID) (SOPView, error) {
 	p, err := authz.Require(ctx, sopPublishRoles...)
 	if err != nil {
+		return SOPView{}, err
+	}
+	var seen *store.Version
+	var tpl *store.Template
+	err = s.inTx(ctx, p.TenantID, func(tx pgx.Tx) error {
+		v, err := store.VersionByID(ctx, tx, versionID, false)
+		if err != nil {
+			return err
+		}
+		if v == nil {
+			return ErrSOPNotFound
+		}
+		if tpl, err = store.TemplateByRef(ctx, tx, v.TemplateRef, false); err != nil {
+			return err
+		}
+		seen = v
+		return nil
+	})
+	if err != nil {
+		return SOPView{}, err
+	}
+	if tpl == nil {
+		return SOPView{}, ErrSOPNotFound
+	}
+	if err := s.checkLiveCatalog(ctx, *tpl, seen.Steps); err != nil {
 		return SOPView{}, err
 	}
 	now := s.now()
@@ -270,9 +408,6 @@ func (s *Service) PublishSOP(ctx context.Context, versionID uuid.UUID) (SOPView,
 		if v == nil {
 			return ErrSOPNotFound
 		}
-		if err := authz.EnsureDistinctApprover(v.AuthoredBy, p); err != nil {
-			return err
-		}
 		t, err := store.TemplateByRef(ctx, tx, v.TemplateRef, true)
 		if err != nil {
 			return err
@@ -280,13 +415,21 @@ func (s *Service) PublishSOP(ctx context.Context, versionID uuid.UUID) (SOPView,
 		if v.Status != domain.VersionDraft || t.Status == domain.TemplateRetired {
 			return ErrSOPState.WithDetail("chỉ phát hành được bản nháp của mẫu chưa ngừng dùng")
 		}
-		if _, err := domain.NormalizeSteps(v.Steps); err != nil {
+		if !v.UpdatedAt.Equal(seen.UpdatedAt) || !t.UpdatedAt.Equal(tpl.UpdatedAt) {
+			return ErrConcurrentEdit
+		}
+		content, err := domain.NormalizeContent(domain.Content{Stages: v.Stages, Steps: v.Steps})
+		if err != nil {
 			return fieldProblem(err)
 		}
-		h, ok := domain.HarvestStep(v.Steps)
-		if !ok {
-			return ErrSOPNoHarvestStep
+		if err := domain.CheckPublishable(content); err != nil {
+			var pb domain.PublishBlock
+			if errors.As(err, &pb) {
+				return publishProblem(pb)
+			}
+			return err
 		}
+		h, _ := domain.HarvestStep(content.Steps)
 		if err := store.PublishVersion(ctx, tx, v.ID, p.ActorRef, now); err != nil {
 			return err
 		}
@@ -298,7 +441,7 @@ func (s *Service) PublishSOP(ctx context.Context, versionID uuid.UUID) (SOPView,
 		if err := enqueue(ctx, tx, p.TenantID, port.EventSOPPublished, now, port.SOPPublishedV1{
 			TemplateRef: t.Ref, Code: t.Code, Name: t.Name, Scope: t.Scope, CooperativeRef: uuidPtr(t.CooperativeRef),
 			VersionID: v.ID, VersionNo: v.VersionNo, StepCount: len(v.Steps), HarvestDayOffset: h.DayOffset,
-			HarvestWindowDays: h.WindowDays, AuthoredBy: v.AuthoredBy, PublishedBy: p.ActorRef, PublishedAt: now.Format(time.RFC3339),
+			HarvestWindowDays: 0, AuthoredBy: v.AuthoredBy, PublishedBy: p.ActorRef, PublishedAt: now.Format(time.RFC3339),
 		}); err != nil {
 			return err
 		}
@@ -324,47 +467,107 @@ func (s *Service) CloneSOP(ctx context.Context, in CloneInput) (SOPView, error) 
 	if err != nil {
 		return SOPView{}, err
 	}
+	var src *store.Template
+	var ver *store.Version
+	err = s.inTx(ctx, p.TenantID, func(tx pgx.Tx) error {
+		var err error
+		if src, err = store.TemplateByRef(ctx, tx, in.SourceRef, false); err != nil || src == nil {
+			return err
+		}
+		if ver, err = store.LatestPublished(ctx, tx, src.Ref); err != nil || ver != nil {
+			return err
+		}
+		vs, err := store.VersionsOf(ctx, tx, src.Ref)
+		if err != nil {
+			return err
+		}
+		ver = &vs[len(vs)-1]
+		return nil
+	})
+	if err != nil {
+		return SOPView{}, err
+	}
+	if src == nil {
+		return SOPView{}, ErrSOPNotFound
+	}
+	ref := ids.New()
+	ci := CreateSOPInput{Code: in.Code, Name: in.Name, Crop: src.Crop, VarietyCode: src.VarietyCode, AnchorName: src.AnchorName,
+		Scope: in.Scope, CooperativeRef: in.CooperativeRef, Standard: src.Standard, Description: src.Description}
+	if ci.Scope == "" {
+		ci.Scope, ci.CooperativeRef = src.Scope, src.CooperativeRef
+	}
+	if strings.TrimSpace(ci.Code) == "" {
+		ci.Code = autoSOPCode(ref)
+	}
+	// Tra danh mục và HTX (I/O) ngoài transaction (§9 #1).
+	if err := s.checkTemplateFields(ctx, &ci); err != nil {
+		return SOPView{}, err
+	}
 	var view SOPView
 	err = s.inTx(ctx, p.TenantID, func(tx pgx.Tx) error {
-		src, err := store.TemplateByRef(ctx, tx, in.SourceRef, false)
-		if err != nil {
-			return err
-		}
-		if src == nil {
-			return ErrSOPNotFound
-		}
-		ver, err := store.LatestPublished(ctx, tx, src.Ref)
-		if err != nil {
-			return err
-		}
-		if ver == nil {
-			vs, err := store.VersionsOf(ctx, tx, src.Ref)
-			if err != nil {
-				return err
-			}
-			ver = &vs[len(vs)-1]
-		}
-		ci := CreateSOPInput{Code: in.Code, Name: in.Name, Crop: src.Crop, Scope: in.Scope, CooperativeRef: in.CooperativeRef,
-			Standard: src.Standard, Description: src.Description}
-		if ci.Scope == "" {
-			ci.Scope, ci.CooperativeRef = src.Scope, src.CooperativeRef
-		}
-		ref := ids.New()
-		if strings.TrimSpace(ci.Code) == "" {
-			ci.Code = "SOP-" + strings.ToUpper(ref.String()[28:36])
-		}
-		if err := s.checkTemplateFields(ctx, &ci); err != nil {
-			return err
-		}
-		t := store.Template{Ref: ref, Code: ci.Code, Name: ci.Name, NameKey: domain.NameKey(ci.Name), Crop: ci.Crop, Scope: ci.Scope,
-			CooperativeRef: ci.CooperativeRef, Standard: ci.Standard, Description: ci.Description, Status: domain.TemplateDraft,
-			SourceTemplateRef: src.Ref, LatestVersion: 1, CreatedBy: p.ActorRef}
+		t := store.Template{Ref: ref, Code: ci.Code, Name: ci.Name, NameKey: domain.NameKey(ci.Name), Crop: ci.Crop, VarietyCode: ci.VarietyCode,
+			AnchorName: ci.AnchorName, Scope: ci.Scope, CooperativeRef: ci.CooperativeRef, Standard: ci.Standard, Description: ci.Description,
+			Status: domain.TemplateDraft, SourceTemplateRef: src.Ref, LatestVersion: 1, CreatedBy: p.ActorRef}
 		if err := insertTemplate(ctx, tx, p.TenantID, t); err != nil {
 			return err
 		}
-		v := store.Version{ID: ids.New(), TemplateRef: t.Ref, VersionNo: 1, Status: domain.VersionDraft, Steps: ver.Steps,
+		v := store.Version{ID: ids.New(), TemplateRef: t.Ref, VersionNo: 1, Status: domain.VersionDraft, Steps: ver.Steps, Stages: ver.Stages,
 			SourceVersionRef: ver.ID, ChangeNote: "Nhân bản từ " + src.Code + " v" + itoa(ver.VersionNo), AuthoredBy: p.ActorRef, AuthoredAt: s.now()}
 		if err := store.InsertVersion(ctx, tx, p.TenantID, v); err != nil {
+			return err
+		}
+		return s.loadView(ctx, tx, t.Ref, &view)
+	})
+	return view, err
+}
+
+// SOPInfoInput sửa thông tin chung của mẫu SOP còn nháp.
+type SOPInfoInput struct {
+	Name        string
+	Crop        string
+	VarietyCode string
+	AnchorName  string
+}
+
+// UpdateSOPInfo sửa thông tin chung (tên, loại cây, giống, tên mốc gốc) của mẫu chưa phát hành lần nào.
+// Mẫu đã phát hành: thông tin chung không đổi, nội dung sửa bằng phiên bản mới.
+func (s *Service) UpdateSOPInfo(ctx context.Context, ref uuid.UUID, in SOPInfoInput) (SOPView, error) {
+	p, err := authz.Require(ctx, sopAuthorRoles...)
+	if err != nil {
+		return SOPView{}, err
+	}
+	if err := cleanTemplateInfo(&in.Name, &in.Crop, &in.VarietyCode, &in.AnchorName); err != nil {
+		return SOPView{}, err
+	}
+	if err := s.checkCatalogScope(ctx, in.Crop, in.VarietyCode); err != nil {
+		return SOPView{}, err
+	}
+	var view SOPView
+	err = s.inTx(ctx, p.TenantID, func(tx pgx.Tx) error {
+		t, err := store.TemplateByRef(ctx, tx, ref, true)
+		if err != nil {
+			return err
+		}
+		if t == nil {
+			return ErrSOPNotFound
+		}
+		if t.Status != domain.TemplateDraft || t.PublishedVersion != nil {
+			return ErrSOPState.WithDetail("SOP đã phát hành — thông tin chung không đổi; nội dung sửa bằng phiên bản mới")
+		}
+		key := domain.NameKey(in.Name)
+		taken, err := store.TemplateNameTaken(ctx, tx, key, t.Ref)
+		if err != nil {
+			return err
+		}
+		if taken {
+			return ErrSOPNameTaken
+		}
+		t.Name, t.NameKey, t.Crop, t.VarietyCode, t.AnchorName = in.Name, key, in.Crop, in.VarietyCode, in.AnchorName
+		err = store.UpdateTemplateInfo(ctx, tx, *t)
+		if isUnique(err, "sop_template_tenant_id_name_key_key") {
+			return ErrSOPNameTaken
+		}
+		if err != nil {
 			return err
 		}
 		return s.loadView(ctx, tx, t.Ref, &view)

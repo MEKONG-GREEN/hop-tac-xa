@@ -199,6 +199,13 @@ func (c caller) adminPost(path string, body any) resp {
 	return c.do(c.f.admin.URL, http.MethodPost, path, key(), "application/json", b)
 }
 
+// adminPostKey như adminPost nhưng dùng đúng Idempotency-Key cho trước (kiểm gọi lặp cùng khóa).
+func (c caller) adminPostKey(path string, body any, idemKey string) resp {
+	c.f.t.Helper()
+	b, _ := json.Marshal(body)
+	return c.do(c.f.admin.URL, http.MethodPost, path, idemKey, "application/json", b)
+}
+
 func (c caller) adminGet(path string) resp {
 	c.f.t.Helper()
 	return c.do(c.f.admin.URL, http.MethodGet, path, "", "application/json", nil)
@@ -247,24 +254,48 @@ func expectCode(t *testing.T, r resp, status int, c, what string) {
 	}
 }
 
-// steps là quy trình mẫu: làm đất, gieo sạ, bón phân, phun thuốc (PHI 14), thu hoạch (95 ± 5).
-func steps() []map[string]any {
+// dateRange dựng cửa sổ Theo ngày so với NXG.
+func dateRange(from, to int) map[string]any {
+	return map[string]any{"kind": "date_range", "anchor": "nxg", "from": from, "to": to}
+}
+
+// sopSteps là các việc của quy trình mẫu: làm đất, gieo sạ (giai đoạn 1), bón phân, phun thuốc (PHI 14)
+// (giai đoạn 2), thu hoạch (giai đoạn 3, ngày 95–100 so với mốc gốc).
+func sopSteps() []map[string]any {
 	return []map[string]any{
-		{"seq": 1, "name": "Làm đất", "activity_code": "lam_dat", "stage_code": "lam_dat", "day_offset": -3, "window_days": 2, "mandatory": true},
-		{"seq": 2, "name": "Gieo sạ", "activity_code": "gieo_sa", "day_offset": 0, "window_days": 1, "mandatory": true, "evidence_kinds": []string{"anh_hien_truong"}},
-		{"seq": 3, "name": "Bón thúc", "activity_code": "bon_phan", "day_offset": 10, "window_days": 3, "mandatory": true},
-		{"seq": 4, "name": "Phun thuốc", "activity_code": "phun_thuoc", "day_offset": 40, "window_days": 3, "mandatory": false, "phi_days": 14},
-		{"seq": 5, "name": "Thu hoạch", "activity_code": "thu_hoach", "day_offset": 95, "window_days": 5, "mandatory": true},
+		{"seq": 1, "stage_seq": 1, "task_seq": 1, "name": "Làm đất", "activity_code": "lam_dat", "stage_code": "lam_dat", "window": dateRange(-3, -1), "mandatory": true},
+		{"seq": 2, "stage_seq": 1, "task_seq": 2, "name": "Gieo sạ", "activity_code": "gieo_sa", "window": dateRange(0, 1), "mandatory": true, "evidence_kinds": []string{"anh_hien_truong"}},
+		{"seq": 3, "stage_seq": 2, "task_seq": 1, "name": "Bón thúc", "activity_code": "bon_phan", "window": dateRange(10, 13), "mandatory": true,
+			"materials": []map[string]any{{"material_code": "URE", "dose_per_ha": "50", "unit": "kg"}}},
+		{"seq": 4, "stage_seq": 2, "task_seq": 2, "name": "Phun thuốc", "activity_code": "phun_thuoc", "window": dateRange(40, 43), "mandatory": false, "phi_days": 14},
+		{"seq": 5, "stage_seq": 3, "task_seq": 1, "name": "Thu hoạch", "activity_code": "thu_hoach", "window": dateRange(95, 100), "mandatory": true},
 	}
+}
+
+func sopStages() []map[string]any {
+	return []map[string]any{
+		{"seq": 1, "name": "Chuẩn bị", "from_day": -3, "to_day": 1},
+		{"seq": 2, "name": "Chăm sóc", "from_day": 2, "to_day": 90},
+		{"seq": 3, "name": "Thu hoạch", "from_day": 91, "to_day": 100},
+	}
+}
+
+// sopBody là thân tạo SOP lúa (loại cây LUA) với nội dung mẫu; extra ghi đè hoặc thêm trường.
+func sopBody(name string, extra map[string]any) map[string]any {
+	body := map[string]any{"name": name, "crop": "LUA", "anchor_name": "Ngày xuống giống", "stages": sopStages(), "steps": sopSteps()}
+	for k, v := range extra {
+		body[k] = v
+	}
+	return body
 }
 
 // publishedSOP tạo, phát hành mẫu SOP hệ thống và (nếu variety ≠ "") gắn với giống.
 func (f *fixture) publishedSOP(name, variety string) (tmpl, version string) {
 	f.t.Helper()
-	r := f.sopAdmin.adminPost("/v1/cropcycle/sops", map[string]any{"code": "SOP-" + ids.New().String()[30:], "name": name, "steps": steps()})
+	r := f.sopAdmin.adminPost("/v1/cropcycle/sops", sopBody(name, map[string]any{"code": "SOP-" + ids.New().String()[30:]}))
 	expect(f.t, r, http.StatusCreated, "tạo SOP")
 	tmpl, version = str(r.body, "ref"), str(list(r.body, "versions")[0], "id")
-	expect(f.t, f.approver.adminPost("/v1/cropcycle/sop-versions/"+version+"/publish", nil), http.StatusOK, "phát hành SOP")
+	expect(f.t, f.sopAdmin.adminPost("/v1/cropcycle/sop-versions/"+version+"/publish", nil), http.StatusOK, "phát hành SOP")
 	if variety != "" {
 		expect(f.t, f.sopAdmin.adminPost("/v1/cropcycle/variety-bindings", map[string]any{"variety_code": variety, "template_ref": tmpl}), http.StatusOK, "gắn giống")
 	}

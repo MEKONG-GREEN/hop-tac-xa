@@ -103,6 +103,67 @@ void main() {
         3,
       );
     });
+
+    test('AH-8: bỏ qua việc undated khi xác định việc đang tới hạn', () {
+      final sop = SopVersion.fromJson({
+        'id': 's',
+        'name': 'SOP',
+        'steps': [
+          {
+            'seq': 1,
+            'name': 'Làm đất',
+            'activity_code': 'lam_dat',
+            'day_offset': -7,
+            'window_days': 0,
+          },
+          // Không ngày: hai trường cũ chỉ là 0 quy ước, không được coi là "tới hạn từ ngày sạ".
+          {
+            'seq': 2,
+            'name': 'Cắt tỉa tự do',
+            'activity_code': 'cat_tia',
+            'day_offset': 0,
+            'window_days': 0,
+            'undated': true,
+          },
+          {
+            'seq': 3,
+            'name': 'Thu hoạch',
+            'activity_code': 'thu_hoach',
+            'day_offset': 95,
+            'window_days': 0,
+          },
+        ],
+      });
+      expect(sop.steps[1].undated, isTrue);
+      expect(sop.steps[0].undated, isFalse);
+      final sowing = DateTime.utc(2026, 7, 1);
+      expect(sop.currentStep(sowing, DateTime.utc(2026, 7, 5))!.seq, 1);
+      expect(sop.currentStep(sowing, DateTime.utc(2026, 10, 10))!.seq, 3);
+      // Mọi việc đều không có ngày → không có bước hiện tại.
+      final allUndated = SopVersion.fromJson({
+        'id': 's',
+        'name': 'SOP',
+        'steps': [
+          {
+            'seq': 1,
+            'name': 'Việc tự do',
+            'activity_code': 'khac',
+            'day_offset': 0,
+            'window_days': 0,
+            'undated': true,
+          },
+        ],
+      });
+      expect(allUndated.currentStep(sowing, DateTime.utc(2026, 7, 5)), isNull);
+    });
+
+    test('AH-8: nhãn hai loại việc mới của SOP; mã cũ và mã lạ giữ nguyên', () {
+      expect(activityLabel('cat_tia'), 'Cắt tỉa');
+      expect(activityLabel('khac'), 'Khác');
+      expect(activityLabel('lam_dat'), 'Làm đất');
+      expect(activityLabel('la_lam'), 'la_lam');
+      expect(FarmActivity.parse('cat_tia'), isNull);
+    });
   });
 
   group('HTX US-YIELD-01/03 sản lượng kg → t/ha, không số thực', () {

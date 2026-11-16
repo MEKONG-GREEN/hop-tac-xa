@@ -22,10 +22,11 @@ func TestHarvestDeclare_HTX_US_YIELD_01_03(t *testing.T) {
 	hp := "/v1/cropcycle/seasons/" + season + "/harvest"
 	r := fa.post(hp, map[string]any{"mass_kg": "9750"})
 	expectCode(t, r, http.StatusConflict, "cropcycle.harvest_too_early", "chưa đến giai đoạn thu hoạch")
-	if str(r.body, "harvest_open_date") != "2026-12-28" {
+	// Ngày mở khai = ngày thu hoạch dự kiến = mốc gốc + Từ của việc Thu hoạch cuối (95).
+	if str(r.body, "harvest_open_date") != "2027-01-02" {
 		t.Fatalf("mốc thu hoạch: %s", r.raw)
 	}
-	f.advanceDays(91)
+	f.advanceDays(96)
 	expectCode(t, fa.post(hp, map[string]any{"mass_kg": "-5"}), http.StatusUnprocessableEntity, "cropcycle.yield_negative", "âm")
 	r = fa.post(hp, map[string]any{"mass_kg": "0"})
 	expectCode(t, r, http.StatusConflict, "cropcycle.yield_anomaly", "bằng 0")
@@ -46,7 +47,7 @@ func TestHarvestDeclare_HTX_US_YIELD_01_03(t *testing.T) {
 	h1 := str(r.body, "harvest", "id")
 	if str(r.body, "harvest", "yield_t_per_ha") != "6.5000" || str(r.body, "harvest", "anomaly_kind") != "above_threshold" ||
 		get(r.body, "harvest", "anomaly_confirmed") != true || str(r.body, "season", "status") != "completed" ||
-		str(r.body, "harvest", "harvest_date") != "2026-12-29" {
+		str(r.body, "harvest", "harvest_date") != "2027-01-03" {
 		t.Fatalf("khai sản lượng: %s", r.raw)
 	}
 	if len(f.outbox(port.EventSeasonCompleted)) != 1 || len(f.outbox(port.EventHarvestDeclared)) != 1 {
@@ -82,13 +83,13 @@ func TestHarvestPHI(t *testing.T) {
 	season := mgr.mustOpen(f.p2)
 	f.advanceDays(85)
 	expect(t, f.farmer(f.h2).log(f.p2, map[string]any{"activity_code": "phun_thuoc", "sop_step_seq": 4}), http.StatusCreated, "phun thuốc")
-	f.advanceDays(6)
+	f.advanceDays(11)
 	r := mgr.post("/v1/cropcycle/seasons/"+season+"/harvest", map[string]any{"mass_kg": "9750"})
 	expectCode(t, r, http.StatusConflict, "cropcycle.phi_violation", "chưa hết cách ly")
 	if str(r.body, "earliest_harvest_date") != "2027-01-06" {
 		t.Fatalf("ngày sớm nhất: %s", r.raw)
 	}
-	f.advanceDays(9)
+	f.advanceDays(3)
 	expect(t, mgr.post("/v1/cropcycle/seasons/"+season+"/harvest", map[string]any{"mass_kg": "9750"}), http.StatusCreated, "hết cách ly")
 }
 
@@ -121,12 +122,12 @@ func TestHarvestImport_HTX_US_YIELD_02(t *testing.T) {
 	mgr.mustOpen(f.p1)
 	mgr.mustOpen(f.p2)
 	s3 := mgr.mustOpen(f.p3)
-	f.advanceDays(91)
+	f.advanceDays(96)
 	body := harvestXLSX(t, [][]any{
-		{"TH0000001", "2026-12-29", 9750, 17},
-		{"TH0000002", "2026-12-29", "", ""},
-		{"TH0000002", "2026-12-29", "chín tấn", ""},
-		{"TH0000009", "2026-12-29", 5000, ""},
+		{"TH0000001", "2027-01-03", 9750, 17},
+		{"TH0000002", "2027-01-03", "", ""},
+		{"TH0000002", "2027-01-03", "chín tấn", ""},
+		{"TH0000009", "2027-01-03", 5000, ""},
 	})
 	r := mgr.do(f.app.URL, http.MethodPost, "/v1/cropcycle/harvests/import", key(), tabular.ContentTypeXLSX, body)
 	expect(t, r, http.StatusOK, "nhập Excel")
@@ -162,7 +163,7 @@ func TestDashboard_HTX_US_DASH_01(t *testing.T) {
 	s1 := mA.mustOpen(f.p1)
 	mA.mustOpen(f.p2)
 	mB.mustOpen(f.p4)
-	f.advanceDays(91)
+	f.advanceDays(96)
 	expect(t, mA.post("/v1/cropcycle/seasons/"+s1+"/harvest", map[string]any{"mass_kg": "9750"}), http.StatusCreated, "khai")
 	d := mA.get("/v1/cropcycle/dashboard?season_code=DX&season_year=2026")
 	expect(t, d, http.StatusOK, "bảng điều hành HTX A")

@@ -22,7 +22,7 @@ func reportSeed(t *testing.T) *fixture {
 	mA.mustOpen(f.p2)
 	mA.mustOpen(f.p5)
 	mB.mustOpen(f.p4)
-	f.advanceDays(91)
+	f.advanceDays(96)
 	expect(t, mA.post("/v1/cropcycle/seasons/"+s1+"/harvest", map[string]any{"mass_kg": "9750.125"}), http.StatusCreated, "khai")
 	return f
 }

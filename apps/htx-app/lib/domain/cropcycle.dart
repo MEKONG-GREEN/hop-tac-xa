@@ -27,9 +27,12 @@ enum FarmActivity {
   }
 }
 
+/// Nhãn của hai loại việc chỉ có trong SOP (AH-8): không thuộc `FarmActivity` nên không đổi danh sách chọn khi ghi nhật ký.
+const _sopOnlyActivityLabels = {'cat_tia': 'Cắt tỉa', 'khac': 'Khác'};
+
 /// Nhãn hoạt động theo mã (mã lạ giữ nguyên).
 String activityLabel(String? code) =>
-    FarmActivity.parse(code)?.label ?? '$code';
+    FarmActivity.parse(code)?.label ?? _sopOnlyActivityLabels[code] ?? '$code';
 
 // ---------------------------------------------------------------------------
 // Ngày nghiệp vụ theo giờ Việt Nam (UTC+7, không có giờ mùa hè)
@@ -109,6 +112,7 @@ class SopStep {
     this.mandatory = false,
     this.instruction = '',
     this.phiDays,
+    this.undated = false,
   });
 
   final int seq;
@@ -120,6 +124,9 @@ class SopStep {
   final bool mandatory;
   final String instruction;
   final int? phiDays;
+
+  /// Việc chưa có ngày trước khi vụ chạy (cửa sổ Không ngày, mốc NTT…): `day_offset` và `window_days` chỉ là 0 quy ước.
+  final bool undated;
 
   static int _int(Object? v) => v is num ? v.toInt() : int.tryParse('$v') ?? 0;
 
@@ -133,6 +140,7 @@ class SopStep {
     mandatory: j['mandatory'] == true,
     instruction: '${j['instruction'] ?? ''}',
     phiDays: j['phi_days'] == null ? null : _int(j['phi_days']),
+    undated: j['undated'] == true,
   );
 }
 
@@ -204,15 +212,20 @@ class SopVersion {
   }
 
   /// Bước SOP hiện tại theo số ngày kể từ sạ: bước cuối cùng đã tới mốc
-  /// (`day_offset − window_days`). Trước bước đầu → bước đầu (sắp tới).
+  /// (`day_offset − window_days`). Trước bước đầu → bước đầu (sắp tới). Bỏ qua việc
+  /// `undated` (chưa có ngày); không còn việc nào có ngày thì không có bước hiện tại.
   SopStep? currentStep(DateTime sowing, DateTime today) {
-    if (steps.isEmpty) return null;
+    final dated = [
+      for (final s in steps)
+        if (!s.undated) s,
+    ];
+    if (dated.isEmpty) return null;
     final elapsed = daysBetween(sowing, today);
     SopStep? cur;
-    for (final s in steps) {
+    for (final s in dated) {
       if (s.dayOffset - s.windowDays <= elapsed) cur = s;
     }
-    return cur ?? steps.first;
+    return cur ?? dated.first;
   }
 }
 

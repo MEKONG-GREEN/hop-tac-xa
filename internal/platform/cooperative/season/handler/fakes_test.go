@@ -123,8 +123,15 @@ func newFakeCatalogs() *fakeCatalogs {
 	add := func(cat, code string, attrs map[string]string) {
 		f.items[cat+"/"+code] = mdport.CatalogItem{Catalog: cat, Code: code, Name: code, Attrs: attrs, Active: true}
 	}
-	add(mdport.CatalogRiceVariety, "OM5451", map[string]string{"growth_days": "95", "expected_yield_t_per_ha": "6.75"})
-	add(mdport.CatalogRiceVariety, "ST25", map[string]string{"growth_days": "105", "expected_yield_t_per_ha": "5.5"})
+	add(mdport.CatalogCrop, "LUA", map[string]string{"is_rice": "true"})
+	add(mdport.CatalogCrop, "CAF", map[string]string{"is_rice": "false"})
+	add(mdport.CatalogCrop, "CON", map[string]string{"parent_code": "LUA"}) // mục con, không phải loại cây
+	add(mdport.CatalogRiceVariety, "OM5451", map[string]string{"growth_days": "95", "expected_yield_t_per_ha": "6.75", "crop_code": "LUA"})
+	add(mdport.CatalogRiceVariety, "ST25", map[string]string{"growth_days": "105", "expected_yield_t_per_ha": "5.5", "crop_code": "LUA"})
+	add(mdport.CatalogRiceVariety, "ARA", map[string]string{"growth_days": "300", "crop_code": "CAF"})
+	add(mdport.CatalogMaterial, "URE", map[string]string{"unit": "kg", "group": "phan_bon"})
+	add(mdport.CatalogMaterial, "DAP", map[string]string{"unit": "kg", "group": "phan_bon"})
+	f.items[mdport.CatalogMaterial+"/OLD"] = mdport.CatalogItem{Catalog: mdport.CatalogMaterial, Code: "OLD", Name: "OLD", Active: false}
 	add(mdport.CatalogSeason, "DX", nil)
 	add(mdport.CatalogSeason, "HT", nil)
 	add(mdport.CatalogMachineType, "MGS", map[string]string{"farm_stage": "gieo_sa"})

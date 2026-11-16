@@ -36,7 +36,7 @@ func TestMetricsSeasonAreaYieldAsOf(t *testing.T) {
 		t.Fatalf("chưa có vụ → ErrNoData: %v", err)
 	}
 	season := fa.mustOpen(f.p1)
-	f.advanceDays(91)
+	f.advanceDays(96)
 	r := fa.post("/v1/cropcycle/seasons/"+season+"/harvest", map[string]any{"mass_kg": "9750", "confirm_anomaly": true})
 	expect(t, r, http.StatusCreated, "khai sản lượng")
 	cut := dbNow()

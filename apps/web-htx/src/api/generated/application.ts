@@ -16854,28 +16854,68 @@ export interface components {
             plant_demand_coverage_pct?: string;
             shortfall_warnings?: number;
         };
+        CropSOPMaterial: {
+            material_code?: string;
+            name?: string;
+            /** @description Liều khuyến cáo theo ha (decimal); chỉ là giá trị gợi ý khi ghi nhật ký */
+            dose_per_ha: string;
+            unit: string;
+        };
+        CropSOPStage: {
+            seq: number;
+            name: string;
+            /** @description Từ so với mốc gốc */
+            from_day?: number | null;
+            /** @description Đến so với mốc gốc */
+            to_day?: number | null;
+        };
         CropSOPStep: {
             /** @description Liên tục 1..n (HTX US-CAT-01 AC-6) */
             seq: number;
+            stage_seq?: number;
+            task_seq?: number;
             name: string;
             stage_code?: string;
             /** @enum {string} */
-            activity_code: "lam_dat" | "gieo_sa" | "tuoi_nuoc" | "bon_phan" | "phun_thuoc" | "kiem_tra" | "thu_hoach";
-            /** @description Ngày so với ngày gieo sạ */
+            activity_code: "lam_dat" | "gieo_sa" | "tuoi_nuoc" | "bon_phan" | "phun_thuoc" | "kiem_tra" | "thu_hoach" | "cat_tia" | "khac";
+            /** @description Máy chủ tính theo cửa sổ (tạm tới AH-71): ngày bắt đầu so với mốc gốc; không tính được → 0 và undated */
             day_offset: number;
+            /** @description Máy chủ ghi 0 (tạm tới AH-71) */
             window_days: number;
+            /** @description Việc chưa có ngày trước khi vụ chạy (cửa sổ Không ngày, mốc NTT, mốc NTH chưa có ngày thu hoạch) */
+            undated?: boolean;
+            window?: components["schemas"]["CropSOPWindow"];
+            materials?: components["schemas"]["CropSOPMaterial"][];
+            season_summary?: boolean;
             mandatory: boolean;
             evidence_kinds?: ("anh_hien_truong" | "hoa_don_vat_tu" | "phieu_kiem_nghiem" | "ghi_chu" | "khac")[];
             /** @description Thời gian cách ly sau phun thuốc */
             phi_days?: number;
             instruction?: string;
         };
+        /** @description Cửa sổ thực hiện của việc: date_range (Theo ngày), open (Mở), stage (Theo giai đoạn), none (Không ngày) */
+        CropSOPWindow: {
+            /** @enum {string} */
+            kind: "date_range" | "open" | "stage" | "none";
+            /**
+             * @description NXG = mốc gốc của SOP, NTH = ngày thu hoạch dự kiến, NTT = ngày thu hoạch thực tế
+             * @enum {string}
+             */
+            anchor?: "nxg" | "nth" | "ntt";
+            from?: number;
+            to?: number;
+        };
         CropSOPTemplate: {
             /** Format: uuid */
             ref: string;
             code: string;
             name: string;
+            /** @description Mã loại cây trong danh mục crop */
             crop: string;
+            /** @description Giống riêng (thuộc loại cây), tùy chọn */
+            variety_code?: string | null;
+            /** @description Tên mốc gốc, vd Ngày xuống giống */
+            anchor_name: string;
             /** @enum {string} */
             scope: "system" | "htx";
             /** Format: uuid */
@@ -16902,6 +16942,7 @@ export interface components {
             version_no: number;
             /** @enum {string} */
             status: "draft" | "published";
+            stages: components["schemas"]["CropSOPStage"][];
             steps: components["schemas"]["CropSOPStep"][];
             harvest_day_offset?: number | null;
             harvest_window_days?: number | null;
@@ -17126,7 +17167,7 @@ export interface components {
         };
         CropFarmLogContent: {
             /** @enum {string} */
-            activity_code: "lam_dat" | "gieo_sa" | "tuoi_nuoc" | "bon_phan" | "phun_thuoc" | "kiem_tra" | "thu_hoach";
+            activity_code: "lam_dat" | "gieo_sa" | "tuoi_nuoc" | "bon_phan" | "phun_thuoc" | "kiem_tra" | "thu_hoach" | "cat_tia" | "khac";
             sop_step_seq?: number | null;
             /** @description Danh mục machine_type (HTX US-LOG-01 AC-2) */
             machine_codes?: string[];

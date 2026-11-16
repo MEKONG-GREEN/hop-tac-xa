@@ -182,6 +182,9 @@ func sumExpr(tbl string) string {
 	case "kn_profile_event", "plot_boundary", "plot_event", "cooperative_boundary", "season_event", "farm_log_batch", "farm_log",
 		"farm_log_review", "harvest_declaration":
 		return "x.row_hash::text"
+	case "sop_template", "sop_version":
+		// AH-8 thêm cột variety_code, anchor_name (mẫu) và stages (phiên bản) sau W3.3; dữ liệu cũ không đổi → bỏ các cột mới khỏi dấu vân tay.
+		return "(to_jsonb(x) - 'variety_code' - 'anchor_name' - 'stages')::text"
 	}
 	return "to_jsonb(x)::text"
 }

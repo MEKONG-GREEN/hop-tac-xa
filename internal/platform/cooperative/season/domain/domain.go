@@ -40,11 +40,14 @@ const (
 	ActPhunThuoc = "phun_thuoc"
 	ActKiemTra   = "kiem_tra"
 	ActThuHoach  = "thu_hoach"
+	ActCatTia    = "cat_tia"
+	ActKhac      = "khac"
 )
 
+// Nhãn theo BRD FN-01; mã cũ giữ nguyên vì nhật ký và app đang dùng.
 var activities = map[string]string{
-	ActLamDat: "Làm đất", ActGieoSa: "Gieo sạ", ActTuoiNuoc: "Tưới nước", ActBonPhan: "Bón phân",
-	ActPhunThuoc: "Phun thuốc", ActKiemTra: "Kiểm tra", ActThuHoach: "Thu hoạch",
+	ActLamDat: "Làm đất", ActGieoSa: "Gieo trồng", ActTuoiNuoc: "Quản lý nước", ActBonPhan: "Bón phân",
+	ActPhunThuoc: "Phun thuốc - dưỡng", ActKiemTra: "Theo dõi", ActThuHoach: "Thu hoạch", ActCatTia: "Cắt tỉa", ActKhac: "Khác",
 }
 
 // KnownActivity cho biết mã hoạt động có trong danh mục.

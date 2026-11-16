@@ -149,10 +149,14 @@ describe("menu App HTX theo vai", () => {
     }
   });
 
-  it("Quy trình SOP cho người soạn và người phê duyệt", () => {
-    expect(hrefs(persona("setter"))).toContain("/quan-tri/quy-trinh");
-    expect(hrefs(persona("approver"))).toContain("/quan-tri/quy-trinh");
-    expect(hrefs(persona("htx"))).not.toContain("/quan-tri/quy-trinh");
+  it("AH-8: Quy trình SOP nằm ở nhóm Dữ liệu nền, đường dẫn cũ ở Quản trị không còn", () => {
+    expect(hrefs(persona("setter"))).toContain("/du-lieu-nen/quy-trinh-sop");
+    expect(hrefs(persona("approver"))).toContain("/du-lieu-nen/quy-trinh-sop");
+    expect(hrefs(persona("htx"))).not.toContain("/du-lieu-nen/quy-trinh-sop");
+    for (const id of ["setter", "approver", "htx"]) expect(hrefs(persona(id))).not.toContain("/quan-tri/quy-trinh");
+    const group = visibleNav(persona("setter")).find((g) => g.items.some((i) => i.href === "/du-lieu-nen/quy-trinh-sop"));
+    expect(group?.label).toBe("7. Dữ liệu nền");
+    expect(findNavItem("/du-lieu-nen/quy-trinh-sop")?.label).toBe("Quy trình SOP");
   });
 });
 

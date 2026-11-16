@@ -21312,28 +21312,61 @@ components:
     # --- hết pf/simulation ---
 
     # --- pf/cropcycle ---
+    CropSOPMaterial:
+      type: object
+      required: [dose_per_ha, unit]
+      properties:
+        material_code: {type: string}
+        name: {type: string}
+        dose_per_ha: {type: string, description: "Liều khuyến cáo theo ha (decimal); chỉ là giá trị gợi ý khi ghi nhật ký"}
+        unit: {type: string}
+    CropSOPStage:
+      type: object
+      required: [seq, name]
+      properties:
+        seq: {type: integer, minimum: 1}
+        name: {type: string, maxLength: 200}
+        from_day: {type: [integer, "null"], description: "Từ so với mốc gốc"}
+        to_day: {type: [integer, "null"], description: "Đến so với mốc gốc"}
     CropSOPStep:
       type: object
       required: [seq, name, activity_code, day_offset, window_days, mandatory]
       properties:
         seq: {type: integer, minimum: 1, description: "Liên tục 1..n (HTX US-CAT-01 AC-6)"}
+        stage_seq: {type: integer, minimum: 1}
+        task_seq: {type: integer, minimum: 1}
         name: {type: string, maxLength: 200}
         stage_code: {type: string}
-        activity_code: {type: string, enum: [lam_dat, gieo_sa, tuoi_nuoc, bon_phan, phun_thuoc, kiem_tra, thu_hoach]}
-        day_offset: {type: integer, minimum: -60, maximum: 365, description: "Ngày so với ngày gieo sạ"}
-        window_days: {type: integer, minimum: 0, maximum: 60}
+        activity_code: {type: string, enum: [lam_dat, gieo_sa, tuoi_nuoc, bon_phan, phun_thuoc, kiem_tra, thu_hoach, cat_tia, khac]}
+        day_offset: {type: integer, description: "Máy chủ tính theo cửa sổ (tạm tới AH-71): ngày bắt đầu so với mốc gốc; không tính được → 0 và undated"}
+        window_days: {type: integer, minimum: 0, description: "Máy chủ ghi 0 (tạm tới AH-71)"}
+        undated: {type: boolean, description: "Việc chưa có ngày trước khi vụ chạy (cửa sổ Không ngày, mốc NTT, mốc NTH chưa có ngày thu hoạch)"}
+        window: {$ref: "#/components/schemas/CropSOPWindow"}
+        materials: {type: array, items: {$ref: "#/components/schemas/CropSOPMaterial"}}
+        season_summary: {type: boolean}
         mandatory: {type: boolean}
         evidence_kinds: {type: array, items: {type: string, enum: [anh_hien_truong, hoa_don_vat_tu, phieu_kiem_nghiem, ghi_chu, khac]}}
         phi_days: {type: integer, minimum: 0, maximum: 120, description: "Thời gian cách ly sau phun thuốc"}
         instruction: {type: string}
+    CropSOPWindow:
+      type: object
+      required: [kind]
+      description: "Cửa sổ thực hiện của việc: date_range (Theo ngày), open (Mở), stage (Theo giai đoạn), none (Không ngày)"
+      properties:
+        kind: {type: string, enum: [date_range, open, stage, none]}
+        anchor: {type: string, enum: [nxg, nth, ntt], description: "NXG = mốc gốc của SOP, NTH = ngày thu hoạch dự kiến, NTT = ngày thu hoạch thực tế"}
+        from: {type: integer}
+        to: {type: integer}
     CropSOPTemplate:
       type: object
-      required: [ref, code, name, crop, scope, status, latest_version]
+      required: [ref, code, name, crop, anchor_name, scope, status, latest_version]
       properties:
         ref: {type: string, format: uuid}
         code: {type: string}
         name: {type: string}
-        crop: {type: string}
+        crop: {type: string, description: "Mã loại cây trong danh mục crop"}
+        variety_code: {type: [string, "null"], description: "Giống riêng (thuộc loại cây), tùy chọn"}
+        anchor_name: {type: string, description: "Tên mốc gốc, vd Ngày xuống giống"}
         scope: {type: string, enum: [system, htx]}
         cooperative_ref: {type: [string, "null"], format: uuid}
         standard: {type: [string, "null"]}
@@ -21347,12 +21380,13 @@ components:
         updated_at: {type: string, format: date-time}
     CropSOPVersion:
       type: object
-      required: [id, template_ref, version_no, status, steps]
+      required: [id, template_ref, version_no, status, stages, steps]
       properties:
         id: {type: string, format: uuid}
         template_ref: {type: string, format: uuid}
         version_no: {type: integer}
         status: {type: string, enum: [draft, published]}
+        stages: {type: array, items: {$ref: "#/components/schemas/CropSOPStage"}}
         steps: {type: array, items: {$ref: "#/components/schemas/CropSOPStep"}}
         harvest_day_offset: {type: [integer, "null"]}
         harvest_window_days: {type: [integer, "null"]}
@@ -21530,7 +21564,7 @@ components:
       type: object
       required: [activity_code]
       properties:
-        activity_code: {type: string, enum: [lam_dat, gieo_sa, tuoi_nuoc, bon_phan, phun_thuoc, kiem_tra, thu_hoach]}
+        activity_code: {type: string, enum: [lam_dat, gieo_sa, tuoi_nuoc, bon_phan, phun_thuoc, kiem_tra, thu_hoach, cat_tia, khac]}
         sop_step_seq: {type: [integer, "null"]}
         machine_codes: {type: array, maxItems: 20, items: {type: string}, description: "Danh mục machine_type (HTX US-LOG-01 AC-2)"}
         inputs:

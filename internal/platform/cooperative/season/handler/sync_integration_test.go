@@ -103,6 +103,17 @@ func TestSyncPushPull_HTX_US_LOG_04(t *testing.T) {
 	if len(got[port.EntitySOPVersion]) != 1 || got[port.EntitySOPVersion][0].ID.String() != ver {
 		t.Fatalf("sop_version: %+v", got[port.EntitySOPVersion])
 	}
+	// AH-8: dữ liệu SOP chỉ được thêm trường (giai đoạn, tên mốc gốc, giống) và hai trường cũ vẫn có mặt.
+	var sopData map[string]any
+	if err := json.Unmarshal(got[port.EntitySOPVersion][0].Data, &sopData); err != nil {
+		t.Fatal(err)
+	}
+	if str(sopData, "anchor_name") != "Ngày xuống giống" || len(list(sopData, "stages")) != 3 || len(list(sopData, "steps")) != 5 {
+		t.Fatalf("sop_version thiếu trường mới: %s", got[port.EntitySOPVersion][0].Data)
+	}
+	if s0 := list(sopData, "steps")[0]; s0 == nil || num(s0, "day_offset") != -3 || get(s0, "window_days") == nil || str(s0, "window", "kind") != "date_range" {
+		t.Fatalf("steps phải giữ day_offset/window_days và thêm window: %v", list(sopData, "steps")[0])
+	}
 	if len(got[port.EntitySeason]) != 2 {
 		t.Fatalf("hai vụ của hai hộ: %d", len(got[port.EntitySeason]))
 	}
@@ -164,7 +175,7 @@ func TestRebuildProjections_R22(t *testing.T) {
 	v2 := fa.post("/v1/cropcycle/farm-logs/"+str(l.body, "log", "id")+"/corrections", map[string]any{"activity_code": "bon_phan", "sop_step_seq": 3,
 		"correction_reason": "Sửa lượng phân bón"})
 	expect(t, mgr.post("/v1/cropcycle/farm-logs/"+str(v2.body, "log", "id")+"/reviews", map[string]any{"decision": "approved"}), http.StatusCreated, "duyệt")
-	f.advanceDays(91)
+	f.advanceDays(96)
 	h := fa.post("/v1/cropcycle/seasons/"+s1+"/harvest", map[string]any{"mass_kg": "9750"})
 	expect(t, h, http.StatusCreated, "khai")
 	expect(t, fa.post("/v1/cropcycle/harvests/"+str(h.body, "harvest", "id")+"/corrections", map[string]any{"mass_kg": "9500",
