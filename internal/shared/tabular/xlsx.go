@@ -97,7 +97,7 @@ func ReadXLSXSheets(data []byte, lim Limits, names ...string) (map[string]*Table
 		}
 		t, err := readSheet(f, real, lim)
 		if err != nil {
-			return nil, err
+			return nil, &SheetError{Sheet: name, Err: err}
 		}
 		t.Keys = make([]string, len(t.Header))
 		for i, h := range t.Header {

@@ -47,6 +47,10 @@ func TestReadXLSXSheets(t *testing.T) {
 	if !errors.As(err, &fe) || fe.Cell != "A4" {
 		t.Fatalf("công thức ở sheet thứ hai: %v", err)
 	}
+	var se *SheetError
+	if !errors.As(err, &se) || se.Sheet != "Hai" || !strings.Contains(Message(err, Limits{}), `Sheet "Hai"`) {
+		t.Fatalf("lỗi phải nêu tên sheet: %v / %q", err, Message(err, Limits{}))
+	}
 	if _, err := ReadXLSXSheets([]byte("a,b\n1,2\n"), Limits{}, "Một"); !errors.Is(err, ErrFormat) {
 		t.Fatalf("CSV: %v", err)
 	}

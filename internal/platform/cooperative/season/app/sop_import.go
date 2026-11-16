@@ -218,6 +218,8 @@ func readSOPImport(src io.Reader) (map[string]*tabular.Table, error) {
 		detail := tabular.Message(err, lim)
 		if errors.Is(err, tabular.ErrFormat) {
 			detail = "Chỉ nhận tệp Excel .xlsx — hãy tải file mẫu và thử lại"
+		} else if errors.Is(err, tabular.ErrLegacyExcel) {
+			detail = "Không hỗ trợ tệp .xls — hãy lưu thành .xlsx (hoặc tải file mẫu) rồi thử lại"
 		}
 		return nil, ErrSOPImportInvalid.WithDetail(detail)
 	}

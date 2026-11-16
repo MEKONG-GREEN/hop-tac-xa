@@ -319,7 +319,7 @@ func TestSOPImport_AH38_AC2(t *testing.T) {
 			{"ô có công thức", sopWorkbook(t, tmpl, func(x *excelize.File) {
 				minimalSOP("Có công thức")(x)
 				_ = x.SetCellFormula("Việc", "G2", "1+1")
-			}), "công thức"},
+			}), `Sheet "Việc": Ô G2 chứa công thức`},
 			{"sheet Việc rỗng", sopWorkbook(t, tmpl, func(x *excelize.File) {
 				setRow(x, "Thông tin chung", 2, "LUA", "", "Không việc", "Ngày xuống giống")
 				setRow(x, "Giai đoạn", 2, 1, "Giai đoạn test", 0, 10)
@@ -335,6 +335,9 @@ func TestSOPImport_AH38_AC2(t *testing.T) {
 			expectCode(t, r, http.StatusUnprocessableEntity, "cropcycle.sop_import_invalid", tc.name)
 			if !strings.Contains(str(r.body, "detail"), tc.detail) || len(list(r.body, "rows")) != 0 {
 				t.Errorf("%s: detail %q, muốn chứa %q", tc.name, str(r.body, "detail"), tc.detail)
+			}
+			if tc.name == "xls cũ" && strings.Contains(str(r.body, "detail"), "CSV") {
+				t.Errorf("xls cũ: detail không được gợi ý CSV: %q", str(r.body, "detail"))
 			}
 		}
 		expectCode(t, f.importSOP(f.sopAdmin, sopWorkbook(t, tmpl, minimalSOP("Thiếu khóa")), ""),

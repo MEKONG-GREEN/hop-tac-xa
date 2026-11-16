@@ -51,6 +51,15 @@ type FormulaError struct{ Cell string }
 
 func (e *FormulaError) Error() string { return "tabular: ô " + e.Cell + " chứa công thức" }
 
+// SheetError gắn tên trang tính vào lỗi đọc một trang tính của tệp nhiều sheet.
+type SheetError struct {
+	Sheet string
+	Err   error
+}
+
+func (e *SheetError) Error() string { return "tabular: sheet " + e.Sheet + ": " + e.Err.Error() }
+func (e *SheetError) Unwrap() error { return e.Err }
+
 // Limits là giới hạn khi đọc. Giá trị 0 dùng mặc định.
 type Limits struct {
 	MaxBytes int64 // dung lượng tệp; mặc định 5 MB
@@ -264,7 +273,10 @@ func Message(err error, lim Limits) string {
 	lim = lim.withDefaults()
 	var fe *FormulaError
 	var ms *MissingSheetError
+	var se *SheetError
 	switch {
+	case errors.As(err, &se):
+		return "Sheet \"" + se.Sheet + "\": " + Message(se.Err, lim)
 	case errors.As(err, &ms):
 		return ms.Message()
 	case errors.As(err, &fe):
