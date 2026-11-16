@@ -10,7 +10,7 @@ depends:
   pf/party: ">=2.0 <3"
   pf/sync: ">=1.0 <2"
 provides:
-  ports: [AreaFarmers, EmailDirectory, StaffDirectory]
+  ports: [AreaFarmers, EmailDirectory, MemberDirectory, MemberNotifier, StaffDirectory]
   events:
     - pf.notify.email.requested/v1
     - pf.notify.notification.created/v1

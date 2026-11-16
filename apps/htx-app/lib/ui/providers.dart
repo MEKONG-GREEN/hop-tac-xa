@@ -6,12 +6,14 @@ import 'package:agrigreen_mobile/data/auth/oidc_client.dart';
 import 'package:agrigreen_mobile/data/auth/pin_service.dart';
 import 'package:agrigreen_mobile/data/auth/session_service.dart';
 import 'package:agrigreen_mobile/data/outbox/outbox_repository.dart';
+import 'package:agrigreen_mobile/data/sync/sync_api.dart';
 import 'package:agrigreen_mobile/data/sync/sync_service.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../application/activation_service.dart';
 import '../application/app_services.dart';
+import '../application/data_consent_service.dart';
 import '../domain/cropcycle.dart';
 import '../domain/roles.dart';
 
@@ -93,6 +95,7 @@ class AppState {
     this.services,
     this.busy = false,
     this.mode = HtxMode.none,
+    this.consent,
   });
   final AuthView view;
   final HtxServices? services;
@@ -101,11 +104,16 @@ class AppState {
   /// Trang chủ theo vai (HTX US-LOGIN-01 AC-1).
   final HtxMode mode;
 
+  /// Khác null → chưa vào được ứng dụng: màn Đồng ý thu thập dữ liệu (hoặc
+  /// màn chặn khi chưa xác nhận được) — AH-23, REQ-011.
+  final DataConsentCheck? consent;
+
   AppState copyWith({bool? busy, HtxMode? mode}) => AppState(
     view,
     services: services,
     busy: busy ?? this.busy,
     mode: mode ?? this.mode,
+    consent: consent,
   );
 }
 
@@ -155,14 +163,14 @@ class AppController extends Notifier<AppState> {
             accessToken: ref.read(sessionServiceProvider).accessToken,
             onWiped: _onWiped,
           );
-      state = AppState(
-        v,
-        services: services,
-        mode: await services.profile.mode(),
-      );
-      _startAutoSync(services);
-      await _push.attach(services.pushHost);
-      unawaited(services.sync.syncOnce(force: true));
+      // AH-23: chưa đồng ý thu thập dữ liệu thì chưa bật đồng bộ, chưa vào app.
+      final consent = await services.dataConsent.check();
+      if (!consent.isOk) {
+        _stopAutoSync();
+        state = AppState(v, services: services, consent: consent);
+        return;
+      }
+      await _enter(services, v);
     } else {
       _stopAutoSync();
       _push.detach();
@@ -170,6 +178,18 @@ class AppController extends Notifier<AppState> {
       state = AppState(v);
       await old?.close();
     }
+  }
+
+  /// Vào ứng dụng sau khi mở khóa và (nếu cần) đã đồng ý thu thập dữ liệu.
+  Future<void> _enter(HtxServices services, AuthView v) async {
+    state = AppState(
+      v,
+      services: services,
+      mode: await services.profile.mode(),
+    );
+    _startAutoSync(services);
+    await _push.attach(services.pushHost);
+    unawaited(services.sync.syncOnce(force: true));
   }
 
   Future<void> _busy(Future<AuthView> Function() f) async {
@@ -185,6 +205,60 @@ class AppController extends Notifier<AppState> {
   Future<void> setPin(String pin, String confirm) =>
       _busy(() => _flow.setPin(pin, confirm));
   Future<void> unlock(String pin) => _busy(() => _flow.unlock(pin));
+
+  /// "Đồng ý" ở màn Đồng ý thu thập dữ liệu: ghi bằng chứng rồi vào ứng dụng.
+  Future<void> acceptDataConsent() async {
+    final s = state.services;
+    final prompt = state.consent;
+    if (s == null || prompt == null || !prompt.isPrompt) return;
+    state = state.copyWith(busy: true);
+    try {
+      await _resolveConsent(s, await s.dataConsent.accept(prompt));
+    } finally {
+      state = state.copyWith(busy: false);
+    }
+  }
+
+  /// "Thử lại" ở màn chặn: hỏi lại trạng thái đồng ý.
+  Future<void> retryDataConsent() async {
+    final s = state.services;
+    if (s == null) return;
+    state = state.copyWith(busy: true);
+    try {
+      await _resolveConsent(s, await s.dataConsent.check());
+    } finally {
+      state = state.copyWith(busy: false);
+    }
+  }
+
+  /// "Không đồng ý" / "Đăng xuất": xóa bản nhớ, đăng xuất; lần đăng nhập sau
+  /// hỏi lại. Dữ liệu trên máy giữ nguyên.
+  Future<void> declineDataConsent() async {
+    await state.services?.dataConsent.forget();
+    await _busy(_flow.signOut);
+  }
+
+  Future<void> _resolveConsent(HtxServices s, DataConsentCheck c) async {
+    if (c.isOk) {
+      await _enter(s, state.view);
+    } else {
+      state = AppState(state.view, services: s, busy: state.busy, consent: c);
+    }
+  }
+
+  /// Máy chủ đòi đồng ý lại (403 accounts.data_consent_required: đổi phiên bản
+  /// nội dung giữa chừng): dừng đồng bộ, mở lại màn Đồng ý. Ảnh/lệnh chờ gửi
+  /// vẫn nguyên ở máy.
+  Future<void> _reopenConsent(HtxServices s) async {
+    _stopAutoSync();
+    await s.dataConsent.forget();
+    final c = await s.dataConsent.check();
+    if (c.isOk) {
+      _startAutoSync(s);
+    } else if (state.services == s) {
+      state = AppState(state.view, services: s, consent: c);
+    }
+  }
 
   /// Khóa màn hình: đóng CSDL, về màn PIN.
   Future<void> lock() async {
@@ -217,6 +291,9 @@ class AppController extends Notifier<AppState> {
     _stopAutoSync();
     _status = s.sync.statusStream.listen((st) {
       if (st.state == SyncState.idle) unawaited(refreshMode());
+      if (st.lastError == DataConsentRequiredException.consentCode) {
+        unawaited(_reopenConsent(s));
+      }
     });
     final pf = s.platform;
     // Có mạng trở lại → đồng bộ ngay (HTX US-LOGIN-02 AC-3).

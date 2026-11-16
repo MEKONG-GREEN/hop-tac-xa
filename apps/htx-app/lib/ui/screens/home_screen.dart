@@ -132,7 +132,7 @@ class HomeScreen extends ConsumerWidget {
         ),
         BigTile(
           icon: Icons.bar_chart,
-          label: 'Dashboard',
+          label: 'Tổng quan',
           onTap: () => open(const DashboardScreen()),
         ),
         BigTile(

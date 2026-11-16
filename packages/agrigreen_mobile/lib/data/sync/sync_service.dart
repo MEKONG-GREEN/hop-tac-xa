@@ -249,7 +249,9 @@ class SyncService {
         await _evidence.markUploaded(f, ref);
         report.uploaded++;
       } on ApiException catch (e) {
-        if (e is DeviceRevokedException || e is UnauthenticatedException) {
+        if (e is DeviceRevokedException ||
+            e is UnauthenticatedException ||
+            e is DataConsentRequiredException) {
           rethrow;
         }
         if (e.retriable) rethrow;
@@ -317,7 +319,9 @@ class SyncService {
         await q.markDone(a.id);
         report.actions++;
       } on ApiException catch (e) {
-        if (e is DeviceRevokedException || e is UnauthenticatedException) {
+        if (e is DeviceRevokedException ||
+            e is UnauthenticatedException ||
+            e is DataConsentRequiredException) {
           rethrow;
         }
         if (e.retriable) {

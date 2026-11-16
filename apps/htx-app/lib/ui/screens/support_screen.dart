@@ -91,7 +91,7 @@ class _SupportScreenState extends ConsumerState<SupportScreen> {
   Widget build(BuildContext context) {
     final data = ref.watch(_supportProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Gửi yêu cầu hỗ trợ')),
+      appBar: AppBar(title: const Text('Yêu cầu hỗ trợ')),
       body: data.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Lỗi: $e')),

@@ -329,6 +329,50 @@ paths:
         "404": {description: accounts.assignment_not_found, $ref: "#/components/responses/Problem"}
         "409": {description: accounts.department_not_open, $ref: "#/components/responses/Problem"}
         "422": {description: accounts.department_required, $ref: "#/components/responses/Problem"}
+  /v1/me/data-consent:
+    get:
+      summary: "AH-23 / REQ-011: người gọi có phải đồng ý thu thập ảnh GPS và dữ liệu sản xuất không (tài khoản HTX; Admin luôn required=false). Nội dung và phiên bản lấy từ tham số masterdata accounts.data_consent.*"
+      description: "Các route nhận ảnh hoặc GPS (POST /v1/files, /v1/sync/push, /v1/cropcycle/seasons, /v1/cropcycle/farm-logs, /v1/plots và route con ghi) trả 403 accounts.data_consent_required cho tài khoản HTX chưa đồng ý phiên bản hiện hành; app mở lại màn Đồng ý khi gặp mã này."
+      operationId: accountsDataConsentStatus
+      tags: [accounts]
+      responses:
+        "200":
+          description: Trạng thái đồng ý
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DataConsentStatus"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "503": {description: accounts.data_consent_unconfigured, $ref: "#/components/responses/Problem"}
+    post:
+      summary: "AH-23 / REQ-011: ghi bằng chứng đồng ý phiên bản nội dung hiện hành (thời điểm theo giờ máy chủ); đã đồng ý rồi thì trả bản đã ghi"
+      operationId: accountsRecordDataConsent
+      tags: [accounts]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                version: {type: string, description: "Mã phiên bản nội dung người dùng đã đọc (lấy từ GET)"}
+      responses:
+        "200":
+          description: Đã đồng ý phiên bản này trước đó (hoặc phát lại cùng khóa) — bản đã ghi, không ghi dòng mới
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DataConsentRecord"}
+        "201":
+          description: Đã ghi bằng chứng đồng ý
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/DataConsentRecord"}
+        "403": {description: "forbidden (không phải tài khoản HTX)", $ref: "#/components/responses/Problem"}
+        "409": {description: accounts.data_consent_version_stale, $ref: "#/components/responses/Problem"}
+        "422": {description: "validation_failed (version sai dạng) | idempotency_key_reused", $ref: "#/components/responses/Problem"}
+        "503": {description: accounts.data_consent_unconfigured, $ref: "#/components/responses/Problem"}
   /v1/orgs:
     get:
       summary: Tổ chức trong phạm vi của người gọi (phân trang cursor)
@@ -20434,11 +20478,11 @@ components:
       description: Không chứa dữ liệu cá nhân. Cũng là data của entity đồng bộ "notification" (không có topic).
       properties:
         id: {type: string, format: uuid}
-        kind: {type: string, enum: [directive, alert, document, task_escalated, sync_conflict, org_deactivated, household_registered, household_membership_changed, task_assigned, farm_log_pending, farm_log_reviewed, season_opened, integration_dead_lettered, area_feed_stale, price_reminder, price_alert, price_verify_request, price_verify_reply, price_verify_decision, price_lock_summary, price_board_approved, price_board_reopened, price_proxy_entry, cnts_knqg_sent, cnts_knqg_reviewed, cnts_knqg_submitted, hrm_appraisal, hrm_promotion_due, hrm_plan_reminder]}
+        kind: {type: string, enum: [directive, alert, document, task_escalated, sync_conflict, org_deactivated, household_registered, household_membership_changed, task_assigned, farm_log_pending, farm_log_reviewed, season_opened, integration_dead_lettered, area_feed_stale, price_reminder, price_alert, price_verify_request, price_verify_reply, price_verify_decision, price_lock_summary, price_board_approved, price_board_reopened, price_proxy_entry, cnts_knqg_sent, cnts_knqg_reviewed, cnts_knqg_submitted, hrm_appraisal, hrm_promotion_due, hrm_plan_reminder, season_calendar_published, season_task_due, season_log_missing, season_process_changed]}
         severity: {type: string, enum: [urgent, normal]}
         title: {type: string, maxLength: 300}
         body: {type: string, maxLength: 2000}
-        deep_link: {type: string, description: "Đường dẫn trong app: /extension/directives/{id}, /documents/{ref}, /extension/tasks/{id}, /sync/conflicts/{id}, /orgs/{ref}, /kn/cnts/du-an-mau-bieu?doc={ref} (W11.53b: biểu dự án KNQG)"}
+        deep_link: {type: string, description: "Đường dẫn trong app: /extension/directives/{id}, /documents/{ref}, /extension/tasks/{id}, /sync/conflicts/{id}, /orgs/{ref}, /kn/cnts/du-an-mau-bieu?doc={ref} (W11.53b: biểu dự án KNQG), /cropcycle/seasons/{ref}, /cropcycle/seasons/{ref}/tasks/{ref} (NTF.2), /cropcycle/calendars/{ref} (NTF.1; chưa có màn đích)"}
         subject_ref: {type: [string, "null"], format: uuid}
         created_at: {type: string, format: date-time}
         read_at: {type: [string, "null"], format: date-time}
@@ -27779,6 +27823,21 @@ components:
     DeptDocList: {"type": "object", "properties": {"department_code": {"type": "string"}, "can_write": {"type": "boolean"}, "can_manage": {"type": "boolean"}, "total": {"type": "integer"}, "kinds": {"type": "array", "items": {"type": "string"}}, "extensions": {"type": "array", "items": {"type": "string"}}, "max_bytes": {"type": "integer"}, "items": {"type": "array", "items": {"$ref": "#/components/schemas/DeptDoc"}}}, "required": ["department_code", "can_write", "can_manage", "total", "kinds", "extensions", "max_bytes", "items"], "additionalProperties": false}
     DeptDocInput: {"type": "object", "properties": {"folder_ref": {"type": ["string", "null"], "format": "uuid"}, "title": {"type": "string"}, "kind": {"type": "string", "enum": ["quy_trinh_ky_thuat", "van_ban_phap_quy", "van_ban_chi_dao", "ke_hoach", "mau_bieu", "tai_lieu_tap_huan", "khac"]}, "field": {"type": "string"}, "number": {"type": "string"}, "issuer": {"type": "string"}, "summary": {"type": "string"}, "issued_on": {"type": "string", "description": "YYYY-MM-DD hoặc rỗng"}, "effective_from": {"type": "string"}, "effective_to": {"type": "string"}, "audience": {"type": "array", "items": {"type": "string", "enum": ["xa", "nong_ho"]}}, "base_version": {"type": "integer", "description": "Bắt buộc khi sửa (khóa lạc quan)"}}, "required": ["title", "kind"], "additionalProperties": false}
     DeptDocHide: {"type": "object", "properties": {"reason": {"type": "string"}, "base_version": {"type": "integer"}}, "required": ["reason", "base_version"], "additionalProperties": false}
+    DataConsentStatus:
+      type: object
+      required: [required, version, text, consented_at]
+      properties:
+        required: {type: boolean, description: "true: phải hiện màn Đồng ý trước khi vào ứng dụng"}
+        version: {type: [string, "null"], description: "Mã phiên bản nội dung hiện hành (null khi tài khoản không thuộc diện phải đồng ý)"}
+        text: {type: [string, "null"], description: "Nội dung thông báo (chỉ có khi required)"}
+        consented_at: {type: [string, "null"], format: date-time, description: "Thời điểm đồng ý phiên bản hiện hành (giờ máy chủ), có khi required=false và đã đồng ý"}
+    DataConsentRecord:
+      type: object
+      required: [id, version, consented_at]
+      properties:
+        id: {type: string, format: uuid}
+        version: {type: string}
+        consented_at: {type: string, format: date-time}
     KNMachineProfile:
       type: object
       required: [cooperative_ref, commune_code, department_code, items]

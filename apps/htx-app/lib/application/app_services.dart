@@ -32,6 +32,7 @@ import 'package:path/path.dart' as p;
 
 import 'collection_service.dart';
 import 'crop_service.dart';
+import 'data_consent_service.dart';
 import 'manager_service.dart';
 import 'news_service.dart';
 import 'profile_service.dart';
@@ -130,6 +131,7 @@ class HtxServices {
     required this.manager,
     required this.boundaries,
     required this.tiles,
+    required this.dataConsent,
   });
 
   final HtxPlatform platform;
@@ -162,6 +164,10 @@ class HtxServices {
 
   /// Gói bản đồ ngoại tuyến (vẽ ranh giới khi mất sóng — HTX US-PLOT-05).
   final TilePackService tiles;
+
+  /// Đồng ý thu thập ảnh GPS và dữ liệu sản xuất (AH-23, REQ-011): hỏi sau khi
+  /// mở khóa, trước khi vào ứng dụng.
+  final DataConsentService dataConsent;
 
   late final PushHost pushHost = _ServicesPushHost(this);
 
@@ -302,6 +308,7 @@ class HtxServices {
         ids: pf.ids,
         userAgent: 'vn.agrigreen.htx (offline-pack)',
       ),
+      dataConsent: DataConsentService(api: api, store: pf.store, ids: pf.ids),
     );
   }
 

@@ -214,6 +214,9 @@ func Build(ctx context.Context, open PoolOpener, clk clock.Clock, ext External) 
 			return Modules{}, pools, err
 		}
 	}
+	if dir != nil {
+		nt.UseMembers(NotifyMembers{Dir: dir}) // AH-22: cổng thông báo Thành viên HTX kiểm người nhận
+	}
 	// Không có hồ sơ phiên ứng dụng nào đăng ký: quyền lấy từ vai realm (coop_manager, farmer, …) và sổ gán của pf/accounts.
 	sessionRegistry, err := authz.NewSessionRegistry()
 	if err != nil {

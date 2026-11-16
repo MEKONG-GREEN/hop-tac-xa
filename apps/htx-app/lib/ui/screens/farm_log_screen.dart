@@ -127,7 +127,7 @@ class _FarmLogScreenState extends ConsumerState<FarmLogScreen> {
     final data = ref.watch(_logDataProvider);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Ghi nhật ký canh tác'),
+        title: const Text('Ghi nhật ký'),
         actions: [
           // HTX US-LOG-03: nông dân có nhiều lô cùng hoạt động trong ngày.
           if (widget.seasonRef == null)

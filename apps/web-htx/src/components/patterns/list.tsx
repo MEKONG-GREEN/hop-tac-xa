@@ -1,9 +1,10 @@
 "use client";
 
 // Mẫu trang List (BRD §4.0 mục 3, Design Sample "Screens / List"): tiêu đề + nút, thanh bộ lọc dạng thẻ
-// có "Đặt lại", bảng có STT, nhãn trạng thái, biểu tượng xem/sửa/xóa, phân trang số trang.
+// một hàng có số kết quả, "Lọc thêm" và "Xóa lọc", bảng có STT, nhãn trạng thái, hàng nút mỗi dòng (nút chính,
+// tối đa một nút phụ, còn lại trong menu "Thêm"), phân trang số trang. Quy ước: docs/conventions/giao-dien-chung.md.
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Icon } from "../Icon";
 
 export interface FilterOption {
@@ -53,15 +54,55 @@ export function SearchBox({ value, onChange, placeholder = "Tìm kiếm" }: { va
   );
 }
 
-export function FilterBar({ children, onReset }: { children: ReactNode; onReset?: () => void }) {
+export function resultCountText(n: number): string {
+  return `${n.toLocaleString("vi-VN")} kết quả`;
+}
+
+/**
+ * Thanh lọc một hàng: ô lọc (`children`, quy ước tối đa 4), "Lọc thêm" (các ô trong `more`), số kết quả, "Xóa lọc".
+ * Màn gọi tự đếm số ô đang đặt và đặt lại giá trị trong `onClear`; thành phần không đo độ rộng.
+ */
+export function FilterBar({
+  children,
+  more,
+  resultCount,
+  activeCount,
+  moreActiveCount = 0,
+  onClear,
+}: {
+  children?: ReactNode;
+  more?: ReactNode;
+  resultCount: number;
+  /** Số ô lọc đang đặt (cả hàng và phần ẩn); 0 → "Xóa lọc" bị vô hiệu. */
+  activeCount: number;
+  /** Số ô đang đặt trong phần "Lọc thêm". */
+  moreActiveCount?: number;
+  onClear: () => void;
+}) {
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreId = useId();
   return (
     <div className="card filters" role="search" aria-label="Bộ lọc">
-      {children}
-      {onReset ? (
-        <button type="button" className="freset" onClick={onReset}>
+      <div className="filters-row">
+        {children}
+        {more ? (
+          <button type="button" className="fmore" aria-expanded={moreOpen} aria-controls={moreId} onClick={() => setMoreOpen((v) => !v)}>
+            <Icon name="filter" size={15} />
+            {moreActiveCount > 0 ? `Lọc thêm (${moreActiveCount})` : "Lọc thêm"}
+          </button>
+        ) : null}
+        <span className="fcount" aria-live="polite">
+          {resultCountText(resultCount)}
+        </span>
+        <button type="button" className="freset" disabled={activeCount === 0} onClick={onClear}>
           <Icon name="refresh" size={15} />
-          Đặt lại
+          Xóa lọc
         </button>
+      </div>
+      {more ? (
+        <div id={moreId} className="filters-more" role="group" aria-label="Lọc thêm" hidden={!moreOpen}>
+          {more}
+        </div>
       ) : null}
     </div>
   );
@@ -73,35 +114,94 @@ export function StatusPill({ tone = "neutral", children }: { tone?: PillTone; ch
   return <span className={`pill${tone === "neutral" ? "" : ` pill-${tone}`}`}>{children}</span>;
 }
 
-/** Biểu tượng xem / sửa / xóa của một dòng. Cấp Quốc gia: không truyền edit/remove (chỉ xem). */
-export function RowActions({
-  label,
-  viewHref,
-  editHref,
-  onDelete,
-}: {
-  /** Tên dòng cho nhãn trợ năng: "Xem HTX Mỹ Hòa". */
-  label: string;
-  viewHref?: string;
-  editHref?: string;
-  onDelete?: () => void;
-}) {
+export type RowAction = { label: string } & ({ href: string; onClick?: never } | { onClick: () => void; href?: never });
+export type MoreAction = RowAction & { danger?: boolean };
+
+/**
+ * Hàng nút của một dòng: một nút chính, tối đa một nút phụ, còn lại trong menu "Thêm" (ẩn khi rỗng).
+ * Xóa/hủy chỉ đặt trong `more`: `primary`/`secondary` không có trường `danger`.
+ * `label` là tên dòng cho nhãn trợ năng: "Sửa HTX Mỹ Hòa".
+ */
+export function RowActions({ label, primary, secondary, more }: { label: string; primary: RowAction; secondary?: RowAction; more?: MoreAction[] }) {
+  const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLSpanElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const id = useId();
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (wrap.current && !wrap.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setOpen(false);
+      trigger.current?.focus();
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const button = (a: RowAction, cls: string) =>
+    a.href !== undefined ? (
+      <Link href={a.href} className={cls} aria-label={`${a.label} ${label}`}>
+        {a.label}
+      </Link>
+    ) : (
+      <button type="button" className={cls} aria-label={`${a.label} ${label}`} onClick={a.onClick}>
+        {a.label}
+      </button>
+    );
+
   return (
-    <span className="row-acts">
-      {viewHref ? (
-        <Link href={viewHref} aria-label={`Xem ${label}`} title="Xem">
-          <Icon name="eye" size={17} />
-        </Link>
-      ) : null}
-      {editHref ? (
-        <Link href={editHref} aria-label={`Sửa ${label}`} title="Sửa">
-          <Icon name="edit" size={16} />
-        </Link>
-      ) : null}
-      {onDelete ? (
-        <button type="button" className="del" aria-label={`Xóa ${label}`} title="Xóa" onClick={onDelete}>
-          <Icon name="trash" size={16} />
-        </button>
+    <span className="row-acts" ref={wrap}>
+      {button(primary, "btn btn-p btn-sm")}
+      {secondary ? button(secondary, "btn btn-o btn-sm") : null}
+      {more && more.length > 0 ? (
+        <span className="row-more">
+          <button
+            type="button"
+            ref={trigger}
+            className="btn btn-o btn-sm"
+            aria-haspopup="menu"
+            aria-expanded={open}
+            aria-controls={`${id}-menu`}
+            aria-label={`Thêm thao tác cho ${label}`}
+            onClick={() => setOpen((v) => !v)}
+          >
+            <Icon name="more" size={16} />
+            Thêm
+          </button>
+          {open ? (
+            <div className="row-more-menu" role="menu" id={`${id}-menu`} aria-label={`Thao tác thêm cho ${label}`}>
+              {more.map((m) => {
+                const cls = `row-more-item${m.danger ? " danger" : ""}`;
+                return m.href !== undefined ? (
+                  <Link key={m.label} href={m.href} role="menuitem" className={cls} onClick={() => setOpen(false)}>
+                    {m.label}
+                  </Link>
+                ) : (
+                  <button
+                    key={m.label}
+                    type="button"
+                    role="menuitem"
+                    className={cls}
+                    onClick={() => {
+                      setOpen(false);
+                      m.onClick();
+                    }}
+                  >
+                    {m.label}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+        </span>
       ) : null}
     </span>
   );

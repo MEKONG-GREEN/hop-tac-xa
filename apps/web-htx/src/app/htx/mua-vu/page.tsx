@@ -1,16 +1,17 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState, type FormEvent } from "react";
 import { unwrap } from "@/api/client";
 import { newIdempotencyKey } from "@/api/idempotency";
 import { collectPages, usePagedList } from "@/api/pagination";
 import { ApiProblem } from "@/api/problem";
 import type { CropBulkOpenResult, CropPreviousConfig, CropSeason, CropSOPTemplate } from "@/api/types";
 import { useAuth } from "@/auth/AuthProvider";
-import { Dialog } from "@/components/Dialog";
 import { Icon } from "@/components/Icon";
 import { ProblemAlert } from "@/components/ProblemAlert";
 import { Empty, LoadMore, Loading, PageHead } from "@/components/ui";
+import { SeasonDetailDialog } from "@/htx/SeasonDetailDialog";
 import { LocationChip, ReasonDialog, ResultList, StatusChip, useCatalog, useCatalogNames } from "@/htx/common";
 import { SEASON_STATUS, sowingDateError, todayVN } from "@/htx/rules";
 import { CoopPicker, ReadOnlyNotice, useCoopFields, useHtxScope, type HtxScope } from "@/htx/scope";
@@ -319,40 +320,15 @@ function CorrectDialog({ season, onClose, onDone }: { season: CropSeason; onClos
   );
 }
 
-function SeasonDetailDialog({ season, onClose }: { season: CropSeason; onClose: () => void }) {
-  const { api } = useAuth();
-  const d = useAsync(() => unwrap(api.GET("/v1/cropcycle/seasons/{ref}", { params: { path: { ref: season.season_ref } } })), [api, season.season_ref]);
-  const varietyName = useCatalogNames("rice_variety");
-  const seasonName = useCatalogNames("season");
-  const ACTION: Record<string, string> = { opened: "Mở vụ", corrected: "Sửa (bản ghi bù)", completed: "Hoàn thành vụ", cancelled: "Hủy vụ" };
-  return (
-    <Dialog title={`Vụ ${seasonName.get(season.season_code) ?? season.season_code} ${season.season_year} — lô ${season.plot_code}`} onClose={onClose}>
-      {d.error ? <ProblemAlert problem={d.error} /> : null}
-      {d.loading && !d.data ? <Loading /> : null}
-      {d.data ? (
-        <div className="stack" style={{ gap: 10 }}>
-          {d.data.progress ? (
-            <p className="small">
-              Tiến độ SOP (chỉ nhật ký đã duyệt): <b style={{ display: "inline" }}>{d.data.progress.sop_steps_done}/{d.data.progress.sop_steps}</b> bước · nhật ký chờ duyệt {d.data.progress.pending_logs}
-            </p>
-          ) : null}
-          <ol style={{ margin: "0 0 0 18px" }} aria-label="Lịch sử vụ">
-            {d.data.events.map((ev) => (
-              <li key={ev.id} className="small" style={{ marginBottom: 4 }}>
-                <b style={{ display: "inline" }}>{ACTION[ev.action] ?? ev.action}</b> · {formatDate(ev.event_time)} · giống {ev.variety_code ? (varietyName.get(ev.variety_code) ?? ev.variety_code) : "—"} · sạ {formatDate(ev.sowing_date)}
-                {ev.correction_reason ? <div className="mute">Lý do: {ev.correction_reason}</div> : null}
-              </li>
-            ))}
-          </ol>
-        </div>
-      ) : null}
-    </Dialog>
-  );
-}
+/** Mã vụ trong `?season=` (từ thông báo) phải là UUID đầy đủ; sai dạng → bỏ qua, chỉ mở danh sách. */
+const STRICT_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Vụ mùa của HTX (HTX US-SEASON-02/03/04): lọc, mở vụ hộ/hàng loạt, sửa/hủy có lý do. KN chỉ xem. */
-export default function SeasonsPage() {
+function SeasonsInner() {
   const { api } = useAuth();
+  const router = useRouter();
+  const seasonParam = useSearchParams().get("season");
+  const linked = seasonParam && STRICT_UUID.test(seasonParam) ? seasonParam : null;
   const scope = useHtxScope();
   const seasons = useCatalog("season");
   const varieties = useCatalog("rice_variety");
@@ -392,7 +368,7 @@ export default function SeasonsPage() {
   return (
     <>
       <PageHead
-        title="Mùa vụ"
+        title="Vụ canh tác"
         subtitle="Vụ của từng lô ruộng — mỗi lô tối đa một vụ đang mở; sửa và hủy bằng bản ghi bù kèm lý do"
         actions={
           scope.canWrite && scope.coopRef ? (
@@ -516,7 +492,8 @@ export default function SeasonsPage() {
         {!list.loading && !list.error && list.items.length === 0 ? <Empty>Không có vụ phù hợp bộ lọc.</Empty> : null}
         <LoadMore hasMore={list.hasMore} loading={list.loading} onClick={list.loadMore} />
       </div>
-      {dialog?.kind === "detail" ? <SeasonDetailDialog season={dialog.s} onClose={() => setDialog(null)} /> : null}
+      {dialog?.kind === "detail" ? <SeasonDetailDialog seasonRef={dialog.s.season_ref} onClose={() => setDialog(null)} /> : null}
+      {linked ? <SeasonDetailDialog seasonRef={linked} onClose={() => router.replace("/htx/mua-vu")} /> : null}
       {dialog?.kind === "correct" ? (
         <CorrectDialog
           season={dialog.s}
@@ -552,3 +529,10 @@ export default function SeasonsPage() {
   );
 }
 
+export default function SeasonsPage() {
+  return (
+    <Suspense fallback={<Loading />}>
+      <SeasonsInner />
+    </Suspense>
+  );
+}

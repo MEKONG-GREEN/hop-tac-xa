@@ -175,4 +175,37 @@ void main() {
     );
     await expectLater(api.pull(limit: 1), throwsA(isA<NetworkException>()));
   });
+
+  test('AH-23 REQ-011: 403 accounts.data_consent_required → DataConsentRequiredException (không phải lỗi dữ liệu)', () async {
+    final api = HttpSyncApi(
+      baseUrl: 'https://api.test',
+      accessToken: () async => 'tok',
+      client: MockClient(
+        (_) async => http.Response.bytes(
+          utf8.encode(
+            jsonEncode({
+              'code': 'accounts.data_consent_required',
+              'detail': 'Chưa đồng ý',
+            }),
+          ),
+          403,
+        ),
+      ),
+    );
+    await expectLater(
+      api.pull(limit: 1),
+      throwsA(
+        isA<DataConsentRequiredException>()
+            .having((e) => e.status, 'status', 403)
+            .having(
+              (e) => e.code,
+              'code',
+              DataConsentRequiredException.consentCode,
+            )
+            .having((e) => e.detail, 'detail', 'Chưa đồng ý')
+            .having((e) => e.retriable, 'retriable', isFalse)
+            .having((e) => e.isContextError, 'isContextError', isFalse),
+      ),
+    );
+  });
 }

@@ -64,7 +64,9 @@ type Deps struct {
 	Staff     port.StaffDirectory
 	Units     partyport.AdminUnits
 	// Farmers (tùy chọn): nông dân có thửa trong địa bàn cảnh báo khẩn (HTX US-NEWS-03).
-	Farmers          port.AreaFarmers
+	Farmers port.AreaFarmers
+	// Members (AH-22): kiểm người nhận của cổng MemberNotifier; nil → cổng trả 503.
+	Members          port.MemberDirectory
 	Pusher           channel.Pusher
 	Mailer           channel.Mailer
 	DigestTo         []string
@@ -161,7 +163,7 @@ type Module struct {
 // notify_app. Mọi giao dịch module tự mở chạy dưới vai r_notify (db.ForModule).
 func New(b tenant.Beginner, clk clock.Clock, d Deps) *Module {
 	m := &Module{svc: app.NewService(db.ForModule(b, DBModule), clk, app.Deps{
-		Scope: d.Scope, Devices: d.Devices, Staff: d.Staff, Units: d.Units, Farmers: d.Farmers, Pusher: d.Pusher, Mailer: d.Mailer,
+		Scope: d.Scope, Devices: d.Devices, Staff: d.Staff, Units: d.Units, Farmers: d.Farmers, Members: d.Members, Pusher: d.Pusher, Mailer: d.Mailer,
 		DigestTo: d.DigestTo, DigestRecipients: d.DigestRecipients, Log: d.Log, NudgeCooldown: d.NudgeCooldown, NudgeHourly: d.NudgeHourly,
 		SyncEntities: d.SyncEntities, Emails: d.Emails, EmailMailer: d.EmailMailer, LinkBase: d.LinkBase,
 	})}
@@ -189,6 +191,14 @@ func (m *Module) RegisterAdmin(rg *gin.RouterGroup) { handler.Handler{Svc: m.svc
 // UseAreaFarmers nối cổng tìm nông dân theo địa bàn (pf/geo + pf/accounts) cho cảnh báo khẩn
 // (HTX US-NEWS-03). Gốc lắp ráp gọi sau khi dựng pf/accounts.
 func (m *Module) UseAreaFarmers(f port.AreaFarmers) { m.svc.Farmers = f }
+
+// UseMembers nối cổng kiểm Thành viên HTX (pf/accounts) cho MemberNotifier (AH-22). Gốc lắp ráp gọi sau khi dựng
+// pf/accounts.
+func (m *Module) UseMembers(d port.MemberDirectory) { m.svc.Members = d }
+
+// MemberNotifier là cổng tạo thông báo cho Thành viên HTX, cho AH-51, AH-191, AH-192, AH-175. Gọi ngoài DB
+// transaction của bên gọi.
+func (m *Module) MemberNotifier() port.MemberNotifier { return app.MemberNotifier{Svc: m.svc} }
 
 // UseSyncEntities nối danh sách entity chiều xuống của pf/sync (kiểm entities[] của
 // POST /v1/sync/nudge, KN US-SYNC-02). Gốc lắp ráp gọi sau khi dựng pf/sync.

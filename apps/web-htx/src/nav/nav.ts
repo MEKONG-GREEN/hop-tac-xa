@@ -115,7 +115,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
       { href: "/htx/dashboard", module: "pf/cropcycle", label: "Bảng điều hành sản xuất", icon: "chart", roles: HTX_READ },
       { href: "/htx/nong-ho", label: "Quản lý nông hộ", icon: "coop", roles: HTX_READ },
       { href: "/htx/lo-ruong", module: "pf/geo", label: "Lô ruộng & ranh giới", icon: "plot", roles: HTX_READ },
-      { href: "/htx/mua-vu", module: "pf/cropcycle", label: "Mùa vụ", icon: "season", roles: HTX_READ },
+      { href: "/htx/mua-vu", module: "pf/cropcycle", label: "Vụ canh tác", icon: "season", roles: HTX_READ },
       { href: "/htx/nhat-ky", module: "pf/cropcycle", label: "Nhật ký canh tác", icon: "journal", roles: HTX_READ },
       { href: "/htx/phe-duyet", module: "pf/cropcycle", label: "Phê duyệt nhật ký", icon: "approve", roles: HTX_WRITE },
       { href: "/htx/san-luong", module: "pf/cropcycle", label: "Sản lượng thu hoạch", icon: "harvest", roles: HTX_READ },

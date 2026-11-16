@@ -63,7 +63,18 @@ const (
 	// tài khoản (D24, CEO 13/10/2026: 38 / 45 ngày — báo trước 7 ngày) — accounts, job accounts_dormant.
 	ParamAccountsDormantWarnDays    = "accounts.dormant_warn_days"
 	ParamAccountsDormantDisableDays = "accounts.dormant_disable_days"
+	// ParamAccountsDataConsentVersion: mã phiên bản nội dung Đồng ý thu thập dữ liệu hiện hành (AH-23, KH-24, REQ-011).
+	ParamAccountsDataConsentVersion = "accounts.data_consent.version"
+	// ParamAccountsDataConsentTextPrefix + ":<mã phiên bản>" — nội dung Đồng ý thu thập dữ liệu của phiên bản đó.
+	// Quy trình đổi nội dung: duyệt "text:<mã mới>" TRƯỚC, rồi mới duyệt "version" trỏ tới mã mới (version trỏ tới mã
+	// chưa có nội dung thì accounts trả 503 và vẫn chặn).
+	ParamAccountsDataConsentTextPrefix = "accounts.data_consent.text"
 )
+
+// DataConsentTextKey là khóa tham số nội dung Đồng ý thu thập dữ liệu của một mã phiên bản.
+func DataConsentTextKey(version string) string {
+	return ParamAccountsDataConsentTextPrefix + ":" + version
+}
 
 // Quy chuẩn hiển thị dùng chung của bản đồ GIS (GIS US-CFG-01/02, FN-03): tham số chuỗi mã
 // màu HEX "#RRGGBB", có phiên bản và phê duyệt như mọi tham số (R-56: người đặt ≠ người duyệt,

@@ -44,6 +44,15 @@ class DeviceRevokedException extends ApiException {
   static const deviceRevokedCode = 'sync.device_revoked';
 }
 
+/// `403 accounts.data_consent_required` (AH-23, REQ-011): tài khoản HTX chưa
+/// đồng ý thu thập dữ liệu với phiên bản nội dung hiện hành nên máy chủ từ chối
+/// cả yêu cầu gửi ảnh/GPS. Dữ liệu giữ nguyên ở máy; app mở lại màn Đồng ý.
+class DataConsentRequiredException extends ApiException {
+  DataConsentRequiredException([String? detail])
+    : super(403, consentCode, detail);
+  static const consentCode = 'accounts.data_consent_required';
+}
+
 /// 401 — token hết hạn / bị thu hồi. Cần làm mới token hoặc đăng nhập lại.
 class UnauthenticatedException extends ApiException {
   UnauthenticatedException(String code) : super(401, code);
@@ -312,6 +321,10 @@ class HttpSyncApi implements SyncApi {
     if (res.statusCode == 403 &&
         code == DeviceRevokedException.deviceRevokedCode) {
       return DeviceRevokedException();
+    }
+    if (res.statusCode == 403 &&
+        code == DataConsentRequiredException.consentCode) {
+      return DataConsentRequiredException(detail);
     }
     if (res.statusCode == 401) return UnauthenticatedException(code);
     return ApiException(res.statusCode, code, detail);

@@ -50,7 +50,7 @@ class _StaffScreenState extends ConsumerState<StaffScreen> {
     final list = ref.watch(_staffProvider);
     final s = ref.services;
     return Scaffold(
-      appBar: AppBar(title: const Text('Danh bạ cán bộ HTX')),
+      appBar: AppBar(title: const Text('Danh bạ cán bộ')),
       body: ListView(
         padding: const EdgeInsets.all(12),
         children: [

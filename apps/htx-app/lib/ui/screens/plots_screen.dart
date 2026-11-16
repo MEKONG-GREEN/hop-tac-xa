@@ -35,9 +35,7 @@ class PlotsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final rows = ref.watch(plotRowsProvider);
     return Scaffold(
-      appBar: AppBar(
-        title: Text(manager ? 'Lô ruộng của HTX' : 'Ruộng của tôi'),
-      ),
+      appBar: AppBar(title: Text(manager ? 'Ghi nhật ký hộ' : 'Ruộng của tôi')),
       body: rows.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Lỗi: $e')),

@@ -14,57 +14,58 @@ import { collectionRoutes as route2 } from "./collection";
 import { cropCatalogAdminRoutes as route3 } from "./crop-catalog";
 import { cropcycleAppRoutes as route4 } from "./cropcycle";
 import { cropcycleAdminRoutes as route5 } from "./cropcycle";
-import { exportRoutes as route6 } from "./export";
-import { formsAppRoutes as route7 } from "./forms/routes";
-import { formsAdminRoutes as route8 } from "./forms/routes";
-import { apiClientAdminRoutes as route9 } from "./g5";
-import { meteringAdminRoutes as route10 } from "./g5";
-import { gisAppRoutes as route11 } from "./gis";
-import { gisAdminRoutes as route12 } from "./gis";
-import { htxAppRoutes as route13 } from "./htx";
-import { htxAdminRoutes as route14 } from "./htx";
-import { htxAnchorRoutes as route15 } from "./htx-anchors";
-import { htxGapAppRoutes as route16 } from "./htx-gaps";
-import { htxGapAdminRoutes as route17 } from "./htx-gaps";
-import { appRoutes41 as route18 } from "./legacy-document";
-import { appRoutes38 as route19 } from "./legacy-geo";
-import { appRoutes39 as route20 } from "./legacy-geo";
-import { appRoutes40 as route21 } from "./legacy-geo";
-import { appRoutes42 as route22 } from "./legacy-geo";
-import { appRoutes30 as route23 } from "./legacy-masterdata";
-import { appRoutes31 as route24 } from "./legacy-masterdata";
-import { appRoutes32 as route25 } from "./legacy-masterdata";
-import { appRoutes33 as route26 } from "./legacy-masterdata";
-import { adminRoutes4 as route27 } from "./legacy-masterdata";
-import { adminRoutes5 as route28 } from "./legacy-masterdata";
-import { adminRoutes6 as route29 } from "./legacy-masterdata";
-import { adminRoutes7 as route30 } from "./legacy-masterdata";
-import { adminRoutes8 as route31 } from "./legacy-masterdata";
-import { adminRoutes9 as route32 } from "./legacy-masterdata";
-import { appRoutes43 as route33 } from "./legacy-mechanization";
-import { appRoutes44 as route34 } from "./legacy-mechanization";
-import { appRoutes45 as route35 } from "./legacy-mechanization";
-import { appRoutes46 as route36 } from "./legacy-mechanization";
-import { appRoutes1 as route37 } from "./legacy-party";
-import { appRoutes34 as route38 } from "./legacy-party";
-import { appRoutes35 as route39 } from "./legacy-party";
-import { appRoutes36 as route40 } from "./legacy-party";
-import { appRoutes37 as route41 } from "./legacy-party";
-import { adminRoutes10 as route42 } from "./legacy-party";
-import { adminRoutes11 as route43 } from "./legacy-party";
-import { adminRoutes12 as route44 } from "./legacy-party";
-import { metricsRoutes as route45 } from "./metrics";
-import { mrvAppRoutes as route46 } from "./mrv";
-import { mrvAdminRoutes as route47 } from "./mrv";
-import { notifyHealthAdminRoutes as route48 } from "./notify-health";
-import { opsRoutes as route49 } from "./ops";
-import { orgCreateRoutes as route50 } from "./orgs-create";
-import { rosterRoutes as route51 } from "./roster";
-import { seasonCatalogAdminRoutes as route52 } from "./season-catalog";
-import { simulationRoutes as route53 } from "./simulation";
-import { syncMonitorRoutes as route54 } from "./syncmonitor";
-import { waterwayAppRoutes as route55 } from "./waterway";
-import { waterwayAdminRoutes as route56 } from "./waterway";
+import { dataConsentAppRoutes as route6 } from "./data-consent";
+import { exportRoutes as route7 } from "./export";
+import { formsAppRoutes as route8 } from "./forms/routes";
+import { formsAdminRoutes as route9 } from "./forms/routes";
+import { apiClientAdminRoutes as route10 } from "./g5";
+import { meteringAdminRoutes as route11 } from "./g5";
+import { gisAppRoutes as route12 } from "./gis";
+import { gisAdminRoutes as route13 } from "./gis";
+import { htxAppRoutes as route14 } from "./htx";
+import { htxAdminRoutes as route15 } from "./htx";
+import { htxAnchorRoutes as route16 } from "./htx-anchors";
+import { htxGapAppRoutes as route17 } from "./htx-gaps";
+import { htxGapAdminRoutes as route18 } from "./htx-gaps";
+import { appRoutes41 as route19 } from "./legacy-document";
+import { appRoutes38 as route20 } from "./legacy-geo";
+import { appRoutes39 as route21 } from "./legacy-geo";
+import { appRoutes40 as route22 } from "./legacy-geo";
+import { appRoutes42 as route23 } from "./legacy-geo";
+import { appRoutes30 as route24 } from "./legacy-masterdata";
+import { appRoutes31 as route25 } from "./legacy-masterdata";
+import { appRoutes32 as route26 } from "./legacy-masterdata";
+import { appRoutes33 as route27 } from "./legacy-masterdata";
+import { adminRoutes4 as route28 } from "./legacy-masterdata";
+import { adminRoutes5 as route29 } from "./legacy-masterdata";
+import { adminRoutes6 as route30 } from "./legacy-masterdata";
+import { adminRoutes7 as route31 } from "./legacy-masterdata";
+import { adminRoutes8 as route32 } from "./legacy-masterdata";
+import { adminRoutes9 as route33 } from "./legacy-masterdata";
+import { appRoutes43 as route34 } from "./legacy-mechanization";
+import { appRoutes44 as route35 } from "./legacy-mechanization";
+import { appRoutes45 as route36 } from "./legacy-mechanization";
+import { appRoutes46 as route37 } from "./legacy-mechanization";
+import { appRoutes1 as route38 } from "./legacy-party";
+import { appRoutes34 as route39 } from "./legacy-party";
+import { appRoutes35 as route40 } from "./legacy-party";
+import { appRoutes36 as route41 } from "./legacy-party";
+import { appRoutes37 as route42 } from "./legacy-party";
+import { adminRoutes10 as route43 } from "./legacy-party";
+import { adminRoutes11 as route44 } from "./legacy-party";
+import { adminRoutes12 as route45 } from "./legacy-party";
+import { metricsRoutes as route46 } from "./metrics";
+import { mrvAppRoutes as route47 } from "./mrv";
+import { mrvAdminRoutes as route48 } from "./mrv";
+import { notifyHealthAdminRoutes as route49 } from "./notify-health";
+import { opsRoutes as route50 } from "./ops";
+import { orgCreateRoutes as route51 } from "./orgs-create";
+import { rosterRoutes as route52 } from "./roster";
+import { seasonCatalogAdminRoutes as route53 } from "./season-catalog";
+import { simulationRoutes as route54 } from "./simulation";
+import { syncMonitorRoutes as route55 } from "./syncmonitor";
+import { waterwayAppRoutes as route56 } from "./waterway";
+import { waterwayAdminRoutes as route57 } from "./waterway";
 
 export const commonRouteRegistrations: RouteRegistration[] = [
   { surface: "admin", order: 13, routes: route0 },
@@ -73,57 +74,58 @@ export const commonRouteRegistrations: RouteRegistration[] = [
   { surface: "admin", order: 120, routes: route3 },
   { surface: "app", order: 53, routes: route4 },
   { surface: "admin", order: 19, routes: route5 },
-  { surface: "app", order: 1001, routes: route6 },
-  { surface: "app", order: 3, routes: route7 },
-  { surface: "admin", order: 3, routes: route8 },
-  { surface: "admin", order: 22, routes: route9 },
-  { surface: "admin", order: 23, routes: route10 },
-  { surface: "app", order: 50, routes: route11 },
-  { surface: "admin", order: 17, routes: route12 },
-  { surface: "app", order: 54, routes: route13 },
-  { surface: "admin", order: 20, routes: route14 },
-  { surface: "admin", order: 16, routes: route15 },
-  { surface: "app", order: 0, routes: route16 },
-  { surface: "admin", order: 1, routes: route17 },
-  { surface: "app", order: 41, routes: route18 },
-  { surface: "app", order: 38, routes: route19 },
-  { surface: "app", order: 39, routes: route20 },
-  { surface: "app", order: 40, routes: route21 },
-  { surface: "app", order: 42, routes: route22 },
-  { surface: "app", order: 30, routes: route23 },
-  { surface: "app", order: 31, routes: route24 },
-  { surface: "app", order: 32, routes: route25 },
-  { surface: "app", order: 33, routes: route26 },
-  { surface: "admin", order: 4, routes: route27 },
-  { surface: "admin", order: 5, routes: route28 },
-  { surface: "admin", order: 6, routes: route29 },
-  { surface: "admin", order: 7, routes: route30 },
-  { surface: "admin", order: 8, routes: route31 },
-  { surface: "admin", order: 9, routes: route32 },
-  { surface: "app", order: 43, routes: route33 },
-  { surface: "app", order: 44, routes: route34 },
-  { surface: "app", order: 45, routes: route35 },
-  { surface: "app", order: 46, routes: route36 },
-  { surface: "app", order: 1, routes: route37 },
-  { surface: "app", order: 34, routes: route38 },
-  { surface: "app", order: 35, routes: route39 },
-  { surface: "app", order: 36, routes: route40 },
-  { surface: "app", order: 37, routes: route41 },
-  { surface: "admin", order: 10, routes: route42 },
-  { surface: "admin", order: 11, routes: route43 },
-  { surface: "admin", order: 12, routes: route44 },
-  { surface: "app", order: 55, routes: route45 },
-  { surface: "app", order: 56, routes: route46 },
-  { surface: "admin", order: 21, routes: route47 },
-  { surface: "admin", order: 24, routes: route48 },
-  { surface: "app", order: 48, routes: route49 },
-  { surface: "admin", order: 14, routes: route50 },
-  { surface: "app", order: 49, routes: route51 },
-  { surface: "admin", order: 121, routes: route52 },
-  { surface: "app", order: 52, routes: route53 },
-  { surface: "admin", order: 15, routes: route54 },
-  { surface: "app", order: 51, routes: route55 },
-  { surface: "admin", order: 18, routes: route56 },
+  { surface: "app", order: 3000, routes: route6 },
+  { surface: "app", order: 1001, routes: route7 },
+  { surface: "app", order: 3, routes: route8 },
+  { surface: "admin", order: 3, routes: route9 },
+  { surface: "admin", order: 22, routes: route10 },
+  { surface: "admin", order: 23, routes: route11 },
+  { surface: "app", order: 50, routes: route12 },
+  { surface: "admin", order: 17, routes: route13 },
+  { surface: "app", order: 54, routes: route14 },
+  { surface: "admin", order: 20, routes: route15 },
+  { surface: "admin", order: 16, routes: route16 },
+  { surface: "app", order: 0, routes: route17 },
+  { surface: "admin", order: 1, routes: route18 },
+  { surface: "app", order: 41, routes: route19 },
+  { surface: "app", order: 38, routes: route20 },
+  { surface: "app", order: 39, routes: route21 },
+  { surface: "app", order: 40, routes: route22 },
+  { surface: "app", order: 42, routes: route23 },
+  { surface: "app", order: 30, routes: route24 },
+  { surface: "app", order: 31, routes: route25 },
+  { surface: "app", order: 32, routes: route26 },
+  { surface: "app", order: 33, routes: route27 },
+  { surface: "admin", order: 4, routes: route28 },
+  { surface: "admin", order: 5, routes: route29 },
+  { surface: "admin", order: 6, routes: route30 },
+  { surface: "admin", order: 7, routes: route31 },
+  { surface: "admin", order: 8, routes: route32 },
+  { surface: "admin", order: 9, routes: route33 },
+  { surface: "app", order: 43, routes: route34 },
+  { surface: "app", order: 44, routes: route35 },
+  { surface: "app", order: 45, routes: route36 },
+  { surface: "app", order: 46, routes: route37 },
+  { surface: "app", order: 1, routes: route38 },
+  { surface: "app", order: 34, routes: route39 },
+  { surface: "app", order: 35, routes: route40 },
+  { surface: "app", order: 36, routes: route41 },
+  { surface: "app", order: 37, routes: route42 },
+  { surface: "admin", order: 10, routes: route43 },
+  { surface: "admin", order: 11, routes: route44 },
+  { surface: "admin", order: 12, routes: route45 },
+  { surface: "app", order: 55, routes: route46 },
+  { surface: "app", order: 56, routes: route47 },
+  { surface: "admin", order: 21, routes: route48 },
+  { surface: "admin", order: 24, routes: route49 },
+  { surface: "app", order: 48, routes: route50 },
+  { surface: "admin", order: 14, routes: route51 },
+  { surface: "app", order: 49, routes: route52 },
+  { surface: "admin", order: 121, routes: route53 },
+  { surface: "app", order: 52, routes: route54 },
+  { surface: "admin", order: 15, routes: route55 },
+  { surface: "app", order: 51, routes: route56 },
+  { surface: "admin", order: 18, routes: route57 },
 ];
 
 const registrations = [...commonRouteRegistrations, ...registeredKnRoutes()];

@@ -447,7 +447,9 @@ Nhãn vị trí (HTX US-GPS-01/02): `location_status` = `match` (≤ `cropcycle.
 | 404 | `notify.nudge_target_not_found` | pf/notify: `device_id` không có token đẩy đang dùng hoặc ngoài phạm vi (trừ vai `device_admin`, `platform_admin`) |
 | 429 | `notify.nudge_rate_limited` | pf/notify: đích đã được yêu cầu đồng bộ trong 5 phút qua, hoặc người gọi vượt 30 lần/giờ; có `retry_after_s` và header `Retry-After` |
 | 422 | `notify.nudge_entity_unknown` | pf/notify: `entities[]` của `POST /v1/sync/nudge` có tên không phải entity chiều xuống của pf/sync (KN US-SYNC-02) |
-| 503 | `notify.dependency_unavailable` | pf/notify: chưa nối sổ thiết bị của pf/sync |
+| 503 | `notify.dependency_unavailable` | pf/notify: chưa nối sổ thiết bị của pf/sync; hoặc chưa nối danh bạ Thành viên HTX (pf/accounts) cho cổng `MemberNotifier` (AH-22) |
+| 422 | `notify.member_notice_invalid` | pf/notify: cổng `MemberNotifier` (AH-22) từ chối nội dung thông báo cho Thành viên HTX; `errors[].field` nêu trường sai. Bên phát sinh hiện lỗi cho người thao tác |
+| 422 | `notify.recipient_not_member` | pf/notify: cổng `MemberNotifier` (AH-22) có người nhận không phải Thành viên HTX đang hoạt động của HTX; cả lần gọi bị từ chối, không tạo thông báo nào |
 
 Consumer `pf.notify.egress_anomaly` (G5, ADR-0024) không trả mã HTTP: payload `pf.metering.egress.anomaly_detected` hỏng → lỗi consumer, giao lại rồi vào `pf.notify.egress_anomaly.dlq` (R-62); giao lặp → inbox bỏ qua (R-61).
 ### pf/accounts
@@ -495,6 +497,9 @@ KN v7.7 gói P1 — gán vai trò nhiều vai × Nút × phòng ban × xã (FN-A
 | 409 | `accounts.duplicate_identity` | SĐT hoặc email đã là tên đăng nhập/email/SĐT của tài khoản khác (đăng nhập bằng email hoặc SĐT) |
 | 403 | `accounts.kn_admin_grant` | vai trò Admin chỉ `platform_admin` gán/thu hồi, cho tài khoản đã có vai realm `platform_admin` (MFA) |
 | 503 | `accounts.profile_update_unavailable` | kho tài khoản (Keycloak) chưa hỗ trợ sửa thông tin |
+| 403 | `accounts.data_consent_required` | pf/accounts (AH-23, REQ-011): tài khoản HTX (`coop_manager`) chưa đồng ý phiên bản nội dung hiện hành mà gọi route nhận ảnh/GPS (`POST /v1/files`, `/v1/sync/push`, `/v1/cropcycle/seasons…`, `/v1/cropcycle/farm-logs…`, `/v1/plots…`); cả yêu cầu bị từ chối. Mở lại màn Đồng ý thu thập dữ liệu (`GET/POST /v1/me/data-consent`) |
+| 409 | `accounts.data_consent_version_stale` | `POST /v1/me/data-consent`: `version` khác phiên bản hiện hành (nội dung vừa đổi) — đọc lại rồi xác nhận |
+| 503 | `accounts.data_consent_unconfigured` | thiếu/sai tham số `accounts.data_consent.version` hoặc `accounts.data_consent.text:<mã>` (pf/masterdata) — fail-closed: route nhận ảnh/GPS của tài khoản HTX vẫn bị chặn |
 | 428 | `accounts.context_required` | route KN v7.7 cần header `X-AG-Context` (chưa chọn vai trò + phòng ban) |
 | 403 | `accounts.context_invalid` | `X-AG-Context` không phải UUID, không tồn tại trong tenant, hoặc thuộc người khác (chống giả header) |
 | 403 | `accounts.context_expired` | ngữ cảnh quá 24 giờ hoặc lần gán hết hiệu lực — chọn lại |

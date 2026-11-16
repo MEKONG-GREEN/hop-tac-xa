@@ -28,6 +28,16 @@ void main() {
       );
       expect(tester.takeException(), isNull);
       expect(find.text('Nhiệm vụ hỗ trợ'), findsOneWidget);
+      // AH-24 AC1: chỉ biểu tượng co lại, chữ nhãn giữ cỡ ≥ 16 (không nằm trong FittedBox).
+      final label = tester.widget<Text>(find.text('Nhiệm vụ hỗ trợ'));
+      expect(label.style!.fontSize, greaterThanOrEqualTo(16));
+      expect(
+        find.ancestor(
+          of: find.text('Nhiệm vụ hỗ trợ'),
+          matching: find.byType(FittedBox),
+        ),
+        findsNothing,
+      );
     });
   }
 }

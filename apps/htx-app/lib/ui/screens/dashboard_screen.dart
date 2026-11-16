@@ -56,7 +56,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final seasons = ref.watch(_seasonChoices).value ?? const [];
     final dash = ref.watch(_dashProvider(_DashFilter(_season, _year)));
     return Scaffold(
-      appBar: AppBar(title: const Text('Dashboard sản lượng')),
+      appBar: AppBar(title: const Text('Tổng quan')),
       body: ListView(
         padding: const EdgeInsets.all(12),
         children: [

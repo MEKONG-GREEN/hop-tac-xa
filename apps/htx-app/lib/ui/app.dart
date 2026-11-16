@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'providers.dart';
+import 'screens/data_consent_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/pin_screen.dart';
@@ -37,7 +38,11 @@ class _AuthGate extends ConsumerWidget {
       AuthStage.needsPinSetup => const PinScreen(setup: true),
       AuthStage.locked => const PinScreen(setup: false),
       AuthStage.unlocked =>
-        st.services == null ? const LoginScreen() : const HomeScreen(),
+        st.services == null
+            ? const LoginScreen()
+            : st.consent != null
+            ? const DataConsentScreen()
+            : const HomeScreen(),
     };
   }
 }
