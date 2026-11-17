@@ -3,7 +3,7 @@ import type { GisLayerEvent, MetricDefinition, MetricValue } from "@/api/types";
 import { activeCount, diffAttributes, foldLayerEvents, replayFeatureCollection, snapshotBadge, validateReplayDate } from "@/gis/replay";
 import { addDays, cutoffOf, isIsoDate, vnToday } from "@/lib/vnDate";
 import { mockFetchNoDelay } from "@/api/mock/handler";
-import { mockToken } from "@/api/mock/personas";
+import { findPersona, mockToken } from "@/api/mock/personas";
 import { chartGeometry, groupDefinitions, rangeFor, shapeSeries } from "./series";
 
 function mv(p: Partial<MetricValue> & { business_date: string; value: string }): MetricValue {
@@ -164,6 +164,19 @@ describe("backend giả lập pf/metrics khớp hợp đồng", () => {
     const r = await get("cuc", "/v1/metrics/cgh.coops_shortage/values");
     expect(r.body.items).toEqual([]);
     expect((r.body.dimensions as string[]).length).toBeGreaterThan(0);
+  });
+
+  it("FN-06 (AH-306): Đại diện HTX không đọc chỉ số cc.* theo xã; khuyến nông vẫn đọc", async () => {
+    // Gọi bằng xã nằm trong scope của chính HTX: lỗi phải đến từ bước kiểm vai, không phải từ kiểm phạm vi.
+    const commune = findPersona("htx")!.me.scope.units[0]!;
+    for (const key of ["cc.season_area_ha", "cc.yield_t_per_ha"]) {
+      const r = await get("htx", `/v1/metrics/${key}/values?unit=${commune}&dimension=DX-2026`);
+      expect(r.status).toBe(403);
+      expect(r.body.code).toBe("forbidden");
+      expect(r.body.items).toBeUndefined();
+      expect(r.body.dimensions).toBeUndefined();
+    }
+    expect((await get("tinh", "/v1/metrics/cc.yield_t_per_ha/values?unit=82&dimension=DX-2026")).status).toBe(200);
   });
 
   it("phát lại: ngày tương lai 422 metrics.future_date; ảnh chụp hôm qua có mốc", async () => {

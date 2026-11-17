@@ -35,7 +35,8 @@ interface MockDef extends MetricDefinition {
 }
 
 const KN_VIEW = ["kn_national_admin", "kn_province_admin", "kn_officer"];
-const CC_VIEW = ["coop_manager", "kn_national_admin", "kn_province_admin", "cgh_viewer"];
+// Như viewer_roles của cc.* v2 (AH-306): số theo xã gộp nhiều HTX nên không mở cho Đại diện HTX.
+const CC_VIEW = ["kn_national_admin", "kn_province_admin", "cgh_viewer"];
 const CGH_VIEW = ["cgh_viewer", "cgh_admin"];
 const PENDING = "tich-hop-g3 (tạm, chờ khách)";
 

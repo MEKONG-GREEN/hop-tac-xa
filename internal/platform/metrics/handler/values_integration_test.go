@@ -132,7 +132,8 @@ func TestMetricsScopeTenantIsolationAndRoles(t *testing.T) {
 			t.Fatal("vai KN không thấy định nghĩa CGH")
 		}
 	}
-	if n := len(f.as(f.tenant, all, port.RoleMetricsViewer).get("/v1/metrics/definitions").items()); n != 9 {
+	// metrics_viewer thấy mọi phiên bản: 9 key, cc.season_area_ha và cc.yield_t_per_ha có v2 (AH-306).
+	if n := len(f.as(f.tenant, all, port.RoleMetricsViewer).get("/v1/metrics/definitions").items()); n != 11 {
 		t.Fatalf("metrics_viewer thấy %d định nghĩa", n)
 	}
 }
