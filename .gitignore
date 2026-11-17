@@ -34,3 +34,6 @@ __pycache__/
 
 # Cấu hình sinh cho VPS (deploy/vps/prepare.sh)
 deploy/compose/.vps/
+
+# Realm và cấu hình sinh cho máy demo (deploy/demo/prepare.sh)
+deploy/demo/.generated/

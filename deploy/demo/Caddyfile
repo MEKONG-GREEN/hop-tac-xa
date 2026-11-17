@@ -1,0 +1,75 @@
+# Cổng vào duy nhất của máy demo App HTX (deploy/demo/docker-compose.demo.yml). TLS tự động (Let's Encrypt).
+# MỘT tên miền, chia theo đường dẫn — chỉ cần một bản ghi DNS và một chứng thư:
+#   /              → web-htx      (Next.js)
+#   /api/*         → api-platform :8080  (bỏ tiền tố: /api/v1/... → /v1/...)
+#   /admin-api/*   → api-platform :8082  (Admin API, MFA ở tầng ứng dụng; bỏ tiền tố)
+#   /auth/*        → keycloak     (KC_HTTP_RELATIVE_PATH=/auth, GIỮ tiền tố)
+#   /<bucket>/*    → seaweedfs    (chỉ GET/HEAD — URL ký sẵn path-style, chữ ký SigV4 gồm Host và đường dẫn: không đổi gì)
+#
+# Biến: PUBLIC_HOST, ACME_EMAIL, AG_S3_BUCKET, ADMIN_ALLOW_CIDR (bảng điều khiển Keycloak),
+#       ADMIN_API_ALLOW_CIDR (Admin API; mặc định mở vì màn quản trị của web gọi thẳng từ trình duyệt người dùng).
+{
+	email {$ACME_EMAIL}
+}
+
+{$PUBLIC_HOST} {
+	encode zstd gzip
+	header {
+		# Không includeSubDomains/preload: máy demo, không ràng buộc tên con của demo-htx.
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+
+	# ---------------------------------------------------------------- Application API
+	handle_path /api/* {
+		header {
+			X-Content-Type-Options "nosniff"
+			Referrer-Policy "no-referrer"
+			Content-Security-Policy "default-src 'none'; frame-ancestors 'none'"
+		}
+		reverse_proxy api-platform:8080
+	}
+
+	# ---------------------------------------------------------------- Admin API (MFA bắt buộc ở ứng dụng)
+	handle_path /admin-api/* {
+		@outside not remote_ip {$ADMIN_API_ALLOW_CIDR:0.0.0.0/0 ::/0}
+		respond @outside 403
+		header {
+			X-Content-Type-Options "nosniff"
+			Referrer-Policy "no-referrer"
+			Content-Security-Policy "default-src 'none'; frame-ancestors 'none'"
+		}
+		reverse_proxy api-platform:8082
+	}
+
+	# ---------------------------------------------------------------- Keycloak
+	# Bảng điều khiển quản trị và realm master chỉ từ mạng quản trị; đăng nhập người dùng (/auth/realms/agrigreen/…) mở.
+	@kcadmin {
+		path /auth/admin /auth/admin/* /auth/realms/master /auth/realms/master/*
+		not remote_ip {$ADMIN_ALLOW_CIDR}
+	}
+	handle @kcadmin {
+		respond 403
+	}
+	@kc path /auth /auth/*
+	handle @kc {
+		reverse_proxy keycloak:8080
+	}
+
+	# ---------------------------------------------------------------- Tệp (URL ký sẵn của kho S3)
+	@files path /{$AG_S3_BUCKET}/*
+	handle @files {
+		@read method GET HEAD
+		handle @read {
+			reverse_proxy seaweedfs:9000 {
+				header_up Host {http.request.host}
+			}
+		}
+		respond 405
+	}
+
+	# ---------------------------------------------------------------- Web
+	handle {
+		reverse_proxy web-htx:3000
+	}
+}
