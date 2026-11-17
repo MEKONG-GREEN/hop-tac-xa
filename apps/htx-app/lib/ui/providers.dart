@@ -260,6 +260,20 @@ class AppController extends Notifier<AppState> {
     }
   }
 
+  /// Tài khoản bị khóa trong lúc đang dùng (FN-01/EX-06, AH-301): máy chủ từ
+  /// chối lượt đồng bộ bằng 403 accounts.account_locked → đăng xuất (xóa
+  /// token, giữ PIN và dữ liệu chờ gửi trên máy), về màn đăng nhập kèm câu EX-03.
+  Future<void> _onAccountLocked() async {
+    if (state.view.stage != AuthStage.unlocked) return;
+    await _flow.signOut();
+    await _apply(
+      const AuthView(
+        AuthStage.needsOnlineLogin,
+        message: AccountLockedException.userMessage,
+      ),
+    );
+  }
+
   /// Khóa màn hình: đóng CSDL, về màn PIN.
   Future<void> lock() async {
     _stopAutoSync();
@@ -293,6 +307,9 @@ class AppController extends Notifier<AppState> {
       if (st.state == SyncState.idle) unawaited(refreshMode());
       if (st.lastError == DataConsentRequiredException.consentCode) {
         unawaited(_reopenConsent(s));
+      }
+      if (st.lastError == AccountLockedException.accountLockedCode) {
+        unawaited(_onAccountLocked());
       }
     });
     final pf = s.platform;

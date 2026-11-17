@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import type { User } from "oidc-client-ts";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { withAccountLockWatch, type FetchFn } from "@/api/accountLock";
 import { createAdminApiClient, createApiClient, unwrap, type AdminApiClient, type ApiClient } from "@/api/client";
 import { newIdempotencyKey } from "@/api/idempotency";
 import { mockAdminFetch, mockFetch } from "@/api/mock/handler";
@@ -24,6 +25,9 @@ import { passwordSession } from "./passwordSession";
 import { tokenStore } from "./tokenStore";
 
 export type AuthStatus = "loading" | "anonymous" | "authenticated";
+
+/** Lý do máy chủ vừa kết thúc phiên: "account_locked" = tài khoản bị khóa trong lúc đang dùng (FN-01/EX-06). */
+export type SessionEnd = "account_locked" | null;
 
 /**
  * Phiên KN v7.7 (FN-CH-00.01): "legacy" = tài khoản không có vai trò KN hoặc backend chưa có P1
@@ -65,6 +69,8 @@ const CONSENT_UNKNOWN: DataConsentState = { status: "unknown" };
 
 export interface AuthContextValue {
   status: AuthStatus;
+  /** Màn đăng nhập hiện câu EX-03 khi phiên vừa kết thúc vì tài khoản bị khóa (AH-301). */
+  sessionEnd?: SessionEnd;
   principal: Principal | null;
   /** /v1/me chưa có hoặc lỗi → phạm vi chưa xác định (chỉ hiện menu theo vai). */
   scopeWarning: string | null;
@@ -136,6 +142,7 @@ function writeMockPersona(id: string | null): void {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [status, setStatus] = useState<AuthStatus>("loading");
+  const [sessionEnd, setSessionEnd] = useState<SessionEnd>(null);
   const [principal, setPrincipal] = useState<Principal | null>(null);
   const [scopeWarning, setScopeWarning] = useState<string | null>(null);
   const [kn, setKn] = useState<KnSessionState>(KN_LEGACY);
@@ -157,9 +164,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const onDataConsentRequired = useCallback(() => setConsentPing((n) => n + 1), []);
 
+  /**
+   * AH-301 (FN-01/EX-06): máy chủ trả 403 accounts.account_locked cho token đang dùng → xóa phiên đang giữ; AppShell
+   * đưa về /login và màn đăng nhập hiện câu EX-03.
+   */
+  const onAccountLocked = useCallback(() => {
+    // Ghi nhận trước khi dọn: onUnauthenticated dừng passwordSession.
+    const oidc = !config.mock && !passwordSession.active();
+    setSessionEnd("account_locked");
+    onUnauthenticated();
+    supportReasonStore.set(null);
+    // Tải lại trang không được khôi phục user OIDC cũ.
+    if (oidc) void getUserManager().removeUser().catch(() => undefined);
+    if (config.mock) writeMockPersona(null);
+  }, [onUnauthenticated]);
+
   const clients = useMemo(() => {
     const getAccessToken = tokenStore.get;
     const getContextId = contextStore.get;
+    // Một lớp bọc cho cả 6 client: client KN dùng fetch thuần, không qua middleware của openapi-fetch.
+    const watch = (base: FetchFn): FetchFn => withAccountLockWatch(base, getAccessToken, onAccountLocked);
+    const appFetch = watch(config.mock ? mockFetch : (r) => fetch(r));
+    const adminFetch = watch(config.mock ? mockAdminFetch : (r) => fetch(r));
     return {
       api: createApiClient({
         baseUrl: config.apiBaseUrl,
@@ -167,21 +193,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         getContextId,
         onUnauthenticated,
         onDataConsentRequired,
-        fetch: config.mock ? mockFetch : undefined,
+        fetch: appFetch,
       }),
       adminApi: createAdminApiClient({
         baseUrl: config.adminApiBaseUrl,
         getAccessToken,
         getContextId,
         onUnauthenticated,
-        fetch: config.mock ? mockAdminFetch : undefined,
+        fetch: adminFetch,
       }),
-      knApi: createKnApi({ baseUrl: config.apiBaseUrl, getAccessToken, getContextId, fetch: config.mock ? mockFetch : undefined }),
-      cycleApi: createCycleApi({ baseUrl: config.apiBaseUrl, getAccessToken, getContextId, fetch: config.mock ? mockFetch : undefined }),
-      collectApi: createCollectApi({ baseUrl: config.apiBaseUrl, getAccessToken, getContextId, fetch: config.mock ? mockFetch : undefined }),
-      knAdminApi: createKnAdminApi({ baseUrl: config.adminApiBaseUrl, getAccessToken, getContextId, fetch: config.mock ? mockAdminFetch : undefined }),
+      knApi: createKnApi({ baseUrl: config.apiBaseUrl, getAccessToken, getContextId, fetch: appFetch }),
+      cycleApi: createCycleApi({ baseUrl: config.apiBaseUrl, getAccessToken, getContextId, fetch: appFetch }),
+      collectApi: createCollectApi({ baseUrl: config.apiBaseUrl, getAccessToken, getContextId, fetch: appFetch }),
+      knAdminApi: createKnAdminApi({ baseUrl: config.adminApiBaseUrl, getAccessToken, getContextId, fetch: adminFetch }),
     };
-  }, [onUnauthenticated, onDataConsentRequired]);
+  }, [onUnauthenticated, onDataConsentRequired, onAccountLocked]);
 
   /** GET /v1/me → Principal (gọi lại sau khi đổi ngữ cảnh: vai và phạm vi theo lần gán đã chọn). */
   const loadPrincipal = useCallback(async () => {
@@ -300,6 +326,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const establish = useCallback(
     async (accessToken: string, mock?: MockPersona) => {
+      setSessionEnd(null);
       tokenStore.set(accessToken);
       contextStore.set(null);
       claimsRef.current = mock
@@ -470,6 +497,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AuthContextValue>(
     () => ({
       status,
+      sessionEnd,
       principal,
       scopeWarning,
       api: clients.api,
@@ -492,7 +520,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       changePassword,
       logout,
     }),
-    [status, principal, scopeWarning, clients, kn, dataConsent, acceptDataConsent, refreshDataConsent, enterSupport, exitSupport, setSupportReason, selectContext, login, signIn, loginAsPersona, changePassword, logout],
+    [status, sessionEnd, principal, scopeWarning, clients, kn, dataConsent, acceptDataConsent, refreshDataConsent, enterSupport, exitSupport, setSupportReason, selectContext, login, signIn, loginAsPersona, changePassword, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

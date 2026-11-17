@@ -53,6 +53,17 @@ class DataConsentRequiredException extends ApiException {
   static const consentCode = 'accounts.data_consent_required';
 }
 
+/// `403 accounts.account_locked` (FN-01/EX-06, AH-301): tài khoản bị khóa trong
+/// lúc đang dùng nên máy chủ từ chối mọi API dù token còn hạn. Dữ liệu chờ gửi
+/// giữ nguyên ở máy; app đăng xuất và về màn đăng nhập kèm câu EX-03.
+class AccountLockedException extends ApiException {
+  AccountLockedException([String? detail])
+    : super(403, accountLockedCode, detail);
+  static const accountLockedCode = 'accounts.account_locked';
+  static const userMessage =
+      'Tài khoản đã bị khóa. Liên hệ người đã cấp tài khoản để mở khóa.';
+}
+
 /// 401 — token hết hạn / bị thu hồi. Cần làm mới token hoặc đăng nhập lại.
 class UnauthenticatedException extends ApiException {
   UnauthenticatedException(String code) : super(401, code);
@@ -325,6 +336,10 @@ class HttpSyncApi implements SyncApi {
     if (res.statusCode == 403 &&
         code == DataConsentRequiredException.consentCode) {
       return DataConsentRequiredException(detail);
+    }
+    if (res.statusCode == 403 &&
+        code == AccountLockedException.accountLockedCode) {
+      return AccountLockedException(detail);
     }
     if (res.statusCode == 401) return UnauthenticatedException(code);
     return ApiException(res.statusCode, code, detail);

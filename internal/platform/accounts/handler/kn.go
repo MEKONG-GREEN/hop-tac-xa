@@ -81,8 +81,14 @@ func isWrite(m string) bool {
 // Middleware dựng authz.KNContext từ header X-AG-Context (gap §4.5): vai, phòng ban, phạm vi giải ở
 // server; context lạ/của người khác/hết hạn/bị thu hồi → 403, không bao giờ âm thầm bỏ qua header.
 // Chế độ hỗ trợ (FN-AD-04.07): thao tác ghi bắt buộc X-AG-Reason và ghi nhật ký trước + sau khi chạy.
+// AH-301 (FN-01/EX-06): bước đầu chặn tài khoản Đã khóa ở mọi route của hai bề mặt (accounts.account_locked, câu
+// EX-03) — vì đứng trước, ResolveContext không còn trả context_revoked cho tài khoản bị khóa; kiểm accountEnabled
+// trong ResolveContext/MyContexts/SelectContext giữ nguyên (phòng thủ nhiều lớp).
 func (h Handler) Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if !h.accountActiveGuard(c) {
+			return
+		}
 		// AH-23: chặn route nhận ảnh/GPS khi chưa đồng ý thu thập dữ liệu — trước nhánh KN, áp cho mọi request.
 		if !h.dataConsentGuard(c) {
 			return

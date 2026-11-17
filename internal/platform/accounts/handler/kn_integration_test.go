@@ -444,7 +444,7 @@ func TestFN_AD_04_04_RevocationAndDepartmentStatusTakeEffect(t *testing.T) {
 	if r := f.adminDo(f.root, http.MethodPost, "/v1/accounts/users/"+anID.String()+"/lock", map[string]any{"reason": goodReason}); r.status != http.StatusOK {
 		t.Fatalf("khóa: %d %v", r.status, r.body)
 	}
-	wantCode(t, f.withCtx(an, http.MethodGet, "/v1/probe", tinhCtx, nil), http.StatusForbidden, "accounts.context_revoked", "tài khoản bị khóa")
+	wantCode(t, f.withCtx(an, http.MethodGet, "/v1/probe", tinhCtx, nil), http.StatusForbidden, "accounts.account_locked", "tài khoản bị khóa")
 	wantCode(t, f.req(f.app, an, http.MethodGet, "/v1/me/contexts", nil, nil), http.StatusForbidden, "accounts.account_locked", "contexts khi bị khóa")
 	if f.dir.Logouts(anID) == 0 {
 		t.Fatal("khóa phải thu hồi phiên Keycloak")
