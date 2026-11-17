@@ -223,8 +223,17 @@ type OrgFilter struct {
 	Kind            string // rỗng = mọi loại
 	Q               string // tìm theo tên (không phân biệt hoa thường), mã hoặc mã số thuế
 	IncludeInactive bool
+	Only            []uuid.UUID // khác nil: chỉ các Nút này (FN-06: phạm vi theo HTX)
 	After           uuid.UUID
 	Limit           int
+}
+
+// onlyRefs đổi OrgFilter.Only sang tham số SQL; nil giữ nguyên nghĩa "không giới hạn".
+func (f OrgFilter) onlyRefs() []string {
+	if f.Only == nil {
+		return nil
+	}
+	return uuidStrings(f.Only)
 }
 
 // ListOrgs liệt kê tổ chức trong phạm vi, phân trang bằng cursor (R-53).
@@ -233,8 +242,9 @@ func ListOrgs(ctx context.Context, tx pgx.Tx, f OrgFilter) ([]port.Org, error) {
 	    WHERE ($1::boolean OR admin_unit_code = ANY($2::text[]))
 	      AND ($3 = '' OR kind = $3)
 	      AND ($4::boolean OR active)
-	      AND ref > $5
-	    ORDER BY ref LIMIT $6`, f.All, units(f.Units), f.Kind, f.IncludeInactive, f.After, f.Limit)
+	      AND ($5::text[] IS NULL OR ref = ANY($5::text[]::uuid[]))
+	      AND ref > $6
+	    ORDER BY ref LIMIT $7`, f.All, units(f.Units), f.Kind, f.IncludeInactive, f.onlyRefs(), f.After, f.Limit)
 	if err != nil {
 		return nil, err
 	}

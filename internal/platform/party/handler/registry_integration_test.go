@@ -301,7 +301,7 @@ func TestNoOrgSeesNothing(t *testing.T) {
 }
 
 // FN-05/AC-01, BR-03 (TECH-01): Thành viên HTX chỉ xem HTX của mình (FN-03: R) — HTX khác, kể cả cùng xã, trả 404;
-// danh sách HTX/tổ chức chưa mở (phạm vi theo HTX thuộc AH-273) nên trả 403. Quản lý HTX giữ giới hạn theo xã.
+// danh sách HTX/tổ chức chỉ có HTX của mình. Từ FN-06 (AH-273), Đại diện HTX cũng chỉ thấy HTX của mình.
 func TestFN05_HTXMemberGetCooperativeOwnOnly(t *testing.T) {
 	f := newFixture(t)
 	root := f.root()
@@ -318,16 +318,16 @@ func TestFN05_HTXMemberGetCooperativeOwnOnly(t *testing.T) {
 		}
 	}
 	for _, path := range []string{"/v1/cooperatives", "/v1/orgs"} {
-		if r := member.appDo(http.MethodGet, path, nil); r.status != http.StatusForbidden || r.body["code"] != "forbidden" {
-			t.Fatalf("Thành viên HTX %s: %d %v, cần 403", path, r.status, r.body)
+		if r := member.appDo(http.MethodGet, path, nil); r.status != http.StatusOK || !slices.Equal(refs(r, "ref"), []string{tr.c1.String()}) {
+			t.Fatalf("Thành viên HTX %s: %d %v, cần chỉ HTX mình", path, r.status, r.body)
 		}
 	}
-	// Quản lý HTX không đổi: vẫn xem HTX cùng xã ở API này.
-	if r := f.as(f.tenant, tr.c1, port.RoleCoopManager).appDo(http.MethodGet, "/v1/cooperatives/"+c3.String(), nil); r.status != http.StatusOK {
+	// Đại diện HTX (FN-06/BR-02): không còn xem HTX cùng xã.
+	if r := f.as(f.tenant, tr.c1, port.RoleCoopManager).appDo(http.MethodGet, "/v1/cooperatives/"+c3.String(), nil); r.status != http.StatusNotFound {
 		t.Fatalf("quản lý HTX xem HTX cùng xã: %d %v", r.status, r.body)
 	}
-	// Kiêm Đại diện HTX → quyền Đại diện HTX (FN-05/BR-02).
-	if r := f.as(f.tenant, tr.c1, port.RoleCoopManager, port.RoleHTXMember).appDo(http.MethodGet, "/v1/cooperatives/"+c3.String(), nil); r.status != http.StatusOK {
+	// Kiêm Đại diện HTX → quyền Đại diện HTX (FN-05/BR-02), cùng phạm vi HTX của mình.
+	if r := f.as(f.tenant, tr.c1, port.RoleCoopManager, port.RoleHTXMember).appDo(http.MethodGet, "/v1/cooperatives/"+c3.String(), nil); r.status != http.StatusNotFound {
 		t.Fatalf("kiêm hai vai xem HTX cùng xã: %d %v", r.status, r.body)
 	}
 }

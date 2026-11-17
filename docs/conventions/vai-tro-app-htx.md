@@ -46,10 +46,22 @@ Trong tệp dữ liệu, FN-01 ghi `R` (nghĩa là "được dùng"); hai dòng 
 
 ## Máy chủ kiểm quyền của Thành viên HTX
 
-- **Lớp dịch vụ:** `htx_member` chỉ có trong danh sách vai của API đọc mà ma trận cho phép và đã giới hạn được theo HTX: danh sách nông hộ của một HTX (`GET /v1/cooperatives/{ref}/households`) và xem một HTX (`GET /v1/cooperatives/{ref}`), cả hai chỉ HTX của `org_ref`. Test đối chiếu (`roles_matrix_test.go` của `cooperative/member/app` và `party/app`) khẳng định phần quyền này khớp ma trận.
+- **Lớp dịch vụ:** `htx_member` chỉ có trong danh sách vai của API đọc mà ma trận cho phép và đã giới hạn được theo HTX (FN-06, mục dưới): danh sách HTX (`GET /v1/cooperatives`), danh sách tổ chức (`GET /v1/orgs`), xem một HTX (`GET /v1/cooperatives/{ref}`) và danh sách nông hộ của một HTX (`GET /v1/cooperatives/{ref}/households`), tất cả chỉ HTX của `org_ref`. Test đối chiếu (`roles_matrix_test.go` của `cooperative/member/app` và `party/app`) khẳng định phần quyền này khớp ma trận.
 - **Lớp lắp ráp:** `cmd/api-platform/assembly/memberguard.go` chặn mọi request ghi (POST/PUT/PATCH/DELETE) của tài khoản chỉ là Thành viên HTX trên Application API và Admin API (403 `forbidden`), trừ route trong `member_write_routes` của ma trận. Test dạng bảng `cmd/api-platform/htx_member_routes_test.go` duyệt mọi route ghi.
 - **Ticket sau mở quyền ghi cho Thành viên HTX** (mở vụ, ghi nhật ký theo KH-01): thêm vai vào dịch vụ **và** thêm route dạng `"POST /v1/…"` (mẫu đường dẫn của gin) vào `member_write_routes`, cập nhật ma trận nếu BRD đổi. Thiếu một trong hai thì request vẫn bị chặn.
-- API đọc chưa có cách giới hạn theo HTX (danh sách HTX, danh sách tổ chức, thống kê) chưa mở cho Thành viên HTX; AH-273 xử lý.
+- API thống kê vụ (FN-12, FN-13) chưa có trên App HTX; khi làm, mở cho Thành viên HTX sau khi đã giới hạn theo HTX.
+
+## Phạm vi dữ liệu theo HTX (FN-06)
+
+Nguồn: FN-06, ADM-02, TECH-01; quyết định của nhóm dự án 17/11/2026 (AH-273).
+
+- **Quy tắc dùng chung:** `htxroles.OwnCoopOnly(has, wider...)` trả true khi tài khoản chỉ được thấy HTX gắn với tài khoản (`org_ref`): tài khoản chỉ là Thành viên HTX, hoặc có Đại diện HTX mà không có Admin và không có vai nào trong `wider` — các vai có phạm vi rộng hơn mà API đó nhận (vd `registry_admin`, `kn_officer`, `kn_province_admin`, `kn_national_admin`, `cgh_viewer`). Đang dùng ở `party/app.ownCoopOnly` (danh sách HTX, danh sách tổ chức, chi tiết HTX) và `cooperative/member/app.isOwnCoopOnly` (nông hộ).
+- **Admin** (`platform_admin`) thấy mọi HTX. Các vai khuyến nông giữ phạm vi theo xã/tỉnh (`scopeFor`, không đổi).
+- **API mới của App HTX** phải gọi quy tắc này (hoặc lọc theo `org_ref`): phạm vi theo xã (`scopeFor`, `authz.Scope`) không tự thu hẹp về một HTX.
+- **Bản ghi ngoài phạm vi** trả 404 (`party.org_not_found`), không lộ việc bản ghi tồn tại (FN-06/EX-01). Danh sách chỉ có HTX của mình.
+- **Tài khoản chưa gắn HTX** (FN-06/EX-02): máy chủ giữ nguyên — danh sách rỗng, API cần Nút trả 403 `node_scope_required` ("tài khoản chưa gắn đơn vị"). Web nhận ra từ thông tin đăng nhập (`lacksCoop` ở `src/auth/permissions.ts`) và ở khung chung (`AppShell`) hiện "Tài khoản chưa được gắn HTX. Liên hệ người cấp tài khoản." thay cho mọi màn `/htx/*`, không gọi API; màn khác nhận `node_scope_required` thì `ProblemAlert` hiện cùng câu.
+- **Rời trang ngoài phạm vi** (web, `src/shell/notice.tsx`): người dùng App HTX mở đường dẫn chi tiết không được xem, hoặc màn chi tiết nhận 404 (`useExitOnNotFound`), được chuyển về trang đầu tiên được xem kèm câu "Không tìm thấy dữ liệu, hoặc bạn không có quyền xem dữ liệu này." — một câu cho cả hai trường hợp. Trang danh sách không thuộc quyền vẫn theo FN-05/EX-01 (chuyển, không kèm câu).
+- **Ngoài phạm vi quy tắc này:** xem dữ liệu HTX khác khi được chia sẻ (FN-09); phạm vi hẹp hơn theo nông hộ của BRD Kế hoạch mùa vụ (AH-39).
 
 ## Kiêm hai vai
 
