@@ -109,6 +109,17 @@ const EnvWebOpsURL = "AG_WEB_OPS_URL"
 // ChannelsFromEnv đọc kênh từ môi trường tiến trình (ChannelsFromEnvWith(os.Getenv, …)).
 func ChannelsFromEnv(log *slog.Logger) (Channels, error) { return ChannelsFromEnvWith(os.Getenv, log) }
 
+// SMTPMailerFromEnv trả kênh email SMTP thật từ AG_MAILER/AG_SMTP_* cho email giao dịch không cần liên kết web (mã OTP
+// đăng nhập của pf/accounts, ADR-0061). ok = false khi kênh không phải SMTP (thiếu AG_SMTP_HOST, tắt, hoặc chế độ log —
+// chế độ log sẽ in nội dung email, tức in mã, ra log). Cấu hình sai → lỗi như ChannelsFromEnv.
+func SMTPMailerFromEnv(log *slog.Logger) (m channel.Mailer, ok bool, err error) {
+	m, st, err := channel.MailerFromEnv(os.Getenv, log)
+	if err != nil || st.Mode != channel.ModeSMTP {
+		return nil, false, err
+	}
+	return m, true, nil
+}
+
 // ChannelsFromEnvWith: AG_PUSHER + AG_FCM_* → kênh đẩy (channel.PusherFromEnvWith); AG_MAILER + AG_SMTP_* → kênh email
 // (channel.MailerFromEnv); AG_WEB_OPS_URL → gốc liên kết. Ngoài máy phát triển (residency.LocalDev) AG_WEB_OPS_URL
 // thiếu/không tuyệt đối/localhost → kênh email theo người nhận TẮT (link_base_missing) thay vì gửi liên kết hỏng.

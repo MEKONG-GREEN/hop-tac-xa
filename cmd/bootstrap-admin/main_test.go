@@ -19,7 +19,7 @@ func TestRun_InMatKhauMotLan_ThieuCoThiLoi(t *testing.T) {
 
 	dir := accounts.NewMemoryDirectory()
 	var out bytes.Buffer
-	if err := run(ctx, []string{"-tenant", tid, "-org", org, "-username", "admin"}, dir, &out, nil); err != nil {
+	if err := run(ctx, []string{"-tenant", tid, "-org", org, "-username", "admin", "-email", "admin@example.vn"}, dir, &out, nil); err != nil {
 		t.Fatal(err)
 	}
 	users, _ := dir.FindUsers(ctx, port.Query{Username: "admin"})
@@ -44,7 +44,8 @@ func TestRun_InMatKhauMotLan_ThieuCoThiLoi(t *testing.T) {
 		"thiếu đơn vị":   {"-tenant", tid, "-username", "a"},
 		"tenant sai":     {"-tenant", "khong-phai-uuid", "-org", org, "-username", "a"},
 		"đơn vị sai":     {"-tenant", tid, "-org", "x", "-username", "a"},
-		"thiếu username": {"-tenant", tid, "-org", org},
+		"thiếu username": {"-tenant", tid, "-org", org, "-email", "a@example.vn"},
+		"thiếu email":    {"-tenant", tid, "-org", org, "-username", "a"},
 	} {
 		d := accounts.NewMemoryDirectory()
 		var buf bytes.Buffer
@@ -56,7 +57,7 @@ func TestRun_InMatKhauMotLan_ThieuCoThiLoi(t *testing.T) {
 		}
 	}
 
-	if err := run(ctx, []string{"-tenant", tid, "-org", org, "-username", "a"}, nil, io.Discard, nil); err == nil ||
+	if err := run(ctx, []string{"-tenant", tid, "-org", org, "-username", "a", "-email", "a@example.vn"}, nil, io.Discard, nil); err == nil ||
 		!strings.Contains(err.Error(), "AG_KC_ADMIN_URL") {
 		t.Fatalf("thiếu Keycloak phải báo chưa cấu hình AG_KC_ADMIN_URL: %v", err)
 	}

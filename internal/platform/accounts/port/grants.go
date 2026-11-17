@@ -61,9 +61,26 @@ const RoleLoginTOTP = "login_totp_required"
 // MFARoles: đó là vai [MFA] mà Admin API còn kiểm amr ở backend (httpx.RequireMFA).
 var KNOfficerRoles = []string{"kn_national_admin", "kn_province_admin", "kn_officer", RoleKNUser}
 
-// LoginTOTPRoles là vai mà realm bắt TOTP lúc đăng nhập: cán bộ KN + mọi vai [MFA]. Phải khớp đúng các vai
-// tổng hợp chứa RoleLoginTOTP trong realm (cmd/api-platform realm_test.go).
-var LoginTOTPRoles = append(slices.Clone(KNOfficerRoles), MFARoles...)
+// EmailOTPRoles là vai mà yếu tố thứ hai lúc đăng nhập là mã OTP gửi qua email (ADR-0061): App HTX đăng nhập hai bước
+// ở màn riêng — mật khẩu rồi mã 6 số. Vai này KHÔNG chứa RoleLoginTOTP trong realm; máy chủ ghi phiên đã qua mã email
+// (pf_accounts.login_mfa_session) và Admin API, Application API chỉ nhận người giữ vai khi token có amr otp hoặc phiên
+// đã được ghi.
+var EmailOTPRoles = []string{"platform_admin"}
+
+// NeedsLoginEmailOTP cho biết người giữ roles đăng nhập bằng mật khẩu + mã OTP gửi qua email (ADR-0061).
+func NeedsLoginEmailOTP(roles []string) bool {
+	for _, r := range roles {
+		if slices.Contains(EmailOTPRoles, r) {
+			return true
+		}
+	}
+	return false
+}
+
+// LoginTOTPRoles là vai mà realm bắt TOTP lúc đăng nhập: cán bộ KN + vai [MFA], trừ vai đăng nhập bằng OTP email
+// (EmailOTPRoles, ADR-0061). Phải khớp đúng các vai tổng hợp chứa RoleLoginTOTP trong realm (cmd/api-platform
+// realm_mfa_test.go).
+var LoginTOTPRoles = without(append(slices.Clone(KNOfficerRoles), MFARoles...), EmailOTPRoles...)
 
 // NeedsLoginTOTP cho biết người giữ roles phải đăng ký TOTP (tạo tài khoản / cấp vai gắn CONFIGURE_TOTP vào
 // liên kết kích hoạt; realm cũng tự mở đăng ký ở lần đăng nhập đầu).

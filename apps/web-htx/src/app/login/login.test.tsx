@@ -14,7 +14,7 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/config", async (orig) => ({ config: { ...((await orig()) as { config: object }).config, mock: false, support: null } }));
 
-const signIn = vi.fn<(identifier: string, password: string, otp?: string) => Promise<SignInOutcome>>();
+const signIn = vi.fn<(identifier: string, password: string, otp?: string, challengeId?: string) => Promise<SignInOutcome>>();
 const login = vi.fn(async () => undefined);
 const auth = {
   status: "anonymous" as "anonymous" | "authenticated" | "loading",
@@ -41,6 +41,87 @@ beforeEach(() => {
   auth.status = "anonymous";
   auth.sessionEnd = null;
   auth.principal = null;
+});
+
+const OTP_PROMPT = { kind: "otp_required", challengeId: "c-1", emailHint: "a***@mekonggreen.vn", expiresIn: 300, resendAfter: 60 } as const;
+
+describe("Admin đăng nhập bằng mật khẩu + mã OTP email (ADR-0061)", () => {
+  it("đúng mật khẩu → màn nhập mã; sai mã → còn n lần; đúng mã → gửi kèm thử thách và mật khẩu đã nhập", async () => {
+    const user = userEvent.setup();
+    render(<LoginPage />);
+    await fill(user, "admin", "Mat-khau-12!");
+    signIn.mockResolvedValueOnce(OTP_PROMPT);
+    await submit(user);
+    expect(await screen.findByRole("heading", { name: "Nhập mã OTP" })).toBeInTheDocument();
+    expect(screen.getByText(/a\*\*\*@mekonggreen\.vn/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Gửi lại mã sau \d+ giây/ })).toBeDisabled();
+
+    // Mã chưa đủ 6 số → không gửi.
+    await user.type(screen.getByLabelText(/^Mã OTP/), "123");
+    await user.click(screen.getByRole("button", { name: "Xác nhận" }));
+    expect(screen.getByText("Nhập mã OTP gồm 6 chữ số")).toBeInTheDocument();
+    expect(signIn).toHaveBeenCalledTimes(1);
+
+    signIn.mockResolvedValueOnce({ kind: "otp_invalid", remaining: 4 });
+    await user.type(screen.getByLabelText(/^Mã OTP/), "456");
+    await user.click(screen.getByRole("button", { name: "Xác nhận" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Mã OTP không đúng. Còn 4 lần thử.");
+    expect(signIn).toHaveBeenLastCalledWith("admin", "Mat-khau-12!", "123456", "c-1");
+
+    signIn.mockResolvedValueOnce({ kind: "authenticated" });
+    await user.clear(screen.getByLabelText(/^Mã OTP/));
+    await user.type(screen.getByLabelText(/^Mã OTP/), "654321");
+    await user.click(screen.getByRole("button", { name: "Xác nhận" }));
+    await waitFor(() => expect(signIn).toHaveBeenLastCalledWith("admin", "Mat-khau-12!", "654321", "c-1"));
+  });
+
+  it("mã hết hạn → mở ngay Gửi lại mã; gửi lại → thử thách mới; sai mật khẩu ở bước 2 → về màn mật khẩu", async () => {
+    const user = userEvent.setup();
+    render(<LoginPage />);
+    await fill(user, "admin", "Mat-khau-12!");
+    signIn.mockResolvedValueOnce(OTP_PROMPT);
+    await submit(user);
+    await screen.findByRole("heading", { name: "Nhập mã OTP" });
+
+    signIn.mockResolvedValueOnce({ kind: "otp_expired" });
+    await user.type(screen.getByLabelText(/^Mã OTP/), "111111");
+    await user.click(screen.getByRole("button", { name: "Xác nhận" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Mã OTP đã hết hạn");
+    const resend = screen.getByRole("button", { name: "Gửi lại mã" });
+    expect(resend).toBeEnabled();
+
+    signIn.mockResolvedValueOnce({ ...OTP_PROMPT, challengeId: "c-2" });
+    await user.click(resend);
+    await waitFor(() => expect(signIn).toHaveBeenLastCalledWith("admin", "Mat-khau-12!"));
+    expect(await screen.findByRole("button", { name: /Gửi lại mã sau/ })).toBeDisabled();
+
+    signIn.mockResolvedValueOnce({ kind: "invalid", remaining: 3 });
+    await user.type(screen.getByLabelText(/^Mã OTP/), "222222");
+    await user.click(screen.getByRole("button", { name: "Xác nhận" }));
+    expect(signIn).toHaveBeenLastCalledWith("admin", "Mat-khau-12!", "222222", "c-2");
+    expect(await screen.findByRole("heading", { name: "Đăng nhập" })).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Sai tài khoản hoặc mật khẩu. Còn 3 lần thử.");
+    expect(screen.getByLabelText(/Tên đăng nhập hoặc số điện thoại/)).toHaveValue("admin");
+  });
+
+  it("Quay lại → màn mật khẩu; chưa có email hoặc chưa cấu hình SMTP → câu lỗi, không có màn nhập mã", async () => {
+    const user = userEvent.setup();
+    render(<LoginPage />);
+    await fill(user, "admin", "Mat-khau-12!");
+    signIn.mockResolvedValueOnce(OTP_PROMPT);
+    await submit(user);
+    await user.click(await screen.findByRole("button", { name: "Quay lại" }));
+    expect(await screen.findByRole("heading", { name: "Đăng nhập" })).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/^Mật khẩu/), "Mat-khau-12!");
+    signIn.mockResolvedValueOnce({ kind: "otp_email_missing" });
+    await submit(user);
+    expect(await screen.findByRole("alert")).toHaveTextContent("chưa có email đã xác minh");
+    signIn.mockResolvedValueOnce({ kind: "otp_unavailable" });
+    await submit(user);
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Chưa gửi được mã OTP qua email"));
+    expect(screen.queryByRole("heading", { name: "Nhập mã OTP" })).toBeNull();
+  });
 });
 
 describe("Trang Đăng nhập (FN-01)", () => {

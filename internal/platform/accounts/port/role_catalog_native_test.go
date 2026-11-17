@@ -54,7 +54,7 @@ func TestNativeRoleCatalogPreservesNativePolicy(t *testing.T) {
 	}
 	if !slices.Equal(native.Grantable([]string{port.RoleAccountAdminProvince}), []string{"coop_manager"}) ||
 		native.IsManaged("platform_admin") || !native.NeedsMFA([]string{"platform_admin"}) ||
-		!native.NeedsLoginTOTP([]string{"platform_admin"}) {
+		native.NeedsLoginTOTP([]string{"platform_admin"}) || !port.NeedsLoginEmailOTP([]string{"platform_admin"}) {
 		t.Fatal("native administrator or province floor changed")
 	}
 	// FN-05 (AH-272): Admin cấp được Thành viên HTX (FN-07, gắn HTX); vai gốc account_admin không đổi quyền.
@@ -100,8 +100,9 @@ func TestNativeRoleCatalogCompositionRetainsPolicyAndIsolation(t *testing.T) {
 			t.Fatalf("composition changed native policy: %s", role)
 		}
 	}
+	// Sàn MFA: vai [MFA] luôn bắt yếu tố thứ hai lúc đăng nhập — TOTP, hoặc mã OTP email với vai trong EmailOTPRoles (ADR-0061).
 	for _, role := range base.MFARoles() {
-		if !catalog.NeedsMFA([]string{role}) || !catalog.NeedsLoginTOTP([]string{role}) {
+		if !catalog.NeedsMFA([]string{role}) || catalog.NeedsLoginTOTP([]string{role}) == port.NeedsLoginEmailOTP([]string{role}) {
 			t.Fatalf("composition removed a native MFA floor: %s", role)
 		}
 	}

@@ -14,6 +14,9 @@ type TokenSet struct {
 	// Roles, AMR đọc từ claim realm_access.roles và amr của access token (token đến thẳng từ Keycloak).
 	Roles []string
 	AMR   []string
+	// SessionID là phiên Keycloak của token (claim sid, dự phòng session_state): khóa của phiên đã qua mã OTP email
+	// (ADR-0061). Rỗng khi token không mang claim nào.
+	SessionID string
 }
 
 // Lỗi của PasswordLogin. Lỗi hạ tầng dùng lại ErrUnavailable.

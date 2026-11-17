@@ -109,6 +109,9 @@ type Service struct {
 	// tồn tại. Thiếu một trong hai (hoặc Dir) → route đăng nhập trả 503 accounts.login_unavailable (fail-closed).
 	PwLogin    port.PasswordLogin
 	LoginIDKey []byte `json:"-"`
+	// LoginOTPMailer (ADR-0061): kênh email gửi mã OTP đăng nhập của vai trong port.EmailOTPRoles (Admin). Nil (thiếu
+	// SMTP) → vai đó không đăng nhập được: bước 1 trả 503 accounts.login_otp_unavailable, không báo "đã gửi" giả.
+	LoginOTPMailer ResetMailer
 	// Log: nhật ký vận hành (không PII, không mã/mật khẩu). Nil → slog.Default().
 	Log *slog.Logger
 }

@@ -1,8 +1,9 @@
 package app
 
 // QTPQ-Q-01 (FN-01, quyết định 16/11/2026): tài khoản Admin đầu tiên tạo bằng lệnh khởi tạo khi triển khai, không có màn
-// hình. Mật khẩu tạm sinh ngẫu nhiên và trả về MỘT lần cho người chạy lệnh; tài khoản phải đổi mật khẩu và đăng ký TOTP ở
-// lần đăng nhập đầu. Không ghi mật khẩu vào mã nguồn, log hay tài liệu.
+// hình. Mật khẩu tạm sinh ngẫu nhiên và trả về MỘT lần cho người chạy lệnh; tài khoản phải đổi mật khẩu ở lần đăng nhập
+// đầu. Admin nhận mã OTP đăng nhập qua email (ADR-0061) nên email bắt buộc và được đánh dấu đã xác minh: người chạy lệnh
+// là quản trị hệ thống nhập địa chỉ. Không ghi mật khẩu vào mã nguồn, log hay tài liệu.
 
 import (
 	"context"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/domain"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/port"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/authz"
 )
@@ -39,7 +41,7 @@ const (
 	bootSpecial = "!@#$%^&*-_=+"
 )
 
-// BootstrapAdmin tạo tài khoản platform_admin bắt đổi mật khẩu và đăng ký TOTP ở lần đăng nhập đầu, đặt mật khẩu tạm và
+// BootstrapAdmin tạo tài khoản platform_admin bắt đổi mật khẩu ở lần đăng nhập đầu, email đã xác minh, đặt mật khẩu tạm và
 // trả (id, mật khẩu tạm). Tên đăng nhập đã có thì dừng mà không đụng tài khoản đó. Lỗi sau bước tạo thì xóa người dùng vừa
 // tạo để bù (như Create). rnd là nguồn ngẫu nhiên (crypto/rand.Reader).
 func BootstrapAdmin(ctx context.Context, dir port.Directory, in BootstrapAdminInput, rnd io.Reader) (uuid.UUID, string, error) {
@@ -54,6 +56,10 @@ func BootstrapAdmin(ctx context.Context, dir port.Directory, in BootstrapAdminIn
 	case username == "":
 		return uuid.Nil, "", errors.New("accounts: thiếu tên đăng nhập")
 	}
+	email, ok := domain.NormalizeResetEmail(in.Email)
+	if !ok {
+		return uuid.Nil, "", errors.New("accounts: thiếu email hợp lệ (Admin nhận mã OTP đăng nhập qua email)")
+	}
 	setter, ok := dir.(port.PasswordSetter)
 	if !ok {
 		return uuid.Nil, "", errors.New("accounts: Keycloak Admin chưa hỗ trợ đặt mật khẩu")
@@ -63,9 +69,9 @@ func BootstrapAdmin(ctx context.Context, dir port.Directory, in BootstrapAdminIn
 		return uuid.Nil, "", err
 	}
 	id, err := dir.CreateUser(ctx, port.NewUser{
-		Username: username, Email: strings.TrimSpace(in.Email), FirstName: in.FirstName, LastName: in.LastName,
+		Username: username, Email: email, EmailVerified: true, FirstName: in.FirstName, LastName: in.LastName,
 		TenantID: in.TenantID, OrgRef: in.OrgRef,
-		RequiredActions: []string{port.ActionUpdatePassword, port.ActionConfigureTOTP},
+		RequiredActions: []string{port.ActionUpdatePassword},
 	})
 	if errors.Is(err, port.ErrUserExists) {
 		return uuid.Nil, "", fmt.Errorf("accounts: tên đăng nhập hoặc email đã có, không đụng tài khoản đó: %w", err)

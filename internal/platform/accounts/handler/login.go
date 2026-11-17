@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/app"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/port"
@@ -32,6 +33,8 @@ type loginReq struct {
 	Identifier string `json:"identifier" pii:"true"`
 	Password   string `json:"password" pii:"true"`
 	OTP        string `json:"otp" pii:"true"`
+	// ChallengeID: bước 2 của đăng nhập bằng OTP email (ADR-0061) — id thử thách bước 1 trả về.
+	ChallengeID string `json:"challenge_id"`
 }
 
 type refreshReq struct {
@@ -58,15 +61,31 @@ func (h Handler) login(c *gin.Context) {
 	if !bindJSON(c, &req) {
 		return
 	}
-	res, err := h.Svc.Login(c.Request.Context(), app.LoginInput{Identifier: req.Identifier, Password: req.Password, OTP: req.OTP})
+	in := app.LoginInput{Identifier: req.Identifier, Password: req.Password, OTP: req.OTP}
+	if req.ChallengeID != "" {
+		id, err := uuid.Parse(req.ChallengeID)
+		if err != nil {
+			httpx.Fail(c, problem.Validation.WithField("challenge_id", "Mã thử thách không hợp lệ"))
+			return
+		}
+		in.ChallengeID = id
+	}
+	res, err := h.Svc.Login(c.Request.Context(), in)
 	if err != nil {
 		var p *problem.Problem
-		if errors.As(err, &p) && p.Code == app.ErrLoginTempLocked.Code {
+		if errors.As(err, &p) && (p.Code == app.ErrLoginTempLocked.Code || p.Code == app.ErrLoginOTPRateLimited.Code) {
 			if m, ok := p.Extra["retry_after_minutes"].(int); ok {
 				c.Header("Retry-After", strconv.Itoa(m*60))
 			}
 		}
 		httpx.Fail(c, err)
+		return
+	}
+	if res.OTP != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"status": res.Status, "challenge_id": res.OTP.ChallengeID, "email_hint": res.OTP.EmailHint,
+			"expires_in": res.OTP.ExpiresIn, "resend_after": res.OTP.ResendAfter,
+		})
 		return
 	}
 	c.JSON(http.StatusOK, tokenBody(res.Status, res.Tokens))

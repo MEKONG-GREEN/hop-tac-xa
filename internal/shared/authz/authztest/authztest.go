@@ -54,11 +54,13 @@ type Token struct {
 	Roles    []string
 	MFA      bool
 	// AMR thay amr mặc định (["pwd"] + "otp" khi MFA) — kiểm chính sách yếu tố thứ hai.
-	AMR      []string
-	OrgRef   uuid.UUID
-	Issuer   string // rỗng = Issuer
-	Audience string // rỗng = Audience
-	TTL      time.Duration
+	AMR    []string
+	OrgRef uuid.UUID
+	// SessionID → claim sid (phiên Keycloak); rỗng → không có claim.
+	SessionID string
+	Issuer    string // rỗng = Issuer
+	Audience  string // rỗng = Audience
+	TTL       time.Duration
 }
 
 // Sign phát token đã ký.
@@ -89,6 +91,9 @@ func (f *FakeIssuer) Sign(t testing.TB, tk Token) string {
 	extra := map[string]any{"tenant_id": tk.TenantID.String(), "realm_access": map[string]any{"roles": tk.Roles}, "amr": amr, "auth_time": now.Unix()}
 	if tk.OrgRef != uuid.Nil {
 		extra["org_ref"] = tk.OrgRef.String()
+	}
+	if tk.SessionID != "" {
+		extra["sid"] = tk.SessionID
 	}
 	raw, err := jwt.Signed(f.signer).Claims(std).Claims(extra).Serialize()
 	if err != nil {

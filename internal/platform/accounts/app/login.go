@@ -12,6 +12,7 @@ package app
 //     kiểm mật khẩu mà bỏ qua yếu tố thứ hai; tài khoản có OTP mà thiếu mã bị từ chối như sai mật khẩu (không lộ tài
 //     khoản nào có OTP) và bị Keycloak tính là một lần sai. Chưa đăng ký OTP mà vai bắt TOTP thì không bao giờ có token.
 //   - Mật khẩu, OTP, token và mã định danh không vào log, lỗi hay kho idempotency.
+//   - Vai đăng nhập bằng OTP email (port.EmailOTPRoles — Admin, ADR-0061) đi hai bước: login_otp.go.
 
 import (
 	"context"
@@ -26,6 +27,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/domain"
@@ -43,24 +45,28 @@ var (
 	ErrSessionExpired     = problem.New(http.StatusUnauthorized, "accounts.session_expired", "Phiên đăng nhập đã hết")
 )
 
-// LoginAuthenticated là trạng thái duy nhất của đăng nhập thành công.
+// LoginAuthenticated là trạng thái của đăng nhập thành công (kèm token). Bước 1 của vai đăng nhập bằng OTP email trả
+// LoginOTPRequired (login_otp.go).
 const LoginAuthenticated = "authenticated"
 
 const loginKeyContext = "pf/accounts login v1\x00"
 
 var otpRe = regexp.MustCompile(`^[0-9]{6}$`)
 
-// LoginInput là dữ liệu đăng nhập. Không bao giờ vào log.
+// LoginInput là dữ liệu đăng nhập. Không bao giờ vào log. ChallengeID khác rỗng là bước 2 của đăng nhập bằng OTP email:
+// OTP là mã trong email (bắt buộc), không gửi cho Keycloak.
 type LoginInput struct {
-	Identifier string `pii:"true"`
-	Password   string `pii:"true"`
-	OTP        string `pii:"true"`
+	Identifier  string `pii:"true"`
+	Password    string `pii:"true"`
+	OTP         string `pii:"true"`
+	ChallengeID uuid.UUID
 }
 
-// LoginResult: Status authenticated kèm Tokens.
+// LoginResult: Status authenticated kèm Tokens; otp_required kèm OTP (bước 1 của đăng nhập bằng OTP email).
 type LoginResult struct {
 	Status string
 	Tokens port.TokenSet
+	OTP    *LoginOTPPrompt
 }
 
 func loginFailed(remaining int) error {
@@ -97,7 +103,10 @@ func validateLogin(in LoginInput) error {
 	case len(in.Password) > domain.MaxLoginPasswordLen:
 		p, bad = p.WithField("password", "Mật khẩu quá dài"), true
 	}
-	if in.OTP != "" && !otpRe.MatchString(in.OTP) {
+	switch {
+	case in.ChallengeID != uuid.Nil && in.OTP == "":
+		p, bad = p.WithField("otp", "Nhập mã OTP gồm 6 chữ số"), true
+	case in.OTP != "" && !otpRe.MatchString(in.OTP):
 		p, bad = p.WithField("otp", "Mã OTP gồm 6 chữ số"), true
 	}
 	if bad {
@@ -214,7 +223,15 @@ func (s *Service) loginKnown(ctx context.Context, u port.User, in LoginInput) (L
 		}
 		return LoginResult{}, "temp_locked", loginTempLocked(left)
 	}
-	ts, err := s.PwLogin.PasswordGrant(ctx, u.Username, in.Password, in.OTP)
+	// Bước 2 của OTP email: mã trong email không phải TOTP của Keycloak nên không gửi cho Keycloak.
+	totp := in.OTP
+	if in.ChallengeID != uuid.Nil {
+		totp = ""
+	}
+	ts, err := s.PwLogin.PasswordGrant(ctx, u.Username, in.Password, totp)
+	if err == nil && port.NeedsLoginEmailOTP(ts.Roles) {
+		return s.loginEmailOTP(ctx, u, in, ts)
+	}
 	if err == nil && s.missingSecondFactor(ts) {
 		// Kiểm lại claim: vai bắt TOTP mà token không có amr otp thì thu hồi, không trả token.
 		s.endSession(ctx, ts.RefreshToken)

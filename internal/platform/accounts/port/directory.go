@@ -42,6 +42,9 @@ type NewUser struct {
 	TenantID        uuid.UUID
 	OrgRef          uuid.UUID
 	RequiredActions []string
+	// EmailVerified đánh dấu email đã xác minh ngay khi tạo — chỉ lệnh khởi tạo Admin (người chạy lệnh là quản trị hệ
+	// thống nhập email): Admin nhận mã OTP đăng nhập qua email này (ADR-0061).
+	EmailVerified bool
 }
 
 // Query lọc người dùng. Attributes so khớp chính xác (Keycloak q=key:value).

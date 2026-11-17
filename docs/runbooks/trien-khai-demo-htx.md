@@ -106,7 +106,7 @@ sudo ufw allow 80,443/tcp && sudo ufw allow 443/udp && sudo ufw enable
    sh deploy/demo/compose.sh run --rm bootstrap-admin -tenant <uuid-tenant> -org <uuid-don-vi> -username <ten-dang-nhap> -email <email>
    ```
 
-   Mật khẩu tạm in ra stdout **một lần**; chuyển qua kênh an toàn. Đăng nhập lần đầu → "Hoàn tất trên trang xác thực" → đổi mật khẩu, đăng ký TOTP → đăng nhập lại ở màn của web với mật khẩu + mã OTP.
+   `-email` bắt buộc: Admin nhận mã OTP đăng nhập qua email này ([ADR-0061](../adr/0061-admin-dang-nhap-otp-email.md)), nên phải cấu hình SMTP trước (dòng Email ở bảng mục 6). Mật khẩu tạm in ra stdout **một lần**; chuyển qua kênh an toàn. Đăng nhập lần đầu → "Hoàn tất trên trang xác thực" → đổi mật khẩu → đăng nhập lại ở màn của web bằng mật khẩu mới, rồi nhập mã OTP gửi tới email.
 
 2. **Dữ liệu nền** bằng giao diện Admin: danh mục đơn vị hành chính (FN-02), HTX (FN-03), tài khoản Đại diện HTX, rồi Đại diện HTX tạo Thành viên HTX (FN-08), danh mục mùa vụ, SOP. Repo chưa có script nạp dữ liệu nền (`deploy/vps/bootstrap.py` của repo gốc không được mang sang) — nên viết một script nạp qua API cho máy demo để dựng lại nhanh.
 
@@ -132,7 +132,7 @@ Thêm `--dart-define=AG_TILE_URL=...` nếu dùng nhà cung cấp tile trong nư
 | Sao lưu tối thiểu | hằng ngày `docker exec htx-demo-postgres-1 pg_dumpall -U postgres \| gzip > /backup/htx-$(date +%F).sql.gz` + sao lưu volume `htx-demo_objects`; chép ra ngoài máy. Hồ sơ pgBackRest đầy đủ: [backup.md](backup.md) |
 | Chứng thư | Caddy tự gia hạn; dữ liệu ACME ở volume `htx-demo_caddy_data` |
 | Giám sát | kiểm uptime ngoài máy trên `/api/healthz` và `/login` mỗi 1–5 phút |
-| Email | Mặc định tắt (fail-closed). Bật: điền `AG_SMTP_*` (`deploy/demo/.env`, mật khẩu ở `deploy/compose/.env`) cho Keycloak; worker cần thêm `AG_SMTP_*` vào hồ sơ demo |
+| Email | Mặc định tắt (fail-closed). Bật: điền `AG_SMTP_*` (`deploy/demo/.env`, mật khẩu ở `deploy/compose/.env`) — Keycloak và `api-platform` cùng đọc. **Thiếu SMTP thì Admin không đăng nhập được** (mã OTP gửi qua email, ADR-0061). Worker cần thêm `AG_SMTP_*` vào hồ sơ demo nếu muốn gửi email thông báo, đặt lại mật khẩu |
 
 **Realm chỉ nhập một lần.** Đổi tên miền hoặc client sau khi đã chạy: sửa trong Admin Console (từ IP quản trị) hoặc xóa DB `keycloak` rồi dựng lại (mất mọi tài khoản).
 

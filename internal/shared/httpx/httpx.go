@@ -2,9 +2,11 @@
 package httpx
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -126,9 +128,19 @@ func Recover(log *slog.Logger) gin.HandlerFunc {
 	}
 }
 
+// SecondFactorAttestor xác nhận yếu tố thứ hai mà token không mang được trong amr — mã OTP gửi qua email do máy chủ kiểm
+// (ADR-0061, pf/accounts). Trả false cho người không thuộc diện; lỗi tra cứu là lỗi phụ thuộc (fail-closed).
+type SecondFactorAttestor interface {
+	SecondFactorVerified(ctx context.Context, p authz.Principal) (bool, error)
+}
+
 // Authenticate xác minh Bearer token, gắn Principal và tenant vào context.
 // Tenant CHỈ lấy từ token (R-16).
-func Authenticate(v *authz.Verifier) gin.HandlerFunc {
+func Authenticate(v *authz.Verifier) gin.HandlerFunc { return AuthenticateAttested(v, nil) }
+
+// AuthenticateAttested như Authenticate; token chưa có yếu tố thứ hai thì hỏi att (nil → bỏ qua) và đặt Principal.MFA
+// khi phiên đã được xác nhận. Không tra được → 503 qua problem của att, không cho qua.
+func AuthenticateAttested(v *authz.Verifier, att SecondFactorAttestor) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		h := c.GetHeader("Authorization")
 		raw, ok := strings.CutPrefix(h, "Bearer ")
@@ -142,6 +154,14 @@ func Authenticate(v *authz.Verifier) gin.HandlerFunc {
 			c.Header("WWW-Authenticate", `Bearer realm="agrigreen", error="invalid_token"`)
 			Fail(c, problem.Unauthenticated.WithDetail("Token không hợp lệ hoặc đã hết hạn"))
 			return
+		}
+		if !p.MFA && att != nil {
+			ok, err := att.SecondFactorVerified(c.Request.Context(), p)
+			if err != nil {
+				Fail(c, err)
+				return
+			}
+			p.MFA = ok
 		}
 		ctx := authz.WithPrincipal(c.Request.Context(), p)
 		ctx = authz.WithRawToken(ctx, raw) // để chuyển tiếp sang kho định danh (R-54)
@@ -160,6 +180,23 @@ func RequireMFA() gin.HandlerFunc {
 			return
 		}
 		if !p.MFA {
+			Fail(c, problem.MFARequired)
+			return
+		}
+		c.Next()
+	}
+}
+
+// RequireMFAForRoles chặn người giữ một trong roles mà chưa qua yếu tố thứ hai — Application API dùng cho vai đăng nhập
+// bằng OTP email (ADR-0061): token chỉ có mật khẩu (vd lấy qua trang Keycloak) không dùng được.
+func RequireMFAForRoles(roles ...string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		p, ok := authz.FromContext(c.Request.Context())
+		if !ok {
+			Fail(c, problem.Unauthenticated)
+			return
+		}
+		if !p.MFA && slices.ContainsFunc(roles, p.Has) {
 			Fail(c, problem.MFARequired)
 			return
 		}

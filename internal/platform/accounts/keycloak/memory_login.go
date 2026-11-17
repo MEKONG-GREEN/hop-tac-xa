@@ -83,8 +83,8 @@ func b64(v any) string {
 }
 
 // jwt dựng token giả KHÔNG ký (chỉ kiểm thử; tokenClaims không kiểm chữ ký).
-func (m *Memory) jwt(u *memUser) (access string, roles, amr []string) {
-	claims := map[string]any{"sub": u.u.ID.String(), "iat": m.now().Unix(), "exp": m.now().Add(memTokenLife).Unix()}
+func (m *Memory) jwt(u *memUser, sid string) (access string, roles, amr []string) {
+	claims := map[string]any{"sub": u.u.ID.String(), "sid": sid, "iat": m.now().Unix(), "exp": m.now().Add(memTokenLife).Unix()}
 	roles = slices.Clone(u.roles)
 	if port.NeedsLoginTOTP(roles) {
 		roles = append(roles, port.RoleLoginTOTP)
@@ -99,13 +99,14 @@ func (m *Memory) jwt(u *memUser) (access string, roles, amr []string) {
 }
 
 func (m *Memory) issue(id uuid.UUID, u *memUser, refresh string) port.TokenSet {
-	access, roles, amr := m.jwt(u)
 	if refresh == "" {
 		refresh = uuid.NewString() + uuid.NewString()
-		m.loginSessions[refresh] = loginSession{user: id}
+		m.loginSessions[refresh] = loginSession{user: id, sid: uuid.NewString()}
 	}
+	sid := m.loginSessions[refresh].sid
+	access, roles, amr := m.jwt(u, sid)
 	return port.TokenSet{AccessToken: access, RefreshToken: refresh, ExpiresIn: int(memTokenLife.Seconds()),
-		RefreshExpiresIn: int((10 * time.Hour).Seconds()), Roles: roles, AMR: amr}
+		RefreshExpiresIn: int((10 * time.Hour).Seconds()), Roles: roles, AMR: amr, SessionID: sid}
 }
 
 // PasswordGrant thực hiện port.PasswordLogin như direct grant của Keycloak: tài khoản tắt → ErrAccountDisabled;

@@ -110,7 +110,8 @@ export interface AuthContextValue {
    * Đăng nhập ở màn riêng (FN-01): tên đăng nhập hoặc SĐT + mật khẩu (+ OTP) gửi về máy chủ. `authenticated` → phiên đã
    * thiết lập (trang đăng nhập tự điều hướng vào trang đầu tiên được xem). Chế độ giả lập: mật khẩu thử (tài khoản KN v7.7).
    */
-  signIn: (identifier: string, password: string, otp?: string) => Promise<SignInOutcome>;
+  /** `challengeId` có giá trị là bước 2 của Admin (ADR-0061): `otp` là mã trong email. */
+  signIn: (identifier: string, password: string, otp?: string, challengeId?: string) => Promise<SignInOutcome>;
   /** Chỉ chế độ giả lập: đăng nhập bằng persona. */
   loginAsPersona: (personaId: string) => Promise<void>;
   /** Đổi mật khẩu: Keycloak kc_action=UPDATE_PASSWORD (chế độ giả lập: không làm gì). */
@@ -408,7 +409,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const signIn = useCallback(
-    async (identifier: string, password: string, otp?: string): Promise<SignInOutcome> => {
+    async (identifier: string, password: string, otp?: string, challengeId?: string): Promise<SignInOutcome> => {
       if (config.mock) {
         const r = mockKnLogin(identifier, password);
         if (r.ok) {
@@ -417,7 +418,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         return r.error === "locked" ? { kind: "locked", minutes: LOCK_MINUTES } : { kind: "invalid", remaining: r.remaining };
       }
-      const outcome = await passwordLogin.login(identifier, password, otp);
+      const outcome = await passwordLogin.login(identifier, password, otp, challengeId);
       if (outcome.kind !== "authenticated") return outcome;
       // Token (kể cả refresh token) chỉ ở bộ nhớ của tab; làm mới trước hạn, thất bại thì về màn đăng nhập.
       passwordSession.start(outcome.tokens, { onAccessToken: tokenStore.set, onExpired: onUnauthenticated });

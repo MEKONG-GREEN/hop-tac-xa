@@ -57,6 +57,7 @@ type memUser struct {
 
 type loginSession struct {
 	user uuid.UUID
+	sid  string // claim sid của token (ADR-0061)
 }
 
 // SentEmail là một lần gửi liên kết hành động (không chứa địa chỉ email).
@@ -172,7 +173,7 @@ func (m *Memory) CreateUser(_ context.Context, nu port.NewUser) (uuid.UUID, erro
 	id := uuid.New() // Keycloak sinh UUIDv4
 	m.users[id] = &memUser{u: port.User{
 		ID: id, Username: fold(nu.Username), Email: fold(nu.Email), FirstName: nu.FirstName, LastName: nu.LastName,
-		Phone: nu.Phone, Enabled: true, TenantID: nu.TenantID, OrgRef: nu.OrgRef,
+		Phone: nu.Phone, Enabled: true, EmailVerified: nu.EmailVerified && nu.Email != "", TenantID: nu.TenantID, OrgRef: nu.OrgRef,
 		RequiredActions: slices.Clone(nu.RequiredActions), CreatedAt: m.now().UTC(),
 	}}
 	m.order = append(m.order, id)

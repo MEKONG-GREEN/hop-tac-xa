@@ -331,7 +331,7 @@ func (c *Client) CreateUser(ctx context.Context, nu port.NewUser) (uuid.UUID, er
 	}
 	rep := userRep{
 		Username: nu.Username, Email: nu.Email, FirstName: nu.FirstName, LastName: nu.LastName,
-		Enabled: true, Attributes: attrs, RequiredActions: nu.RequiredActions,
+		Enabled: true, EmailVerified: nu.EmailVerified && nu.Email != "", Attributes: attrs, RequiredActions: nu.RequiredActions,
 	}
 	hdr, err := c.do(ctx, "tạo người dùng", http.MethodPost, "/users", nil, rep, nil)
 	if err != nil {

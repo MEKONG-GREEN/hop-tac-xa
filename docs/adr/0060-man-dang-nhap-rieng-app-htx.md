@@ -1,6 +1,6 @@
 # ADR-0060: Màn đăng nhập riêng của App HTX
 
-**Trạng thái:** Chấp nhận. **Ngày:** 16/11/2026 (AH-268, FN-01). **Nguồn:** quyết định kiến trúc đăng nhập của người phụ trách dự án ngày 16/11/2026, phương án nhóm dự án 15/11/2026 và trả lời hai lượt của nhóm dự án cho các câu hỏi của dev-agent.
+**Trạng thái:** Chấp nhận; yếu tố thứ hai của Admin (`platform_admin`) thay bằng mã OTP gửi qua email theo [ADR-0061](0061-admin-dang-nhap-otp-email.md) (17/11/2026). **Ngày:** 16/11/2026 (AH-268, FN-01). **Nguồn:** quyết định kiến trúc đăng nhập của người phụ trách dự án ngày 16/11/2026, phương án nhóm dự án 15/11/2026 và trả lời hai lượt của nhóm dự án cho các câu hỏi của dev-agent.
 
 **Liên quan:** [ADR-0057](0057-tu-dat-lai-mat-khau-qua-email.md) (đặt lại mật khẩu), [ADR-0059](0059-tach-he-thong-hop-tac-xa.md) (App HTX), [runbook đăng nhập App HTX](../runbooks/dang-nhap-app-htx.md), [runbook MFA D24](../runbooks/keycloak-mfa-d24.md).
 
@@ -22,7 +22,7 @@ App HTX có màn đăng nhập riêng trên web. Người dùng nhập tên đă
 - **Tra tài khoản:** khớp đúng tên đăng nhập thì lấy (duy nhất); không có mới tra theo SĐT; SĐT khớp từ hai tài khoản trở lên coi như sai và ghi một dòng cảnh báo không kèm SĐT. SĐT duy nhất toàn hệ thống (BR-07) thuộc FN-07/FN-08, không sửa ở đây.
 - **Token chỉ nằm trong bộ nhớ của tab** (kể cả refresh token), giữ quy tắc của `tokenStore.ts`. Làm mới và đăng xuất đi qua máy chủ; đăng xuất thu hồi phiên ở Keycloak.
 - **Không đòi `Idempotency-Key`** cho API đăng nhập; thân chứa mật khẩu không vào kho idempotency, outbox, log, đo đếm hay thông báo lỗi.
-- **Admin đầu tiên** tạo bằng lệnh `cmd/bootstrap-admin` (không có màn hình): vai `platform_admin`, tenant và đơn vị là cờ bắt buộc, mật khẩu tạm in ra stdout đúng một lần, tài khoản phải đổi mật khẩu và đăng ký TOTP ở lần đăng nhập đầu.
+- **Admin đầu tiên** tạo bằng lệnh `cmd/bootstrap-admin` (không có màn hình): vai `platform_admin`, tenant và đơn vị là cờ bắt buộc, mật khẩu tạm in ra stdout đúng một lần, tài khoản phải đổi mật khẩu ở lần đăng nhập đầu. Từ ADR-0061: email bắt buộc (đã xác minh), không đăng ký TOTP; Admin đăng nhập hai bước bằng mật khẩu và mã OTP gửi qua email.
 
 ## Nhóm tài khoản theo luồng
 

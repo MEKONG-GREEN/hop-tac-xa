@@ -233,6 +233,18 @@ func Build(ctx context.Context, open PoolOpener, clk clock.Clock, ext External) 
 	}
 	if pwLogin != nil {
 		acc.UseLogin(pwLogin, loginKey)
+		// ADR-0061: Admin nhận mã OTP đăng nhập qua email. Chỉ nhận kênh SMTP thật: thiếu AG_SMTP_HOST thì kênh tắt và Admin
+		// không đăng nhập được (fail-closed); chế độ log (máy phát triển) không dùng vì sẽ in mã ra log.
+		mailer, ok, err := notify.SMTPMailerFromEnv(slog.Default())
+		if err != nil {
+			return Modules{}, pools, err
+		}
+		if ok {
+			acc.UseLoginOTPMailer(mailer)
+		} else {
+			slog.Default().Warn("chưa cấu hình SMTP — Admin không đăng nhập được (mã OTP gửi qua email, ADR-0061)",
+				"event", "startup", "outcome", "skipped")
+		}
 	}
 	// KN v7.7 P1 ↔ P2: menu theo ngữ cảnh phiên, số tài khoản theo phòng ban (mở khóa "xóa" phòng ban),
 	// dòng tài khoản của bảng Ảnh hưởng, tên người thao tác trong Log (Keycloak, dự phòng danh bạ cán bộ).
