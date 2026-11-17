@@ -208,4 +208,43 @@ void main() {
       ),
     );
   });
+
+  test(
+    'FN-01/AC-N2: 403 accounts.account_locked → AccountLockedException',
+    () async {
+      final api = HttpSyncApi(
+        baseUrl: 'https://api.test',
+        accessToken: () async => 'tok',
+        client: MockClient(
+          (_) async => http.Response.bytes(
+            utf8.encode(
+              jsonEncode({
+                'code': 'accounts.account_locked',
+                'detail': AccountLockedException.userMessage,
+              }),
+            ),
+            403,
+          ),
+        ),
+      );
+      await expectLater(
+        api.pull(limit: 1),
+        throwsA(
+          isA<AccountLockedException>()
+              .having((e) => e.status, 'status', 403)
+              .having(
+                (e) => e.code,
+                'code',
+                AccountLockedException.accountLockedCode,
+              )
+              .having(
+                (e) => e.detail,
+                'detail',
+                AccountLockedException.userMessage,
+              )
+              .having((e) => e.retriable, 'retriable', isFalse),
+        ),
+      );
+    },
+  );
 }

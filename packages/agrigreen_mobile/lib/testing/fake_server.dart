@@ -40,6 +40,10 @@ class FakeServer implements SyncApi {
   bool revoked = false;
   bool unauthenticated = false;
 
+  /// Tài khoản bị khóa trong lúc đang dùng (FN-01/EX-06, AH-301): mọi API bị từ
+  /// chối 403 `accounts.account_locked`.
+  bool accountLocked = false;
+
   /// Đồng ý thu thập dữ liệu (AH-23, REQ-011): true = tài khoản chưa đồng ý —
   /// `GET /v1/me/data-consent` trả `required`, `push`/`uploadFile` bị từ chối
   /// 403 `accounts.data_consent_required`. `POST` đúng phiên bản thì ghi nhận.
@@ -75,6 +79,7 @@ class FakeServer implements SyncApi {
   void _guard() {
     if (revoked) throw DeviceRevokedException();
     if (unauthenticated) throw UnauthenticatedException('unauthenticated');
+    if (accountLocked) throw AccountLockedException();
   }
 
   @override

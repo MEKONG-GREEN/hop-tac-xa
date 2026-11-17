@@ -203,6 +203,17 @@ class SyncService {
       await _save(const SyncStatus(state: SyncState.revoked));
       await _wipe.wipe();
       return null;
+    } on AccountLockedException catch (e) {
+      // FN-01/EX-06 (AH-301): tài khoản bị khóa → về màn đăng nhập, dữ liệu chờ
+      // gửi giữ nguyên ở máy.
+      await _save(
+        SyncStatus(
+          state: SyncState.needsLogin,
+          lastSuccessAt: prev.lastSuccessAt,
+          lastError: e.code,
+        ),
+      );
+      return null;
     } on UnauthenticatedException catch (e) {
       await _save(
         SyncStatus(
@@ -251,7 +262,8 @@ class SyncService {
       } on ApiException catch (e) {
         if (e is DeviceRevokedException ||
             e is UnauthenticatedException ||
-            e is DataConsentRequiredException) {
+            e is DataConsentRequiredException ||
+            e is AccountLockedException) {
           rethrow;
         }
         if (e.retriable) rethrow;
@@ -321,7 +333,8 @@ class SyncService {
       } on ApiException catch (e) {
         if (e is DeviceRevokedException ||
             e is UnauthenticatedException ||
-            e is DataConsentRequiredException) {
+            e is DataConsentRequiredException ||
+            e is AccountLockedException) {
           rethrow;
         }
         if (e.retriable) {

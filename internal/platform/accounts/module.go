@@ -148,7 +148,8 @@ func (m *Module) RegisterAdmin(rg *gin.RouterGroup) {
 }
 
 // Middleware thực hiện httpx.RequestMiddleware: ngữ cảnh phiên KN v7.7 (header X-AG-Context) cho MỌI
-// route của hai bề mặt — vai, phòng ban, phạm vi giải ở server (gap §4.5).
+// route của hai bề mặt — vai, phòng ban, phạm vi giải ở server (gap §4.5). Trước đó chặn tài khoản Đã khóa
+// (AH-301, FN-01/EX-06): đọc pf_accounts.account ở mỗi request, khóa có hiệu lực ngay ở thao tác kế tiếp.
 func (m *Module) Middleware() gin.HandlerFunc {
 	return handler.Handler{Svc: m.svc, Sessions: m.sessions}.Middleware()
 }

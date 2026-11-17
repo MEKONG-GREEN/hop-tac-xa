@@ -52,3 +52,9 @@ Lần đầu đăng nhập ở màn mới, tài khoản nhận `accounts.login_s
 - Khóa tạm 15 phút (hoặc 60 giây khi hai lần sai cách nhau dưới 1 giây) là khóa của Keycloak, **không** hiện trong danh sách tài khoản; Admin mở sớm bằng nút "Mở khóa" ở chi tiết tài khoản. Đặt lại mật khẩu thành công cũng xóa bộ đếm.
 - Mã định danh không tồn tại có bộ đếm ở bảng `pf_accounts.login_probe` (chỉ HMAC); dòng đã hết khóa và quá 24 giờ được dọn dần. Đổi `AG_LOGIN_ID_KEY` làm bộ đếm cũ vô nghĩa (an toàn: về 0).
 - Nhật ký: mỗi lượt một dòng `event=accounts.login` với `outcome` (`authenticated`, `failed`, `temp_locked`, `account_locked`, `setup_required`, `unknown_identifier`, `ambiguous_phone` — cảnh báo SĐT khớp nhiều tài khoản, chỉ kèm `id_hash`). Không có mã định danh, mật khẩu, OTP hay token.
+
+## 5. Khóa tài khoản trong lúc đang dùng (FN-01/EX-06, AH-301)
+
+- Khóa có hiệu lực ở **yêu cầu kế tiếp**, không chờ token hết hạn: middleware của pf/accounts tra `pf_accounts.account` ở mỗi yêu cầu đã đăng nhập (cả Application lẫn Admin API) và trả 403 `accounts.account_locked` kèm câu EX-03. Web xóa phiên và về màn đăng nhập; app về màn đăng nhập ở lượt đồng bộ kế tiếp (chậm nhất 2 phút), dữ liệu chờ gửi giữ nguyên.
+- CSDL không đọc được thì **mọi** API cần đăng nhập trả 503 `accounts.dependency_unavailable`, kể cả yêu cầu đọc (fail-closed). Keycloak không nằm trên đường mỗi yêu cầu: Keycloak sập không làm API hỏng.
+- Tài khoản chỉ bị tắt trong console Keycloak mà pf chưa ghi thì **không** bị lớp này chặn; token đã phát dùng được tới khi hết hạn. Muốn chặn ngay thì khóa bằng nút "Khóa" của ứng dụng.

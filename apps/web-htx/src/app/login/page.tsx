@@ -15,14 +15,16 @@ import { menuAllows } from "@/shell/menu";
 import { purgeLegacyIdentifier, rememberIdentifier, useRememberedIdentifier } from "@/lib/rememberLogin";
 
 function LoginInner() {
-  const { status, principal, kn, dataConsent, login, signIn, loginAsPersona } = useAuth();
+  const { status, sessionEnd, principal, kn, dataConsent, login, signIn, loginAsPersona } = useAuth();
   const router = useRouter();
   const params = useSearchParams();
   const returnTo = safeReturnTo(params.get("returnTo"));
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<LoginError | null>(() =>
-    params.get("error") ? { kind: "message", text: "Không hoàn tất được đăng nhập. Vui lòng thử lại hoặc liên hệ quản trị viên." } : null,
-  );
+  const [error, setError] = useState<LoginError | null>(() => {
+    // AC-N2 (FN-01/EX-06): bị đưa về vì tài khoản bị khóa trong lúc đang dùng → hiện câu EX-03 ngay khi mở màn.
+    if (sessionEnd === "account_locked") return { kind: "account_locked" };
+    return params.get("error") ? { kind: "message", text: "Không hoàn tất được đăng nhập. Vui lòng thử lại hoặc liên hệ quản trị viên." } : null;
+  });
   // undefined trước hydrate → chờ để thẻ nhận đúng giá trị ban đầu.
   // Chỉ email, chỉ khi đã tích "Ghi nhớ đăng nhập", ở sessionStorage (src/lib/rememberLogin.ts).
   const remembered = useRememberedIdentifier();

@@ -18,6 +18,7 @@ const signIn = vi.fn<(identifier: string, password: string, otp?: string) => Pro
 const login = vi.fn(async () => undefined);
 const auth = {
   status: "anonymous" as "anonymous" | "authenticated" | "loading",
+  sessionEnd: null as "account_locked" | null,
   principal: null as ReturnType<typeof buildPrincipal> | null,
   kn: { status: "legacy", assignments: [], context: null, menu: null, badges: null },
   dataConsent: { status: "not_required" },
@@ -38,6 +39,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   window.sessionStorage.clear();
   auth.status = "anonymous";
+  auth.sessionEnd = null;
   auth.principal = null;
 });
 
@@ -80,6 +82,13 @@ describe("Trang Đăng nhập (FN-01)", () => {
     signIn.mockResolvedValueOnce({ kind: "account_locked" });
     await submit(user);
     expect(await screen.findByRole("alert")).toHaveTextContent("Tài khoản đã bị khóa. Liên hệ người đã cấp tài khoản để mở khóa.");
+  });
+
+  it("AC-N2 (FN-01/EX-06): bị đưa về vì tài khoản bị khóa → hiện câu EX-03 ngay khi mở màn", () => {
+    auth.sessionEnd = "account_locked";
+    render(<LoginPage />);
+    expect(screen.getByRole("alert")).toHaveTextContent("Tài khoản đã bị khóa. Liên hệ người đã cấp tài khoản để mở khóa.");
+    expect(signIn).not.toHaveBeenCalled();
   });
 
   it("AC-01: đăng nhập đúng → vào trang đầu tiên được xem (homeFor)", async () => {

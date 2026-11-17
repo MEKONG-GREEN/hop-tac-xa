@@ -480,7 +480,7 @@ Tài khoản cán bộ quản lý trong Keycloak qua Admin REST (KN US-ADM-01..0
 | 404 | `accounts.contact_unavailable` | pf/accounts: cán bộ HTX chưa có SĐT hợp lệ — app ẩn nút gọi nhanh (HTX US-SUPPORT-02 AC-2) |
 | 422 | `validation_failed` | pf/accounts: lý do khóa/mở khóa dưới 20 ký tự; email/SĐT/tên đăng nhập sai dạng; thiếu vai; vai sai loại tổ chức (`coop_manager` → "Vui lòng chọn HTX liên kết.") |
 | 502 | `accounts.email_failed` | pf/accounts: Keycloak không gửi được email liên kết (SMTP lỗi) khi gửi lại; khi tạo tài khoản thì trả 201 với `activation_email_sent = false` |
-| 503 | `accounts.dependency_unavailable` | pf/accounts: chưa cấu hình `AG_KC_*`, Keycloak không phản hồi hoặc từ chối tài khoản dịch vụ, chưa nối pf/party |
+| 503 | `accounts.dependency_unavailable` | pf/accounts: chưa cấu hình `AG_KC_*`, Keycloak không phản hồi hoặc từ chối tài khoản dịch vụ, chưa nối pf/party; không đọc được trạng thái tài khoản ở CSDL (mọi API cần đăng nhập, AH-301) |
 | 410 | `accounts.reset_link_invalid` | pf/accounts (#255, ADR-0057): `POST /v1/public/password-reset/confirm` — mã sai/bị sửa, đã dùng, hết hạn (30 phút), đang được xác nhận song song hoặc tài khoản đã bị khóa; một mã chung, không phân biệt lý do |
 | 422 | `accounts.password_policy` | pf/accounts (#255): mật khẩu mới không đạt chính sách realm (≥ 12 ký tự, khác tên đăng nhập, không trùng 5 mật khẩu gần nhất); liên kết đặt lại vẫn dùng lại được |
 | 401 | `accounts.login_failed` | pf/accounts (FN-01/EX-02, ADR-0060): `POST /v1/public/auth/login` — sai tên đăng nhập, SĐT, mật khẩu hoặc mã OTP, kể cả tài khoản có OTP mà không gửi mã (một mã chung, không phân biệt lý do; mã định danh không tồn tại và SĐT khớp nhiều tài khoản cho phản hồi giống hệt). Thân có `remaining_attempts` (số lần thử còn lại) và `detail` "Sai tài khoản hoặc mật khẩu. Còn n lần thử." |
@@ -511,7 +511,7 @@ KN v7.7 gói P1 — gán vai trò nhiều vai × Nút × phòng ban × xã (FN-A
 | 403 | `accounts.context_invalid` | `X-AG-Context` không phải UUID, không tồn tại trong tenant, hoặc thuộc người khác (chống giả header) |
 | 403 | `accounts.context_expired` | ngữ cảnh quá 24 giờ hoặc lần gán hết hiệu lực — chọn lại |
 | 403 | `accounts.context_revoked` | vai trò đã thu hồi/đổi vai, phòng ban không còn trong vai trò hoặc không còn Đang áp dụng, tài khoản bị khóa, phiên hỗ trợ đã kết thúc |
-| 403 | `accounts.account_locked` | tài khoản bị khóa — "Tài khoản đã bị khóa, vui lòng liên hệ Admin để mở khóa." Ở `POST /v1/public/auth/login` (FN-01/EX-03): mã định danh khớp tài khoản đã bị khóa (FN-07) thì báo "Tài khoản đã bị khóa. Liên hệ người đã cấp tài khoản để mở khóa." dù mật khẩu đúng hay sai |
+| 403 | `accounts.account_locked` | tài khoản bị khóa — "Tài khoản đã bị khóa, vui lòng liên hệ Admin để mở khóa." Ở `POST /v1/public/auth/login` (FN-01/EX-03): mã định danh khớp tài khoản đã bị khóa (FN-07) thì báo "Tài khoản đã bị khóa. Liên hệ người đã cấp tài khoản để mở khóa." dù mật khẩu đúng hay sai. Mọi API cần đăng nhập (Application và Admin API, FN-01/EX-06, AH-301) trả mã này kèm câu EX-03 khi token còn hạn thuộc tài khoản đang Đã khóa — web và app xóa phiên rồi về màn đăng nhập |
 | 403 | `mfa_required` | ngữ cảnh Admin và chế độ hỗ trợ bắt buộc token có yếu tố thứ hai |
 | 422 | `accounts.support_reason_required` | thao tác ghi trong chế độ hỗ trợ thiếu header `X-AG-Reason` (≥ 10 ký tự, UTF-8 mã hóa phần trăm) |
 | 404 | `accounts.support_session_not_found` | phiên hỗ trợ không có hoặc của Admin khác |
