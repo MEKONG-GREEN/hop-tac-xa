@@ -190,8 +190,10 @@ func enqueueRegistered(ctx context.Context, tx pgx.Tx, p authz.Principal, h doma
 // HouseholdView là nông hộ kèm nhãn hiển thị tối thiểu từ kho định danh.
 type HouseholdView struct {
 	domain.Household
-	Label       string `pii:"true"` // đã che bớt, vd "Nguyễn V. A."
-	MaskedPhone string `pii:"true"`
+	ActiveAreaHa decimal.Decimal
+	Availability domain.AreaAvailability
+	Label        string `pii:"true"` // đã che bớt, vd "Nguyễn V. A."
+	MaskedPhone  string `pii:"true"`
 	// LabelUnavailable: kho định danh không trả nhãn (đã xóa định danh hoặc lỗi).
 	LabelUnavailable bool
 }
@@ -232,6 +234,7 @@ func (s *Service) ListHouseholds(ctx context.Context, coopRef, after uuid.UUID, 
 		return HouseholdPage{}, err
 	}
 	var items []domain.Household
+	var activeAreas map[uuid.UUID]decimal.Decimal
 	err = tenant.WithTenantTx(ctx, s.DB, p.TenantID, func(tx pgx.Tx) error {
 		var e error
 		if coop == nil || !visible(sc, coop.AdminUnitCode) {
@@ -245,9 +248,20 @@ func (s *Service) ListHouseholds(ctx context.Context, coopRef, after uuid.UUID, 
 			if e == nil && h != nil && h.CooperativeRef == coopRef {
 				items = []domain.Household{*h}
 			}
-			return e
+			if e != nil {
+				return e
+			}
+		} else {
+			items, e = store.ListHouseholdsByCooperative(ctx, tx, coopRef, after, limit+1)
+			if e != nil {
+				return e
+			}
 		}
-		items, e = store.ListHouseholdsByCooperative(ctx, tx, coopRef, after, limit+1)
+		refs := make([]uuid.UUID, 0, len(items))
+		for _, h := range items {
+			refs = append(refs, h.Ref)
+		}
+		activeAreas, e = store.ActiveAreas(ctx, tx, coopRef, refs)
 		return e
 	})
 	if err != nil {
@@ -267,7 +281,8 @@ func (s *Service) ListHouseholds(ctx context.Context, coopRef, after uuid.UUID, 
 	}
 	pg.Items = make([]HouseholdView, 0, len(items))
 	for _, h := range items {
-		v := HouseholdView{Household: h}
+		v := HouseholdView{Household: h, ActiveAreaHa: activeAreas[h.Ref]}
+		v.Availability = domain.HouseholdAreaAvailability(h.CultivatedAreaHa, v.ActiveAreaHa, h.Active)
 		if s.Vault == nil {
 			v.LabelUnavailable = true
 		} else if d, err := s.Vault.Label(ctx, port.IdentityFieldSupport, h.Ref); err != nil {

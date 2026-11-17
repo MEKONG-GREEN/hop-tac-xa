@@ -8,7 +8,7 @@ import { AuthContextForTests, type AuthContextValue } from "@/auth/AuthProvider"
 import { buildPrincipal } from "@/auth/principal";
 import { HouseholdsPanel } from "./HouseholdsPanel";
 
-function renderAs(personaId: string) {
+function renderAs(personaId: string, readOnly = false) {
   const p = MOCK_PERSONAS.find((x) => x.id === personaId);
   if (!p) throw new Error(personaId);
   const principal = buildPrincipal({ sub: p.me.actor_ref, name: p.displayName, amr: p.amr, realm_access: { roles: p.me.roles } }, p.me);
@@ -16,12 +16,22 @@ function renderAs(personaId: string) {
   const value = { status: "authenticated", principal, api } as unknown as AuthContextValue;
   return render(
     <AuthContextForTests.Provider value={value}>
-      <HouseholdsPanel coop={htxCoop().api} />
+      <HouseholdsPanel coop={htxCoop().api} readOnly={readOnly} />
     </AuthContextForTests.Provider>,
   );
 }
 
 describe("HouseholdsPanel: nút theo ma trận vai (FN-05)", () => {
+  it("[AH-50] danh sách diện tích chỉ đọc cho Đại diện HTX, vẫn hiện hộ hết diện tích", async () => {
+    renderAs("htx", true);
+    await waitFor(() => expect(screen.getAllByRole("row").length).toBeGreaterThan(1));
+    for (const name of ["Diện tích đất (ha)", "Đang canh tác (ha)", "Còn lại (ha)"]) {
+      expect(screen.getByRole("columnheader", { name })).toBeTruthy();
+    }
+    expect(screen.queryByRole("button", { name: /Sao chép hàng loạt/ })).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.getAllByText("Hết diện tích để mở vụ.").length).toBeGreaterThan(0);
+  });
   it("[FN-05/AC-01] Thành viên HTX không có nút thêm/sửa/xóa nông hộ", async () => {
     renderAs("htx-member");
     await waitFor(() => expect(screen.getAllByRole("row").length).toBeGreaterThan(1));

@@ -13528,6 +13528,14 @@ export interface components {
             recorded_at: string;
         };
         HouseholdListItem: components["schemas"]["Household"] & {
+            /** @description AH-50: tổng diện tích các vụ đang canh tác; không cộng vụ hoàn thành hoặc hủy */
+            active_area_ha: components["schemas"]["Decimal"];
+            /** @description max(0, diện tích đất - đang canh tác); null khi chưa có diện tích đất */
+            remaining_area_ha: components["schemas"]["Decimal"] | null;
+            /** @description Khả năng diện tích của nông hộ, không thay thế kiểm quyền mở vụ trên server */
+            can_open_season: boolean;
+            /** @description Rỗng khi nông hộ còn diện tích và đang tham gia HTX */
+            open_season_blocked_reason: string;
             /** @description Nhãn đã che, vd "Nguyễn V. A." */
             label: string;
             /** @description SĐT đã che */

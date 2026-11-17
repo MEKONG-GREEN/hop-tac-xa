@@ -5333,8 +5333,12 @@ components:
       allOf:
         - $ref: "#/components/schemas/Household"
         - type: object
-          required: [label, masked_phone, label_unavailable, consents]
+          required: [label, masked_phone, label_unavailable, consents, active_area_ha, remaining_area_ha, can_open_season, open_season_blocked_reason]
           properties:
+            active_area_ha: {$ref: "#/components/schemas/Decimal", description: "AH-50: tổng diện tích các vụ đang canh tác; không cộng vụ hoàn thành hoặc hủy"}
+            remaining_area_ha: {oneOf: [{$ref: "#/components/schemas/Decimal"}, {type: "null"}], description: "max(0, diện tích đất - đang canh tác); null khi chưa có diện tích đất"}
+            can_open_season: {type: boolean, description: "Khả năng diện tích của nông hộ, không thay thế kiểm quyền mở vụ trên server"}
+            open_season_blocked_reason: {type: string, description: "Rỗng khi nông hộ còn diện tích và đang tham gia HTX"}
             label: {type: string, description: "Nhãn đã che, vd \"Nguyễn V. A.\""}
             masked_phone: {type: string, description: "SĐT đã che"}
             label_unavailable: {type: boolean}
