@@ -107,7 +107,7 @@ func (s *Service) DataConsentStatus(ctx context.Context) (DataConsentView, error
 // RecordDataConsent ghi bằng chứng người gọi đồng ý phiên bản version (phải là bản hiện hành). Thời điểm là giờ máy
 // chủ. Đã đồng ý phiên bản này rồi (hoặc phát lại cùng khóa) → trả bản đã ghi, created=false, không ghi dòng mới.
 func (s *Service) RecordDataConsent(ctx context.Context, version, idemKey string) (c domain.DataConsent, created bool, err error) {
-	p, err := authz.Require(ctx, "coop_manager")
+	p, err := authz.Require(ctx, "coop_manager", "htx_member")
 	if err != nil {
 		return c, false, err
 	}

@@ -25,14 +25,16 @@ func TestFarmLogRecord_HTX_US_LOG_01_02(t *testing.T) {
 		t.Fatalf("thông báo: %s", r.raw)
 	}
 	season := fa.mustOpen(f.p1)
-	f.managerA().mustOpen(f.p2)
+	f.memberA().mustOpen(f.p2)
 
 	expectCode(t, fa.log(f.p1, map[string]any{"machine_codes": []string{"OLD"}}), http.StatusUnprocessableEntity, "cropcycle.catalog_invalid", "máy ngừng dùng")
 	expectCode(t, fa.log(f.p1, map[string]any{"sop_step_seq": 9}), http.StatusUnprocessableEntity, "validation_failed", "bước không có")
 	expectCode(t, fa.log(f.p1, map[string]any{"note": "Liên hệ 0912 345 678"}), http.StatusUnprocessableEntity, "validation_failed", "SĐT trong ghi chú")
 	expectCode(t, fa.log(f.p1, map[string]any{"activity_code": "nhay_mua"}), http.StatusUnprocessableEntity, "validation_failed", "hoạt động lạ")
 	expectCode(t, fa.log(f.p2, nil), http.StatusForbidden, "cropcycle.out_of_scope", "thửa của hộ khác")
-	expectCode(t, f.managerB().log(f.p1, nil), http.StatusForbidden, "cropcycle.out_of_scope", "HTX khác")
+	expectCode(t, f.memberB().log(f.p1, nil), http.StatusForbidden, "cropcycle.out_of_scope", "HTX khác")
+	// AH-39: Đại diện HTX chỉ xem nhật ký (ma trận KHMV-FN-05).
+	expectCode(t, f.managerA().log(f.p1, nil), http.StatusForbidden, "cropcycle.read_only", "Đại diện HTX không ghi")
 
 	r = fa.log(f.p1, nil)
 	expect(t, r, http.StatusCreated, "ghi nhật ký")
@@ -42,14 +44,14 @@ func TestFarmLogRecord_HTX_US_LOG_01_02(t *testing.T) {
 		get(l, "on_behalf") != false || str(r.body, "state", "status") != "pending" {
 		t.Fatalf("nhật ký: %s", r.raw)
 	}
-	// Quản lý HTX ghi hộ (US-LOG-02 AC-1); GPS bị từ chối → "Thiếu GPS" (US-GPS-01 AC-4).
-	r = f.managerA().log(f.p1, map[string]any{"gps": map[string]any{"source": "denied"}, "activity_code": "kiem_tra", "sop_step_seq": nil})
+	// Thành viên HTX ghi hộ (US-LOG-02 AC-1, AH-39); GPS bị từ chối → "Thiếu GPS" (US-GPS-01 AC-4).
+	r = f.memberA().log(f.p1, map[string]any{"gps": map[string]any{"source": "denied"}, "activity_code": "kiem_tra", "sop_step_seq": nil})
 	expect(t, r, http.StatusCreated, "ghi hộ")
 	if get(r.body, "log", "on_behalf") != true || str(r.body, "log", "location_status") != "missing" {
 		t.Fatalf("ghi hộ: %s", r.raw)
 	}
 	// Thửa lệch 120 m → "Vị trí không khớp", vẫn lưu (US-GPS-01 AC-3).
-	r = f.managerA().log(f.p2, nil)
+	r = f.memberA().log(f.p2, nil)
 	expect(t, r, http.StatusCreated, "ghi nhật ký lệch vị trí")
 	if str(r.body, "log", "location_status") != "mismatch" || str(r.body, "log", "distance_m") != "120.0" {
 		t.Fatalf("nhãn lệch: %s", r.raw)
@@ -101,10 +103,13 @@ func TestFarmLogCorrection_HTX_US_LOG_01_AC3(t *testing.T) {
 	}
 	expectCode(t, fa.post(path, map[string]any{"activity_code": "bon_phan", "correction_reason": "Sửa trên bản đã bị thay"}),
 		http.StatusConflict, "cropcycle.concurrent_edit", "sửa bản cũ")
-	r = f.managerA().post("/v1/cropcycle/farm-logs/"+v2+"/corrections", map[string]any{"activity_code": "bon_phan",
-		"correction_reason": "Quản lý HTX sửa hộ theo biên bản"})
+	expectCode(t, f.managerA().post("/v1/cropcycle/farm-logs/"+v2+"/corrections", map[string]any{"activity_code": "bon_phan",
+		"correction_reason": "Đại diện HTX sửa hộ theo biên bản"}), http.StatusForbidden, "cropcycle.read_only", "Đại diện HTX chỉ xem (AH-39)")
+	mem := f.memberA()
+	r = mem.post("/v1/cropcycle/farm-logs/"+v2+"/corrections", map[string]any{"activity_code": "bon_phan",
+		"correction_reason": "Thành viên HTX sửa hộ theo biên bản"})
 	expect(t, r, http.StatusCreated, "sửa hộ")
-	if get(r.body, "log", "on_behalf") != true || str(r.body, "log", "author_ref") != f.managerA().actor.String() && str(r.body, "log", "author_ref") == fa.actor.String() {
+	if get(r.body, "log", "on_behalf") != true || str(r.body, "log", "author_ref") != mem.actor.String() && str(r.body, "log", "author_ref") == fa.actor.String() {
 		t.Fatalf("sửa hộ: %s", r.raw)
 	}
 	err := tenant.WithTenantTx(context.Background(), f.db, f.tenant, func(tx pgx.Tx) error {
@@ -129,10 +134,10 @@ func TestFarmLogCorrection_HTX_US_LOG_01_AC3(t *testing.T) {
 func TestFarmLogBatch_HTX_US_LOG_03(t *testing.T) {
 	f := newFixture(t)
 	f.publishedSOP("SOP OM5451", "OM5451")
-	mgr := f.managerA()
+	mgr := f.memberA()
 	mgr.mustOpen(f.p1)
 	mgr.mustOpen(f.p2)
-	f.managerB().mustOpen(f.p4)
+	f.memberB().mustOpen(f.p4)
 	r := mgr.post("/v1/cropcycle/farm-logs/batch", map[string]any{"plot_refs": []string{f.p1.String(), f.p2.String(), f.p3.String(), f.p4.String()},
 		"activity_code": "bon_phan", "sop_step_seq": 3, "machine_codes": []string{"MPT"}, "note": "Bón thúc cả tổ"})
 	expect(t, r, http.StatusCreated, "ghi hàng loạt")
@@ -208,9 +213,10 @@ func TestFarmLogReview_HTX_US_LOG_05(t *testing.T) {
 	if str(d.body, "totals", "sop_progress_pct") != "20.0" {
 		t.Fatalf("tiến độ SOP 1/5 bước: %s", d.raw)
 	}
-	// Người ghi không tự duyệt: quản lý ghi hộ rồi tự duyệt → chặn.
-	r = mgr.log(f.p1, map[string]any{"activity_code": "kiem_tra", "sop_step_seq": nil})
+	// Người ghi không tự duyệt: Admin (vừa ghi được vừa duyệt được, AH-39) ghi hộ rồi tự duyệt → chặn.
+	adm := f.platformAdmin()
+	r = adm.log(f.p1, map[string]any{"activity_code": "kiem_tra", "sop_step_seq": nil})
 	expect(t, r, http.StatusCreated, "ghi hộ")
-	expectCode(t, mgr.post("/v1/cropcycle/farm-logs/"+str(r.body, "log", "id")+"/reviews", map[string]any{"decision": "approved"}),
+	expectCode(t, adm.post("/v1/cropcycle/farm-logs/"+str(r.body, "log", "id")+"/reviews", map[string]any{"decision": "approved"}),
 		http.StatusForbidden, "cropcycle.self_review", "tự duyệt")
 }

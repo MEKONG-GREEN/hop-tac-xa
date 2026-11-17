@@ -70,7 +70,7 @@ function QuickGrid({ scope, seasons, onSaved }: { scope: HtxScope; seasons: Crop
         api.POST("/v1/cropcycle/harvests/bulk", {
           params: { header: { "Idempotency-Key": key } },
           body: {
-            cooperative_ref: scope.isManager ? null : scope.coopRef || null,
+            cooperative_ref: scope.ownCoop ? null : scope.coopRef || null,
             rows: filled.map((s) => {
               const d = get(s.season_ref);
               return {
@@ -172,7 +172,7 @@ function QuickGrid({ scope, seasons, onSaved }: { scope: HtxScope; seasons: Crop
         </table>
       </div>
       {open.length === 0 ? <Empty>Không có vụ đang mở để khai sản lượng.</Empty> : null}
-      {scope.canWrite && open.length > 0 ? (
+      {scope.can("KHMV-FN-06", "C") && open.length > 0 ? (
         <div className="row" style={{ marginTop: 12 }}>
           <button type="submit" className="btn btn-p btn-sm" disabled={busy}>
             {busy ? "Đang lưu…" : `Lưu ${filled.length} lô`}
@@ -219,7 +219,7 @@ function ImportPanel({ scope, onDone }: { scope: HtxScope; onDone: () => void })
     try {
       const res = await unwrap(
         api.POST("/v1/cropcycle/harvests/import", {
-          params: { header: { "Idempotency-Key": key }, query: { cooperative_ref: scope.isManager ? undefined : scope.coopRef || undefined } },
+          params: { header: { "Idempotency-Key": key }, query: { cooperative_ref: scope.ownCoop ? undefined : scope.coopRef || undefined } },
           body: file.body as unknown as string,
           bodySerializer: (b: unknown) => b as BodyInit,
           headers: { "Content-Type": file.contentType },
@@ -275,13 +275,15 @@ export default function HarvestPage() {
   const [showImport, setShowImport] = useState(false);
   const index = useSeasonIndex(scope.coopRef, [version]);
   const reload = () => setVersion((v) => v + 1);
+  // Ma trận KHMV-FN-06 (AH-39): Thành viên HTX và Admin khai sản lượng (cả nhập hàng loạt); Đại diện HTX chỉ xem.
+  const canDeclare = scope.can("KHMV-FN-06", "C");
   return (
     <>
       <PageHead
         title="Sản lượng thu hoạch"
         subtitle="Khai sản lượng đóng vụ ngay; sản lượng bằng 0 hoặc vượt ngưỡng theo giống cần xác nhận lại"
         actions={
-          scope.canWrite && scope.coopRef ? (
+          canDeclare && scope.coopRef ? (
             <button type="button" className="btn btn-o btn-sm" aria-expanded={showImport} onClick={() => setShowImport((v) => !v)}>
               <Icon name="upload" size={15} />
               Nhập từ Excel
@@ -289,15 +291,15 @@ export default function HarvestPage() {
           ) : null
         }
       />
-      <ReadOnlyNotice scope={scope} />
+      <ReadOnlyNotice scope={scope} writable={canDeclare} />
       {showImport && scope.coopRef ? <ImportPanel scope={scope} onDone={reload} /> : null}
       <div className="card sec">
         <div className="row" style={{ marginBottom: 14, alignItems: "flex-end" }}>
-          <CoopPicker scope={scope} allowAll={!scope.canWrite} />
+          <CoopPicker scope={scope} allowAll={!canDeclare} />
         </div>
-        {scope.canWrite && !scope.coopRef ? <Empty>Chọn một HTX để nhập sản lượng.</Empty> : null}
+        {canDeclare && !scope.coopRef ? <Empty>Chọn một HTX để nhập sản lượng.</Empty> : null}
         {index.loading && index.seasons.length === 0 ? <Loading /> : null}
-        {scope.coopRef || !scope.canWrite ? <QuickGrid key={scope.coopRef} scope={scope} seasons={index.seasons} onSaved={reload} /> : null}
+        {scope.coopRef || !canDeclare ? <QuickGrid key={scope.coopRef} scope={scope} seasons={index.seasons} onSaved={reload} /> : null}
       </div>
     </>
   );

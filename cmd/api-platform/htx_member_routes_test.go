@@ -115,11 +115,25 @@ func TestFN05_BR03_HTXMemberWriteRoutesDenied(t *testing.T) {
 				t.Errorf("Thành viên HTX %s %s = %d %q %q, cần %d %q", c.method, c.path, status, code, detail, c.status, c.code)
 			}
 		}
+		// AH-39 (ma trận KHMV): Thành viên HTX mở vụ, ghi nhật ký, khai sản lượng, đồng ý thu thập dữ liệu — lớp lắp
+		// ráp cho qua, dịch vụ quyết định (thân {} → lỗi dữ liệu hoặc lỗi của dịch vụ, không phải 403 của lớp chặn).
+		for _, path := range []string{"/v1/cropcycle/seasons", "/v1/cropcycle/farm-logs", "/v1/cropcycle/harvests/bulk", "/v1/me/data-consent"} {
+			if status, code, detail := callJSON(t, srv.URL, http.MethodPost, path, member); detail == memberGuardDetail || code == "forbidden" {
+				t.Errorf("Thành viên HTX POST %s bị lớp chặn ghi từ chối: %d %q %q", path, status, code, detail)
+			}
+		}
 		// Đối chứng: lớp lắp ráp không chặn Đại diện HTX và tài khoản kiêm hai vai (BR-02).
 		for _, roles := range [][]string{{partyport.RoleCoopManager}, {partyport.RoleCoopManager, htxroles.Member}} {
 			if status, _, detail := callJSON(t, srv.URL, http.MethodPost, "/v1/households/copy", token(roles...)); status == http.StatusForbidden && detail == memberGuardDetail {
 				t.Errorf("%v bị chặn bởi lớp chặn ghi của Thành viên HTX", roles)
 			}
+		}
+		// AH-39: tài khoản kiêm hai vai dùng quyền Đại diện HTX (chỉ xem vụ) — dịch vụ từ chối, không phải lớp chặn.
+		// (Route không qua cổng đồng ý thu thập dữ liệu, để thấy đúng lỗi của dịch vụ.)
+		dual := token(partyport.RoleCoopManager, htxroles.Member)
+		if status, code, detail := callJSON(t, srv.URL, http.MethodPost, "/v1/cropcycle/seasons/bulk-open", dual); status != http.StatusForbidden ||
+			code != "cropcycle.read_only" || detail == memberGuardDetail {
+			t.Errorf("kiêm hai vai POST /v1/cropcycle/seasons/bulk-open = %d %q %q, cần 403 cropcycle.read_only", status, code, detail)
 		}
 	}
 }

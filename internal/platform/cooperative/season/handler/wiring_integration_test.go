@@ -76,7 +76,7 @@ func TestGpsLogConsumerAfterCommit_HTX_US_GPS_03(t *testing.T) {
 	fa := f.farmer(f.h1)
 	fa.mustOpen(f.p1)
 	expect(t, fa.log(f.p1, nil), http.StatusCreated, "ghi nhật ký")
-	expect(t, f.managerA().log(f.p1, map[string]any{"gps": map[string]any{"source": "denied"}, "activity_code": "kiem_tra", "sop_step_seq": nil}),
+	expect(t, f.memberA().log(f.p1, map[string]any{"gps": map[string]any{"source": "denied"}, "activity_code": "kiem_tra", "sop_step_seq": nil}),
 		http.StatusCreated, "ghi hộ không GPS")
 
 	gl := &fakeGpsLog{fixes: map[string]geoport.GpsFix{}, fail: 1}

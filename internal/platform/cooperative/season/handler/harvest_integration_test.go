@@ -79,7 +79,7 @@ func TestHarvestDeclare_HTX_US_YIELD_01_03(t *testing.T) {
 func TestHarvestPHI(t *testing.T) {
 	f := newFixture(t)
 	f.publishedSOP("SOP OM5451", "OM5451")
-	mgr := f.managerA()
+	mgr := f.memberA()
 	season := mgr.mustOpen(f.p2)
 	f.advanceDays(85)
 	expect(t, f.farmer(f.h2).log(f.p2, map[string]any{"activity_code": "phun_thuoc", "sop_step_seq": 4}), http.StatusCreated, "phun thuốc")
@@ -115,10 +115,11 @@ func harvestXLSX(t *testing.T, rows [][]any) []byte {
 
 // HTX US-YIELD-02: nhập sản lượng hàng loạt bằng Excel / bảng nhập nhanh — bỏ qua
 // dòng lỗi (thiếu sản lượng, sai định dạng số), chỉ ghi dòng hợp lệ, trả lý do theo dòng.
+// AH-39: nhập hàng loạt là FN-06.2 — Thành viên HTX và Admin; Đại diện HTX chỉ xem.
 func TestHarvestImport_HTX_US_YIELD_02(t *testing.T) {
 	f := newFixture(t)
 	f.publishedSOP("SOP OM5451", "OM5451")
-	mgr := f.managerA()
+	mgr := f.memberA()
 	mgr.mustOpen(f.p1)
 	mgr.mustOpen(f.p2)
 	s3 := mgr.mustOpen(f.p3)
@@ -150,6 +151,10 @@ func TestHarvestImport_HTX_US_YIELD_02(t *testing.T) {
 	}
 	expectCode(t, f.farmer(f.h1).post("/v1/cropcycle/harvests/bulk", map[string]any{"rows": []map[string]any{{"plot_code": "TH0000003", "mass_kg": "1"}}}),
 		http.StatusForbidden, "forbidden", "nông dân không nhập hàng loạt")
+	expectCode(t, f.managerA().post("/v1/cropcycle/harvests/bulk", map[string]any{"rows": []map[string]any{{"plot_code": "TH0000003", "mass_kg": "1"}}}),
+		http.StatusForbidden, "cropcycle.read_only", "Đại diện HTX không nhập hàng loạt")
+	expectCode(t, f.managerA().do(f.app.URL, http.MethodPost, "/v1/cropcycle/harvests/import", key(), tabular.ContentTypeXLSX, body),
+		http.StatusForbidden, "cropcycle.read_only", "Đại diện HTX không nhập từ tệp")
 	expectCode(t, mgr.post("/v1/cropcycle/harvests/bulk", map[string]any{"cooperative_ref": f.coopB.String(), "rows": []map[string]any{{"plot_code": "X", "mass_kg": "1"}}}),
 		http.StatusForbidden, "cropcycle.out_of_scope", "HTX khác")
 }
@@ -159,12 +164,12 @@ func TestHarvestImport_HTX_US_YIELD_02(t *testing.T) {
 func TestDashboard_HTX_US_DASH_01(t *testing.T) {
 	f := newFixture(t)
 	f.publishedSOP("SOP OM5451", "OM5451")
-	mA, mB := f.managerA(), f.managerB()
-	s1 := mA.mustOpen(f.p1)
-	mA.mustOpen(f.p2)
-	mB.mustOpen(f.p4)
+	mA, wA := f.managerA(), f.memberA()
+	s1 := wA.mustOpen(f.p1)
+	wA.mustOpen(f.p2)
+	f.memberB().mustOpen(f.p4)
 	f.advanceDays(96)
-	expect(t, mA.post("/v1/cropcycle/seasons/"+s1+"/harvest", map[string]any{"mass_kg": "9750"}), http.StatusCreated, "khai")
+	expect(t, wA.post("/v1/cropcycle/seasons/"+s1+"/harvest", map[string]any{"mass_kg": "9750"}), http.StatusCreated, "khai")
 	d := mA.get("/v1/cropcycle/dashboard?season_code=DX&season_year=2026")
 	expect(t, d, http.StatusOK, "bảng điều hành HTX A")
 	tot := get(d.body, "totals")

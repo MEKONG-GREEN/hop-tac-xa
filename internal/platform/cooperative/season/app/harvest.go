@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/shopspring/decimal"
 
+	"github.com/MEKONG-GREEN/hop-tac-xa/contracts/htxroles"
 	port "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/port"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/season/domain"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/season/store"
@@ -52,9 +53,9 @@ type HarvestResult struct {
 
 // DeclareHarvest khai sản lượng: chỉ khi đến giai đoạn thu hoạch của SOP đã ghim
 // (AC-1); đóng vụ ngay trong cùng giao dịch (AC-2); âm → từ chối; 0 hoặc vượt
-// ngưỡng theo giống → cropcycle.yield_anomaly cần xác nhận (HTX US-YIELD-03).
+// ngưỡng theo giống → cropcycle.yield_anomaly cần xác nhận (HTX US-YIELD-03). Quyền: KHMV-FN-06 C.
 func (s *Service) DeclareHarvest(ctx context.Context, in HarvestInput) (HarvestResult, error) {
-	a, err := s.access(ctx, writeRoles...)
+	a, err := s.matrixAccess(ctx, fnHarvest, htxroles.Create, legacyWriteRoles...)
 	if err != nil {
 		return HarvestResult{}, err
 	}
@@ -335,9 +336,9 @@ type CorrectHarvestInput struct {
 }
 
 // CorrectHarvest ghi khai báo mới thay khai báo hiện hành của vụ (RB-1). Không
-// phải khai báo hiện hành → cropcycle.concurrent_edit. Giữ vị trí GPS của bản gốc.
+// phải khai báo hiện hành → cropcycle.concurrent_edit. Giữ vị trí GPS của bản gốc. Quyền: KHMV-FN-06 U.
 func (s *Service) CorrectHarvest(ctx context.Context, in CorrectHarvestInput) (HarvestResult, error) {
-	a, err := s.access(ctx, writeRoles...)
+	a, err := s.matrixAccess(ctx, fnHarvest, htxroles.Update, legacyWriteRoles...)
 	if err != nil {
 		return HarvestResult{}, err
 	}

@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/MEKONG-GREEN/hop-tac-xa/contracts/htxroles"
 	port "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/port"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/season/domain"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/season/store"
@@ -53,9 +54,9 @@ type SeasonResult struct {
 	Replayed bool
 }
 
-// OpenSeason mở vụ (nông dân tự mở, quản lý HTX mở hộ).
+// OpenSeason mở vụ (KHMV-FN-03 C: Thành viên HTX, Admin; nông dân tự mở).
 func (s *Service) OpenSeason(ctx context.Context, in OpenInput) (SeasonResult, error) {
-	a, err := s.access(ctx, writeRoles...)
+	a, err := s.matrixAccess(ctx, fnSeason, htxroles.Create, legacyWriteRoles...)
 	if err != nil {
 		return SeasonResult{}, err
 	}
@@ -342,9 +343,9 @@ type BulkItem struct {
 // MaxBulk là số thửa tối đa mỗi lượt hàng loạt (xử lý đồng bộ dưới 2 giây, R-52).
 const MaxBulk = 200
 
-// BulkOpen mở vụ cho các thửa hợp lệ, bỏ qua thửa lỗi kèm lý do.
+// BulkOpen mở vụ cho các thửa hợp lệ, bỏ qua thửa lỗi kèm lý do (KHMV-FN-03 C: Thành viên HTX, Admin).
 func (s *Service) BulkOpen(ctx context.Context, in BulkOpenInput) ([]BulkItem, error) {
-	a, err := s.access(ctx, managerRoles...)
+	a, err := s.matrixAccess(ctx, fnSeason, htxroles.Create)
 	if err != nil {
 		return nil, err
 	}
@@ -410,9 +411,10 @@ type PreviousConfig struct {
 	SOPVersionNo int
 }
 
-// PreviousSeasonConfig trả giống + SOP của vụ vừa hoàn thành; chặn khi lô đang canh tác (AC-2).
+// PreviousSeasonConfig trả giống + SOP của vụ vừa hoàn thành; chặn khi lô đang canh tác (AC-2). Phục vụ mở vụ nên
+// kiểm quyền mở vụ (KHMV-FN-03 C).
 func (s *Service) PreviousSeasonConfig(ctx context.Context, plot uuid.UUID) (PreviousConfig, error) {
-	a, err := s.access(ctx, writeRoles...)
+	a, err := s.matrixAccess(ctx, fnSeason, htxroles.Create, legacyWriteRoles...)
 	if err != nil {
 		return PreviousConfig{}, err
 	}
@@ -452,9 +454,14 @@ type CorrectSeasonInput struct {
 }
 
 // CorrectSeason ghi bản ghi bù thay sự kiện hiện hành của vụ (sửa hoặc hủy).
-// supersedes_id phải là sự kiện hiện hành, nếu không → cropcycle.concurrent_edit.
+// supersedes_id phải là sự kiện hiện hành, nếu không → cropcycle.concurrent_edit. Quyền: KHMV-FN-03 U khi sửa, D khi
+// hủy (dừng vụ kèm lý do).
 func (s *Service) CorrectSeason(ctx context.Context, in CorrectSeasonInput) (SeasonResult, error) {
-	a, err := s.access(ctx, writeRoles...)
+	act := htxroles.Update
+	if in.Cancel {
+		act = htxroles.Delete
+	}
+	a, err := s.matrixAccess(ctx, fnSeason, act, legacyWriteRoles...)
 	if err != nil {
 		return SeasonResult{}, err
 	}
@@ -584,9 +591,9 @@ type SeasonDetail struct {
 	Harvest *store.Harvest
 }
 
-// GetSeason đọc vụ trong phạm vi.
+// GetSeason đọc vụ trong phạm vi (KHMV-FN-03-XEM R; gồm kế hoạch và sản lượng của vụ).
 func (s *Service) GetSeason(ctx context.Context, ref uuid.UUID) (SeasonDetail, error) {
-	a, err := s.access(ctx, readRoles...)
+	a, err := s.matrixAccess(ctx, fnSeasonView, htxroles.Read, legacyReadRoles...)
 	if err != nil {
 		return SeasonDetail{}, err
 	}
@@ -633,9 +640,9 @@ type ListSeasonsInput struct {
 	Limit          int
 }
 
-// ListSeasons liệt kê vụ trong phạm vi (cursor).
+// ListSeasons liệt kê vụ trong phạm vi (cursor; KHMV-FN-03-XEM R).
 func (s *Service) ListSeasons(ctx context.Context, in ListSeasonsInput) (Page[store.Season], error) {
-	a, err := s.access(ctx, readRoles...)
+	a, err := s.matrixAccess(ctx, fnSeasonView, htxroles.Read, legacyReadRoles...)
 	if err != nil {
 		return Page[store.Season]{}, err
 	}

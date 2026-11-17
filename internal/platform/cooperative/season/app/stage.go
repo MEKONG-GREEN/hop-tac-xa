@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/shopspring/decimal"
 
+	"github.com/MEKONG-GREEN/hop-tac-xa/contracts/htxroles"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/season/domain"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/season/store"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/problem"
@@ -57,9 +58,9 @@ type StageMap struct {
 
 // StageMap đọc giai đoạn mùa vụ theo thửa và theo HTX (GIS US-SEASON-01 / FN-13) kèm vùng chín rộ trong
 // 1–3 ngày tới và sản lượng dự kiến App HTX đã gửi (GIS US-YIELD-01 / FN-14, BR-48 — không tự dự báo).
-// Phạm vi như bảng điều hành: quản lý HTX chỉ HTX mình, KN theo xã, nông dân theo hộ.
+// Phạm vi như bảng điều hành: quản lý HTX chỉ HTX mình, KN theo xã, nông dân theo hộ. Quyền: KHMV-FN-03-XEM R.
 func (s *Service) StageMap(ctx context.Context, in StageMapInput) (StageMap, error) {
-	a, err := s.access(ctx, readRoles...)
+	a, err := s.matrixAccess(ctx, fnSeasonView, htxroles.Read, legacyReadRoles...)
 	if err != nil {
 		return StageMap{}, err
 	}

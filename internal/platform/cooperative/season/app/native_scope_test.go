@@ -163,6 +163,8 @@ func TestNativeScopeNeverReplacesOtherCallerProjections(t *testing.T) {
 		foreign bool
 	}{
 		{"manager", func(p *authz.Principal) { p.Roles = append(p.Roles, port.RoleCoopManager) }, false},
+		// AH-39: Thành viên HTX (kể cả kèm vai KN) dùng Nút HTX của mình, không dùng phạm vi xã.
+		{"htx member", func(p *authz.Principal) { p.Roles = append(p.Roles, port.RoleHTXMember) }, false},
 		{"farmer", func(p *authz.Principal) { p.Roles = append(p.Roles, port.RoleFarmer) }, false},
 		{"partner", func(p *authz.Principal) { p.Roles = append(p.Roles, partyport.RolePartnerSync) }, false},
 		{"api", func(p *authz.Principal) { p.Roles = append(p.Roles, "api_client") }, false},

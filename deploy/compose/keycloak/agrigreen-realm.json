@@ -81,7 +81,7 @@
       { "name": "kn_province_admin", "description": "Cán bộ TTKN tỉnh — đọc/ghi, phân công, chỉ đạo trong tỉnh", "composite": true, "composites": { "realm": ["login_totp_required"] } },
       { "name": "kn_officer", "description": "Cán bộ khuyến nông xã / Tổ KNCĐ — đọc/ghi trong xã phụ trách", "composite": true, "composites": { "realm": ["login_totp_required"] } },
       { "name": "coop_manager", "description": "Quản lý HTX/THT — nông hộ, thửa của chính HTX mình" },
-      { "name": "htx_member", "description": "Thành viên HTX (App HTX) — người của HTX được cấp tài khoản; xem dữ liệu HTX của org_ref, không thao tác ghi (FN-05)" },
+      { "name": "htx_member", "description": "Thành viên HTX (App HTX) — người của HTX được cấp tài khoản; phạm vi HTX của org_ref; mở vụ, ghi nhật ký, khai sản lượng theo ma trận KHMV; dữ liệu khác chỉ xem (FN-05, AH-39)" },
       { "name": "kn_user", "description": "KN v7.7: cổng vào bề mặt KN Phòng Trồng trọt — vai nghiệp vụ, Nút, phòng ban, xã phụ trách ở sổ gán vai trò pf/accounts, chọn theo ngữ cảnh phiên (X-AG-Context), không trong token. W11.23: chứa vault_directory để tra Contact (FN-13)", "composite": true, "composites": { "realm": ["login_totp_required", "vault_directory"] } },
       { "name": "farmer", "description": "Nông dân App HTX — tên đăng nhập là SĐT; phạm vi = nông hộ liên kết với tài khoản (pf/accounts farmer_link), không org_ref; kích hoạt bằng QR/liên kết một lần" },
       { "name": "sop_admin", "description": "Soạn quy trình SOP, nhân bản, gắn giống ↔ SOP (pf/cropcycle, Admin API); phát hành cần param_approver khác người soạn" },

@@ -16,7 +16,7 @@ import (
 func TestPartnerSeasonHarvestDates_ADR0020(t *testing.T) {
 	f := newFixture(t)
 	f.publishedSOP("SOP OM5451", "OM5451")
-	season := f.managerA().mustOpen(f.p1)
+	season := f.memberA().mustOpen(f.p1)
 	sa := f.as(f.mkg, uuid.Nil, partyport.RolePartnerSync)
 	path := "/v1/partner/season-harvest-dates?plot_ref=" + f.p1.String()
 	before := f.share.ReadCount()

@@ -280,7 +280,9 @@ export default function FarmLogsPage() {
   );
   const items = list.items.filter((l) => !loc || l.location_status === loc);
   const reload = () => setVersion((v) => v + 1);
-  const writable = scope.canWrite && !!scope.coopRef;
+  // Ma trận KHMV-FN-05 (AH-39): Thành viên HTX và Admin ghi nhật ký; Đại diện HTX chỉ xem.
+  const canRecord = scope.can("KHMV-FN-05", "C");
+  const writable = canRecord && !!scope.coopRef;
 
   return (
     <>
@@ -301,7 +303,7 @@ export default function FarmLogsPage() {
           ) : null
         }
       />
-      <ReadOnlyNotice scope={scope} />
+      <ReadOnlyNotice scope={scope} writable={canRecord} />
       {panel === "onbehalf" && writable ? <OnBehalfForm scope={scope} onDone={reload} /> : null}
       {panel === "batch" && writable ? <BatchForm scope={scope} onDone={reload} /> : null}
       <div className="card sec">
@@ -366,7 +368,7 @@ export default function FarmLogsPage() {
                       {l.review_note ? <div className="mute small">{l.review_note}</div> : null}
                     </td>
                     <td>
-                      {scope.canWrite ? (
+                      {scope.can("KHMV-FN-05", "U") ? (
                         <button type="button" className="btn btn-o btn-sm" onClick={() => setEditing(l)} aria-label={`Sửa nhật ký lô ${s?.plot_code ?? ""} lúc ${formatDateTime(l.event_time)}`}>
                           Sửa
                         </button>

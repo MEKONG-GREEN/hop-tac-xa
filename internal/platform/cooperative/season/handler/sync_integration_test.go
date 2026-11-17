@@ -77,7 +77,7 @@ func TestSyncPushPull_HTX_US_LOG_04(t *testing.T) {
 	if r := sink.Accept(ctx, scope, foreign); r.Status != syncport.StatusRejected || r.Code != "cropcycle.out_of_scope" {
 		t.Fatalf("thửa của hộ ngoài quyền: %+v", r)
 	}
-	f.managerA().mustOpen(f.p2)
+	f.memberA().mustOpen(f.p2)
 	batch := rec(port.EntityLogBatch, syncport.OpCreate, map[string]any{"plot_refs": []string{f.p1.String(), f.p2.String(), f.p3.String()},
 		"activity_code": "tuoi_nuoc"}, nil, "", now)
 	if r := sink.Accept(ctx, scope, batch); r.Status != syncport.StatusAccepted {
@@ -89,6 +89,14 @@ func TestSyncPushPull_HTX_US_LOG_04(t *testing.T) {
 	}
 	if r := sink.Accept(f.ctxFor(f.officerA(), "kn_officer"), scope, hv); r.Status != syncport.StatusRejected || r.Code != "forbidden" {
 		t.Fatalf("KN không đẩy được: %+v", r)
+	}
+	// AH-39: Đại diện HTX chỉ xem vụ, nhật ký, sản lượng (ma trận KHMV) — đẩy lên bị từ chối, kể cả mở vụ.
+	mgrCtx := f.ctxFor(f.managerA(), port.RoleCoopManager)
+	for _, r := range []syncport.Record{hv, rec(port.EntitySeasonOpen, syncport.OpCreate, map[string]any{"plot_ref": f.p3.String(), "season_code": "DX",
+		"season_year": 2026, "variety_code": "OM5451", "sowing_date": today}, nil, "", now)} {
+		if res := sink.Accept(mgrCtx, scope, r); res.Status != syncport.StatusRejected || res.Code != "cropcycle.read_only" {
+			t.Fatalf("Đại diện HTX đẩy %s: %+v", r.Entity, res)
+		}
 	}
 
 	// Chiều xuống cho nông dân.
@@ -165,10 +173,10 @@ func TestSyncPushPull_HTX_US_LOG_04(t *testing.T) {
 func TestRebuildProjections_R22(t *testing.T) {
 	f := newFixture(t)
 	f.publishedSOP("SOP OM5451", "OM5451")
-	fa, mgr := f.farmer(f.h1), f.managerA()
+	fa, mgr, mem := f.farmer(f.h1), f.managerA(), f.memberA()
 	s1 := fa.mustOpen(f.p1)
-	s2 := mgr.mustOpen(f.p2)
-	r := mgr.post("/v1/cropcycle/seasons/"+s2+"/cancel", map[string]any{"supersedes_id": str(mgr.get("/v1/cropcycle/seasons/"+s2).body, "current_event_id"),
+	s2 := mem.mustOpen(f.p2)
+	r := mem.post("/v1/cropcycle/seasons/"+s2+"/cancel", map[string]any{"supersedes_id": str(mem.get("/v1/cropcycle/seasons/"+s2).body, "current_event_id"),
 		"reason": "Mở nhầm thửa khi mở hộ"})
 	expect(t, r, http.StatusCreated, "hủy")
 	l := fa.log(f.p1, nil)
@@ -219,10 +227,10 @@ func TestRebuildProjections_R22(t *testing.T) {
 func TestStatsPort(t *testing.T) {
 	f := newFixture(t)
 	f.publishedSOP("SOP OM5451", "OM5451")
-	mgr := f.managerA()
-	mgr.mustOpen(f.p1)
-	mgr.mustOpen(f.p2)
-	expect(t, mgr.log(f.p1, nil), http.StatusCreated, "ghi")
+	mem := f.memberA()
+	mem.mustOpen(f.p1)
+	mem.mustOpen(f.p2)
+	expect(t, mem.log(f.p1, nil), http.StatusCreated, "ghi")
 	ctx := tenant.WithID(context.Background(), f.tenant)
 	act, err := f.mod.Stats().ActivityByCooperative(ctx, nil)
 	if err != nil || act[f.coopA].OpenSeasons != 2 || act[f.coopA].PendingLogs != 1 || len(act) != 1 {

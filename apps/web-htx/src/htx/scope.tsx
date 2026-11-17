@@ -1,16 +1,19 @@
 "use client";
 
 // Phạm vi HTX cho màn hình App HTX trên web vận hành:
-//  - coop_manager: CHỈ HTX của mình (Principal.orgRef), không có ô chọn HTX;
-//  - htx_member (Thành viên HTX, FN-05): CHỈ HTX của mình như coop_manager, chỉ xem;
+//  - coop_manager (Đại diện HTX): CHỈ HTX của mình (Principal.orgRef), không có ô chọn HTX; chỉ xem vụ, nhật ký,
+//    sản lượng (ma trận KHMV, AH-39);
+//  - htx_member (Thành viên HTX, FN-05): CHỈ HTX của mình như coop_manager; mở vụ, ghi nhật ký, khai sản lượng;
 //  - platform_admin: mọi HTX, ghi được;
 //  - cán bộ KN: HTX trong phạm vi xã/tỉnh, CHỈ XEM (backend trả cropcycle.read_only nếu ghi).
+// Nút của màn vụ, nhật ký, sản lượng theo dòng KHMV-* của ma trận (can); màn ngoài ma trận dùng canWrite.
 // Đây chỉ là ẩn/hiện — backend kiểm quyền từng lời gọi (R-55).
 import { useMemo, useState } from "react";
 import { cooperativePlotsPage, householdsPage, listAllCooperatives } from "@/api/adapters/cooperatives";
 import { collectPages } from "@/api/pagination";
 import type { Cooperative, HouseholdListItem, PlotFeature } from "@/api/types";
 import { useAuth } from "@/auth/AuthProvider";
+import { isHtxAppUser, matrixAllows, type HtxAction, type HtxFunction } from "@/auth/permissions";
 import { hasRole, ROLES } from "@/auth/principal";
 import { Icon } from "@/components/Icon";
 import { useAsync } from "@/lib/useAsync";
@@ -22,7 +25,10 @@ export interface HtxScope {
   isManager: boolean;
   /** Chỉ HTX của mình (Principal.orgRef): quản lý HTX hoặc Thành viên HTX — không có ô chọn HTX. */
   ownCoop: boolean;
+  /** Ghi được trên các màn ngoài ma trận KHMV (Admin, Đại diện HTX). */
   canWrite: boolean;
+  /** Người dùng App HTX được thao tác action với dòng fn của ma trận (cán bộ KN: false — chỉ xem). */
+  can: (fn: HtxFunction, action: HtxAction) => boolean;
   coops: Cooperative[];
   coopsLoading: boolean;
   coopName: (ref: string | null | undefined) => string;
@@ -45,6 +51,7 @@ export function useHtxScope(): HtxScope {
     isManager,
     ownCoop,
     canWrite,
+    can: (fn, action) => isHtxAppUser(principal) && matrixAllows(principal, fn, action),
     coops,
     coopsLoading: list.loading,
     coopName: (ref) => (!ref ? "—" : ownCoop && ref === principal?.orgRef ? (principal?.orgName ?? ref) : (names.get(ref) ?? ref.slice(0, 8))),
@@ -77,13 +84,21 @@ export function CoopPicker({ scope, allowAll = true, id = "htx-coop" }: { scope:
   );
 }
 
-/** Thông báo chỉ xem cho cán bộ KN (pf/cropcycle: KN chỉ đọc theo phạm vi xã). */
-export function ReadOnlyNotice({ scope }: { scope: HtxScope }) {
-  if (scope.canWrite) return null;
+/**
+ * Thông báo chỉ xem: cán bộ KN (pf/cropcycle: KN chỉ đọc theo phạm vi xã) hoặc người dùng App HTX không có quyền ghi
+ * trên màn này (writable — mặc định scope.canWrite; màn vụ, nhật ký, sản lượng truyền quyền theo dòng KHMV).
+ */
+export function ReadOnlyNotice({ scope, writable = scope.canWrite }: { scope: HtxScope; writable?: boolean }) {
+  const { principal } = useAuth();
+  if (writable) return null;
   return (
     <div className="alert alert-info" style={{ marginBottom: 14 }} role="note">
       <Icon name="info" />
-      <span>Cán bộ khuyến nông chỉ xem dữ liệu sản xuất của HTX trong phạm vi được phân quyền; ghi và duyệt do Quản lý HTX thực hiện.</span>
+      <span>
+        {isHtxAppUser(principal)
+          ? "Đại diện HTX chỉ xem vụ, nhật ký canh tác và sản lượng của HTX; Thành viên HTX thực hiện mở vụ, ghi nhật ký và khai báo sản lượng."
+          : "Cán bộ khuyến nông chỉ xem dữ liệu sản xuất của HTX trong phạm vi được phân quyền; ghi và duyệt do Quản lý HTX thực hiện."}
+      </span>
     </div>
   );
 }

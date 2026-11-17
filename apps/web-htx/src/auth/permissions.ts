@@ -30,13 +30,21 @@ export function isHtxAppUser(p: Pick<Principal, "roles"> | null): boolean {
 }
 
 /**
+ * Vai ma trận đang có hiệu lực: vai đầu tiên theo thứ tự ma trận (Admin, Đại diện HTX, Thành viên HTX) mà người dùng
+ * có; null khi không có vai nào. Cùng quy tắc với htxroles.Effective của máy chủ (BRD mục V, FN-05/BR-02).
+ */
+export function effectiveRole(p: Pick<Principal, "roles"> | null): string | null {
+  return matrixRolesOf(p)[0] ?? null;
+}
+
+/**
  * Ma trận cho người dùng thao tác action với fn không. Người không có vai nào của ma trận → true (ma trận không quản
- * vai đó, quyền theo danh sách vai sẵn có). Kiêm nhiều vai → hợp quyền, nên kiêm Đại diện HTX và Thành viên HTX dùng
- * quyền Đại diện HTX (FN-05/BR-02).
+ * vai đó, quyền theo danh sách vai sẵn có). Kiêm nhiều vai → KHÔNG cộng gộp: dùng quyền của vai đang có hiệu lực
+ * (effectiveRole), nên kiêm Đại diện HTX và Thành viên HTX dùng quyền Đại diện HTX tới khi có bước chọn vai (AH-270).
  */
 export function matrixAllows(p: Pick<Principal, "roles"> | null, fn: HtxFunction, action: HtxAction): boolean {
-  const roles = matrixRolesOf(p);
-  return roles.length === 0 || roles.some((r) => grants(r, fn).includes(action));
+  const role = effectiveRole(p);
+  return role === null || grants(role, fn).includes(action);
 }
 
 /**

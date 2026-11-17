@@ -9,7 +9,8 @@ import (
 	"github.com/MEKONG-GREEN/hop-tac-xa/contracts/htxroles"
 )
 
-// Ma trận Mục V (FN-05, ADM-01) chép đúng bản đã chốt 17/11/2026: 3 vai, 14 dòng, ký hiệu ⊆ CRUDLPX.
+// Ma trận Mục V (FN-05, ADM-01) chép đúng bản đã chốt 17/11/2026: 3 vai, 14 dòng, ký hiệu ⊆ CRUDLPX; cùng 9 dòng
+// KHMV-* của Mục VI BRD Kế hoạch mùa vụ v3.9 (AH-39, KH-02, KH-28).
 func TestMatrix(t *testing.T) {
 	m := htxroles.Load()
 	if m.Version != 1 {
@@ -32,6 +33,9 @@ func TestMatrix(t *testing.T) {
 		"FN-07": {"CRUL", "", ""}, "FN-08": {"", "CRUL", ""}, "FN-09": {"", "CRUD", ""}, "FN-10-OTP": {"P", "P", ""},
 		"FN-10-SELF": {"U", "U", "U"}, "FN-11": {"CRU", "", ""}, "FN-12": {"R", "R", "R"}, "FN-13": {"R", "R", ""},
 		"FN-14": {"R", "", ""}, "FN-15": {"RX", "RX", "R"},
+		"KHMV-FN-01": {"CRUD", "R", "R"}, "KHMV-FN-02": {"R", "R", "R"}, "KHMV-FN-03": {"CRUD", "R", "CRUD"},
+		"KHMV-FN-03-LICH": {"CRUD", "CRUD", "R"}, "KHMV-FN-03-XEM": {"R", "R", "R"}, "KHMV-FN-04": {"CRUD", "R", "CRUD"},
+		"KHMV-FN-05": {"CRUD", "R", "CRUD"}, "KHMV-FN-06": {"CRUD", "R", "CRUD"}, "KHMV-NTF": {"", "", "R"},
 	}
 	if len(m.Functions) != len(want) {
 		t.Fatalf("ma trận có %d dòng, cần %d", len(m.Functions), len(want))
@@ -73,8 +77,12 @@ func TestMatrixHelpers(t *testing.T) {
 	if htxroles.Grants(htxroles.Admin, "FN-99") != "" || htxroles.Can(htxroles.Admin, "FN-99", htxroles.Read) {
 		t.Fatal("chức năng không có trong ma trận → không có quyền")
 	}
-	// Thành viên HTX chỉ xem (FN-05/AC-01), trừ tự đổi mật khẩu của mình (FN-10).
+	// Thành viên HTX chỉ xem (FN-05/AC-01), trừ tự đổi mật khẩu của mình (FN-10). Các dòng KHMV-* theo BRD Kế hoạch
+	// mùa vụ (Thành viên HTX mở vụ, ghi nhật ký, khai sản lượng) kiểm ở TestAllows_KHMV.
 	for _, f := range htxroles.Load().Functions {
+		if strings.HasPrefix(f.Key, "KHMV-") {
+			continue
+		}
 		g := f.Grants[htxroles.Member]
 		if f.Key == "FN-10-SELF" {
 			if g != "U" {
@@ -121,6 +129,71 @@ func TestIsMemberOnly(t *testing.T) {
 		if got := htxroles.IsMemberOnly(func(r string) bool { return slices.Contains(c.roles, r) }); got != c.want {
 			t.Errorf("IsMemberOnly(%v) = %v, cần %v", c.roles, got, c.want)
 		}
+	}
+}
+
+// BRD mục V, FN-05/BR-02: vai có hiệu lực theo thứ tự Admin > Đại diện HTX > Thành viên HTX, không cộng gộp; vai
+// ngoài ma trận không tính (AH-39).
+func TestEffective_KHMV(t *testing.T) {
+	for _, c := range []struct {
+		roles []string
+		want  string
+	}{
+		{[]string{htxroles.Member}, htxroles.Member},
+		{[]string{htxroles.Representative, htxroles.Member}, htxroles.Representative},
+		{[]string{htxroles.Member, htxroles.Admin}, htxroles.Admin},
+		{[]string{htxroles.Member, "kn_officer"}, htxroles.Member},
+		{[]string{"kn_officer"}, ""},
+		{nil, ""},
+	} {
+		if got := htxroles.Effective(func(r string) bool { return slices.Contains(c.roles, r) }); got != c.want {
+			t.Errorf("Effective(%v) = %q, cần %q", c.roles, got, c.want)
+		}
+	}
+}
+
+// Ma trận Mục VI BRD Kế hoạch mùa vụ: Thành viên HTX ghi vụ, nhật ký, sản lượng; Đại diện HTX chỉ xem nhưng lập lịch
+// thời vụ; tài khoản kiêm hai vai dùng quyền Đại diện HTX; Admin đủ quyền (AH-39, KH-28).
+func TestAllows_KHMV(t *testing.T) {
+	has := func(roles ...string) func(string) bool {
+		return func(r string) bool { return slices.Contains(roles, r) }
+	}
+	member, rep := has(htxroles.Member), has(htxroles.Representative)
+	both, admin := has(htxroles.Representative, htxroles.Member), has(htxroles.Admin, htxroles.Member)
+	for _, fn := range []string{"KHMV-FN-03", "KHMV-FN-04", "KHMV-FN-05", "KHMV-FN-06"} {
+		for _, a := range []htxroles.Action{htxroles.Create, htxroles.Update, htxroles.Delete} {
+			if !htxroles.Allows(member, fn, a) || !htxroles.Allows(admin, fn, a) {
+				t.Errorf("%s/%c: Thành viên HTX và Admin phải được ghi", fn, a)
+			}
+			if htxroles.Allows(rep, fn, a) || htxroles.Allows(both, fn, a) {
+				t.Errorf("%s/%c: Đại diện HTX (kể cả kiêm Thành viên HTX) chỉ xem", fn, a)
+			}
+		}
+		for _, h := range []func(string) bool{member, rep, both, admin} {
+			if !htxroles.Allows(h, fn, htxroles.Read) {
+				t.Errorf("%s/R: cả ba vai được xem", fn)
+			}
+		}
+	}
+	for _, a := range []htxroles.Action{htxroles.Create, htxroles.Read, htxroles.Update, htxroles.Delete} {
+		if !htxroles.Allows(rep, "KHMV-FN-03-LICH", a) {
+			t.Errorf("KHMV-FN-03-LICH/%c: Đại diện HTX lập, sửa, hủy, phát lịch thời vụ", a)
+		}
+	}
+	if htxroles.Allows(member, "KHMV-FN-03-LICH", htxroles.Create) || htxroles.Allows(rep, "KHMV-FN-01", htxroles.Create) {
+		t.Error("Thành viên HTX chỉ xem lịch thời vụ; Đại diện HTX chỉ xem danh mục SOP (KH-04 tách ticket)")
+	}
+	if !htxroles.Allows(member, "KHMV-NTF", htxroles.Read) || htxroles.Allows(rep, "KHMV-NTF", htxroles.Read) || htxroles.Allows(has(htxroles.Admin), "KHMV-NTF", htxroles.Read) {
+		t.Error("KHMV-NTF: chỉ Thành viên HTX nhận thông báo của BRD Kế hoạch mùa vụ")
+	}
+	// Kế hoạch mùa vụ chưa có API riêng: grants của FN-04 bằng FN-03 ở cả ba vai.
+	for _, r := range []string{htxroles.Admin, htxroles.Representative, htxroles.Member} {
+		if htxroles.Grants(r, "KHMV-FN-04") != htxroles.Grants(r, "KHMV-FN-03") {
+			t.Errorf("KHMV-FN-04/%s khác KHMV-FN-03", r)
+		}
+	}
+	if htxroles.Allows(has("kn_officer"), "KHMV-FN-03", htxroles.Read) {
+		t.Error("vai ngoài ma trận không có quyền theo ma trận")
 	}
 }
 

@@ -16,7 +16,7 @@ import (
 func TestCoopStatsEndpoint(t *testing.T) {
 	f := newFixture(t)
 	f.publishedSOP("SOP OM5451", "OM5451")
-	mgr := f.managerA()
+	mgr := f.memberA()
 	mgr.mustOpen(f.p1)
 	mgr.mustOpen(f.p2)
 	expect(t, mgr.log(f.p1, nil), http.StatusCreated, "ghi nhật ký")
@@ -42,8 +42,9 @@ func TestCoopStatsEndpoint(t *testing.T) {
 		t.Fatalf("tenant khác thấy số liệu: %s", r.raw)
 	}
 
-	// Vai khác (quản lý HTX, cán bộ KN) không gọi được.
-	expectCode(t, mgr.adminGet("/v1/cropcycle/stats/cooperatives/"+f.coopA.String()), http.StatusForbidden, "forbidden", "quản lý HTX")
+	// Vai khác (quản lý HTX, Thành viên HTX, cán bộ KN) không gọi được.
+	expectCode(t, f.managerA().adminGet("/v1/cropcycle/stats/cooperatives/"+f.coopA.String()), http.StatusForbidden, "forbidden", "quản lý HTX")
+	expectCode(t, mgr.adminGet("/v1/cropcycle/stats/cooperatives/"+f.coopA.String()), http.StatusForbidden, "forbidden", "Thành viên HTX")
 	expectCode(t, f.officerA().adminGet("/v1/cropcycle/stats/cooperatives/"+f.coopA.String()), http.StatusForbidden, "forbidden", "cán bộ KN")
 	expectCode(t, reg.adminGet("/v1/cropcycle/stats/cooperatives/khong-phai-uuid"), http.StatusNotFound, "not_found", "ref sai")
 }

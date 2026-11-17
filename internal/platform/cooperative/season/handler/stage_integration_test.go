@@ -23,10 +23,10 @@ func stagePlots(t *testing.T, r resp) map[string]map[string]any {
 func TestStageMap_GIS_US_SEASON_01_US_YIELD_01(t *testing.T) {
 	f := newFixture(t)
 	f.publishedSOP("SOP OM5451", "OM5451")
-	ma, mb := f.managerA(), f.managerB()
+	ma, mb := f.memberA(), f.managerB()
 	ma.mustOpen(f.p1)
 	ma.mustOpen(f.p3)
-	mb.mustOpen(f.p4)
+	f.memberB().mustOpen(f.p4)
 
 	// Hôm nay (29/09/2026, ngày sạ): sinh trưởng; thu hoạch dự kiến 02/01/2027.
 	r := f.platformAdmin().get("/v1/cropcycle/stage-map")

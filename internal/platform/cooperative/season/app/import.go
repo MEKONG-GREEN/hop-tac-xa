@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/shopspring/decimal"
 
+	"github.com/MEKONG-GREEN/hop-tac-xa/contracts/htxroles"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/season/domain"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/season/store"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/mass"
@@ -61,10 +62,11 @@ type BulkHarvestResult struct {
 }
 
 // BulkHarvest lưu nhiều dòng sản lượng trong một lần bấm (HTX US-YIELD-02 AC-2),
-// bỏ qua dòng lỗi và chỉ ghi dòng hợp lệ (AC-1). coop: HTX tra mã lô (quản lý
-// HTX: bỏ trống = HTX của mình).
+// bỏ qua dòng lỗi và chỉ ghi dòng hợp lệ (AC-1). coop: HTX tra mã lô (Thành viên
+// HTX: bỏ trống = HTX của mình). Quyền: KHMV-FN-06 C (FN-06.2 "Nhập hàng loạt":
+// Thành viên HTX, Admin).
 func (s *Service) BulkHarvest(ctx context.Context, coop uuid.UUID, rows []HarvestRow, source, idemKey string) (BulkHarvestResult, error) {
-	a, err := s.access(ctx, managerRoles...)
+	a, err := s.matrixAccess(ctx, fnHarvest, htxroles.Create)
 	if err != nil {
 		return BulkHarvestResult{}, err
 	}
@@ -75,7 +77,8 @@ func (s *Service) BulkHarvest(ctx context.Context, coop uuid.UUID, rows []Harves
 		return BulkHarvestResult{}, problem.Validation.WithField("rows", "1–200 dòng")
 	}
 	if a.kind == accCoop {
-		if coop != uuid.Nil && coop != a.p.OrgRef {
+		// Chưa gắn HTX (org_ref rỗng) → không ghi gì (fail-closed, AH-39).
+		if a.p.OrgRef == uuid.Nil || (coop != uuid.Nil && coop != a.p.OrgRef) {
 			return BulkHarvestResult{}, ErrOutOfScope
 		}
 		coop = a.p.OrgRef
@@ -203,9 +206,9 @@ var importAliases = map[string]string{
 
 // ImportHarvests nhập sản lượng từ CSV (UTF-8) hoặc Excel .xlsx (HTX US-YIELD-02):
 // tệp sai mẫu bị từ chối toàn bộ; dòng lỗi (thiếu sản lượng, sai định dạng số...)
-// bị bỏ qua kèm lý do, chỉ dòng hợp lệ được ghi.
+// bị bỏ qua kèm lý do, chỉ dòng hợp lệ được ghi. Quyền: KHMV-FN-06 C (FN-06.2).
 func (s *Service) ImportHarvests(ctx context.Context, coop uuid.UUID, src io.Reader, idemKey string) (BulkHarvestResult, error) {
-	if _, err := s.access(ctx, managerRoles...); err != nil {
+	if _, err := s.matrixAccess(ctx, fnHarvest, htxroles.Create); err != nil {
 		return BulkHarvestResult{}, err
 	}
 	lim := tabular.Limits{MaxBytes: MaxImportBytes, MaxRows: MaxImportRows}

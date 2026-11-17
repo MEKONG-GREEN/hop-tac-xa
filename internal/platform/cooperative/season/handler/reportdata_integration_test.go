@@ -17,7 +17,7 @@ import (
 func reportSeed(t *testing.T) *fixture {
 	f := newFixture(t)
 	f.publishedSOP("SOP OM5451", "OM5451")
-	mA, mB := f.managerA(), f.managerB()
+	mA, mB := f.memberA(), f.memberB()
 	s1 := mA.mustOpen(f.p1)
 	mA.mustOpen(f.p2)
 	mA.mustOpen(f.p5)

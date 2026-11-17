@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/shopspring/decimal"
 
+	"github.com/MEKONG-GREEN/hop-tac-xa/contracts/htxroles"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/plot/domain"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/plot/store"
 	port "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/port"
@@ -56,8 +57,8 @@ var (
 	ErrDependency            = problem.New(http.StatusServiceUnavailable, "geo.dependency_unavailable", "Dịch vụ phụ thuộc chưa sẵn sàng")
 )
 
-// Vai được đọc thửa.
-var readRoles = []string{port.RolePlotViewer, port.RolePlotEditor, geoport.RoleGeoAdmin, authz.RolePlatformAdmin}
+// Vai được đọc thửa. Thành viên HTX đọc thửa (diện tích đất) của HTX mình để mở vụ (KHMV-FN-02 R, AH-39).
+var readRoles = []string{port.RolePlotViewer, port.RolePlotEditor, geoport.RoleGeoAdmin, authz.RolePlatformAdmin, port.RoleHTXMember}
 
 // Vai được ghi thửa (Application API và đồng bộ).
 var writeRoles = []string{port.RolePlotEditor, authz.RolePlatformAdmin}
@@ -134,7 +135,7 @@ func (s *Service) now() time.Time { return s.Clock.Now().UTC() }
 type access struct {
 	p        authz.Principal
 	sc       authz.Scope
-	coopOnly bool // quản lý HTX: chỉ HTX của mình (OrgRef) và thửa nháp chưa gán
+	coopOnly bool // Đại diện HTX, Thành viên HTX: chỉ HTX của mình (OrgRef) và thửa nháp chưa gán
 }
 
 func (s *Service) access(ctx context.Context, roles ...string) (access, error) {
@@ -154,7 +155,8 @@ func (s *Service) access(ctx context.Context, roles ...string) (access, error) {
 
 func accessFor(p authz.Principal, sc authz.Scope) access {
 	a := access{p: p, sc: sc}
-	a.coopOnly = p.Has(port.RoleCoopManager) && !p.Has(authz.RolePlatformAdmin) && !p.Has(geoport.RoleGeoAdmin)
+	// FN-06 (luật dùng chung): coop_manager như trước; htx_member cũng chỉ HTX của mình (AH-39).
+	a.coopOnly = htxroles.OwnCoopOnly(p.Has, geoport.RoleGeoAdmin)
 	if a.coopOnly && p.OrgRef == uuid.Nil {
 		a.sc = authz.Scope{}
 	}

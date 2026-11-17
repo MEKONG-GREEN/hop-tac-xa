@@ -1,7 +1,8 @@
 // Package htxroles nạp ma trận quyền Mục V của BRD Quản trị phân quyền App HTX (FN-05, ADM-01) — dữ liệu cố định
 // trong mã, ở MỘT chỗ (htx-roles.v1.json), để máy chủ kiểm và web dựng menu, nút từ cùng một nguồn. Bản TS của web
 // sinh từ chính tệp này (scripts/gen-role-matrix.mjs). Đối chiếu vai BRD ↔ vai trong mã, phạm vi dữ liệu và quy tắc
-// cho các ticket sau: docs/conventions/vai-tro-app-htx.md.
+// cho các ticket sau: docs/conventions/vai-tro-app-htx.md. Ma trận Mục VI của BRD Kế hoạch mùa vụ (v3.9) nằm cùng
+// tệp, thành các dòng có tiền tố KHMV- (AH-39).
 //
 // Ma trận chỉ nói vai được làm GÌ với từng chức năng; phạm vi dữ liệu do từng API kiểm: "HTX của mình" qua
 // OwnCoopOnly (FN-06), "HTX được chia sẻ" thuộc FN-09. Ẩn menu, ẩn nút trên giao diện không thay cho kiểm quyền ở
@@ -100,11 +101,31 @@ func With(fn string, a Action) []string {
 	return out
 }
 
+// Effective trả vai ma trận đang có hiệu lực của người có các vai (has): Admin, nếu không thì Đại diện HTX, nếu
+// không thì Thành viên HTX; "" khi không có vai nào của ma trận. Quyền không cộng gộp giữa các vai (FN-05/BR-02, BRD
+// mục V): tài khoản kiêm Đại diện HTX và Thành viên HTX dùng quyền Đại diện HTX cho tới khi có bước chọn vai làm việc
+// khi đăng nhập (AH-270).
+func Effective(has func(role string) bool) string {
+	for _, r := range []string{Admin, Representative, Member} {
+		if has(r) {
+			return r
+		}
+	}
+	return ""
+}
+
+// Allows cho biết người có các vai (has) được thao tác a với chức năng fn theo vai đang có hiệu lực (Effective).
+// Không có vai ma trận → false.
+func Allows(has func(role string) bool, fn string, a Action) bool {
+	r := Effective(has)
+	return r != "" && Can(r, fn, a)
+}
+
 // IsMemberOnly cho biết người có các vai (has) dùng quyền của Thành viên HTX: có htx_member mà không có
 // coop_manager hay platform_admin. Tài khoản kiêm Đại diện HTX và Thành viên HTX dùng quyền Đại diện HTX
 // (FN-05/BR-02; chọn vai làm việc khi đăng nhập thuộc AH-270).
 func IsMemberOnly(has func(role string) bool) bool {
-	return has(Member) && !has(Representative) && !has(Admin)
+	return Effective(has) == Member
 }
 
 // OwnCoopOnly cho biết người có các vai (has) chỉ được thấy dữ liệu của HTX gắn với tài khoản (FN-06/BR-02, BR-03,
