@@ -51,9 +51,6 @@ x-kc-admin-env: &kc-admin-env
   AG_KC_CLIENT_SECRET: ${AG_KC_CLIENT_SECRET:?chạy scripts/gen-dev-secrets để bổ sung AG_KC_CLIENT_SECRET vào deploy/compose/.env}
   AG_KC_ACTIONS_CLIENT_ID: agrigreen-web-ops
   AG_KC_ACTIONS_REDIRECT_URI: http://localhost:3000/
-  # FN-01 (ADR-0060): màn đăng nhập riêng của App HTX — máy chủ đổi mật khẩu lấy token qua client bí mật.
-  AG_KC_LOGIN_CLIENT_ID: agrigreen-htx-login
-  AG_KC_LOGIN_CLIENT_SECRET: ${AG_KC_LOGIN_CLIENT_SECRET:?chạy scripts/gen-dev-secrets để bổ sung bí mật đăng nhập vào deploy/compose/.env}
 
 x-s3-env: &s3-env
   AG_S3_ENDPOINT: seaweedfs:9000
@@ -307,6 +304,11 @@ services:
       AG_RABBITMQ_MGMT_URL: http://agrigreen:${AMQP_PASSWORD}@rabbitmq:15672
       AG_VAULT_URL: http://identity-vault:8090
       AG_SYNC_CURSOR_KEY: ${AG_SYNC_CURSOR_KEY:?chạy scripts/gen-dev-secrets}
+      # FN-01 (ADR-0060): màn đăng nhập riêng của App HTX — máy chủ đổi mật khẩu lấy token qua client bí mật. Chỉ
+      # api-platform phục vụ route đăng nhập nên chỉ dịch vụ này nhận ba biến; worker dựng cùng assembly nhưng không có
+      # biến nào thì LoginFromEnv bỏ qua (đặt thiếu một phần là lỗi khởi động).
+      AG_KC_LOGIN_CLIENT_ID: agrigreen-htx-login
+      AG_KC_LOGIN_CLIENT_SECRET: ${AG_KC_LOGIN_CLIENT_SECRET:?chạy scripts/gen-dev-secrets để bổ sung bí mật đăng nhập vào deploy/compose/.env}
       AG_LOGIN_ID_KEY: ${AG_LOGIN_ID_KEY:?chạy scripts/gen-dev-secrets để bổ sung AG_LOGIN_ID_KEY vào deploy/compose/.env}
       AG_CORS_ORIGINS: ${AG_CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
       # Điểm kiểm soát xuất (ADR-0024): observe (ĐTK 1) | enforce (Phase K) — đặt AG_EGRESS_MODE trong .env.
