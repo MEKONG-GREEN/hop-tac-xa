@@ -6,6 +6,7 @@ Mã nguồn: `internal/platform/metrics`. Migration `pf/000036` (định nghĩa,
 
 - Mỗi tệp `internal/platform/metrics/defs/<key>.v<n>.yaml` là **một** phiên bản. Nội dung gồm: `key`, `version`, `title`, `description`, `unit`, `grain` (`day` hoặc `season`), `aggregation`, `source_module`, `source`, `rule_version`, `effective_from`, `proposed_by`, `approved_by` (phải khác người đề xuất, R-56), `viewer_roles`.
 - Đổi công thức thì **thêm tệp phiên bản mới**, với `effective_from` sau phiên bản trước. Không sửa tệp cũ. Đơn vị và grain không đổi giữa các phiên bản; muốn đổi thì dùng key mới.
+- Đổi `viewer_roles` cũng phải thêm phiên bản mới, vì băm ghim cả tệp. API values xét vai theo phiên bản mới nhất, kể cả với giá trị đã ghi bằng phiên bản cũ. Ví dụ: `cc.season_area_ha`, `cc.yield_t_per_ha` v2 (AH-306) giữ công thức v1, bỏ `coop_manager`.
 - Lần đầu một tenant dùng một phiên bản, băm tệp được ghim vào `pf_metrics.definition_pin`. Nếu sau đó tệp bị sửa, job báo `metrics.definition_edited` và không ghi.
 - Kiểm thử `TestRepoDefinitionsLoad` nạp và kiểm mọi tệp. Tệp hỏng thì `metrics.New` panic khi khởi động.
 

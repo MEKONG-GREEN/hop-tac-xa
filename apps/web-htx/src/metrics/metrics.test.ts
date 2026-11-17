@@ -166,6 +166,11 @@ describe("backend giả lập pf/metrics khớp hợp đồng", () => {
     expect((r.body.dimensions as string[]).length).toBeGreaterThan(0);
   });
 
+  it("FN-06 (AH-306): Đại diện HTX không đọc chỉ số cc.* theo xã; khuyến nông vẫn đọc", async () => {
+    expect((await get("htx", "/v1/metrics/cc.season_area_ha/values?unit=82&dimension=DX-2026")).status).toBe(403);
+    expect((await get("tinh", "/v1/metrics/cc.yield_t_per_ha/values?unit=82&dimension=DX-2026")).status).toBe(200);
+  });
+
   it("phát lại: ngày tương lai 422 metrics.future_date; ảnh chụp hôm qua có mốc", async () => {
     const future = await get("setter", `/v1/gis/replay?date=${addDays(vnToday(), 1)}`);
     expect(future.status).toBe(422);

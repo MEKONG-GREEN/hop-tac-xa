@@ -1,0 +1,18 @@
+# v2 (AH-306): cùng công thức v1; bỏ coop_manager khỏi viewer_roles — số theo xã gộp nhiều HTX (FN-06/BR-02). Không sửa v1 vì băm đã ghim.
+# App HTX: diện tích gieo trồng theo vụ (nguồn của CGH FN-07 và mô phỏng).
+key: cc.season_area_ha
+version: 2
+title: Diện tích vụ (theo vụ)
+description: >
+  Tổng area_ha của sự việc mới nhất (theo seq, recorded_at < Cutoff(D)) của mỗi vụ
+  thửa thuộc vụ Scope.Dimension, trừ vụ đã hủy (cancelled).
+unit: ha
+grain: season
+aggregation: sum
+source_module: pf/cropcycle
+source: pf_cropcycle.season_event (sổ)
+rule_version: cc.season.v1
+effective_from: "2026-11-18"
+proposed_by: pf-metrics (G3-A5)
+approved_by: tich-hop-g3 (tạm, chờ khách)
+viewer_roles: [kn_national_admin, kn_province_admin, cgh_viewer]
