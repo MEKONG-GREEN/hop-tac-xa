@@ -1,17 +1,21 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { knMenuFor } from "@/api/mock/kn";
 import { KN_ACCOUNTS } from "@/api/mock/kn-accounts";
 import { MOCK_PERSONAS } from "@/api/mock/personas";
 import type { MenuTree } from "@/kn/contract";
 import { AuthContextForTests, type AuthContextValue, type KnSessionState } from "@/auth/AuthProvider";
-import { buildPrincipal } from "@/auth/principal";
+import { buildPrincipal, type Principal } from "@/auth/principal";
+import { ApiProblem } from "@/api/problem";
 import { activeMenu, AppShell, isAllowed, isBareRoute, isKnRemovedTool } from "@/components/AppShell";
+import { ProblemAlert } from "@/components/ProblemAlert";
 import { AccountMenu } from "./AccountMenu";
 import { Breadcrumb } from "./Breadcrumb";
 import { LoginCard } from "./LoginCard";
 import { badgeOf, crumbsFor, findActive, legacyMenu, menuAllows, menuLinks } from "./menu";
+import { NO_COOP_NOTICE, NOTICE_KEY, OUT_OF_SCOPE_NOTICE, useExitOnNotFound } from "./notice";
 import { RoleContextPicker } from "./RoleContextPicker";
 import { Sidebar } from "./Sidebar";
 
@@ -495,28 +499,7 @@ describe("AppShell: mở trang không thuộc quyền của vai App HTX (FN-05/A
   beforeEach(() => nav.replace.mockClear());
 
   function renderAs(personaId: string, pathname: string) {
-    nav.pathname = pathname;
-    const p = MOCK_PERSONAS.find((x) => x.id === personaId);
-    if (!p) throw new Error(personaId);
-    const principal = buildPrincipal({ sub: p.me.actor_ref, name: p.displayName, amr: p.amr, realm_access: { roles: p.me.roles } }, p.me);
-    const value = {
-      status: "authenticated",
-      principal,
-      scopeWarning: null,
-      kn: { status: "legacy", assignments: [], context: null, menu: null, badges: null } satisfies KnSessionState,
-      dataConsent: { status: "not_required" },
-      api: { GET: vi.fn(async () => ({ data: { items: [] }, response: { ok: true, status: 200 } })) },
-      logout: vi.fn(),
-      selectContext: vi.fn(),
-      changePassword: vi.fn(),
-    } as unknown as AuthContextValue;
-    render(
-      <AuthContextForTests.Provider value={value}>
-        <AppShell>
-          <p>Nội dung trang</p>
-        </AppShell>
-      </AuthContextForTests.Provider>,
-    );
+    return renderShell(personaPrincipal(personaId), pathname);
   }
 
   it("Thành viên HTX mở thẳng /quan-tri/tai-khoan → chuyển về trang đầu tiên được xem (/htx/nong-ho)", () => {
@@ -541,3 +524,132 @@ describe("AppShell: mở trang không thuộc quyền của vai App HTX (FN-05/A
     nav.pathname = "/";
   });
 });
+
+describe("AppShell: phạm vi dữ liệu theo HTX của mình (FN-06)", () => {
+  beforeEach(() => {
+    nav.replace.mockClear();
+    window.sessionStorage.clear();
+  });
+
+  const storedNotice = () => {
+    const raw = window.sessionStorage.getItem(NOTICE_KEY);
+    return raw ? (JSON.parse(raw) as { from: string; to: string; text: string }) : null;
+  };
+
+  it("[AC-N1] Thành viên HTX chưa gắn HTX → mọi màn App HTX hiện câu liên hệ người cấp tài khoản, không mở màn", () => {
+    renderShell(buildPrincipal({ sub: "u", realm_access: { roles: ["htx_member"] } }, null), "/htx/nong-ho");
+    expect(screen.getByText(NO_COOP_NOTICE)).toBeTruthy();
+    expect(screen.queryByText("Nội dung trang")).toBeNull();
+    expect(nav.replace).not.toHaveBeenCalled();
+    nav.pathname = "/";
+  });
+
+  it("[AC-N1] Đại diện HTX chưa gắn HTX → cùng câu thông báo ở màn khác của App HTX", () => {
+    renderShell(buildPrincipal({ sub: "u", realm_access: { roles: ["coop_manager"] } }, null), "/htx/mua-vu");
+    expect(screen.getByText(NO_COOP_NOTICE)).toBeTruthy();
+    expect(screen.queryByText("Nội dung trang")).toBeNull();
+    nav.pathname = "/";
+  });
+
+  it("[AC-N1] đối chứng: Thành viên HTX đã gắn HTX thấy nội dung màn", () => {
+    renderShell(personaPrincipal("htx-member"), "/htx/nong-ho");
+    expect(screen.getByText("Nội dung trang")).toBeTruthy();
+    expect(screen.queryByText(NO_COOP_NOTICE)).toBeNull();
+    nav.pathname = "/";
+  });
+
+  it("[AC-N2] Đại diện HTX mở chi tiết HTX ngoài phạm vi → về trang đầu tiên được xem, kèm thông báo ở trang đó", () => {
+    const principal = personaPrincipal("htx");
+    const from = "/htx/01963011-1234-7123-8123-123456789abc";
+    const view = renderShell(principal, from);
+    expect(nav.replace).toHaveBeenCalledWith("/htx/dashboard");
+    expect(screen.queryByText("Nội dung trang")).toBeNull();
+    expect(storedNotice()).toEqual({ from, to: "/htx/dashboard", text: OUT_OF_SCOPE_NOTICE });
+    view.unmount();
+
+    renderShell(principal, "/htx/dashboard");
+    expect(screen.getByText(OUT_OF_SCOPE_NOTICE)).toBeTruthy();
+    expect(screen.getByText("Nội dung trang")).toBeTruthy();
+    nav.pathname = "/";
+  });
+
+  it("[AC-N2] thông báo bị xoá khi sang trang khác", () => {
+    window.sessionStorage.setItem(NOTICE_KEY, JSON.stringify({ from: "/htx/x", to: "/htx/dashboard", text: OUT_OF_SCOPE_NOTICE }));
+    renderShell(personaPrincipal("htx"), "/htx/mua-vu");
+    expect(screen.queryByText(OUT_OF_SCOPE_NOTICE)).toBeNull();
+    expect(storedNotice()).toBeNull();
+    nav.pathname = "/";
+  });
+
+  it("FN-05/EX-01 không đổi: mở trang danh sách không thuộc quyền → chuyển mà không ghi thông báo", () => {
+    renderShell(personaPrincipal("htx-member"), "/quan-tri/tai-khoan");
+    expect(nav.replace).toHaveBeenCalledWith("/htx/nong-ho");
+    expect(storedNotice()).toBeNull();
+    nav.pathname = "/";
+  });
+
+  const notFound = new ApiProblem({ type: "about:blank", title: "Not found", status: 404, code: "party.org_not_found" });
+  function DetailProbe() {
+    return useExitOnNotFound(notFound) ? <p>đang rời</p> : <ProblemAlert problem={notFound} />;
+  }
+
+  it("[AC-N2] màn chi tiết nhận 404 với người dùng App HTX (Admin) → về trang đầu tiên được xem kèm thông báo", () => {
+    const from = "/htx/01963011-1234-7123-8123-123456789abc";
+    renderShell(personaPrincipal("setter"), from, <DetailProbe />);
+    expect(screen.getByText("đang rời")).toBeTruthy();
+    const home = nav.replace.mock.calls.at(-1)?.[0] as string;
+    expect(home).toBeTruthy();
+    expect(storedNotice()).toEqual({ from, to: home, text: OUT_OF_SCOPE_NOTICE });
+    nav.pathname = "/";
+  });
+
+  it("màn chi tiết nhận 404 với vai khuyến nông → ở lại, thấy lỗi như cũ", () => {
+    renderShell(personaPrincipal("xa"), "/htx/01963011-1234-7123-8123-123456789abc", <DetailProbe />);
+    expect(screen.getByRole("alert")).toBeTruthy();
+    expect(nav.replace).not.toHaveBeenCalled();
+    expect(storedNotice()).toBeNull();
+    nav.pathname = "/";
+  });
+
+  const noNode = new ApiProblem({ type: "about:blank", title: "node", status: 403, code: "node_scope_required" });
+
+  it("[AC-N1] màn ngoài App HTX nhận 'tài khoản chưa gắn đơn vị' → cùng câu liên hệ người cấp tài khoản", () => {
+    renderShell(buildPrincipal({ sub: "u", realm_access: { roles: ["htx_member"] } }, null), "/khong-co-quyen", <ProblemAlert problem={noNode} />);
+    expect(screen.getByText(NO_COOP_NOTICE)).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+    nav.pathname = "/";
+  });
+
+  it("vai khuyến nông thiếu Nút nhận cùng lỗi → vẫn thấy thông báo lỗi chung", () => {
+    renderShell(buildPrincipal({ sub: "u", realm_access: { roles: ["kn_officer"] } }, null), "/khong-co-quyen", <ProblemAlert problem={noNode} />);
+    expect(screen.queryByText(NO_COOP_NOTICE)).toBeNull();
+    expect(screen.getByRole("alert")).toBeTruthy();
+    nav.pathname = "/";
+  });
+});
+
+function personaPrincipal(personaId: string): Principal {
+  const p = MOCK_PERSONAS.find((x) => x.id === personaId);
+  if (!p) throw new Error(personaId);
+  return buildPrincipal({ sub: p.me.actor_ref, name: p.displayName, amr: p.amr, realm_access: { roles: p.me.roles } }, p.me);
+}
+
+function renderShell(principal: Principal, pathname: string, page: ReactNode = <p>Nội dung trang</p>) {
+  nav.pathname = pathname;
+  const value = {
+    status: "authenticated",
+    principal,
+    scopeWarning: null,
+    kn: { status: "legacy", assignments: [], context: null, menu: null, badges: null } satisfies KnSessionState,
+    dataConsent: { status: "not_required" },
+    api: { GET: vi.fn(async () => ({ data: { items: [] }, response: { ok: true, status: 200 } })) },
+    logout: vi.fn(),
+    selectContext: vi.fn(),
+    changePassword: vi.fn(),
+  } as unknown as AuthContextValue;
+  return render(
+    <AuthContextForTests.Provider value={value}>
+      <AppShell>{page}</AppShell>
+    </AuthContextForTests.Provider>,
+  );
+}

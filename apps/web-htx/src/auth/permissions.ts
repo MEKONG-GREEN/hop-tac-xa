@@ -2,7 +2,7 @@
 // Thành viên HTX. Nguồn duy nhất là contracts/htxroles/htx-roles.v1.json (bản sinh ở src/api/generated).
 // CHỈ dùng để ẩn/hiện menu và nút — máy chủ kiểm lại mọi yêu cầu (FN-05/BR-03, TECH-01).
 import { HTX_ROLE_MATRIX } from "@/api/generated/htx-roles";
-import type { Principal } from "./principal";
+import { hasRole, KN_ROLES, ROLES, type Principal } from "./principal";
 
 export type HtxFunction = (typeof HTX_ROLE_MATRIX.functions)[number]["key"];
 export type HtxAction = keyof typeof HTX_ROLE_MATRIX.actions;
@@ -37,4 +37,17 @@ export function isHtxAppUser(p: Pick<Principal, "roles"> | null): boolean {
 export function matrixAllows(p: Pick<Principal, "roles"> | null, fn: HtxFunction, action: HtxAction): boolean {
   const roles = matrixRolesOf(p);
   return roles.length === 0 || roles.some((r) => grants(r, fn).includes(action));
+}
+
+/**
+ * FN-06/EX-02: tài khoản Đại diện HTX / Thành viên HTX (không kèm Admin hay vai có phạm vi rộng hơn) chưa gắn HTX →
+ * không có dữ liệu nào trong phạm vi. Máy chủ vẫn tự từ chối; web dùng để hiện thông báo thay cho danh sách.
+ */
+export function lacksCoop(p: Pick<Principal, "roles" | "orgRef"> | null): boolean {
+  return (
+    !!p &&
+    !p.orgRef &&
+    hasRole(p, ROLES.coopManager, ROLES.htxMember) &&
+    !hasRole(p, ROLES.platformAdmin, ROLES.registryAdmin, ROLES.cghViewer, ...KN_ROLES)
+  );
 }

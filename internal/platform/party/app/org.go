@@ -10,7 +10,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/MEKONG-GREEN/hop-tac-xa/contracts/htxroles"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/party/domain"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/party/port"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/party/store"
@@ -735,11 +734,16 @@ func (r *Registry) ListOrgs(ctx context.Context, q ListQuery) (OrgPage, error) {
 	if err != nil || sc.Empty() {
 		return OrgPage{Items: []port.Org{}}, err
 	}
+	// Đại diện HTX, Thành viên HTX chỉ thấy HTX gắn với tài khoản (FN-06), chặt hơn phạm vi theo xã.
+	var only []uuid.UUID
+	if ownCoopOnly(p) {
+		only = []uuid.UUID{p.OrgRef}
+	}
 	var items []port.Org
 	err = tenant.WithTenantTx(ctx, r.DB, p.TenantID, func(tx pgx.Tx) error {
 		var e error
 		items, e = store.ListOrgs(ctx, tx, store.OrgFilter{
-			All: sc.All, Units: sc.Units, Kind: q.Kind, IncludeInactive: q.IncludeInactive, After: q.After, Limit: q.Limit + 1,
+			All: sc.All, Units: sc.Units, Kind: q.Kind, IncludeInactive: q.IncludeInactive, Only: only, After: q.After, Limit: q.Limit + 1,
 		})
 		return e
 	})
@@ -782,6 +786,9 @@ func (r *Registry) ListCooperatives(ctx context.Context, q ListQuery) (CoopPage,
 	if err != nil {
 		return CoopPage{}, err
 	}
+	if ownCoopOnly(p) { // FN-06: chỉ HTX gắn với tài khoản
+		only = intersectRefs(only, []uuid.UUID{p.OrgRef})
+	}
 	var orgs []store.CoopOrg
 	err = tenant.WithTenantTx(ctx, r.DB, p.TenantID, func(tx pgx.Tx) error {
 		var e error
@@ -807,7 +814,7 @@ func (r *Registry) ListCooperatives(ctx context.Context, q ListQuery) (CoopPage,
 
 // GetCooperative đọc một HTX; ngoài phạm vi → 404 (không lộ sự tồn tại).
 func (r *Registry) GetCooperative(ctx context.Context, ref uuid.UUID) (Cooperative, error) {
-	p, err := authz.Require(ctx, coopReaderRoles...)
+	p, err := authz.Require(ctx, readerRoles...)
 	if err != nil {
 		return Cooperative{}, err
 	}
@@ -822,8 +829,8 @@ func (r *Registry) GetCooperative(ctx context.Context, ref uuid.UUID) (Cooperati
 	if c == nil || !visible(sc, c.AdminUnitCode) {
 		return Cooperative{}, ErrOrgNotFound
 	}
-	// Thành viên HTX chỉ xem HTX của mình (FN-03: R), chặt hơn giới hạn theo xã của quản lý HTX ở API này.
-	if htxroles.IsMemberOnly(p.Has) && c.Ref != p.OrgRef {
+	// Đại diện HTX, Thành viên HTX chỉ xem HTX gắn với tài khoản (FN-06/BR-02, BR-03), chặt hơn phạm vi theo xã.
+	if ownCoopOnly(p) && c.Ref != p.OrgRef {
 		return Cooperative{}, ErrOrgNotFound
 	}
 	return *c, nil

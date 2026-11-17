@@ -13,6 +13,7 @@ import { useAuth } from "@/auth/AuthProvider";
 import { hasRole, ROLES } from "@/auth/principal";
 import { Icon } from "@/components/Icon";
 import { ReasonDialog } from "@/htx/common";
+import { useExitOnNotFound } from "@/shell/notice";
 import { HouseholdsPanel } from "@/htx/HouseholdsPanel";
 import { Dialog } from "@/components/Dialog";
 import { normalizePhone } from "@/htx/rules";
@@ -337,6 +338,8 @@ export default function CooperativeDetailPage() {
   const [deactivating, setDeactivating] = useState(false);
   const [copying, setCopying] = useState(false);
   const coop = useAsync(() => getCooperative(api, id), [api, id]);
+  // FN-06/EX-01, AC-N2: HTX ngoài phạm vi (404) → về trang đầu tiên được xem kèm thông báo.
+  const leaving = useExitOnNotFound(coop.error);
   const canDeactivate = hasRole(principal, ROLES.registryAdmin, ROLES.platformAdmin);
   const canCopy = hasRole(principal, ROLES.registryAdmin, ROLES.platformAdmin, ROLES.knProvinceAdmin);
 
@@ -345,7 +348,7 @@ export default function CooperativeDetailPage() {
       <p style={{ marginBottom: 8 }}>
         <Link href="/htx">← Danh sách HTX</Link>
       </p>
-      {coop.error ? <ProblemAlert problem={coop.error} onRetry={coop.reload} /> : null}
+      {leaving ? <Loading /> : coop.error ? <ProblemAlert problem={coop.error} onRetry={coop.reload} /> : null}
       {coop.loading && !coop.data ? <Loading /> : null}
       {coop.data ? (
         <>

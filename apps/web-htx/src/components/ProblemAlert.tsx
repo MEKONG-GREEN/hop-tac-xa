@@ -1,10 +1,13 @@
 import { isConfirmable, type ApiProblem } from "@/api/problem";
+import { NoCoopState, useIsNoCoopProblem } from "@/shell/notice";
 import { Icon } from "./Icon";
 
 /**
  * Hiển thị lỗi RFC 9457: thông báo tiếng Việt + mã lỗi + trace_id để tra log (R-63).
  * - mfa_required (Admin API): hướng dẫn đăng nhập lại có OTP.
  * - geo.*_needs_confirm: nút "Xác nhận vẫn lưu" khi nơi gọi truyền `onConfirm`.
+ * - node_scope_required của tài khoản Đại diện HTX / Thành viên HTX chưa gắn HTX: trạng thái rỗng kèm câu liên hệ người
+ *   cấp tài khoản (FN-06/EX-02, AC-N1) thay cho lỗi chung.
  */
 export function ProblemAlert({
   problem,
@@ -17,6 +20,7 @@ export function ProblemAlert({
   onConfirm?: () => void;
   confirming?: boolean;
 }) {
+  if (useIsNoCoopProblem(problem)) return <NoCoopState />;
   const confirmable = isConfirmable(problem) && !!onConfirm;
   return (
     <div className={`alert ${confirmable ? "alert-warn" : "alert-bad"}`} role="alert">
