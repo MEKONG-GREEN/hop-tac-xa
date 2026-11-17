@@ -4,6 +4,7 @@ import 'package:agrigreen_htx/ui/providers.dart';
 import 'package:agrigreen_htx/ui/screens/access_blocked_screen.dart';
 import 'package:agrigreen_htx/ui/screens/data_consent_screen.dart';
 import 'package:agrigreen_htx/ui/screens/home_screen.dart';
+import 'package:agrigreen_htx/ui/screens/households_screen.dart';
 import 'package:agrigreen_htx/ui/screens/login_screen.dart';
 import 'package:agrigreen_mobile/ui/widgets/common.dart';
 import 'package:flutter/material.dart';
@@ -117,6 +118,31 @@ void main() {
       await tester.runAsync(
         () => c.read(appControllerProvider.notifier).lock(),
       );
+      await finish(tester);
+    },
+  );
+
+  testWidgets(
+    'vai bị gỡ giữa phiên khi đang ở màn Nông hộ → lượt đồng bộ đóng màn đó, '
+    'chỉ còn màn chặn',
+    (tester) async {
+      final env = TestEnv(roles: const ['htx_member'])..seed();
+      final s = await loginToHome(tester, env);
+      await openTile(tester, 'Nông hộ');
+      expect(find.byType(HouseholdsScreen), findsOneWidget);
+
+      final me = env.server.onGet!;
+      env.server.onGet = (path, query) async => path == '/v1/me'
+          ? {'roles': <String>[], 'org': null}
+          : me(path, query);
+      await s.sync.syncOnce(force: true);
+      await settle(tester, 30);
+
+      expect(find.byType(HouseholdsScreen, skipOffstage: false), findsNothing);
+      expect(find.byType(HomeScreen, skipOffstage: false), findsNothing);
+      expect(find.byType(AccessBlockedScreen), findsOneWidget);
+      expect(find.text(msgNoHtxRole), findsOneWidget);
+      expect(find.byType(BigTile, skipOffstage: false), findsNothing);
       await finish(tester);
     },
   );

@@ -32,6 +32,19 @@ class _AuthGate extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final st = ref.watch(appControllerProvider);
+    // Vai bị gỡ giữa phiên (lượt đồng bộ tải /v1/me mới): trang gốc đổi sang
+    // màn chặn, nên đóng mọi màn đã mở đè lên để không còn màn nghiệp vụ nào.
+    // Cùng điều kiện với nhánh AccessBlockedScreen bên dưới.
+    ref.listen(
+      appControllerProvider.select(
+        (s) => s.services != null && s.consent == null && s.mode.blocked,
+      ),
+      (was, now) {
+        if (now && was == false) {
+          Navigator.of(context).popUntil((r) => r.isFirst);
+        }
+      },
+    );
     return switch (st.view.stage) {
       AuthStage.loading => const Scaffold(
         body: Center(child: CircularProgressIndicator()),
