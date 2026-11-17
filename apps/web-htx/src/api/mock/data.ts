@@ -282,14 +282,26 @@ export function householdsOf(coop: MockCooperative): HouseholdListItem[] {
           ? [{ purpose: "mrv.evidence", status: "withdrawn", event_time: iso(5) }]
           : [];
     if (i % 4 === 0) consents.push({ purpose: "extension.field_support", status: "granted", event_time: iso(60) });
+    const sampledArea = r() < 0.05 ? null : `${(0.3 + r() * 4.5).toFixed(4)}`;
+    const land = i === 0 ? "1.25" : sampledArea;
+    const since = `202${Math.floor(r() * 6)}-0${1 + Math.floor(r() * 9)}-15`;
+    const sampledActive = r() > 0.06;
+    const active = i === 0 || sampledActive;
+    const used = i % 5 === 0 && land != null ? land : "0";
+    const remaining = land == null ? null : (Number(land) - Number(used)).toFixed(4);
+    const canOpen = active && remaining != null && Number(remaining) > 0;
     return {
       consents,
       household_ref: householdRefOf(coop, i),
       cooperative_ref: coop.api.ref,
       commune_code: coop.api.admin_unit_code ?? "",
-      cultivated_area_ha: r() < 0.05 ? null : `${(0.3 + r() * 4.5).toFixed(4)}`,
-      member_since: `202${Math.floor(r() * 6)}-0${1 + Math.floor(r() * 9)}-15`,
-      active: r() > 0.06,
+      cultivated_area_ha: land,
+      active_area_ha: used,
+      remaining_area_ha: remaining,
+      can_open_season: canOpen,
+      open_season_blocked_reason: canOpen ? "" : !active ? "Nông hộ đã ngừng tham gia HTX." : land == null ? "Chưa có diện tích đất của nông hộ." : "Hết diện tích để mở vụ.",
+      member_since: since,
+      active,
       label: unavailable ? "" : `${pick(SURNAMES, r)} ${a}. ${b}.`,
       masked_phone: `09******${syntheticPhone(coop, i).slice(-2)}`,
       label_unavailable: unavailable,

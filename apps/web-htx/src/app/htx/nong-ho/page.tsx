@@ -18,7 +18,7 @@ export default function HouseholdsPage() {
   const coop = useAsync(() => (scope.coopRef ? getCooperative(api, scope.coopRef) : Promise.resolve(null)), [api, scope.coopRef]);
   return (
     <>
-      <PageHead title="Quản lý nông hộ" subtitle="Nông hộ thành viên của HTX — nhãn đã che; SĐT chỉ đọc khi bấm gọi" />
+      <PageHead title="Quản lý nông hộ" subtitle="Danh sách chỉ đọc — diện tích đất, đang canh tác và còn lại của nông hộ trong HTX" />
       <div className="card sec">
         <div className="row" style={{ marginBottom: 12 }}>
           <CoopPicker scope={scope} allowAll={false} id="hh-coop" />
@@ -26,7 +26,7 @@ export default function HouseholdsPage() {
         {!scope.coopRef ? <Empty>Chọn HTX để xem nông hộ.</Empty> : null}
         {coop.error ? <ProblemAlert problem={coop.error} onRetry={coop.reload} /> : null}
         {coop.loading && !coop.data ? <Loading /> : null}
-        {coop.data ? <HouseholdsPanel key={coop.data.ref} coop={coop.data} /> : null}
+        {coop.data ? <HouseholdsPanel key={coop.data.ref} coop={coop.data} readOnly /> : null}
       </div>
     </>
   );

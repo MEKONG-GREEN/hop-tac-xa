@@ -33,6 +33,102 @@ Map<String, Object?> _pendingLog(String id, String status, String gps) => {
 
 void main() {
   testWidgets(
+    'AH-50: Thành viên xem hộ hết diện tích, không mở thửa chưa có vụ',
+    (tester) async {
+      final env = TestEnv(roles: const ['htx_member'])..seed();
+      final base = env.server.onGet!;
+      env.server.onGet = (path, q) async {
+        if (path == '/v1/me') {
+          return {
+            'roles': ['htx_member'],
+            'org': {'ref': coopRef, 'name': 'HTX Tân Phú'},
+          };
+        }
+        if (path == '/v1/cooperatives/$coopRef/households') {
+          return {
+            'items': [
+              {
+                'household_ref': householdRef,
+                'label': 'Hộ hết diện tích',
+                'cultivated_area_ha': '2.50',
+                'active_area_ha': '2.50',
+                'remaining_area_ha': '0',
+                'can_open_season': false,
+                'open_season_blocked_reason': 'Hết diện tích để mở vụ.',
+              },
+            ],
+            'next_cursor': null,
+          };
+        }
+        return base(path, q);
+      };
+      await loginToHome(tester, env);
+      await openTile(tester, 'Nông hộ');
+      expect(find.text('Hộ hết diện tích'), findsOneWidget);
+      expect(find.textContaining('Còn lại: 0,00 ha'), findsOneWidget);
+      await tapText(tester, 'Hộ hết diện tích');
+      final tile = tester.widget<ListTile>(
+        find.widgetWithText(ListTile, 'T1 · Ruộng bờ kênh'),
+      );
+      expect(tile.onTap, isNull);
+      expect(find.text('Mở vụ mới'), findsNothing);
+      await finish(tester);
+    },
+  );
+
+  testWidgets(
+    'AH-50: cache ngoại tuyến không cấp khả năng mở vụ; lỗi quyền không trả cache',
+    (tester) async {
+      final env = TestEnv(roles: const ['coop_manager'])..seed();
+      final base = env.server.onGet!;
+      var offline = false;
+      var denied = false;
+      env.server.onGet = (path, q) async {
+        if (path == '/v1/cooperatives/$coopRef/households') {
+          if (denied) throw ApiException(403, 'forbidden');
+          if (offline) throw NetworkException('offline');
+          return {
+            'items': [
+              {
+                'household_ref': householdRef,
+                'label': 'Hộ còn đất',
+                'cultivated_area_ha': '2.50',
+                'active_area_ha': '0',
+                'remaining_area_ha': '2.50',
+                'can_open_season': true,
+                'open_season_blocked_reason': '',
+              },
+            ],
+            'next_cursor': null,
+          };
+        }
+        return base(path, q);
+      };
+      final services = await loginToHome(tester, env);
+      expect(
+        (await services.manager.households()).single.canOpenSeason,
+        isTrue,
+      );
+      offline = true;
+      final cached = (await services.manager.households()).single;
+      expect(cached.remainingAreaHa, '2.50');
+      expect(cached.areaFresh, isFalse);
+      expect(cached.canOpenSeason, isFalse);
+      offline = false;
+      denied = true;
+      await expectLater(
+        services.manager.households(),
+        throwsA(isA<ApiException>()),
+      );
+      await expectLater(
+        services.manager.households(cooperativeRef: 'other-coop'),
+        throwsA(isA<Exception>()),
+      );
+      await finish(tester);
+    },
+  );
+
+  testWidgets(
     'HTX US-LOG-05: nhãn vị trí rõ khi duyệt; phê duyệt / yêu cầu bổ sung xếp '
     'hàng rồi gửi POST /reviews; tự duyệt bị máy chủ chặn → báo rõ',
     (tester) async {
@@ -155,7 +251,16 @@ void main() {
         path == '/v1/cooperatives/$coopRef/households'
         ? {
             'items': [
-              {'ref': householdRef, 'label': 'Nguyễn V. A.', 'code': 'HH-01'},
+              {
+                'ref': householdRef,
+                'label': 'Nguyễn V. A.',
+                'code': 'HH-01',
+                'cultivated_area_ha': '2.50',
+                'active_area_ha': '0.50',
+                'remaining_area_ha': '2.00',
+                'can_open_season': true,
+                'open_season_blocked_reason': '',
+              },
             ],
             'next_cursor': null,
           }
@@ -163,7 +268,13 @@ void main() {
     await loginToHome(tester, env);
     await openTile(tester, 'Nông hộ');
     expect(find.text('Nguyễn V. A.'), findsOneWidget);
-    expect(find.text('HH-01 · 2 lô ruộng'), findsOneWidget);
+    expect(find.textContaining('2 lô ruộng'), findsOneWidget);
+    expect(
+      find.textContaining(
+        'Đất: 2,50 ha · Đang canh tác: 0,50 ha · Còn lại: 2,00 ha',
+      ),
+      findsOneWidget,
+    );
     await tapText(tester, 'Nguyễn V. A.');
     await tapText(tester, 'T1 · Ruộng bờ kênh');
     expect(find.text('Mở vụ mới'), findsOneWidget);

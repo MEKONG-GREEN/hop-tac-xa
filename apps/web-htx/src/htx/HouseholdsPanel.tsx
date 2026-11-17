@@ -202,7 +202,7 @@ function CopyDialog({ coop, sources, onClose, onDone }: { coop: Cooperative; sou
 }
 
 /** Danh sách nông hộ của một HTX kèm tìm SĐT, gọi nhanh, chọn để sao chép hàng loạt. */
-export function HouseholdsPanel({ coop }: { coop: Cooperative }) {
+export function HouseholdsPanel({ coop, readOnly = false }: { coop: Cooperative; readOnly?: boolean }) {
   const { api, principal } = useAuth();
   const id = coop.ref;
   const [query, setQuery] = useState("");
@@ -213,7 +213,7 @@ export function HouseholdsPanel({ coop }: { coop: Cooperative }) {
   const [copying, setCopying] = useState(false);
   // FN-05/AC-01: nút thao tác (sao chép, chọn, gọi) theo ma trận — Thành viên HTX (FN-04: R) không thấy.
   const canWrite =
-    coop.active && hasRole(principal, ROLES.coopManager, ROLES.knOfficer, ROLES.knProvinceAdmin, ROLES.registryAdmin) && matrixAllows(principal, "FN-04", "C");
+    !readOnly && coop.active && hasRole(principal, ROLES.coopManager, ROLES.knOfficer, ROLES.knProvinceAdmin, ROLES.registryAdmin) && matrixAllows(principal, "FN-04", "C");
   const list = usePagedList((cursor) => householdsPage(api, id, cursor, 20), [api, id, version]);
   const found = useAsync(
     () => (search ? unwrap(api.GET("/v1/cooperatives/{ref}/households", { params: { path: { ref: id }, query: { phone: search.phone } } })) : Promise.resolve(null)),
@@ -298,7 +298,10 @@ export function HouseholdsPanel({ coop }: { coop: Cooperative }) {
               <th scope="col">Nông hộ (đã che)</th>
               <th scope="col">SĐT (đã che)</th>
               <th scope="col">Xã</th>
-              <th scope="col" className="num">Diện tích canh tác (ha)</th>
+              <th scope="col" className="num">Diện tích đất (ha)</th>
+              <th scope="col" className="num">Đang canh tác (ha)</th>
+              <th scope="col" className="num">Còn lại (ha)</th>
+              <th scope="col">Khả năng mở vụ</th>
               <th scope="col">Vào HTX</th>
               <th scope="col">Đồng ý chia sẻ dữ liệu</th>
               <th scope="col">Trạng thái</th>
@@ -317,6 +320,13 @@ export function HouseholdsPanel({ coop }: { coop: Cooperative }) {
                 <td style={{ fontFamily: "ui-monospace, Consolas, monospace" }}>{h.masked_phone || "—"}</td>
                 <td>{communeName(h.commune_code)}</td>
                 <td className="num">{formatDecimal(h.cultivated_area_ha, 2)}</td>
+                <td className="num">{formatDecimal(h.active_area_ha, 2)}</td>
+                <td className="num">{formatDecimal(h.remaining_area_ha, 2)}</td>
+                <td>
+                  {h.can_open_season ? <span className="chip c-ok">Còn diện tích</span> : (
+                    <span className="chip c-warn">{h.open_season_blocked_reason || "Chưa xác định diện tích còn lại."}</span>
+                  )}
+                </td>
                 <td>{formatDate(h.member_since)}</td>
                 <td>
                   <ConsentBadges consents={h.consents} />

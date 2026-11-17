@@ -18,11 +18,23 @@ class HouseholdItem {
     required this.label,
     this.code,
     this.plots = 0,
+    this.landAreaHa,
+    this.activeAreaHa,
+    this.remainingAreaHa,
+    this.canOpenSeason = false,
+    this.blockedReason = 'Chưa xác định diện tích còn lại.',
+    this.areaFresh = false,
   });
   final String ref;
   final String label;
   final String? code;
   final int plots;
+  final String? landAreaHa;
+  final String? activeAreaHa;
+  final String? remainingAreaHa;
+  final bool canOpenSeason;
+  final String blockedReason;
+  final bool areaFresh;
 }
 
 /// Máy không gọi điện được (HTX US-HH-03 AC-2).
@@ -115,20 +127,33 @@ class ManagerService {
 
   /// Nông hộ của HTX: tải khi có mạng (đệm), ngoại tuyến dùng bản đệm; chưa
   /// có đệm → suy từ thửa đã đồng bộ.
-  Future<List<HouseholdItem>> households({bool refresh = true}) async {
+  Future<List<HouseholdItem>> households({
+    bool refresh = true,
+    String? cooperativeRef,
+  }) async {
     final plots = await _crop.plots();
     final counts = <String, int>{};
+    final own = await _profile.cooperativeRef();
+    if (cooperativeRef != null && cooperativeRef != own) {
+      throw ManagerException(
+        'Bạn không có quyền truy cập nông hộ của HTX này.',
+      );
+    }
+    final coop = cooperativeRef ?? own;
+    if (coop == null) return [];
     for (final p in plots) {
-      if (p.householdRef != null) {
+      if (p.cooperativeRef == coop && p.householdRef != null) {
         counts[p.householdRef!] = (counts[p.householdRef!] ?? 0) + 1;
       }
     }
-    final coop = await _profile.cooperativeRef();
-    if (refresh && coop != null) {
+    final cacheKey = '$_hhKey:$coop';
+    var fresh = false;
+    if (refresh) {
       try {
         final items = <Map<String, Object?>>[];
         String? cursor;
-        for (var page = 0; page < 20; page++) {
+        final seen = <String>{};
+        while (true) {
           final j = await _api.getJson(
             '/v1/cooperatives/$coop/households',
             query: {'limit': '200', 'cursor': ?cursor},
@@ -139,20 +164,27 @@ class ManagerService {
                 'ref': e['ref'] ?? e['household_ref'],
                 'label': e['label'],
                 'code': e['code'],
+                'cultivated_area_ha': e['cultivated_area_ha'],
+                'active_area_ha': e['active_area_ha'],
+                'remaining_area_ha': e['remaining_area_ha'],
+                'can_open_season': e['can_open_season'],
+                'open_season_blocked_reason': e['open_season_blocked_reason'],
               });
             }
           }
           cursor = j['next_cursor'] as String?;
           if (cursor == null || cursor.isEmpty) break;
+          if (!seen.add(cursor)) {
+            throw ManagerException('Không tải được đầy đủ danh sách nông hộ.');
+          }
         }
-        await _db.setMeta(_hhKey, jsonEncode(items));
+        await _db.setMeta(cacheKey, jsonEncode(items));
+        fresh = true;
       } on NetworkException {
         // dùng bản đệm
-      } on ApiException catch (e) {
-        if (e is DeviceRevokedException) rethrow;
       }
     }
-    final cached = await _db.getMeta(_hhKey);
+    final cached = await _db.getMeta(cacheKey);
     final out = <HouseholdItem>[];
     if (cached != null) {
       for (final e in jsonDecode(cached) as List) {
@@ -164,11 +196,21 @@ class ManagerService {
             label: '${m['label'] ?? 'Hộ ${ref.substring(0, 8)}'}',
             code: m['code'] as String?,
             plots: counts[ref] ?? 0,
+            landAreaHa: m['cultivated_area_ha'] as String?,
+            activeAreaHa: m['active_area_ha'] as String?,
+            remainingAreaHa: m['remaining_area_ha'] as String?,
+            canOpenSeason: fresh && m['can_open_season'] == true,
+            blockedReason: !fresh
+                ? 'Cần kết nối mạng để kiểm tra diện tích còn lại.'
+                : (m['open_season_blocked_reason'] as String? ??
+                      'Chưa xác định diện tích còn lại.'),
+            areaFresh: fresh,
           ),
         );
       }
     }
-    for (final e in counts.entries) {
+    for (final e
+        in cached == null ? counts.entries : <MapEntry<String, int>>[]) {
       if (out.every((h) => h.ref != e.key)) {
         out.add(
           HouseholdItem(

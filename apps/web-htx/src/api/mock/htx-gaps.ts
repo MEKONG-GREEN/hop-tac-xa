@@ -49,6 +49,8 @@ function listOf(coop: MockCooperative) {
   const extra = COPIED.filter((h) => h.coop === coop.api.ref).map((h) => ({
     household_ref: h.ref, cooperative_ref: coop.api.ref, commune_code: coop.api.admin_unit_code ?? "", cultivated_area_ha: h.area,
     member_since: nowIso().slice(0, 10), active: true, label: h.label, masked_phone: `09******${h.phone.slice(-2)}`, label_unavailable: false, consents: [],
+    active_area_ha: "0", remaining_area_ha: h.area, can_open_season: h.area != null && Number(h.area) > 0,
+    open_season_blocked_reason: h.area == null ? "Chưa có diện tích đất của nông hộ." : Number(h.area) > 0 ? "" : "Hết diện tích để mở vụ.",
   }));
   return [...householdsOf(coop), ...extra];
 }

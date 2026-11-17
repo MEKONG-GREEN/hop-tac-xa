@@ -203,9 +203,13 @@ type consentStateDTO struct {
 
 type householdListItem struct {
 	householdDTO
-	Label            string `json:"label" pii:"true"`
-	MaskedPhone      string `json:"masked_phone" pii:"true"`
-	LabelUnavailable bool   `json:"label_unavailable"`
+	ActiveAreaHa            decimal.Decimal  `json:"active_area_ha"`
+	RemainingAreaHa         *decimal.Decimal `json:"remaining_area_ha"`
+	CanOpenSeason           bool             `json:"can_open_season"`
+	OpenSeasonBlockedReason string           `json:"open_season_blocked_reason"`
+	Label                   string           `json:"label" pii:"true"`
+	MaskedPhone             string           `json:"masked_phone" pii:"true"`
+	LabelUnavailable        bool             `json:"label_unavailable"`
 	// Consents: trạng thái đồng ý hiện tại theo mục đích (G-04, R-41/R-42).
 	Consents []consentStateDTO `json:"consents"`
 }
@@ -252,6 +256,8 @@ func (h Handler) listHouseholds(c *gin.Context) {
 	items := make([]householdListItem, 0, len(page.Items))
 	for _, it := range page.Items {
 		items = append(items, householdListItem{
+			ActiveAreaHa: it.ActiveAreaHa, RemainingAreaHa: it.Availability.Remaining,
+			CanOpenSeason: it.Availability.CanOpen, OpenSeasonBlockedReason: it.Availability.Reason,
 			householdDTO: toHouseholdDTO(it.Household), Label: it.Label, MaskedPhone: it.MaskedPhone, LabelUnavailable: it.LabelUnavailable,
 			Consents: consents[it.Ref],
 		})
