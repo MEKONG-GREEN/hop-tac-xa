@@ -1,10 +1,15 @@
+import 'dart:io';
+
+import 'package:agrigreen_htx/ui/providers.dart';
 import 'package:agrigreen_htx/ui/screens/access_blocked_screen.dart';
 import 'package:agrigreen_htx/ui/screens/data_consent_screen.dart';
 import 'package:agrigreen_htx/ui/screens/home_screen.dart';
 import 'package:agrigreen_htx/ui/screens/login_screen.dart';
 import 'package:agrigreen_mobile/ui/widgets/common.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 
 import 'support/test_env.dart';
 
@@ -45,6 +50,73 @@ void main() {
       await loginAndSetPin(tester, env);
       _expectBlocked(env, msgNoHtxRole);
       expect(find.byKey(const ValueKey('blocked-logout')), findsOneWidget);
+      await finish(tester);
+    },
+  );
+
+  testWidgets(
+    'bản đệm /v1/me cũ có roles: [] nhưng access token mới có htx_member '
+    '→ đăng nhập lại vào trang chủ, không kẹt ở màn chặn',
+    (tester) async {
+      // CSDL trên tệp: bản đệm `htx.me` còn lại sau khi đăng xuất.
+      final dir = Directory.systemTemp.createTempSync('htx_me_');
+      addTearDown(() {
+        try {
+          dir.deleteSync(recursive: true);
+        } on FileSystemException {
+          // Test trượt giữa chừng: CSDL còn mở, để lại thư mục tạm.
+        }
+      });
+      final env = TestEnv(
+        roles: const ['htx_member'],
+        opener: MemoryDbOpener(file: p.join(dir.path, 'app.db')),
+      )..seed();
+      final me = env.server.onGet!;
+      var revoked = true;
+      env.server.onGet = (path, query) async => path == '/v1/me' && revoked
+          ? {'roles': <String>[], 'org': null}
+          : me(path, query);
+
+      // CSDL trên tệp chạy I/O thật: cho các Future đó xong ngoài fake async.
+      Future<void> pumpIo() async {
+        for (var i = 0; i < 5; i++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 50)),
+          );
+          await settle(tester);
+        }
+      }
+
+      // Vai bị gỡ: token cũ còn htx_member nên vào app, lượt đồng bộ đầu ghi
+      // `roles: []` vào bản đệm → màn chặn.
+      await loginAndSetPin(tester, env);
+      await pumpIo();
+      final c = ProviderScope.containerOf(
+        tester.element(find.byType(AccessBlockedScreen)),
+      );
+      expect(find.text(msgNoHtxRole), findsOneWidget);
+      final cached = await tester.runAsync(
+        () => c.read(appControllerProvider).services!.profile.roles(),
+      );
+      expect(cached, isEmpty);
+
+      // Vai được cấp lại: đăng xuất, đăng nhập lại với token có htx_member;
+      // bản đệm vẫn còn `roles: []`.
+      revoked = false;
+      await tester.tap(find.byKey(const ValueKey('blocked-logout')));
+      await pumpIo();
+      expect(find.byType(LoginScreen), findsOneWidget);
+      await tester.tap(find.text('Đăng nhập'));
+      await pumpIo();
+
+      expect(find.byType(AccessBlockedScreen), findsNothing);
+      expect(find.byType(HomeScreen), findsOneWidget);
+      expect(find.text('Mở vụ hàng loạt'), findsOneWidget);
+
+      // Đóng CSDL trước khi xóa thư mục tạm.
+      await tester.runAsync(
+        () => c.read(appControllerProvider.notifier).lock(),
+      );
       await finish(tester);
     },
   );

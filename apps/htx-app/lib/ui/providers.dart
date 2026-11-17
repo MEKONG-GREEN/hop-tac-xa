@@ -164,8 +164,9 @@ class AppController extends Notifier<AppState> {
             onWiped: _onWiped,
           );
       // AH-303: Admin (chỉ dùng web) và tài khoản không có vai của App HTX →
-      // màn chặn; không hỏi đồng ý, không đồng bộ, không gắn kênh đẩy.
-      final mode = await services.profile.mode();
+      // màn chặn; không hỏi đồng ý, không đồng bộ, không gắn kênh đẩy. Bản đệm
+      // `/v1/me` cũ không giữ màn chặn khi token hiện tại đã có vai.
+      final mode = await services.profile.entryMode();
       if (mode.blocked) {
         _stopAutoSync();
         state = AppState(v, services: services, mode: mode);

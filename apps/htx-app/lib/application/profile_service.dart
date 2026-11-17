@@ -65,6 +65,20 @@ class ProfileService {
 
   Future<HtxMode> mode() async => modeFor(await roles());
 
+  /// Chế độ lúc vào app sau khi mở khóa (AH-303). Bản đệm `/v1/me` chỉ được
+  /// cập nhật qua lượt đồng bộ, mà màn chặn thì không đồng bộ: bản đệm cho ra
+  /// chế độ bị chặn nhưng access token hiện tại có vai App HTX (vai được cấp
+  /// lại rồi đăng nhập lại) → bỏ bản đệm, theo token; lượt đồng bộ kế tiếp tải
+  /// lại `/v1/me` và [refresh] chặn lại nếu máy chủ vẫn không cấp vai.
+  Future<HtxMode> entryMode() async {
+    final cached = await mode();
+    if (!cached.blocked) return cached;
+    final fromToken = modeFor(rolesFromJwt(await _token()));
+    if (fromToken.blocked) return cached;
+    await _db.setMeta(_meKey, null);
+    return fromToken;
+  }
+
   /// HTX của người dùng (`org.ref` của `/v1/me`) — quản lý HTX.
   Future<String?> cooperativeRef() async {
     final me = await _get(_meKey);

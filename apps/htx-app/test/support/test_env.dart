@@ -31,11 +31,14 @@ import 'package:pinenacl/x25519.dart' as nacl;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 /// CSDL SQLite trong bộ nhớ, chạy ngay trong isolate kiểm thử (không isolate
-/// phụ) nên dùng được trong `testWidgets` (fake async).
+/// phụ) nên dùng được trong `testWidgets` (fake async). Có [file] thì ghi vào
+/// tệp đó để dữ liệu còn lại sau khi đóng rồi mở lại (đăng xuất → đăng nhập).
 class MemoryDbOpener implements DbOpener {
-  MemoryDbOpener() {
+  MemoryDbOpener({this.file}) {
     sqfliteFfiInit();
   }
+
+  final String? file;
 
   @override
   Future<Database> open(
@@ -45,7 +48,7 @@ class MemoryDbOpener implements DbOpener {
     required OnDatabaseCreateFn onCreate,
     OnDatabaseVersionChangeFn? onUpgrade,
   }) => databaseFactoryFfiNoIsolate.openDatabase(
-    inMemoryDatabasePath,
+    file ?? inMemoryDatabasePath,
     options: OpenDatabaseOptions(
       version: version,
       onCreate: onCreate,
@@ -155,10 +158,14 @@ final Uint8List blankTilePng = img.encodePng(img.Image(width: 1, height: 1));
 
 /// Môi trường kiểm thử: máy chủ giả theo hợp đồng + mọi phụ thuộc nền tảng.
 class TestEnv {
-  TestEnv({List<String> roles = const ['farmer'], FakeServer? server})
-    : oidc = JwtOidc(roles),
-      roles = roles,
-      server = server ?? FakeServer() {
+  TestEnv({
+    List<String> roles = const ['farmer'],
+    FakeServer? server,
+    DbOpener? opener,
+  }) : oidc = JwtOidc(roles),
+       roles = roles,
+       server = server ?? FakeServer(),
+       opener = opener ?? MemoryDbOpener() {
     this.server.dataConsentApplies = _coopRoles.any(roles.contains);
   }
 
@@ -168,6 +175,9 @@ class TestEnv {
 
   final List<String> roles;
   final FakeServer server;
+
+  /// CSDL của app; mặc định trong bộ nhớ (mất khi đóng).
+  final DbOpener opener;
   final MemorySecureStore store = MemorySecureStore();
   final FakeClock clock = FakeClock(testNow);
   final MutableLocation location = MutableLocation();
@@ -195,7 +205,7 @@ class TestEnv {
     store: store,
     clock: clock,
     ids: UuidV7Generator(),
-    opener: MemoryDbOpener(),
+    opener: opener,
     dataDir: Directory('mem'),
     apiFactory: (_, _) => server,
     camera: camera,
