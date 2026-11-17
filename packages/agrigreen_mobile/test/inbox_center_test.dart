@@ -79,4 +79,13 @@ void main() {
       expect(DeepLink.parse('/cropcycle/calendars/c1'), isA<InboxLink>());
     },
   );
+
+  test(
+    'AH-303: deep link thu gom rơm (lịch thu gom, bảng kê) → màn thu gom',
+    () {
+      expect(DeepLink.parse('/htx/thu-gom'), const CollectionLink());
+      expect(DeepLink.parse('/htx/thu-gom/x'), const InboxLink());
+      expect(DeepLink.parse('/htx/khac'), const InboxLink());
+    },
+  );
 }

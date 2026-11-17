@@ -88,9 +88,9 @@ void main() {
   });
 
   testWidgets(
-    'HTX US-SEASON-02: quản lý mở vụ hàng loạt — thửa lỗi bỏ qua kèm lý do',
+    'HTX US-SEASON-02: Thành viên HTX mở vụ hàng loạt — thửa lỗi bỏ qua kèm lý do',
     (tester) async {
-      final env = TestEnv(roles: const ['coop_manager'])..seed();
+      final env = TestEnv(roles: const ['htx_member'])..seed();
       await loginToHome(tester, env);
       Map<String, Object?>? body;
       env.server.onPost = (path, b) async {

@@ -26,9 +26,7 @@ Future<void> _expectTitlesMatchTiles(
 }
 
 void main() {
-  testWidgets('Thành viên HTX: tiêu đề màn trùng nhãn ô lối tắt', (
-    tester,
-  ) async {
+  testWidgets('Nông dân: tiêu đề màn trùng nhãn ô lối tắt', (tester) async {
     await _expectTitlesMatchTiles(
       tester,
       const ['farmer'],
@@ -51,12 +49,29 @@ void main() {
       const [
         'Nông hộ',
         'Bản đồ lô ruộng',
-        'Mở vụ hàng loạt',
-        'Ghi nhật ký hộ',
-        'Nhật ký hàng loạt',
+        'Xem vụ và nhật ký hộ',
         'Duyệt nhật ký',
         'Thu gom rơm MKG',
         'Tổng quan',
+        'Tin tức',
+        'Hàng đợi đồng bộ',
+      ],
+    );
+  });
+
+  testWidgets('Thành viên HTX: tiêu đề màn trùng nhãn ô lối tắt', (
+    tester,
+  ) async {
+    await _expectTitlesMatchTiles(
+      tester,
+      const ['htx_member'],
+      const [
+        'Nông hộ',
+        'Bản đồ lô ruộng',
+        'Mở vụ hàng loạt',
+        'Ghi nhật ký hộ',
+        'Nhật ký hàng loạt',
+        'Khai sản lượng',
         'Tin tức',
         'Hàng đợi đồng bộ',
       ],

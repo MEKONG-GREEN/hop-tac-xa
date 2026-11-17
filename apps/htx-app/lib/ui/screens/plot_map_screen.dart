@@ -12,6 +12,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../domain/roles.dart';
 import '../providers.dart';
 import '../widgets.dart';
 
@@ -93,6 +94,11 @@ class _PlotMapScreenState extends ConsumerState<PlotMapScreen> {
   @override
   Widget build(BuildContext context) {
     final data = ref.watch(plotMapProvider);
+    // Thành viên HTX chỉ xem bản đồ (KHMV-FN-02 R); sửa ranh thửa giữ cho Đại
+    // diện HTX.
+    final edits = ref.watch(
+      appControllerProvider.select((s) => s.mode.editsBoundaries),
+    );
     Future<void> draw(RefRow? plot) async {
       await Navigator.of(context).push(
         MaterialPageRoute<void>(builder: (_) => htxBoundaryEditor(ref, plot)),
@@ -117,11 +123,13 @@ class _PlotMapScreenState extends ConsumerState<PlotMapScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => draw(null),
-        icon: const Icon(Icons.add_location_alt),
-        label: const Text('Vẽ lô mới', style: TextStyle(fontSize: 17)),
-      ),
+      floatingActionButton: edits
+          ? FloatingActionButton.extended(
+              onPressed: () => draw(null),
+              icon: const Icon(Icons.add_location_alt),
+              label: const Text('Vẽ lô mới', style: TextStyle(fontSize: 17)),
+            )
+          : null,
       // Giữ bản đồ khi làm mới (TileLayer bị tháo sẽ đóng nguồn tile).
       body: data.when(
         skipLoadingOnReload: true,
@@ -200,17 +208,21 @@ class _PlotMapScreenState extends ConsumerState<PlotMapScreen> {
                   padding: const EdgeInsets.fromLTRB(8, 8, 8, 88),
                   children: [
                     if (d.plots.isEmpty && d.localNew.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.all(16),
+                      Padding(
+                        padding: const EdgeInsets.all(16),
                         child: Text(
                           'Chưa có lô ruộng của HTX trên máy. Đồng bộ khi có '
-                          'mạng, hoặc bấm "Vẽ lô mới".',
-                          style: TextStyle(fontSize: 17),
+                          'mạng${edits ? ', hoặc bấm "Vẽ lô mới"' : ''}.',
+                          style: const TextStyle(fontSize: 17),
                         ),
                       ),
-                    for (final r in d.localNew) _LocalPlotCard(record: r),
+                    for (final r in d.localNew)
+                      _LocalPlotCard(record: r, confirms: edits),
                     for (final p in d.plots)
-                      _PlotCard(plot: p, onEdit: () => draw(p.row)),
+                      _PlotCard(
+                        plot: p,
+                        onEdit: edits ? () => draw(p.row) : null,
+                      ),
                   ],
                 ),
               ),
@@ -266,7 +278,9 @@ Widget htxBoundaryEditor(WidgetRef ref, RefRow? plot) {
 class _PlotCard extends ConsumerWidget {
   const _PlotCard({required this.plot, required this.onEdit});
   final MapPlot plot;
-  final VoidCallback onEdit;
+
+  /// Vẽ/sửa ranh giới; null → chỉ xem (ẩn nút sửa và "Xác nhận giữ nguyên").
+  final VoidCallback? onEdit;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -296,13 +310,14 @@ class _PlotCard extends ConsumerWidget {
                     ),
                   ),
                 ),
-                TextButton.icon(
-                  onPressed: onEdit,
-                  icon: const Icon(Icons.edit_location_alt),
-                  label: Text(
-                    p.ring == null ? 'Vẽ ranh giới' : 'Sửa ranh giới',
+                if (onEdit != null)
+                  TextButton.icon(
+                    onPressed: onEdit,
+                    icon: const Icon(Icons.edit_location_alt),
+                    label: Text(
+                      p.ring == null ? 'Vẽ ranh giới' : 'Sửa ranh giới',
+                    ),
                   ),
-                ),
               ],
             ),
             Wrap(
@@ -318,7 +333,9 @@ class _PlotCard extends ConsumerWidget {
                   Tag(st.state.label, color: _stateColor(st.state)),
               ],
             ),
-            if (st.canConfirm && st.record?.replacedBy == null)
+            if (onEdit != null &&
+                st.canConfirm &&
+                st.record?.replacedBy == null)
               Align(
                 alignment: Alignment.centerRight,
                 child: FilledButton.icon(
@@ -335,8 +352,11 @@ class _PlotCard extends ConsumerWidget {
 }
 
 class _LocalPlotCard extends ConsumerWidget {
-  const _LocalPlotCard({required this.record});
+  const _LocalPlotCard({required this.record, required this.confirms});
   final OutboxRecord record;
+
+  /// Hiện "Xác nhận giữ nguyên" (vai được sửa ranh thửa).
+  final bool confirms;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -360,7 +380,7 @@ class _LocalPlotCard extends ConsumerWidget {
                 st.detail!,
                 style: const TextStyle(color: AgColors.mute, fontSize: 14),
               ),
-            if (st.canConfirm && record.replacedBy == null)
+            if (confirms && st.canConfirm && record.replacedBy == null)
               Align(
                 alignment: Alignment.centerRight,
                 child: FilledButton.icon(

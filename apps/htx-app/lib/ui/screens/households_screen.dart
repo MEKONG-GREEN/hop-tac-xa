@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/manager_service.dart';
+import '../../domain/role_matrix.dart';
+import '../../domain/roles.dart';
 import '../providers.dart';
 import 'plots_screen.dart';
 
@@ -11,8 +13,9 @@ final _householdsProvider = FutureProvider.autoDispose<List<HouseholdItem>>(
   (ref) => servicesOf(ref).manager.households(),
 );
 
-/// Nông hộ của HTX (quản lý HTX). Chạm → lô của hộ → mở vụ hộ / ghi nhật ký
-/// hộ (HTX US-SEASON-02, US-LOG-02); biểu tượng điện thoại → gọi nhanh (HTX
+/// Nông hộ của HTX (Đại diện HTX, Thành viên HTX — chỉ xem, FN-04). Chạm → lô
+/// của hộ → mở vụ hộ / ghi nhật ký hộ theo ma trận (HTX US-SEASON-02,
+/// US-LOG-02); biểu tượng điện thoại → gọi nhanh, chỉ Đại diện HTX (HTX
 /// US-HH-03, SĐT đọc từ máy chủ lúc bấm, không lưu trên máy).
 class HouseholdsScreen extends ConsumerStatefulWidget {
   const HouseholdsScreen({super.key});
@@ -38,7 +41,9 @@ class _HouseholdsScreenState extends ConsumerState<HouseholdsScreen> {
   @override
   Widget build(BuildContext context) {
     final list = ref.watch(_householdsProvider);
-    final canCall = ref.services.manager.householdCallAvailable;
+    final mode = ref.watch(appControllerProvider.select((s) => s.mode));
+    final canCall =
+        mode.callsHouseholds && ref.services.manager.householdCallAvailable;
     return Scaffold(
       appBar: AppBar(title: const Text('Nông hộ')),
       body: list.when(
@@ -124,6 +129,9 @@ class HouseholdPlotsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final rows = ref.watch(_hhPlotsProvider(household.ref));
+    final mode = ref.watch(appControllerProvider.select((s) => s.mode));
+    final canOpen = mode.can(HtxFn.season, HtxAction.create);
+    final canLog = mode.can(HtxFn.farmLog, HtxAction.create);
     return Scaffold(
       appBar: AppBar(title: Text(household.label)),
       body: rows.when(
@@ -139,8 +147,9 @@ class HouseholdPlotsScreen extends ConsumerWidget {
                   title: Text(r.plot.title),
                   subtitle: Text(
                     r.season == null
-                        ? 'Chưa mở vụ — chạm để mở vụ hộ'
-                        : 'Vụ ${r.season!.seasonCode} ${r.season!.seasonYear} — chạm để ghi nhật ký hộ',
+                        ? 'Chưa mở vụ${canOpen ? ' — chạm để mở vụ hộ' : ''}'
+                        : 'Vụ ${r.season!.seasonCode} ${r.season!.seasonYear}'
+                              '${canLog ? ' — chạm để ghi nhật ký hộ' : ''}',
                   ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.of(context)

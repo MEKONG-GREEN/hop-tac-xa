@@ -3,6 +3,7 @@ import 'package:agrigreen_mobile/ui/widgets/common.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../domain/role_matrix.dart';
 import '../../domain/roles.dart';
 import '../navigation.dart';
 import '../providers.dart';
@@ -23,7 +24,8 @@ import 'staff_screen.dart';
 import 'support_screen.dart';
 import 'sync_queue_screen.dart';
 
-/// Trang chủ theo vai (HTX US-LOGIN-01 AC-1): nông dân hoặc quản lý HTX.
+/// Trang chủ theo vai (HTX US-LOGIN-01 AC-1, FN-05): nông dân, Đại diện HTX
+/// hoặc Thành viên HTX.
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
@@ -93,63 +95,111 @@ class HomeScreen extends ConsumerWidget {
         ),
         _queueTile(s, () => open(const SyncQueueScreen())),
       ],
-      HtxMode.manager => [
-        BigTile(
-          icon: Icons.groups,
-          label: 'Nông hộ',
-          onTap: () => open(const HouseholdsScreen()),
-        ),
-        BigTile(
-          icon: Icons.map_outlined,
-          label: 'Bản đồ lô ruộng',
-          onTap: () => open(const PlotMapScreen()),
-        ),
-        BigTile(
-          icon: Icons.playlist_add,
-          label: 'Mở vụ hàng loạt',
-          onTap: () => open(const BulkOpenScreen()),
-        ),
-        BigTile(
-          icon: Icons.edit_note,
-          label: 'Ghi nhật ký hộ',
-          onTap: () => open(const PlotsScreen(manager: true)),
-        ),
-        BigTile(
-          icon: Icons.library_add_check_outlined,
-          label: 'Nhật ký hàng loạt',
-          onTap: () => open(const BatchLogScreen()),
-        ),
-        BigTile(
-          icon: Icons.fact_check_outlined,
-          label: 'Duyệt nhật ký',
-          badge: (s?.reviewPending ?? 0) > 0 ? '${s!.reviewPending}' : null,
-          onTap: () => open(const ReviewScreen()),
-        ),
-        BigTile(
-          icon: Icons.agriculture,
-          label: 'Thu gom rơm MKG',
-          onTap: () => open(const CollectionScreen()),
-        ),
-        BigTile(
-          icon: Icons.bar_chart,
-          label: 'Tổng quan',
-          onTap: () => open(const DashboardScreen()),
-        ),
-        BigTile(
-          icon: Icons.newspaper,
-          label: 'Tin tức',
-          onTap: () => open(const NewsScreen()),
-        ),
-        _queueTile(s, () => open(const SyncQueueScreen())),
+      // Đại diện HTX và Thành viên HTX: một danh sách ô theo thứ tự, lọc theo
+      // ma trận quyền (FN-05) — không rải điều kiện theo vai.
+      HtxMode.manager || HtxMode.member => [
+        for (final (screen, tile) in <(HtxScreen, Widget)>[
+          (
+            HtxScreen.households,
+            BigTile(
+              icon: Icons.groups,
+              label: 'Nông hộ',
+              onTap: () => open(const HouseholdsScreen()),
+            ),
+          ),
+          (
+            HtxScreen.plotMap,
+            BigTile(
+              icon: Icons.map_outlined,
+              label: 'Bản đồ lô ruộng',
+              onTap: () => open(const PlotMapScreen()),
+            ),
+          ),
+          (
+            HtxScreen.bulkOpen,
+            BigTile(
+              icon: Icons.playlist_add,
+              label: 'Mở vụ hàng loạt',
+              onTap: () => open(const BulkOpenScreen()),
+            ),
+          ),
+          (
+            HtxScreen.householdLogs,
+            BigTile(
+              icon: Icons.edit_note,
+              label: mode.can(HtxFn.farmLog, HtxAction.create)
+                  ? titleWriteHouseholdLogs
+                  : titleViewHouseholdLogs,
+              onTap: () => open(const PlotsScreen(manager: true)),
+            ),
+          ),
+          (
+            HtxScreen.batchLog,
+            BigTile(
+              icon: Icons.library_add_check_outlined,
+              label: 'Nhật ký hàng loạt',
+              onTap: () => open(const BatchLogScreen()),
+            ),
+          ),
+          (
+            HtxScreen.harvest,
+            BigTile(
+              icon: Icons.scale,
+              label: 'Khai sản lượng',
+              onTap: () => open(const HarvestScreen()),
+            ),
+          ),
+          (
+            HtxScreen.review,
+            BigTile(
+              icon: Icons.fact_check_outlined,
+              label: 'Duyệt nhật ký',
+              badge: (s?.reviewPending ?? 0) > 0 ? '${s!.reviewPending}' : null,
+              onTap: () => open(const ReviewScreen()),
+            ),
+          ),
+          (
+            HtxScreen.collection,
+            BigTile(
+              icon: Icons.agriculture,
+              label: 'Thu gom rơm MKG',
+              onTap: () => open(const CollectionScreen()),
+            ),
+          ),
+          (
+            HtxScreen.dashboard,
+            BigTile(
+              icon: Icons.bar_chart,
+              label: 'Tổng quan',
+              onTap: () => open(const DashboardScreen()),
+            ),
+          ),
+          (
+            HtxScreen.news,
+            BigTile(
+              icon: Icons.newspaper,
+              label: 'Tin tức',
+              onTap: () => open(const NewsScreen()),
+            ),
+          ),
+          (
+            HtxScreen.syncQueue,
+            _queueTile(s, () => open(const SyncQueueScreen())),
+          ),
+        ])
+          if (mode.canView(screen)) tile,
       ],
-      HtxMode.none => [_queueTile(s, () => open(const SyncQueueScreen()))],
+      // _AuthGate hiện màn chặn cho hai chế độ này, không vào trang chủ.
+      HtxMode.admin || HtxMode.none => const <Widget>[],
     };
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          mode == HtxMode.manager ? 'AgriGreen HTX · Quản lý' : 'AgriGreen HTX',
-        ),
+        title: Text(switch (mode) {
+          HtxMode.manager => 'AgriGreen HTX · Quản lý',
+          HtxMode.member => 'AgriGreen HTX · Thành viên HTX',
+          _ => 'AgriGreen HTX',
+        }),
         actions: [
           IconButton(
             tooltip: 'Thông báo',
@@ -177,18 +227,6 @@ class HomeScreen extends ConsumerWidget {
         child: ListView(
           padding: const EdgeInsets.all(12),
           children: [
-            if (mode == HtxMode.none)
-              const Card(
-                color: AgColors.amberBg,
-                child: Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text(
-                    'Tài khoản chưa có vai Nông dân hoặc Quản lý HTX. '
-                    'Đồng bộ khi có mạng, hoặc liên hệ quản lý HTX.',
-                    style: TextStyle(fontSize: 16),
-                  ),
-                ),
-              ),
             summary.when(
               data: (s) => SyncCard(summary: s),
               loading: () => const Card(

@@ -163,6 +163,15 @@ class AppController extends Notifier<AppState> {
             accessToken: ref.read(sessionServiceProvider).accessToken,
             onWiped: _onWiped,
           );
+      // AH-303: Admin (chỉ dùng web) và tài khoản không có vai của App HTX →
+      // màn chặn; không hỏi đồng ý, không đồng bộ, không gắn kênh đẩy. Bản đệm
+      // `/v1/me` cũ không giữ màn chặn khi token hiện tại đã có vai.
+      final mode = await services.profile.entryMode();
+      if (mode.blocked) {
+        _stopAutoSync();
+        state = AppState(v, services: services, mode: mode);
+        return;
+      }
       // AH-23: chưa đồng ý thu thập dữ liệu thì chưa bật đồng bộ, chưa vào app.
       final consent = await services.dataConsent.check();
       if (!consent.isOk) {
@@ -205,6 +214,9 @@ class AppController extends Notifier<AppState> {
   Future<void> setPin(String pin, String confirm) =>
       _busy(() => _flow.setPin(pin, confirm));
   Future<void> unlock(String pin) => _busy(() => _flow.unlock(pin));
+
+  /// "Đăng xuất" ở màn chặn (Admin, tài khoản không có vai của App HTX).
+  Future<void> signOut() => _busy(_flow.signOut);
 
   /// "Đồng ý" ở màn Đồng ý thu thập dữ liệu: ghi bằng chứng rồi vào ứng dụng.
   Future<void> acceptDataConsent() async {
@@ -287,7 +299,12 @@ class AppController extends Notifier<AppState> {
     final s = state.services;
     if (s == null) return;
     final m = await s.profile.mode();
-    if (m != state.mode) state = state.copyWith(mode: m);
+    if (m == state.mode) return;
+    if (m.blocked) {
+      _stopAutoSync();
+      _push.detach();
+    }
+    state = state.copyWith(mode: m);
   }
 
   void _onWiped() {

@@ -76,10 +76,10 @@ void main() {
   );
 
   testWidgets(
-    'HTX US-SEASON-02 (hủy vụ): quản lý hủy vụ mở nhầm với lý do ≥ 10 ký tự → '
-    'cancel: true; lô trở lại "Chưa mở vụ" và mở vụ lại được',
+    'HTX US-SEASON-02 (hủy vụ): Thành viên HTX hủy vụ mở nhầm với lý do ≥ 10 '
+    'ký tự → cancel: true; lô trở lại "Chưa mở vụ" và mở vụ lại được',
     (tester) async {
-      final env = TestEnv(roles: const ['coop_manager'])..seed(season: true);
+      final env = TestEnv(roles: const ['htx_member'])..seed(season: true);
       final s = await loginToHome(tester, env);
       await _openPlot(tester, manager: true);
       await tapText(tester, 'Hủy vụ');

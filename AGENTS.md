@@ -19,6 +19,7 @@ Repo này tách từ Agrigreen_demo_v2 (xem [README.md](README.md#nguồn-gốc)
 |---|---|
 | `**/module.yaml`, `internal/shared/modreg/*_gen.go` | `go run ./tools/modgen` (kiểm: `-check`) |
 | `apps/web-htx/src/api/generated/*`, mock/OpenAPI gộp của web | `npm run gen:api` trong `apps/web-htx` (kiểm: `npm run check:api`) |
+| `apps/htx-app/lib/domain/generated/htx_roles.dart` (ma trận quyền cho app) | `npm run gen:modules` trong `apps/web-htx`, hoặc `node scripts/gen-role-matrix.mjs` ở gốc repo (kiểm: `npm run check:api`) |
 
 ## Migration
 

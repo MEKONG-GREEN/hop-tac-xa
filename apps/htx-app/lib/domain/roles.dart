@@ -1,28 +1,134 @@
 import 'dart:convert';
 
-/// Vai của App HTX (g2-conventions §5). Quyền thật kiểm ở backend (R-55);
-/// app chỉ chọn trang chủ và ẩn/hiện chức năng theo vai.
+import 'role_matrix.dart';
+
+/// Vai của App HTX (g2-conventions §5, docs/conventions/vai-tro-app-htx.md).
+/// Quyền thật kiểm ở backend (R-55, TECH-01); app chỉ chọn trang chủ và
+/// ẩn/hiện chức năng theo vai.
 abstract final class HtxRole {
   static const farmer = 'farmer';
+
+  /// Admin của App HTX — chỉ dùng web.
+  static const admin = 'platform_admin';
+
+  /// Đại diện HTX.
   static const coopManager = 'coop_manager';
+
+  /// Thành viên HTX (AH-272).
+  static const htxMember = 'htx_member';
 }
 
 enum HtxMode {
-  /// Nông dân: ruộng của hộ mình.
+  /// Nông dân: ruộng của hộ mình (ngoài ma trận; AH-309 sẽ gỡ).
   farmer,
 
-  /// Quản lý HTX (bộ chức năng di động).
+  /// Đại diện HTX: chỉ xem dữ liệu ma trận (vụ, nhật ký, sản lượng), giữ các
+  /// chức năng ngoài ma trận đang có (duyệt nhật ký, thu gom rơm…).
   manager,
 
-  /// Tài khoản không có vai của App HTX.
+  /// Thành viên HTX: mở vụ, ghi nhật ký, khai sản lượng cho HTX mình.
+  member,
+
+  /// Admin: chỉ dùng web — app hiện màn chặn, không đồng bộ.
+  admin,
+
+  /// Tài khoản không có vai nào của App HTX — màn chặn, không đồng bộ.
   none,
 }
 
+/// Chế độ theo vai có hiệu lực của ma trận (Admin > Đại diện HTX > Thành viên
+/// HTX); không có vai ma trận thì nông dân nếu có vai `farmer`.
 HtxMode modeFor(Iterable<String> roles) {
-  final r = roles.toSet();
-  if (r.contains(HtxRole.coopManager)) return HtxMode.manager;
-  if (r.contains(HtxRole.farmer)) return HtxMode.farmer;
-  return HtxMode.none;
+  switch (htxRoleMatrix.effectiveRole(roles)) {
+    case HtxRole.admin:
+      return HtxMode.admin;
+    case HtxRole.coopManager:
+      return HtxMode.manager;
+    case HtxRole.htxMember:
+      return HtxMode.member;
+  }
+  return roles.contains(HtxRole.farmer) ? HtxMode.farmer : HtxMode.none;
+}
+
+/// Các màn của app, để quyết định màn nào được mở (trang chủ, liên kết từ
+/// thông báo).
+enum HtxScreen {
+  notifications,
+  news,
+  syncQueue,
+  farmerPlots,
+  farmLog,
+  support,
+  staff,
+  households,
+  plotMap,
+  bulkOpen,
+  householdLogs,
+  batchLog,
+  harvest,
+  plotDetail,
+  farmLogDetail,
+  review,
+  collection,
+  dashboard,
+}
+
+/// Quy tắc ẩn/hiện của app theo chế độ — cùng ma trận quyền với máy chủ.
+extension HtxModeAccess on HtxMode {
+  /// Vai realm của ma trận ứng với chế độ; null với nông dân và `none`.
+  String? get matrixRole => switch (this) {
+    HtxMode.admin => HtxRole.admin,
+    HtxMode.manager => HtxRole.coopManager,
+    HtxMode.member => HtxRole.htxMember,
+    HtxMode.farmer || HtxMode.none => null,
+  };
+
+  /// Admin và tài khoản không có vai: không vào được màn nghiệp vụ nào.
+  bool get blocked => this == HtxMode.admin || this == HtxMode.none;
+
+  /// Ma trận cho thao tác [action] với chức năng [fn] không.
+  bool can(String fn, HtxAction action) => switch (this) {
+    // Nông dân ngoài ma trận: giữ quyền như hiện tại.
+    HtxMode.farmer => true,
+    HtxMode.none => false,
+    _ => htxRoleMatrix.can(matrixRole!, fn, action),
+  };
+
+  bool _matrix(String fn, HtxAction action) =>
+      matrixRole != null && can(fn, action);
+
+  bool canView(HtxScreen s) {
+    if (blocked) return false;
+    final farmer = this == HtxMode.farmer;
+    return switch (s) {
+      HtxScreen.notifications || HtxScreen.news || HtxScreen.syncQueue => true,
+      HtxScreen.farmerPlots ||
+      HtxScreen.farmLog ||
+      HtxScreen.support ||
+      HtxScreen.staff => farmer,
+      HtxScreen.households => _matrix(HtxFn.households, HtxAction.read),
+      HtxScreen.plotMap => _matrix(HtxFn.plotsAndArea, HtxAction.read),
+      HtxScreen.bulkOpen => _matrix(HtxFn.season, HtxAction.create),
+      HtxScreen.householdLogs => _matrix(HtxFn.seasonView, HtxAction.read),
+      HtxScreen.batchLog => _matrix(HtxFn.farmLog, HtxAction.create),
+      HtxScreen.harvest => farmer || can(HtxFn.harvest, HtxAction.create),
+      HtxScreen.plotDetail => farmer || can(HtxFn.seasonView, HtxAction.read),
+      HtxScreen.farmLogDetail => farmer || can(HtxFn.farmLog, HtxAction.read),
+      // Ngoài ma trận: giữ quyền đang có của Đại diện HTX (quyết định 17/11,
+      // PO quyết định sau theo bảng của AH-39).
+      HtxScreen.review ||
+      HtxScreen.collection ||
+      HtxScreen.dashboard => this == HtxMode.manager,
+    };
+  }
+
+  /// Sửa ranh thửa: ngoài 9 dòng KHMV, máy chủ chưa đổi quyền này — giữ cho
+  /// Đại diện HTX.
+  bool get editsBoundaries => this == HtxMode.manager;
+
+  /// Gọi nông hộ (US-HH-03) ngoài ma trận: máy chủ chỉ trả số điện thoại cho
+  /// vai ghi nông hộ (`householdWriterRoles`, không có `htx_member`).
+  bool get callsHouseholds => this == HtxMode.manager;
 }
 
 /// Vai trong access token (claim `realm_access.roles` của Keycloak). Chỉ đọc

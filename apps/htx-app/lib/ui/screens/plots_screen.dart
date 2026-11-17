@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/crop_service.dart';
 import '../../domain/cropcycle.dart';
+import '../../domain/role_matrix.dart';
+import '../../domain/roles.dart';
 import '../providers.dart';
 import '../widgets.dart';
 import 'farm_log_screen.dart';
@@ -26,7 +28,14 @@ final plotRowsProvider = FutureProvider.autoDispose<List<PlotRow>>((ref) async {
   ];
 });
 
-/// "Ruộng của tôi" (nông dân) / thửa của HTX (quản lý — ghi nhật ký hộ).
+/// Tiêu đề màn thửa của HTX (và nhãn ô trên trang chủ) khi được ghi nhật ký.
+const titleWriteHouseholdLogs = 'Ghi nhật ký hộ';
+
+/// Tiêu đề màn thửa của HTX khi chỉ được xem (Đại diện HTX, ma trận KHMV).
+const titleViewHouseholdLogs = 'Xem vụ và nhật ký hộ';
+
+/// "Ruộng của tôi" (nông dân) / thửa của HTX (Thành viên HTX ghi nhật ký hộ;
+/// Đại diện HTX chỉ xem).
 class PlotsScreen extends ConsumerWidget {
   const PlotsScreen({super.key, this.manager = false});
   final bool manager;
@@ -34,8 +43,14 @@ class PlotsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final rows = ref.watch(plotRowsProvider);
+    final mode = ref.watch(appControllerProvider.select((s) => s.mode));
+    final title = !manager
+        ? 'Ruộng của tôi'
+        : mode.can(HtxFn.farmLog, HtxAction.create)
+        ? titleWriteHouseholdLogs
+        : titleViewHouseholdLogs;
     return Scaffold(
-      appBar: AppBar(title: Text(manager ? 'Ghi nhật ký hộ' : 'Ruộng của tôi')),
+      appBar: AppBar(title: Text(title)),
       body: rows.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Lỗi: $e')),
@@ -127,7 +142,8 @@ final plotDetailProvider = FutureProvider.autoDispose
     });
 
 /// Chi tiết lô: vụ đang mở, tiến độ SOP, nhật ký; mở vụ / ghi nhật ký / khai
-/// sản lượng.
+/// sản lượng / sửa, hủy vụ — mỗi nút theo ma trận quyền (FN-05), phần xem
+/// giữ nguyên cho vai chỉ xem.
 class PlotDetailScreen extends ConsumerWidget {
   const PlotDetailScreen({super.key, required this.plotRef});
   final String plotRef;
@@ -135,6 +151,13 @@ class PlotDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final d = ref.watch(plotDetailProvider(plotRef));
+    final mode = ref.watch(appControllerProvider.select((s) => s.mode));
+    final canOpen = mode.can(HtxFn.season, HtxAction.create);
+    final canEdit = mode.can(HtxFn.season, HtxAction.update);
+    final canCancel = mode.can(HtxFn.season, HtxAction.delete);
+    final canLog = mode.can(HtxFn.farmLog, HtxAction.create);
+    final canSupplement = mode.can(HtxFn.farmLog, HtxAction.update);
+    final canHarvest = mode.can(HtxFn.harvest, HtxAction.create);
     void open(Widget w) =>
         Navigator.of(context)
             .push(MaterialPageRoute<void>(builder: (_) => w))
@@ -202,67 +225,78 @@ class PlotDetailScreen extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 8),
-              if (se == null)
-                FilledButton.icon(
-                  onPressed: () => open(OpenSeasonScreen(plotRef: d.plot.ref)),
-                  icon: const Icon(Icons.add_circle_outline),
-                  label: const Text('Mở vụ mới'),
-                )
-              else ...[
-                FilledButton.icon(
-                  onPressed: () => open(FarmLogScreen(seasonRef: se.seasonRef)),
-                  icon: const Icon(Icons.edit_note),
-                  label: const Text('Ghi nhật ký'),
-                ),
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: d.harvestQueued
-                      ? null
-                      : () => open(HarvestScreen(seasonRef: se.seasonRef)),
-                  icon: const Icon(Icons.scale),
-                  label: Text(
-                    d.harvestQueued
-                        ? 'Đã khai sản lượng — chờ đồng bộ'
-                        : 'Khai sản lượng',
+              if (se == null) ...[
+                if (canOpen)
+                  FilledButton.icon(
+                    onPressed: () =>
+                        open(OpenSeasonScreen(plotRef: d.plot.ref)),
+                    icon: const Icon(Icons.add_circle_outline),
+                    label: const Text('Mở vụ mới'),
                   ),
-                ),
-                if (d.harvestBlock != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text(
-                      d.harvestBlock!,
-                      style: const TextStyle(color: AgColors.mute),
+              ] else ...[
+                if (canLog) ...[
+                  FilledButton.icon(
+                    onPressed: () =>
+                        open(FarmLogScreen(seasonRef: se.seasonRef)),
+                    icon: const Icon(Icons.edit_note),
+                    label: const Text('Ghi nhật ký'),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                if (canHarvest) ...[
+                  OutlinedButton.icon(
+                    onPressed: d.harvestQueued
+                        ? null
+                        : () => open(HarvestScreen(seasonRef: se.seasonRef)),
+                    icon: const Icon(Icons.scale),
+                    label: Text(
+                      d.harvestQueued
+                          ? 'Đã khai sản lượng — chờ đồng bộ'
+                          : 'Khai sản lượng',
                     ),
                   ),
+                  if (d.harvestBlock != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        d.harvestBlock!,
+                        style: const TextStyle(color: AgColors.mute),
+                      ),
+                    ),
+                ],
                 // Sửa / hủy vụ mở nhầm (bản ghi bù, lý do ≥ 10 ký tự) — chỉ
                 // khi chưa khai sản lượng (máy chủ: cropcycle.season_state).
-                if (!d.harvestQueued && se.harvestId == null) ...[
+                if (!d.harvestQueued &&
+                    se.harvestId == null &&
+                    (canEdit || canCancel)) ...[
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () =>
-                              open(SeasonEditScreen(seasonRef: se.seasonRef)),
-                          icon: const Icon(Icons.edit_calendar),
-                          label: const Text('Sửa vụ'),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AgColors.red,
+                      if (canEdit)
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () =>
+                                open(SeasonEditScreen(seasonRef: se.seasonRef)),
+                            icon: const Icon(Icons.edit_calendar),
+                            label: const Text('Sửa vụ'),
                           ),
-                          onPressed: () async {
-                            if (await confirmCancelSeason(context, ref, se)) {
-                              ref.invalidate(plotDetailProvider(plotRef));
-                            }
-                          },
-                          icon: const Icon(Icons.cancel_outlined),
-                          label: const Text('Hủy vụ'),
                         ),
-                      ),
+                      if (canEdit && canCancel) const SizedBox(width: 8),
+                      if (canCancel)
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AgColors.red,
+                            ),
+                            onPressed: () async {
+                              if (await confirmCancelSeason(context, ref, se)) {
+                                ref.invalidate(plotDetailProvider(plotRef));
+                              }
+                            },
+                            icon: const Icon(Icons.cancel_outlined),
+                            label: const Text('Hủy vụ'),
+                          ),
+                        ),
                     ],
                   ),
                 ],
@@ -273,7 +307,8 @@ class PlotDetailScreen extends ConsumerWidget {
                   'Nhật ký canh tác',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
-              for (final l in d.logs) LogCard(entry: l, onSupplement: open),
+              for (final l in d.logs)
+                LogCard(entry: l, onSupplement: canSupplement ? open : null),
             ],
           );
         },
@@ -285,11 +320,14 @@ class PlotDetailScreen extends ConsumerWidget {
 class LogCard extends StatelessWidget {
   const LogCard({super.key, required this.entry, required this.onSupplement});
   final LogEntry entry;
-  final void Function(Widget) onSupplement;
+
+  /// Mở màn "Bổ sung"; null → ẩn nút (vai không được sửa nhật ký).
+  final void Function(Widget)? onSupplement;
 
   @override
   Widget build(BuildContext context) {
     final v = entry.view;
+    final supplement = onSupplement;
     final act = FarmActivity.parse(v.activityCode);
     final loc = locationLabel(v.locationStatus, v.gpsSource);
     return Card(
@@ -346,11 +384,13 @@ class LogCard extends StatelessWidget {
                 'Quản lý HTX: ${v.reviewNote}',
                 style: const TextStyle(color: AgColors.red),
               ),
-            if (v.status == 'needs_supplement' && entry.local == null)
+            if (supplement != null &&
+                v.status == 'needs_supplement' &&
+                entry.local == null)
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton.icon(
-                  onPressed: () => onSupplement(SupplementScreen(log: v)),
+                  onPressed: () => supplement(SupplementScreen(log: v)),
                   icon: const Icon(Icons.edit),
                   label: const Text('Bổ sung'),
                 ),

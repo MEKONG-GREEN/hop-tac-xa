@@ -3,7 +3,9 @@ import 'package:agrigreen_mobile/ui/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../domain/roles.dart';
 import 'providers.dart';
+import 'screens/access_blocked_screen.dart';
 import 'screens/data_consent_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
@@ -30,6 +32,19 @@ class _AuthGate extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final st = ref.watch(appControllerProvider);
+    // Vai bị gỡ giữa phiên (lượt đồng bộ tải /v1/me mới): trang gốc đổi sang
+    // màn chặn, nên đóng mọi màn đã mở đè lên để không còn màn nghiệp vụ nào.
+    // Cùng điều kiện với nhánh AccessBlockedScreen bên dưới.
+    ref.listen(
+      appControllerProvider.select(
+        (s) => s.services != null && s.consent == null && s.mode.blocked,
+      ),
+      (was, now) {
+        if (now && was == false) {
+          Navigator.of(context).popUntil((r) => r.isFirst);
+        }
+      },
+    );
     return switch (st.view.stage) {
       AuthStage.loading => const Scaffold(
         body: Center(child: CircularProgressIndicator()),
@@ -42,6 +57,8 @@ class _AuthGate extends ConsumerWidget {
             ? const LoginScreen()
             : st.consent != null
             ? const DataConsentScreen()
+            : st.mode.blocked
+            ? const AccessBlockedScreen()
             : const HomeScreen(),
     };
   }

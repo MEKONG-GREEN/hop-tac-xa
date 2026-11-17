@@ -31,11 +31,14 @@ import 'package:pinenacl/x25519.dart' as nacl;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 /// CSDL SQLite trong bộ nhớ, chạy ngay trong isolate kiểm thử (không isolate
-/// phụ) nên dùng được trong `testWidgets` (fake async).
+/// phụ) nên dùng được trong `testWidgets` (fake async). Có [file] thì ghi vào
+/// tệp đó để dữ liệu còn lại sau khi đóng rồi mở lại (đăng xuất → đăng nhập).
 class MemoryDbOpener implements DbOpener {
-  MemoryDbOpener() {
+  MemoryDbOpener({this.file}) {
     sqfliteFfiInit();
   }
+
+  final String? file;
 
   @override
   Future<Database> open(
@@ -45,7 +48,7 @@ class MemoryDbOpener implements DbOpener {
     required OnDatabaseCreateFn onCreate,
     OnDatabaseVersionChangeFn? onUpgrade,
   }) => databaseFactoryFfiNoIsolate.openDatabase(
-    inMemoryDatabasePath,
+    file ?? inMemoryDatabasePath,
     options: OpenDatabaseOptions(
       version: version,
       onCreate: onCreate,
@@ -92,7 +95,10 @@ String fakeJwt(List<String> roles) {
 
 class JwtOidc implements OidcClient {
   JwtOidc(this.roles);
-  final List<String> roles;
+
+  /// Vai của token cấp ở lần đăng nhập kế tiếp; test đổi để giả vai được cấp
+  /// hoặc gỡ giữa hai lần đăng nhập.
+  List<String> roles;
   int signIns = 0;
 
   @override
@@ -155,15 +161,26 @@ final Uint8List blankTilePng = img.encodePng(img.Image(width: 1, height: 1));
 
 /// Môi trường kiểm thử: máy chủ giả theo hợp đồng + mọi phụ thuộc nền tảng.
 class TestEnv {
-  TestEnv({List<String> roles = const ['farmer'], FakeServer? server})
-    : oidc = JwtOidc(roles),
-      roles = roles,
-      server = server ?? FakeServer() {
-    this.server.dataConsentApplies = roles.contains('coop_manager');
+  TestEnv({
+    List<String> roles = const ['farmer'],
+    FakeServer? server,
+    DbOpener? opener,
+  }) : oidc = JwtOidc(roles),
+       roles = roles,
+       server = server ?? FakeServer(),
+       opener = opener ?? MemoryDbOpener() {
+    this.server.dataConsentApplies = _coopRoles.any(roles.contains);
   }
+
+  /// Vai có HTX gắn với tài khoản (`org` của `/v1/me`), áp đồng ý thu thập
+  /// dữ liệu (AH-23, AH-39).
+  static const _coopRoles = ['coop_manager', 'htx_member'];
 
   final List<String> roles;
   final FakeServer server;
+
+  /// CSDL của app; mặc định trong bộ nhớ (mất khi đóng).
+  final DbOpener opener;
   final MemorySecureStore store = MemorySecureStore();
   final FakeClock clock = FakeClock(testNow);
   final MutableLocation location = MutableLocation();
@@ -191,7 +208,7 @@ class TestEnv {
     store: store,
     clock: clock,
     ids: UuidV7Generator(),
-    opener: MemoryDbOpener(),
+    opener: opener,
     dataDir: Directory('mem'),
     apiFactory: (_, _) => server,
     camera: camera,
@@ -316,7 +333,7 @@ class TestEnv {
     server.onGet = (path, query) async => switch (path) {
       '/v1/me' => {
         'roles': roles,
-        'org': roles.contains('coop_manager')
+        'org': _coopRoles.any(roles.contains)
             ? {'ref': coopRef, 'name': 'HTX Tân Phú', 'kind': 'cooperative'}
             : null,
       },
@@ -384,8 +401,9 @@ Widget appUnderTest(TestEnv env) => ProviderScope(
   child: const HtxApp(),
 );
 
-/// Đăng nhập (OIDC giả) → tạo PIN → trang chủ; đợi lượt đồng bộ đầu.
-Future<HtxServices> loginToHome(WidgetTester tester, TestEnv env) async {
+/// Đăng nhập (OIDC giả) → tạo PIN, dừng ở màn đầu tiên sau khi mở khóa (đồng
+/// ý dữ liệu, màn chặn hoặc trang chủ).
+Future<void> loginAndSetPin(WidgetTester tester, TestEnv env) async {
   await tester.pumpWidget(appUnderTest(env));
   await settle(tester);
   await tester.tap(find.text('Đăng nhập'));
@@ -398,6 +416,11 @@ Future<HtxServices> loginToHome(WidgetTester tester, TestEnv env) async {
     await settle(tester, 10);
   }
   await settle(tester, 30);
+}
+
+/// Đăng nhập (OIDC giả) → tạo PIN → trang chủ; đợi lượt đồng bộ đầu.
+Future<HtxServices> loginToHome(WidgetTester tester, TestEnv env) async {
+  await loginAndSetPin(tester, env);
   expect(find.byType(HomeScreen), findsOneWidget);
   final c = ProviderScope.containerOf(tester.element(find.byType(HomeScreen)));
   final s = c.read(appControllerProvider).services!;

@@ -4,8 +4,9 @@
 /// HTX, pf/notify `cropcycle.go`): `/cropcycle/farm-logs/{id}` (kind
 /// `farm_log_pending` / `farm_log_reviewed`), `/cropcycle/seasons/{ref}` (kind
 /// `season_opened`, `season_log_missing`, `season_process_changed`),
-/// `/cropcycle/seasons/{ref}/tasks/{ref}` (kind `season_task_due`). Lịch thời
-/// vụ `/cropcycle/calendars/{ref}` chưa có màn đích nên ở lại hộp thư.
+/// `/cropcycle/seasons/{ref}/tasks/{ref}` (kind `season_task_due`), `/htx/thu-gom`
+/// (lịch thu gom rơm và bảng kê, pf/notify `collection.go`). Lịch thời vụ
+/// `/cropcycle/calendars/{ref}` chưa có màn đích nên ở lại hộp thư.
 /// Cảnh báo khẩn cấp (`alert`) dùng `/documents/{ref}`.
 sealed class DeepLink {
   const DeepLink();
@@ -44,6 +45,9 @@ sealed class DeepLink {
         isId(seg[4])) {
       return SeasonLink(seg[2], taskRef: seg[4]);
     }
+    if (seg.length == 2 && seg[0] == 'htx' && seg[1] == 'thu-gom') {
+      return const CollectionLink();
+    }
     if (seg.length == 1 && seg[0] == 'notifications') return const InboxLink();
     return const InboxLink();
   }
@@ -55,6 +59,15 @@ class InboxLink extends DeepLink {
   bool operator ==(Object other) => other is InboxLink;
   @override
   int get hashCode => 0;
+}
+
+/// Thu gom rơm MKG (lịch thu gom, bảng kê) — G2 App HTX.
+class CollectionLink extends DeepLink {
+  const CollectionLink();
+  @override
+  bool operator ==(Object other) => other is CollectionLink;
+  @override
+  int get hashCode => 1;
 }
 
 class DirectiveLink extends DeepLink {

@@ -70,11 +70,11 @@ Future<void> _reveal(WidgetTester tester, Finder f) async {
 
 void main() {
   testWidgets(
-    'HTX US-LOG-03: quản lý chọn nhiều lô → MỘT bản ghi farm_log_batch (một '
-    'đầu lô, AC-1); lô chưa mở vụ bị loại và liệt kê kèm lý do (AC-2); sau '
-    'đồng bộ hiện số lô máy chủ đã ghi',
+    'HTX US-LOG-03: Thành viên HTX chọn nhiều lô → MỘT bản ghi farm_log_batch '
+    '(một đầu lô, AC-1); lô chưa mở vụ bị loại và liệt kê kèm lý do (AC-2); '
+    'sau đồng bộ hiện số lô máy chủ đã ghi',
     (tester) async {
-      final env = TestEnv(roles: const ['coop_manager'])..seed(season: true);
+      final env = TestEnv(roles: const ['htx_member'])..seed(season: true);
       final s = await loginToHome(tester, env);
       await openTile(tester, 'Nhật ký hàng loạt');
       expect(find.byType(BatchLogScreen), findsOneWidget);
@@ -143,7 +143,7 @@ void main() {
     'HTX US-LOG-03 AC-2: máy chủ loại thêm lô (ngoài phạm vi / vụ đã đóng lúc '
     'nhận) → "Máy chủ bỏ qua"; không còn lô hợp lệ → chặn trên máy',
     (tester) async {
-      final env = TestEnv(roles: const ['coop_manager'])
+      final env = TestEnv(roles: const ['htx_member'])
         ..seed(season: true, extra: [_season2()]);
       final s = await loginToHome(tester, env);
       final plots = await s.crop.plots();

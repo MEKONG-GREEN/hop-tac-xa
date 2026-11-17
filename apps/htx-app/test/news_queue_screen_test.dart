@@ -112,6 +112,7 @@ void main() {
     for (final roles in const [
       ['farmer'],
       ['coop_manager'],
+      ['htx_member'],
     ]) {
       testWidgets(
         'màn hình nhỏ ${size.width.toInt()}×${size.height.toInt()} (${roles.first}): '
@@ -123,10 +124,11 @@ void main() {
           final env = TestEnv(roles: roles)..seed(season: true);
           await loginToHome(tester, env);
           expect(tester.takeException(), isNull);
-          await openTile(
-            tester,
-            roles.first == 'farmer' ? 'Ghi nhật ký' : 'Ghi nhật ký hộ',
-          );
+          await openTile(tester, switch (roles.first) {
+            'farmer' => 'Ghi nhật ký',
+            'coop_manager' => 'Xem vụ và nhật ký hộ',
+            _ => 'Ghi nhật ký hộ',
+          });
           expect(tester.takeException(), isNull);
           await tester.pageBack();
           await settle(tester);
