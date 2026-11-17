@@ -68,4 +68,6 @@ func TestFN06_HouseholdsScope(t *testing.T) {
 	officer := f.as(f.tenant, tr.t30001, partyport.RoleKNOfficer)
 	wantOnly(officer, c3, h3, "khuyến nông xem hộ HTX trong xã")
 	wantOnly(officer, tr.c1, h1, "khuyến nông xem hộ c1")
+	// Kèm Thành viên HTX không thu hẹp phạm vi của vai khuyến nông (htxroles.OwnCoopOnly xét vai rộng hơn).
+	wantOnly(f.as(f.tenant, tr.t30001, coopport.RoleHTXMember, partyport.RoleKNOfficer), c3, h3, "khuyến nông + Thành viên xem hộ HTX trong xã")
 }

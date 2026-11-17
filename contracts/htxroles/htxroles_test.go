@@ -125,7 +125,7 @@ func TestIsMemberOnly(t *testing.T) {
 }
 
 // FN-06/BR-02, BR-03: Đại diện HTX và Thành viên HTX chỉ thấy HTX gắn với tài khoản; vai có phạm vi rộng hơn mà API
-// nhận (wider) hoặc Admin thì không bị thu hẹp. Tài khoản chỉ là Thành viên HTX luôn bị thu hẹp.
+// nhận (wider) hoặc Admin thì không bị thu hẹp — kể cả khi kèm Thành viên HTX.
 func TestOwnCoopOnly(t *testing.T) {
 	wider := []string{"kn_officer", "registry_admin"}
 	for _, c := range []struct {
@@ -139,6 +139,9 @@ func TestOwnCoopOnly(t *testing.T) {
 		{[]string{htxroles.Representative, "plot_viewer"}, true},
 		{[]string{htxroles.Representative, htxroles.Admin}, false},
 		{[]string{htxroles.Member, htxroles.Admin}, false},
+		{[]string{htxroles.Member, "kn_officer"}, false},
+		{[]string{htxroles.Member, "registry_admin"}, false},
+		{[]string{htxroles.Member, "plot_viewer"}, true},
 		{[]string{"kn_officer"}, false},
 		{nil, false},
 	} {

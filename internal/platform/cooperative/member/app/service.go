@@ -132,8 +132,8 @@ func isCoopManagerOnly(p authz.Principal) bool {
 		!p.Has(partyport.RoleKNOfficer) && !p.Has(partyport.RoleKNNationalAdmin) && !p.Has(authz.RolePlatformAdmin)
 }
 
-// isOwnCoopOnly: người gọi chỉ thấy HTX của mình (Principal.OrgRef) — quản lý HTX hoặc tài khoản chỉ là Thành viên HTX
-// (FN-06, luật dùng chung htxroles.OwnCoopOnly; FN-05/BR-02: kiêm Đại diện HTX thì theo quyền Đại diện HTX).
+// isOwnCoopOnly: người gọi chỉ thấy HTX của mình (Principal.OrgRef) — Đại diện HTX hoặc Thành viên HTX không kèm Admin
+// hay vai cán bộ/quản trị có phạm vi rộng hơn (FN-06, luật dùng chung htxroles.OwnCoopOnly).
 func isOwnCoopOnly(p authz.Principal) bool {
 	return htxroles.OwnCoopOnly(p.Has, partyport.RoleRegistryAdmin, partyport.RoleKNProvinceAdmin, partyport.RoleKNOfficer, partyport.RoleKNNationalAdmin)
 }

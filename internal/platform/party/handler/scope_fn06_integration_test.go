@@ -127,8 +127,9 @@ func TestFN06_KNOfficerScopeUnchanged(t *testing.T) {
 	want := []string{tr.c1.String(), tr.c3.String()}
 	slices.Sort(want)
 	for name, c := range map[string]caller{
-		"khuyến nông":            f.as(f.tenant, tr.t30001, port.RoleKNOfficer),
-		"khuyến nông + Đại diện": f.as(f.tenant, tr.c1, port.RoleCoopManager, port.RoleKNOfficer),
+		"khuyến nông":              f.as(f.tenant, tr.t30001, port.RoleKNOfficer),
+		"khuyến nông + Đại diện":   f.as(f.tenant, tr.c1, port.RoleCoopManager, port.RoleKNOfficer),
+		"khuyến nông + Thành viên": f.as(f.tenant, tr.c1, port.RoleHTXMember, port.RoleKNOfficer),
 	} {
 		got := refs(c.appDo(http.MethodGet, "/v1/cooperatives", nil), "ref")
 		slices.Sort(got)

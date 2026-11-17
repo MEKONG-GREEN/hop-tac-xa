@@ -55,7 +55,7 @@ Trong tệp dữ liệu, FN-01 ghi `R` (nghĩa là "được dùng"); hai dòng 
 
 Nguồn: FN-06, ADM-02, TECH-01; quyết định của nhóm dự án 17/11/2026 (AH-273).
 
-- **Quy tắc dùng chung:** `htxroles.OwnCoopOnly(has, wider...)` trả true khi tài khoản chỉ được thấy HTX gắn với tài khoản (`org_ref`): tài khoản chỉ là Thành viên HTX, hoặc có Đại diện HTX mà không có Admin và không có vai nào trong `wider` — các vai có phạm vi rộng hơn mà API đó nhận (vd `registry_admin`, `kn_officer`, `kn_province_admin`, `kn_national_admin`, `cgh_viewer`). Đang dùng ở `party/app.ownCoopOnly` (danh sách HTX, danh sách tổ chức, chi tiết HTX) và `cooperative/member/app.isOwnCoopOnly` (nông hộ).
+- **Quy tắc dùng chung:** `htxroles.OwnCoopOnly(has, wider...)` trả true khi tài khoản chỉ được thấy HTX gắn với tài khoản (`org_ref`): có Đại diện HTX hoặc Thành viên HTX mà không có Admin và không có vai nào trong `wider` — các vai có phạm vi rộng hơn mà API đó nhận (vd `registry_admin`, `kn_officer`, `kn_province_admin`, `kn_national_admin`, `cgh_viewer`). Tài khoản kèm một vai rộng hơn (kể cả Thành viên HTX + khuyến nông) theo phạm vi của vai đó, khớp `lacksCoop` của web. Đang dùng ở `party/app.ownCoopOnly` (danh sách HTX, danh sách tổ chức, chi tiết HTX) và `cooperative/member/app.isOwnCoopOnly` (nông hộ).
 - **Admin** (`platform_admin`) thấy mọi HTX. Các vai khuyến nông giữ phạm vi theo xã/tỉnh (`scopeFor`, không đổi).
 - **API mới của App HTX** phải gọi quy tắc này (hoặc lọc theo `org_ref`): phạm vi theo xã (`scopeFor`, `authz.Scope`) không tự thu hẹp về một HTX.
 - **Bản ghi ngoài phạm vi** trả 404 (`party.org_not_found`), không lộ việc bản ghi tồn tại (FN-06/EX-01). Danh sách chỉ có HTX của mình.

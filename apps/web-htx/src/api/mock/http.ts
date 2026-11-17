@@ -72,8 +72,9 @@ export function hasRole(p: MockPersona, ...roles: string[]): boolean {
 
 /** Quản lý HTX không kèm vai cán bộ/quản trị có phạm vi rộng hơn (member/app.isCoopManagerOnly). */
 export const managerOnly = (p: MockPersona) => hasRole(p, "coop_manager") && !hasRole(p, "kn_officer", "kn_province_admin", "kn_national_admin", "registry_admin", "platform_admin");
-/** FN-06: chỉ thấy HTX gắn với tài khoản — quản lý HTX hoặc tài khoản chỉ là Thành viên HTX (htxroles.OwnCoopOnly). */
-export const ownCoopOnly = (p: MockPersona) => managerOnly(p) || (hasRole(p, "htx_member") && !hasRole(p, "coop_manager", "platform_admin"));
+/** FN-06: chỉ thấy HTX gắn với tài khoản — Đại diện HTX / Thành viên HTX không kèm Admin hay vai rộng hơn (htxroles.OwnCoopOnly). */
+export const ownCoopOnly = (p: MockPersona) =>
+  hasRole(p, "coop_manager", "htx_member") && !hasRole(p, "kn_officer", "kn_province_admin", "kn_national_admin", "registry_admin", "cgh_viewer", "platform_admin");
 
 export interface Ctx {
   url: URL;

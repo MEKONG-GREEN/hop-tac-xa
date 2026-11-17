@@ -108,13 +108,10 @@ func IsMemberOnly(has func(role string) bool) bool {
 }
 
 // OwnCoopOnly cho biết người có các vai (has) chỉ được thấy dữ liệu của HTX gắn với tài khoản (FN-06/BR-02, BR-03,
-// ADM-02): tài khoản chỉ là Thành viên HTX (IsMemberOnly), hoặc có Đại diện HTX mà không có Admin và không có vai nào
-// trong wider — các vai có phạm vi rộng hơn mà API đó nhận (khuyến nông, quản trị sổ tổ chức…).
+// ADM-02): có Đại diện HTX hoặc Thành viên HTX mà không có Admin và không có vai nào trong wider — các vai có phạm vi
+// rộng hơn mà API đó nhận (khuyến nông, quản trị sổ tổ chức…); kèm vai rộng hơn thì theo phạm vi của vai đó.
 func OwnCoopOnly(has func(role string) bool, wider ...string) bool {
-	if IsMemberOnly(has) {
-		return true
-	}
-	return has(Representative) && !has(Admin) && !slices.ContainsFunc(wider, has)
+	return (has(Representative) || has(Member)) && !has(Admin) && !slices.ContainsFunc(wider, has)
 }
 
 // MemberWriteRoutes trả bản sao danh sách route ghi Thành viên HTX được gọi.
