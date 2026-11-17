@@ -33,8 +33,9 @@ const memberGuardDetail = "Thành viên HTX chỉ được xem (FN-05/BR-03)"
 var routeParam = regexp.MustCompile(`[:*][A-Za-z_][A-Za-z0-9_]*`)
 
 // FN-05/BR-03, TECH-01 trên router THẬT (Application API và Admin API): tài khoản chỉ là Thành viên HTX bị từ chối
-// (403 forbidden) ở MỌI route ghi ngoài htxroles.MemberWriteRoutes, kể cả khi gọi thẳng API; Đại diện HTX và tài khoản
-// kiêm hai vai (BR-02) không bị lớp này chặn.
+// (403 forbidden) ở MỌI route ghi ngoài htxroles.MemberWriteRoutes, kể cả khi gọi thẳng API; route trong danh sách
+// (thao tác cá nhân: đánh dấu đã đọc thông báo, đăng ký push token) gọi được; Đại diện HTX và tài khoản kiêm hai vai
+// (BR-02) không bị lớp này chặn.
 func TestFN05_BR03_HTXMemberWriteRoutesDenied(t *testing.T) {
 	env := pgtest.Get(t)
 	iss := authztest.New(t)
@@ -87,6 +88,32 @@ func TestFN05_BR03_HTXMemberWriteRoutesDenied(t *testing.T) {
 
 		if surface.name != "Application API" {
 			continue
+		}
+		// Route trong member_write_routes phải có trên router thật (không sai mẫu đường dẫn) và tới được dịch vụ.
+		registered := map[string]bool{}
+		for _, rt := range surface.router.Routes() {
+			registered[rt.Method+" "+rt.Path] = true
+		}
+		for _, route := range allow {
+			if !registered[route] {
+				t.Errorf("member_write_routes %q không có trên Application API", route)
+			}
+		}
+		// Thao tác cá nhân của pf/notify (không phải ghi dữ liệu nghiệp vụ): Thành viên HTX gọi được; kết quả do
+		// dịch vụ quyết định, không phải lớp chặn ghi.
+		for _, c := range []struct {
+			method, path string
+			status       int
+			code         string
+		}{
+			{http.MethodPost, "/v1/notifications/read-all", http.StatusOK, ""},
+			{http.MethodPost, "/v1/notifications/" + ids.New().String() + "/read", http.StatusNotFound, "notify.notification_not_found"},
+			{http.MethodPost, "/v1/devices/" + ids.New().String() + "/push-token", http.StatusUnprocessableEntity, "validation_failed"},
+		} {
+			status, code, detail := callJSON(t, srv.URL, c.method, c.path, member)
+			if detail == memberGuardDetail || status != c.status || code != c.code {
+				t.Errorf("Thành viên HTX %s %s = %d %q %q, cần %d %q", c.method, c.path, status, code, detail, c.status, c.code)
+			}
 		}
 		// Đối chứng: lớp lắp ráp không chặn Đại diện HTX và tài khoản kiêm hai vai (BR-02).
 		for _, roles := range [][]string{{partyport.RoleCoopManager}, {partyport.RoleCoopManager, htxroles.Member}} {

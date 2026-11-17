@@ -154,5 +154,9 @@ export const HTX_ROLE_MATRIX = {
       }
     }
   ],
-  "member_write_routes": []
+  "member_write_routes": [
+    "POST /v1/notifications/read-all",
+    "POST /v1/notifications/:id/read",
+    "POST /v1/devices/:id/push-token"
+  ]
 } as const;
