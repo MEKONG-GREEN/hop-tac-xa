@@ -38,11 +38,12 @@ void main() {
       final env = TestEnv(roles: const ['htx_member'])..seed();
       final base = env.server.onGet!;
       env.server.onGet = (path, q) async {
-        if (path == '/v1/me')
+        if (path == '/v1/me') {
           return {
             'roles': ['htx_member'],
             'org': {'ref': coopRef, 'name': 'HTX Tân Phú'},
           };
+        }
         if (path == '/v1/cooperatives/$coopRef/households') {
           return {
             'items': [

@@ -174,8 +174,9 @@ class ManagerService {
           }
           cursor = j['next_cursor'] as String?;
           if (cursor == null || cursor.isEmpty) break;
-          if (!seen.add(cursor))
+          if (!seen.add(cursor)) {
             throw ManagerException('Không tải được đầy đủ danh sách nông hộ.');
+          }
         }
         await _db.setMeta(cacheKey, jsonEncode(items));
         fresh = true;
