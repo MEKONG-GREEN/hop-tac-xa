@@ -54,71 +54,69 @@ class _HouseholdsScreenState extends ConsumerState<HouseholdsScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Nông hộ')),
       body: list.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text('Lỗi: $e')),
-              data: (items) => ListView(
-                padding: const EdgeInsets.all(8),
-                children: [
-                  if (items.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(24),
-                      child: Text(
-                        'Chưa có nông hộ trong HTX đã chọn.',
-                        style: TextStyle(fontSize: 17),
-                      ),
-                    ),
-                  for (final h in items)
-                    Card(
-                      child: ListTile(
-                        leading: const Icon(
-                          Icons.home_work,
-                          color: AgColors.g700,
-                          size: 32,
-                        ),
-                        title: Text(h.label),
-                        subtitle: Text(
-                          [
-                            if (h.code != null) h.code!,
-                            '${h.plots} lô ruộng',
-                            'Đất: ${_area(h.landAreaHa)} ha · Đang canh tác: ${_area(h.activeAreaHa)} ha · Còn lại: ${_area(h.remainingAreaHa)} ha',
-                            if (!h.areaFresh) 'Số liệu lưu trên máy',
-                            if (!h.canOpenSeason) h.blockedReason,
-                          ].join('\n'),
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (canCall)
-                              IconButton(
-                                tooltip: 'Gọi ${h.label}',
-                                iconSize: 28,
-                                color: AgColors.g700,
-                                icon: _calling == h.ref
-                                    ? const SizedBox(
-                                        width: 24,
-                                        height: 24,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                    : const Icon(Icons.phone),
-                                onPressed: _calling == null
-                                    ? () => _call(h)
-                                    : null,
-                              ),
-                            const Icon(Icons.chevron_right),
-                          ],
-                        ),
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => HouseholdPlotsScreen(household: h),
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(child: Text('Lỗi: $e')),
+        data: (items) => ListView(
+          padding: const EdgeInsets.all(8),
+          children: [
+            if (items.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(24),
+                child: Text(
+                  'Chưa có nông hộ trong HTX đã chọn.',
+                  style: TextStyle(fontSize: 17),
+                ),
               ),
-            ),
+            for (final h in items)
+              Card(
+                child: ListTile(
+                  leading: const Icon(
+                    Icons.home_work,
+                    color: AgColors.g700,
+                    size: 32,
+                  ),
+                  title: Text(h.label),
+                  subtitle: Text(
+                    [
+                      if (h.code != null) h.code!,
+                      '${h.plots} lô ruộng',
+                      'Đất: ${_area(h.landAreaHa)} ha · Đang canh tác: ${_area(h.activeAreaHa)} ha · Còn lại: ${_area(h.remainingAreaHa)} ha',
+                      if (!h.areaFresh) 'Số liệu lưu trên máy',
+                      if (!h.canOpenSeason) h.blockedReason,
+                    ].join('\n'),
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (canCall)
+                        IconButton(
+                          tooltip: 'Gọi ${h.label}',
+                          iconSize: 28,
+                          color: AgColors.g700,
+                          icon: _calling == h.ref
+                              ? const SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.phone),
+                          onPressed: _calling == null ? () => _call(h) : null,
+                        ),
+                      const Icon(Icons.chevron_right),
+                    ],
+                  ),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => HouseholdPlotsScreen(household: h),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
