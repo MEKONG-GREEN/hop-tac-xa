@@ -100,7 +100,7 @@ export const MOCK_PERSONAS: readonly MockPersona[] = [
   persona({
     id: "htx",
     title: "Quản lý HTX",
-    description: `coop_manager — ${HTX.api.name}: mở vụ, ghi nhật ký hộ, duyệt nhật ký, sản lượng, tài khoản nông dân`,
+    description: `coop_manager — ${HTX.api.name}: xem vụ, nhật ký, sản lượng; duyệt nhật ký, thu gom, tài khoản nông dân`,
     displayName: "Quản lý HTX (giả lập)",
     amr: ["pwd"],
     actor: "mock-htx-0001",
@@ -111,7 +111,7 @@ export const MOCK_PERSONAS: readonly MockPersona[] = [
   persona({
     id: "htx-member",
     title: "Thành viên HTX",
-    description: `htx_member — ${HTX.api.name}: chỉ xem nông hộ của HTX mình (FN-05)`,
+    description: `htx_member — ${HTX.api.name}: mở vụ, ghi nhật ký, khai sản lượng của HTX mình (KHMV, AH-39)`,
     displayName: "Thành viên HTX (giả lập)",
     amr: ["pwd"],
     actor: "mock-htx-member-0001",

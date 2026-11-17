@@ -340,6 +340,8 @@ function SeasonsInner() {
   const [version, setVersion] = useState(0);
   const [dialog, setDialog] = useState<{ kind: "correct" | "cancel" | "detail"; s: CropSeason } | null>(null);
   const fields = useCoopFields(scope.coopRef);
+  // Ma trận KHMV-FN-03 (AH-39): Thành viên HTX và Admin mở vụ; Đại diện HTX chỉ xem.
+  const canOpen = scope.can("KHMV-FN-03", "C");
 
   const list = usePagedList(
     (cursor) =>
@@ -371,7 +373,7 @@ function SeasonsInner() {
         title="Vụ canh tác"
         subtitle="Vụ của từng lô ruộng — mỗi lô tối đa một vụ đang mở; sửa và hủy bằng bản ghi bù kèm lý do"
         actions={
-          scope.canWrite && scope.coopRef ? (
+          canOpen && scope.coopRef ? (
             <button type="button" className="btn btn-p btn-sm" aria-expanded={showOpen} onClick={() => setShowOpen((v) => !v)}>
               <Icon name="season" size={15} />
               Mở vụ cho nông hộ
@@ -379,8 +381,8 @@ function SeasonsInner() {
           ) : null
         }
       />
-      <ReadOnlyNotice scope={scope} />
-      {scope.canWrite && !scope.coopRef ? <p className="small mute">Chọn một HTX để mở vụ.</p> : null}
+      <ReadOnlyNotice scope={scope} writable={canOpen} />
+      {canOpen && !scope.coopRef ? <p className="small mute">Chọn một HTX để mở vụ.</p> : null}
       {showOpen && scope.coopRef ? <OpenPanel scope={scope} onDone={reload} /> : null}
       <div className="card sec">
         <form className="row" role="search" style={{ marginBottom: 14, alignItems: "flex-end" }} onSubmit={(e) => e.preventDefault()}>
@@ -471,15 +473,15 @@ function SeasonsInner() {
                       <button type="button" className="btn btn-o btn-sm" onClick={() => setDialog({ kind: "detail", s })} aria-label={`Lịch sử vụ lô ${s.plot_code}`}>
                         Lịch sử
                       </button>
-                      {scope.canWrite && s.status === "open" ? (
-                        <>
-                          <button type="button" className="btn btn-o btn-sm" onClick={() => setDialog({ kind: "correct", s })} aria-label={`Sửa vụ lô ${s.plot_code}`}>
-                            Sửa
-                          </button>
-                          <button type="button" className="btn btn-o btn-sm" onClick={() => setDialog({ kind: "cancel", s })} aria-label={`Hủy vụ lô ${s.plot_code}`}>
-                            Hủy
-                          </button>
-                        </>
+                      {scope.can("KHMV-FN-03", "U") && s.status === "open" ? (
+                        <button type="button" className="btn btn-o btn-sm" onClick={() => setDialog({ kind: "correct", s })} aria-label={`Sửa vụ lô ${s.plot_code}`}>
+                          Sửa
+                        </button>
+                      ) : null}
+                      {scope.can("KHMV-FN-03", "D") && s.status === "open" ? (
+                        <button type="button" className="btn btn-o btn-sm" onClick={() => setDialog({ kind: "cancel", s })} aria-label={`Hủy vụ lô ${s.plot_code}`}>
+                          Hủy
+                        </button>
                       ) : null}
                     </div>
                   </td>

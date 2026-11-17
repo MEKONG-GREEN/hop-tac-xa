@@ -1,8 +1,11 @@
 // Package app: use case vụ mùa của pf/cooperative (W3.3, chuyển từ pf/cropcycle; mã lỗi cropcycle.* giữ nguyên) — SOP, vụ mùa, nhật ký canh tác, duyệt,
 // sản lượng, bảng điều hành và đồng bộ ngoại tuyến. Giao dịch mở ở đây
-// (tenant.WithTenantTx); vai kiểm bằng authz.Require, phạm vi theo vai:
+// (tenant.WithTenantTx). Vụ, nhật ký, sản lượng, SOP (đọc) và bảng điều hành kiểm quyền theo ma trận Mục VI BRD
+// Kế hoạch mùa vụ (dòng KHMV-* của contracts/htxroles, matrixAccess, AH-39); các lối khác kiểm bằng authz.Require.
+// Phạm vi theo vai:
 //   - platform_admin: toàn tenant, ghi được;
-//   - coop_manager: HTX của mình (Principal.OrgRef), ghi hộ nông dân;
+//   - coop_manager (Đại diện HTX): HTX của mình (Principal.OrgRef); chỉ đọc vụ, nhật ký, sản lượng; duyệt nhật ký;
+//   - htx_member (Thành viên HTX): HTX của mình; mở vụ, ghi nhật ký, khai sản lượng (ghi hộ nông hộ);
 //   - farmer: thửa của các nông hộ liên kết với tài khoản (port.FarmerHouseholds);
 //   - cán bộ KN (kn_officer, kn_province_admin, kn_national_admin): CHỈ ĐỌC theo
 //     phạm vi xã của party ScopeResolver (ADR-0009).
@@ -85,13 +88,10 @@ var (
 // Vai cán bộ khuyến nông (chỉ đọc theo phạm vi xã).
 var knRoles = []string{partyport.RoleKNOfficer, partyport.RoleKNProvinceAdmin, partyport.RoleKNNationalAdmin}
 
-// readRoles: vai đọc vụ, nhật ký, sản lượng, bảng điều hành.
+// readRoles: vai đọc của các lối chưa thuộc ma trận KHMV (gắn giống ↔ SOP, đồng bộ chiều xuống của vai cũ).
 var readRoles = append([]string{port.RoleFarmer, port.RoleCoopManager, authz.RolePlatformAdmin}, knRoles...)
 
-// writeRoles: vai ghi vụ, nhật ký, sản lượng.
-var writeRoles = []string{port.RoleFarmer, port.RoleCoopManager, authz.RolePlatformAdmin}
-
-// managerRoles: vai quản lý (mở vụ hàng loạt, duyệt, nhập sản lượng).
+// managerRoles: vai duyệt nhật ký (ngoài ma trận KHMV, giữ quyền cũ).
 var managerRoles = []string{port.RoleCoopManager, authz.RolePlatformAdmin}
 
 // Service là use case vụ mùa của pf/cooperative (W3.3, chuyển từ pf/cropcycle).

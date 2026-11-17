@@ -133,7 +133,7 @@ func newFixture(t *testing.T, p channel.Pusher) *fixture {
 	return f
 }
 
-// newMember tạo Thành viên HTX của HTX coop, có một thiết bị đã đăng ký.
+// newMember tạo Thành viên HTX (vai htx_member, AH-39) của HTX coop, có một thiết bị đã đăng ký.
 func (f *fixture) newMember(coop uuid.UUID) member {
 	actor := ids.New()
 	f.members.mu.Lock()
@@ -144,7 +144,7 @@ func (f *fixture) newMember(coop uuid.UUID) member {
 	f.devices.devs[dev] = syncport.DeviceInfo{ID: dev, ActorRef: actor, Platform: "android"}
 	f.devices.mu.Unlock()
 	return member{f: f, tid: f.tenant, coop: coop, actor: actor, device: dev,
-		token: f.iss.Sign(f.t, authztest.Token{Subject: actor, TenantID: f.tenant, Roles: []string{partyport.RoleCoopManager}, OrgRef: coop, MFA: true})}
+		token: f.iss.Sign(f.t, authztest.Token{Subject: actor, TenantID: f.tenant, Roles: []string{partyport.RoleHTXMember}, OrgRef: coop, MFA: true})}
 }
 
 // newAdmin tạo tài khoản quản trị nền tảng (không phải Thành viên HTX).

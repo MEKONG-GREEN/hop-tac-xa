@@ -82,7 +82,10 @@ export interface NavGroup {
 }
 
 const KN: readonly ScopeLevel[] = ["tw", "tinh", "xa"];
-/** Ghi dữ liệu mùa vụ HTX: quản lý HTX (HTX mình) và quản trị nền tảng. */
+/**
+ * Màn HTX ngoài ma trận KHMV (phê duyệt nhật ký, thu gom rơm…): quản lý HTX (HTX mình) và quản trị nền tảng. Vụ,
+ * nhật ký, sản lượng theo dòng KHMV-* của ma trận (AH-39).
+ */
 const HTX_WRITE: readonly string[] = [ROLES.coopManager, ROLES.platformAdmin];
 /** Xem dữ liệu mùa vụ HTX: thêm cán bộ KN (chỉ đọc theo phạm vi). */
 const HTX_READ: readonly string[] = [...HTX_WRITE, ...KN_ROLES];
@@ -121,10 +124,11 @@ export const NAV_GROUPS: readonly NavGroup[] = [
       { href: "/htx/dashboard", module: "pf/cropcycle", label: "Bảng điều hành sản xuất", icon: "chart", roles: HTX_READ },
       { href: "/htx/nong-ho", label: "Quản lý nông hộ", icon: "coop", roles: HTX_READ, fn: "FN-04" },
       { href: "/htx/lo-ruong", module: "pf/geo", label: "Lô ruộng & ranh giới", icon: "plot", roles: HTX_READ },
-      { href: "/htx/mua-vu", module: "pf/cropcycle", label: "Vụ canh tác", icon: "season", roles: HTX_READ },
-      { href: "/htx/nhat-ky", module: "pf/cropcycle", label: "Nhật ký canh tác", icon: "journal", roles: HTX_READ },
+      // AH-39: gắn dòng ma trận KHMV — Thành viên HTX thấy (và thao tác) vụ, nhật ký, sản lượng của HTX mình.
+      { href: "/htx/mua-vu", module: "pf/cropcycle", label: "Vụ canh tác", icon: "season", roles: HTX_READ, fn: "KHMV-FN-03-XEM" },
+      { href: "/htx/nhat-ky", module: "pf/cropcycle", label: "Nhật ký canh tác", icon: "journal", roles: HTX_READ, fn: "KHMV-FN-05" },
       { href: "/htx/phe-duyet", module: "pf/cropcycle", label: "Phê duyệt nhật ký", icon: "approve", roles: HTX_WRITE },
-      { href: "/htx/san-luong", module: "pf/cropcycle", label: "Sản lượng thu hoạch", icon: "harvest", roles: HTX_READ },
+      { href: "/htx/san-luong", module: "pf/cropcycle", label: "Sản lượng thu hoạch", icon: "harvest", roles: HTX_READ, fn: "KHMV-FN-06" },
       // HTX US-DASH-03: lịch trên Application API chỉ cho quản lý HTX (cán bộ/quản trị dùng /quan-tri/mau-bao-cao).
       { href: "/htx/lich-bao-cao", module: "pf/reports", label: "Lịch gửi báo cáo", icon: "report", roles: [ROLES.coopManager] },
       { href: "/htx/tai-khoan-nong-dan", label: "Tài khoản nông dân", icon: "qr", roles: HTX_READ },

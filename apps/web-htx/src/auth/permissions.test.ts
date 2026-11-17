@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { HTX_ROLE_MATRIX } from "@/api/generated/htx-roles";
-import { isHtxAppUser, lacksCoop, matrixAllows, matrixRolesOf, rolesWith } from "./permissions";
+import { effectiveRole, isHtxAppUser, lacksCoop, matrixAllows, matrixRolesOf, rolesWith } from "./permissions";
 
 const as = (...roles: string[]) => ({ roles });
 
@@ -26,6 +26,42 @@ describe("ma trận quyền App HTX (FN-05, Mục V)", () => {
     expect(isHtxAppUser(null)).toBe(false);
     expect(isHtxAppUser(as("htx_member"))).toBe(true);
     expect(matrixAllows(as("kn_officer"), "FN-04", "C")).toBe(true);
+    expect(matrixAllows(as("kn_officer"), "KHMV-FN-03", "C")).toBe(true);
+  });
+});
+
+describe("ma trận BRD Kế hoạch mùa vụ (Mục VI, dòng KHMV-*, AH-39)", () => {
+  const writes = ["C", "U", "D"] as const;
+  const rows = ["KHMV-FN-03", "KHMV-FN-05", "KHMV-FN-06"] as const;
+
+  it("vai có hiệu lực theo thứ tự Admin > Đại diện HTX > Thành viên HTX", () => {
+    expect(effectiveRole(as("htx_member"))).toBe("htx_member");
+    expect(effectiveRole(as("htx_member", "coop_manager"))).toBe("coop_manager");
+    expect(effectiveRole(as("htx_member", "platform_admin"))).toBe("platform_admin");
+    expect(effectiveRole(as("kn_officer"))).toBeNull();
+    expect(effectiveRole(null)).toBeNull();
+  });
+
+  it("Thành viên HTX mở vụ, ghi nhật ký, khai sản lượng; Đại diện HTX chỉ xem", () => {
+    for (const fn of rows) {
+      for (const a of writes) {
+        expect(matrixAllows(as("htx_member"), fn, a)).toBe(true);
+        expect(matrixAllows(as("coop_manager"), fn, a)).toBe(false);
+        expect(matrixAllows(as("platform_admin"), fn, a)).toBe(true);
+      }
+      expect(matrixAllows(as("coop_manager"), fn, "R")).toBe(true);
+    }
+    expect(matrixAllows(as("coop_manager"), "KHMV-FN-03-LICH", "C")).toBe(true);
+    expect(matrixAllows(as("htx_member"), "KHMV-FN-03-LICH", "C")).toBe(false);
+  });
+
+  it("kiêm hai vai dùng quyền Đại diện HTX — không cộng gộp (BRD mục V, tới AH-270)", () => {
+    const both = as("htx_member", "coop_manager");
+    for (const fn of rows) for (const a of writes) expect(matrixAllows(both, fn, a)).toBe(false);
+    expect(matrixAllows(both, "KHMV-FN-03", "R")).toBe(true);
+    // Các dòng FN-xx đang dùng giữ kết quả cũ.
+    expect(matrixAllows(both, "FN-04", "C")).toBe(true);
+    expect(matrixAllows(as("htx_member", "platform_admin"), "FN-02", "R")).toBe(true);
   });
 });
 

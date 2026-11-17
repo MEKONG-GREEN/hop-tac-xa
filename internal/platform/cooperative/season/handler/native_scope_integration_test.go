@@ -28,8 +28,8 @@ func (f nativeSeasonScopeFunc) Scope(ctx context.Context) (authz.Scope, error) {
 func TestNativeSeasonScopeReachesRLSWithoutReplacingSessionScope(t *testing.T) {
 	f := newFixture(t)
 	f.publishedSOP("SOP native scope", "OM5451")
-	f.managerA().mustOpen(f.p1)
-	f.managerB().mustOpen(f.p4)
+	f.memberA().mustOpen(f.p1)
+	f.memberB().mustOpen(f.p4)
 	svc := f.mod.svc
 	original := svc.Scope
 	defer func() { svc.Scope = original }()

@@ -176,9 +176,9 @@ describe("FN-05: menu theo ma trận ba vai App HTX", () => {
   ];
   const withRoles = (...roles: string[]) => buildPrincipal({ sub: "u", realm_access: { roles } }, null);
 
-  it("[FN-05/AC-01] Thành viên HTX chỉ thấy Quản lý nông hộ, không thấy Tài khoản cán bộ, Danh mục dùng chung", () => {
+  it("[FN-05/AC-01, AH-39] Thành viên HTX thấy Quản lý nông hộ, Vụ, Nhật ký, Sản lượng; không thấy Tài khoản cán bộ, Danh mục dùng chung", () => {
     const member = persona("htx-member");
-    expect(hrefs(member)).toEqual(["/htx/nong-ho"]);
+    expect(hrefs(member)).toEqual(["/htx/nong-ho", "/htx/mua-vu", "/htx/nhat-ky", "/htx/san-luong"]);
     expect(hrefs(member)).not.toContain("/quan-tri/tai-khoan");
     expect(hrefs(member)).not.toContain("/quan-tri/danh-muc");
   });
@@ -201,6 +201,12 @@ describe("FN-05: menu theo ma trận ba vai App HTX", () => {
     expect(accounts && canSee(accounts, member)).toBe(false);
     const units = findNavItem("/quan-tri/danh-muc");
     expect(units && canSee(units, member)).toBe(false);
+  });
+
+  it("[AH-39] màn Thông báo mở cho Thành viên HTX (KHMV-NTF) và vẫn mở cho Đại diện HTX", () => {
+    const inbox = findNavItem("/thong-bao");
+    expect(inbox && canSee(inbox, persona("htx-member"))).toBe(true);
+    expect(inbox && canSee(inbox, persona("htx"))).toBe(true);
   });
 
   it("vai ngoài ma trận giữ danh sách vai sẵn có; vai App HTX bị ma trận chặn dù có vai gốc", () => {

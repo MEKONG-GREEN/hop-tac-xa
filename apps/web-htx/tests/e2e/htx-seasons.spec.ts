@@ -8,7 +8,7 @@ const fresh = plot(4); // chưa có vụ nào
 const done2 = plot(5); // vụ trước đã hoàn thành (giống OM18)
 
 test("HTX US-SEASON-02/04: mở vụ hàng loạt cho nhiều lô — lô đang canh tác bị bỏ qua kèm lý do", async ({ page }) => {
-  await loginAs(page, "htx", "/htx/mua-vu");
+  await loginAs(page, "htx-member", "/htx/mua-vu");
   await expect(page.getByRole("heading", { level: 1, name: "Vụ canh tác" })).toBeVisible();
   await expect(page.getByRole("row").filter({ hasText: growing.code }).first()).toContainText("Đang canh tác");
   await page.getByRole("button", { name: "Mở vụ cho nông hộ" }).click();
@@ -24,7 +24,7 @@ test("HTX US-SEASON-02/04: mở vụ hàng loạt cho nhiều lô — lô đang 
 });
 
 test("HTX US-SEASON-01 AC-2: ngày sạ ngoài khoảng cho phép bị chặn ngay trên form", async ({ page }) => {
-  await loginAs(page, "htx", "/htx/mua-vu");
+  await loginAs(page, "htx-member", "/htx/mua-vu");
   await page.getByRole("button", { name: "Mở vụ cho nông hộ" }).click();
   const form = page.getByRole("form", { name: "Mở vụ cho nông hộ" });
   await form.getByRole("checkbox", { name: new RegExp(fresh.code) }).check();
@@ -35,7 +35,7 @@ test("HTX US-SEASON-01 AC-2: ngày sạ ngoài khoảng cho phép bị chặn ng
 });
 
 test("HTX US-SEASON-03: sao chép cấu hình vụ trước — lô chưa có vụ hoàn thành bị bỏ qua", async ({ page }) => {
-  await loginAs(page, "htx", "/htx/mua-vu");
+  await loginAs(page, "htx-member", "/htx/mua-vu");
   await page.getByRole("button", { name: "Mở vụ cho nông hộ" }).click();
   const form = page.getByRole("form", { name: "Mở vụ cho nông hộ" });
   await form.getByRole("checkbox", { name: new RegExp(done2.code) }).check();
@@ -52,7 +52,7 @@ test("HTX US-SEASON-03: sao chép cấu hình vụ trước — lô chưa có v�
 });
 
 test("hủy vụ mở nhầm cần lý do ≥ 10 ký tự (bản ghi bù, RB-1)", async ({ page }) => {
-  await loginAs(page, "htx", "/htx/mua-vu");
+  await loginAs(page, "htx-member", "/htx/mua-vu");
   const row = page.getByRole("table", { name: "Danh sách vụ" }).getByRole("row").filter({ hasText: growing.code });
   await row.getByRole("button", { name: `Hủy vụ lô ${growing.code}` }).click();
   const dlg = page.getByRole("dialog", { name: `Hủy vụ lô ${growing.code}` });
@@ -68,6 +68,15 @@ test("hủy vụ mở nhầm cần lý do ≥ 10 ký tự (bản ghi bù, RB-1)"
   await expect(cancelled).toContainText("Đã hủy");
   await cancelled.getByRole("button", { name: `Lịch sử vụ lô ${growing.code}` }).click();
   await expect(page.getByRole("dialog")).toContainText("Mở nhầm lô của hộ bên cạnh");
+});
+
+test("[AH-39] Đại diện HTX chỉ xem vụ của HTX mình: không có nút mở, sửa, hủy vụ", async ({ page }) => {
+  await loginAs(page, "htx", "/htx/mua-vu");
+  await expect(page.getByRole("note")).toContainText("Đại diện HTX chỉ xem");
+  await expect(page.getByRole("table", { name: "Danh sách vụ" }).getByRole("row").filter({ hasText: growing.code }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "Mở vụ cho nông hộ" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^Sửa vụ/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^Hủy vụ/ })).toHaveCount(0);
 });
 
 test("cán bộ KN xã chỉ xem vụ của HTX trong xã, không có nút ghi", async ({ page }) => {

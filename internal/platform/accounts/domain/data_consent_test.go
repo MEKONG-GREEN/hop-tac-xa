@@ -22,6 +22,9 @@ func TestRequiresDataConsent_REQ011(t *testing.T) {
 		{[]string{"kn_officer"}, false},
 		// Có cả vai HTX lẫn Admin vẫn phải đồng ý.
 		{[]string{"account_admin", "coop_manager"}, true},
+		// AH-39: Thành viên HTX cũng phải đồng ý (mở vụ, ghi nhật ký có ảnh/GPS).
+		{[]string{"htx_member"}, true},
+		{[]string{"htx_member", "coop_manager"}, true},
 	} {
 		if got := RequiresDataConsent(tc.roles); got != tc.want {
 			t.Errorf("RequiresDataConsent(%v) = %v, muốn %v", tc.roles, got, tc.want)

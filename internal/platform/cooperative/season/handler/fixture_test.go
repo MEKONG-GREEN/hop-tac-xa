@@ -141,6 +141,19 @@ func (f *fixture) managerA() caller      { return f.as(f.tenant, f.coopA, port.R
 func (f *fixture) managerB() caller      { return f.as(f.tenant, f.coopB, port.RoleCoopManager) }
 func (f *fixture) officerA() caller      { return f.as(f.tenant, f.knA, partyport.RoleKNOfficer) }
 
+// Thành viên HTX (htx_member): mở vụ, ghi nhật ký, khai sản lượng của HTX mình (ma trận KHMV, AH-39).
+func (f *fixture) memberA() caller { return f.as(f.tenant, f.coopA, port.RoleHTXMember) }
+func (f *fixture) memberB() caller { return f.as(f.tenant, f.coopB, port.RoleHTXMember) }
+
+// bothA: tài khoản kiêm Đại diện HTX và Thành viên HTX của HTX A — dùng quyền Đại diện HTX tới AH-270.
+func (f *fixture) bothA() caller {
+	return f.as(f.tenant, f.coopA, port.RoleCoopManager, port.RoleHTXMember)
+}
+
+// memberNoCoop, managerNoCoop: tài khoản App HTX chưa gắn HTX (org_ref rỗng).
+func (f *fixture) memberNoCoop() caller  { return f.as(f.tenant, uuid.Nil, port.RoleHTXMember) }
+func (f *fixture) managerNoCoop() caller { return f.as(f.tenant, uuid.Nil, port.RoleCoopManager) }
+
 // farmer tạo tài khoản nông dân liên kết với các nông hộ.
 func (f *fixture) farmer(hh ...uuid.UUID) caller {
 	c := f.as(f.tenant, f.coopA, port.RoleFarmer)

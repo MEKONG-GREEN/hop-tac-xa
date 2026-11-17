@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/shopspring/decimal"
 
+	"github.com/MEKONG-GREEN/hop-tac-xa/contracts/htxroles"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/season/domain"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/season/store"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/problem"
@@ -51,9 +52,9 @@ func derive(g store.DashGroup) DashGroup {
 }
 
 // Dashboard tổng hợp theo phạm vi của người gọi: quản lý HTX chỉ HTX mình (AC-3),
-// quản trị xem toàn bộ hoặc lọc theo HTX (AC-4), cán bộ KN theo xã.
+// quản trị xem toàn bộ hoặc lọc theo HTX (AC-4), cán bộ KN theo xã. Quyền: KHMV-FN-03-XEM R (tiến độ vụ).
 func (s *Service) Dashboard(ctx context.Context, in DashboardInput) (Dashboard, error) {
-	a, err := s.access(ctx, readRoles...)
+	a, err := s.matrixAccess(ctx, fnSeasonView, htxroles.Read, legacyReadRoles...)
 	if err != nil {
 		return Dashboard{}, err
 	}

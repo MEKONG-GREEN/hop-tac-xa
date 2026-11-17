@@ -27,9 +27,9 @@ func (p logScopePlots) Get(ctx context.Context, ref uuid.UUID) (port.Plot, error
 func TestFarmLogHiddenAndUnknownPlotsHaveSameDenial(t *testing.T) {
 	f := newFixture(t)
 	f.publishedSOP("SOP log scope", "OM5451")
-	f.managerA().mustOpen(f.p1)
+	f.memberA().mustOpen(f.p1)
 	f.mod.svc.Plots = logScopePlots{Plots: f.plots, hidden: map[uuid.UUID]bool{f.p1: true, f.p3: true}}
-	for _, c := range []caller{f.managerB(), f.farmer(f.h4)} {
+	for _, c := range []caller{f.memberB(), f.farmer(f.h4)} {
 		for _, ref := range []uuid.UUID{f.p1, f.p3, ids.New()} {
 			expectCode(t, c.log(ref, nil), http.StatusForbidden, "cropcycle.out_of_scope", "hidden/open, hidden/unopened and unknown plots use same denial")
 		}
@@ -40,7 +40,7 @@ func TestFarmLogHiddenAndUnknownPlotsHaveSameDenial(t *testing.T) {
 	// A visible plot of another household is still not writable by a farmer.
 	f.mod.svc.Plots = f.plots
 	expectCode(t, f.farmer(f.h1).log(f.p3, nil), http.StatusForbidden, "cropcycle.out_of_scope", "other household without an open season")
-	r := f.managerA().post("/v1/cropcycle/farm-logs/batch", map[string]any{"plot_refs": []string{f.p1.String(), f.p4.String(), ids.New().String()}, "activity_code": "bon_phan"})
+	r := f.memberA().post("/v1/cropcycle/farm-logs/batch", map[string]any{"plot_refs": []string{f.p1.String(), f.p4.String(), ids.New().String()}, "activity_code": "bon_phan"})
 	expect(t, r, http.StatusCreated, "batch retains permitted line")
 	if num(r.body, "accepted") != 1 || len(list(r.body, "skipped")) != 2 {
 		t.Fatalf("batch scope: %s", r.raw)

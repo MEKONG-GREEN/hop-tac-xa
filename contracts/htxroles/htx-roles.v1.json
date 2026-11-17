@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "source": "BRD_App_HTX_QuanTriPhanQuyen_HoSoHTX_ThongKeBaoCao_v3.0 — Mục V (FN-05, ADM-01); quyết định nhóm dự án 17/11/2026 (AH-272)",
+  "source": "BRD_App_HTX_QuanTriPhanQuyen_HoSoHTX_ThongKeBaoCao_v3.0 — Mục V (FN-05, ADM-01); quyết định nhóm dự án 17/11/2026 (AH-272); BRD Kế hoạch mùa vụ v3.9 Mục VI — dòng KHMV-* (AH-39, KH-02, KH-28)",
   "actions": {
     "C": "tạo",
     "R": "xem",
@@ -29,11 +29,32 @@
     { "key": "FN-12", "name": "Thống kê vụ của Thành viên HTX", "grants": { "platform_admin": "R", "coop_manager": "R", "htx_member": "R" } },
     { "key": "FN-13", "name": "Thống kê vụ của Đại diện HTX", "grants": { "platform_admin": "R", "coop_manager": "R", "htx_member": "" } },
     { "key": "FN-14", "name": "Thống kê vụ của Admin", "grants": { "platform_admin": "R", "coop_manager": "", "htx_member": "" } },
-    { "key": "FN-15", "name": "Bộ lọc và xuất báo cáo", "grants": { "platform_admin": "RX", "coop_manager": "RX", "htx_member": "R" } }
+    { "key": "FN-15", "name": "Bộ lọc và xuất báo cáo", "grants": { "platform_admin": "RX", "coop_manager": "RX", "htx_member": "R" } },
+    { "key": "KHMV-FN-01", "name": "Danh mục cây trồng, giống và SOP", "grants": { "platform_admin": "CRUD", "coop_manager": "R", "htx_member": "R" } },
+    { "key": "KHMV-FN-02", "name": "Xem danh sách nông hộ và diện tích đất", "grants": { "platform_admin": "R", "coop_manager": "R", "htx_member": "R" } },
+    { "key": "KHMV-FN-03", "name": "Khai báo mở vụ mới (D = dừng/hủy vụ kèm lý do)", "grants": { "platform_admin": "CRUD", "coop_manager": "R", "htx_member": "CRUD" } },
+    { "key": "KHMV-FN-03-LICH", "name": "Lịch thời vụ (lập, sửa, hủy, phát)", "grants": { "platform_admin": "CRUD", "coop_manager": "CRUD", "htx_member": "R" } },
+    { "key": "KHMV-FN-03-XEM", "name": "Xem chi tiết vụ, tiến độ, kế hoạch mùa vụ", "grants": { "platform_admin": "R", "coop_manager": "R", "htx_member": "R" } },
+    { "key": "KHMV-FN-04", "name": "Kế hoạch mùa vụ", "grants": { "platform_admin": "CRUD", "coop_manager": "R", "htx_member": "CRUD" } },
+    { "key": "KHMV-FN-05", "name": "Ghi nhật ký canh tác", "grants": { "platform_admin": "CRUD", "coop_manager": "R", "htx_member": "CRUD" } },
+    { "key": "KHMV-FN-06", "name": "Khai báo sản lượng (D = hủy khai báo)", "grants": { "platform_admin": "CRUD", "coop_manager": "R", "htx_member": "CRUD" } },
+    { "key": "KHMV-NTF", "name": "Thông báo của BRD Kế hoạch mùa vụ", "grants": { "platform_admin": "", "coop_manager": "", "htx_member": "R" } }
   ],
   "member_write_routes": [
     "POST /v1/notifications/read-all",
     "POST /v1/notifications/:id/read",
-    "POST /v1/devices/:id/push-token"
+    "POST /v1/devices/:id/push-token",
+    "POST /v1/cropcycle/seasons",
+    "POST /v1/cropcycle/seasons/bulk-open",
+    "POST /v1/cropcycle/seasons/:ref/corrections",
+    "POST /v1/cropcycle/seasons/:ref/cancel",
+    "POST /v1/cropcycle/seasons/:ref/harvest",
+    "POST /v1/cropcycle/harvests/bulk",
+    "POST /v1/cropcycle/harvests/import",
+    "POST /v1/cropcycle/harvests/:id/corrections",
+    "POST /v1/cropcycle/farm-logs",
+    "POST /v1/cropcycle/farm-logs/batch",
+    "POST /v1/cropcycle/farm-logs/:id/corrections",
+    "POST /v1/me/data-consent"
   ]
 }

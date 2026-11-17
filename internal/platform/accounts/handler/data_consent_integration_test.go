@@ -295,6 +295,38 @@ func TestDataConsent_REQ011_AC3_GuardRejectsPhotoGPS(t *testing.T) {
 	}
 }
 
+// AH-39: Thành viên HTX mở vụ, ghi nhật ký có ảnh/GPS nên cũng phải đồng ý trước; đồng ý được, sau đó qua cổng chặn.
+func TestDataConsent_AH39_HTXMemberMustConsent(t *testing.T) {
+	f := newConsentFixture(t)
+	sub := ids.New()
+	tok := f.token(f.tenant, sub, "htx_member")
+	if r := f.call(tok, http.MethodGet, "/v1/me/data-consent", "", nil); r.status != http.StatusOK || r.body["required"] != true {
+		t.Fatalf("GET: %d %v", r.status, r.body)
+	}
+	for _, route := range consentGuardedRoutes(t) {
+		method, path := routeURL(route)
+		r := f.call(tok, method, path, key(), map[string]any{"gps": map[string]any{"lat": 10.1, "lng": 105.2}})
+		if r.status != http.StatusForbidden || str(r.body, "code") != "accounts.data_consent_required" {
+			t.Fatalf("%s trước khi đồng ý: %d %v", route, r.status, r.body)
+		}
+	}
+	if n := f.calls.Load(); n != 0 {
+		t.Fatalf("handler nhận ảnh/GPS không được chạy khi chưa đồng ý: %d lần", n)
+	}
+	if r := f.accept(tok, "tam-1"); r.status != http.StatusCreated {
+		t.Fatalf("đồng ý: %d %v", r.status, r.body)
+	}
+	if got := f.consentRows(f.tenant, sub); len(got) != 1 {
+		t.Fatalf("sổ: %v", got)
+	}
+	for _, route := range consentGuardedRoutes(t) {
+		method, path := routeURL(route)
+		if r := f.call(tok, method, path, key(), map[string]any{}); r.status != http.StatusCreated {
+			t.Fatalf("%s sau khi đồng ý: %d %v", route, r.status, r.body)
+		}
+	}
+}
+
 func TestDataConsent_ACN1_NoPromptAfterConsent(t *testing.T) {
 	f := newConsentFixture(t)
 	tok, sub := f.coop()

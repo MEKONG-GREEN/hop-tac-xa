@@ -16,12 +16,12 @@ import (
 
 // Native staff have an OrgRef but no selected application session. Their
 // server-resolved commune scope must reach RLS as well as the app's filters.
-// Managers/farmers keep their own node scope; KN/selected projections remain
+// Managers/HTX members/farmers keep their own node scope; KN/selected projections remain
 // authoritative. A target tenant different from either authenticated tenant
 // is never eligible for this additional native scope.
 func nativeScopeStaff(p authz.Principal) bool {
 	if p.TenantID == uuid.Nil || p.ActorRef == uuid.Nil || p.OrgRef == uuid.Nil || p.KN != nil || p.SelectedSession != nil ||
-		p.Has(authz.RolePlatformAdmin) || p.Has(port.RoleCoopManager) || p.Has(port.RoleFarmer) ||
+		p.Has(authz.RolePlatformAdmin) || p.Has(port.RoleCoopManager) || p.Has(port.RoleHTXMember) || p.Has(port.RoleFarmer) ||
 		p.Has(partyport.RolePartnerSync) || p.Has("api_client") || p.Has("kn_user") {
 		return false
 	}

@@ -14,6 +14,7 @@ import (
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/authz"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/params"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/problem"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/tenant"
 )
 
 // fakeScope thay party.ScopeResolver: phạm vi theo OrgRef của người gọi.
@@ -40,6 +41,17 @@ type fakePlots struct {
 	mu    sync.Mutex
 	plots map[uuid.UUID]port.Plot
 	dist  map[uuid.UUID]decimal.Decimal
+	// tenant (tùy chọn): khác Nil thì chỉ trả thửa cho người gọi cùng tenant, như cổng thửa thật dưới RLS.
+	tenant uuid.UUID
+}
+
+// visible cho biết thửa thấy được với tenant của ctx (khi đã bật tenant).
+func (f *fakePlots) visible(ctx context.Context) bool {
+	if f.tenant == uuid.Nil {
+		return true
+	}
+	tid, err := tenant.FromContext(ctx)
+	return err == nil && tid == f.tenant
 }
 
 func (f *fakePlots) put(p port.Plot, distM int64) {
@@ -49,11 +61,11 @@ func (f *fakePlots) put(p port.Plot, distM int64) {
 	f.dist[p.Ref] = decimal.NewFromInt(distM)
 }
 
-func (f *fakePlots) Get(_ context.Context, ref uuid.UUID) (port.Plot, error) {
+func (f *fakePlots) Get(ctx context.Context, ref uuid.UUID) (port.Plot, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	p, ok := f.plots[ref]
-	if !ok {
+	if !ok || !f.visible(ctx) {
 		return port.Plot{}, port.ErrPlotNotFound
 	}
 	return p, nil
@@ -70,10 +82,13 @@ func (f *fakePlots) DistanceM(_ context.Context, ref uuid.UUID, _, _ decimal.Dec
 }
 
 // Facts: dữ kiện nhiều thửa.
-func (f *fakePlots) Facts(_ context.Context, refs []uuid.UUID) (map[uuid.UUID]port.Plot, error) {
+func (f *fakePlots) Facts(ctx context.Context, refs []uuid.UUID) (map[uuid.UUID]port.Plot, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	out := map[uuid.UUID]port.Plot{}
+	if !f.visible(ctx) {
+		return out, nil
+	}
 	for _, r := range refs {
 		if p, ok := f.plots[r]; ok {
 			out[r] = p

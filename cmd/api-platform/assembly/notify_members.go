@@ -7,12 +7,13 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/MEKONG-GREEN/hop-tac-xa/contracts/htxroles"
 	accport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/port"
-	partyport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/party/port"
 )
 
 // NotifyMembers hiện thực notify/port.MemberDirectory trên pf/accounts (Keycloak): Thành viên HTX là tài khoản
-// đang bật, cùng tenant, org_ref bằng HTX và có vai coop_manager (AH-22).
+// đang bật, cùng tenant, org_ref bằng HTX và có vai htx_member (AH-22; người nhận chuyển từ coop_manager sang
+// htx_member ở AH-39, dòng KHMV-NTF của ma trận).
 type NotifyMembers struct{ Dir accport.Directory }
 
 // IsActiveMember thực hiện notify/port.MemberDirectory.
@@ -31,5 +32,5 @@ func (m NotifyMembers) IsActiveMember(ctx context.Context, tid, coop, actor uuid
 	if err != nil {
 		return false, err
 	}
-	return slices.Contains(roles, partyport.RoleCoopManager), nil
+	return slices.Contains(roles, htxroles.Member), nil
 }

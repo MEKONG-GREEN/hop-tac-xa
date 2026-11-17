@@ -9,8 +9,8 @@ import (
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/problem"
 )
 
-// Thông báo cho Thành viên HTX (AH-22, BRD §V NTF). Thành viên HTX ứng với vai quản lý HTX đang có
-// (partyport.RoleCoopManager). Bốn loại dưới đây do cổng MemberNotifier tạo; việc phát sinh từ sự kiện nghiệp vụ
+// Thông báo cho Thành viên HTX (AH-22, BRD §V NTF). Thành viên HTX là vai htx_member (AH-39, dòng KHMV-NTF của ma
+// trận contracts/htxroles). Bốn loại dưới đây do cổng MemberNotifier tạo; việc phát sinh từ sự kiện nghiệp vụ
 // thuộc Story khác (phát lịch AH-51, nhắc việc AH-191, nhắc nhật ký AH-192, đổi giống AH-175).
 const (
 	KindSeasonCalendarPublished = "season_calendar_published" // NTF.1: lịch thời vụ được phát
@@ -94,7 +94,7 @@ type MemberNotifier interface {
 }
 
 // MemberDirectory kiểm một tài khoản có phải Thành viên HTX đang hoạt động của HTX: tài khoản bật, cùng tenant,
-// org_ref bằng HTX và có vai coop_manager. pf/notify khai cổng, gốc lắp ráp hiện thực qua pf/accounts.
+// org_ref bằng HTX và có vai htx_member. pf/notify khai cổng, gốc lắp ráp hiện thực qua pf/accounts.
 type MemberDirectory interface {
 	IsActiveMember(ctx context.Context, tenantID, cooperativeRef, actorRef uuid.UUID) (bool, error)
 }

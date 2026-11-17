@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/shopspring/decimal"
 
+	"github.com/MEKONG-GREEN/hop-tac-xa/contracts/htxroles"
 	port "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/port"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/season/domain"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/season/store"
@@ -165,9 +166,9 @@ func seasonAcceptsLog(season store.Season, at time.Time, channel string) bool {
 	return false
 }
 
-// RecordLog ghi nhật ký canh tác. Lô chưa mở vụ → cropcycle.season_not_open.
+// RecordLog ghi nhật ký canh tác. Lô chưa mở vụ → cropcycle.season_not_open. Quyền: KHMV-FN-05 C.
 func (s *Service) RecordLog(ctx context.Context, in LogInput) (LogResult, error) {
-	a, err := s.access(ctx, writeRoles...)
+	a, err := s.matrixAccess(ctx, fnLog, htxroles.Create, legacyWriteRoles...)
 	if err != nil {
 		return LogResult{}, err
 	}
@@ -332,9 +333,9 @@ type CorrectLogInput struct {
 }
 
 // CorrectLog ghi bản ghi bù cho nhật ký. Phiên bản bị thay phải là hiện hành,
-// nếu không → cropcycle.concurrent_edit. Giữ nguyên event_time và GPS.
+// nếu không → cropcycle.concurrent_edit. Giữ nguyên event_time và GPS. Quyền: KHMV-FN-05 U.
 func (s *Service) CorrectLog(ctx context.Context, in CorrectLogInput) (LogResult, error) {
-	a, err := s.access(ctx, writeRoles...)
+	a, err := s.matrixAccess(ctx, fnLog, htxroles.Update, legacyWriteRoles...)
 	if err != nil {
 		return LogResult{}, err
 	}
@@ -459,9 +460,9 @@ type BatchResult struct {
 // Lý do bỏ thửa khỏi lượt ghi hàng loạt (HTX US-LOG-03 AC-2).
 const SkipNotOpen = "Lô chưa mở vụ"
 
-// RecordBatch ghi nhật ký hàng loạt: thửa chưa mở vụ hoặc ngoài phạm vi bị loại kèm lý do.
+// RecordBatch ghi nhật ký hàng loạt: thửa chưa mở vụ hoặc ngoài phạm vi bị loại kèm lý do. Quyền: KHMV-FN-05 C.
 func (s *Service) RecordBatch(ctx context.Context, in BatchInput) (BatchResult, error) {
-	a, err := s.access(ctx, writeRoles...)
+	a, err := s.matrixAccess(ctx, fnLog, htxroles.Create, legacyWriteRoles...)
 	if err != nil {
 		return BatchResult{}, err
 	}
@@ -632,7 +633,8 @@ type ReviewResult struct {
 	Replayed bool
 }
 
-// ReviewLog duyệt nhật ký chờ duyệt: quản lý HTX của đúng HTX; người duyệt ≠ người ghi.
+// ReviewLog duyệt nhật ký chờ duyệt: quản lý HTX của đúng HTX; người duyệt ≠ người ghi. Phê duyệt không có trong
+// ma trận KHMV nên giữ quyền cũ (managerRoles, AH-39).
 // Chỉ nhật ký đã duyệt tính vào số liệu (AC-2); yêu cầu bổ sung cần ghi chú (AC-3).
 func (s *Service) ReviewLog(ctx context.Context, in ReviewInput) (ReviewResult, error) {
 	a, err := s.access(ctx, managerRoles...)
@@ -748,9 +750,9 @@ type LogDetail struct {
 	Versions []store.FarmLog
 }
 
-// GetLog đọc một phiên bản nhật ký trong phạm vi.
+// GetLog đọc một phiên bản nhật ký trong phạm vi (KHMV-FN-05 R).
 func (s *Service) GetLog(ctx context.Context, id uuid.UUID) (LogDetail, error) {
-	a, err := s.access(ctx, readRoles...)
+	a, err := s.matrixAccess(ctx, fnLog, htxroles.Read, legacyReadRoles...)
 	if err != nil {
 		return LogDetail{}, err
 	}
@@ -785,7 +787,7 @@ type ListLogsInput struct {
 
 // ListLogs liệt kê nhật ký trong phạm vi (vd "Chờ duyệt" của HTX — US-LOG-05).
 func (s *Service) ListLogs(ctx context.Context, in ListLogsInput) (Page[store.LogState], error) {
-	a, err := s.access(ctx, readRoles...)
+	a, err := s.matrixAccess(ctx, fnLog, htxroles.Read, legacyReadRoles...)
 	if err != nil {
 		return Page[store.LogState]{}, err
 	}

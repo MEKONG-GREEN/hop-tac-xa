@@ -16,11 +16,12 @@ const (
 	RoleFarmer = "farmer"
 	// RoleSOPAdmin: soạn và phát hành quy trình SOP (Admin API); phát hành một bước, không cần người thứ hai (AH-8).
 	RoleSOPAdmin = "sop_admin"
-	// RoleCoopManager là vai quản lý HTX: mở vụ hộ, ghi nhật ký hộ, duyệt nhật ký, nhập sản lượng hàng loạt,
-	// sửa hồ sơ HTX/hộ — chỉ HTX của mình (Principal.OrgRef).
+	// RoleCoopManager là vai quản lý HTX (Đại diện HTX): chỉ xem vụ, nhật ký, sản lượng (ma trận KHMV, AH-39), duyệt
+	// nhật ký, sửa hồ sơ HTX/hộ — chỉ HTX của mình (Principal.OrgRef).
 	RoleCoopManager = "coop_manager"
 	// RoleHTXMember: Thành viên HTX (App HTX, FN-05) — người của HTX được cấp tài khoản; quyền theo ma trận
-	// contracts/htxroles (docs/conventions/vai-tro-app-htx.md), phạm vi HTX của mình (Principal.OrgRef).
+	// contracts/htxroles (docs/conventions/vai-tro-app-htx.md), phạm vi HTX của mình (Principal.OrgRef): mở vụ, ghi
+	// nhật ký, khai sản lượng của HTX mình theo các dòng KHMV-*.
 	RoleHTXMember = "htx_member"
 )
 

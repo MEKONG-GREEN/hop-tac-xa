@@ -7,7 +7,7 @@ const growing2 = plot(2);
 const fresh = plot(4); // chưa mở vụ
 
 test("HTX US-LOG-05 AC-1: nhãn “Vị trí không khớp”, “Thiếu GPS” trong danh sách nhật ký", async ({ page }) => {
-  await loginAs(page, "htx", "/htx/nhat-ky");
+  await loginAs(page, "htx-member", "/htx/nhat-ky");
   const table = page.getByRole("table", { name: "Nhật ký canh tác" });
   await page.getByLabel("Vị trí").selectOption("mismatch");
   await expect(table.getByRole("row").nth(1)).toContainText("Vị trí không khớp");
@@ -17,7 +17,7 @@ test("HTX US-LOG-05 AC-1: nhãn “Vị trí không khớp”, “Thiếu GPS”
 });
 
 test("HTX US-LOG-02: ghi hộ nông dân — chặn lô chưa mở vụ, ghi được lô đang canh tác", async ({ page }) => {
-  await loginAs(page, "htx", "/htx/nhat-ky");
+  await loginAs(page, "htx-member", "/htx/nhat-ky");
   await page.getByRole("button", { name: "Ghi hộ nông dân" }).click();
   const form = page.getByRole("form", { name: "Ghi nhật ký hộ nông dân" });
   await form.getByLabel("Lô ruộng").selectOption(fresh.ref);
@@ -39,7 +39,7 @@ test("HTX US-LOG-02: ghi hộ nông dân — chặn lô chưa mở vụ, ghi đ�
 });
 
 test("HTX US-LOG-03: ghi hàng loạt — một lượt, lô chưa mở vụ bị loại kèm lý do", async ({ page }) => {
-  await loginAs(page, "htx", "/htx/nhat-ky");
+  await loginAs(page, "htx-member", "/htx/nhat-ky");
   await page.getByRole("button", { name: "Ghi hàng loạt" }).click();
   const form = page.getByRole("form", { name: "Ghi nhật ký hàng loạt" });
   for (const p of [growing, growing2, fresh]) await form.getByRole("checkbox", { name: new RegExp(p.code) }).check();
@@ -50,7 +50,7 @@ test("HTX US-LOG-03: ghi hàng loạt — một lượt, lô chưa mở vụ b�
 });
 
 test("sửa nhật ký bằng phiên bản mới kèm lý do; thời điểm và GPS giữ nguyên", async ({ page }) => {
-  await loginAs(page, "htx", "/htx/nhat-ky");
+  await loginAs(page, "htx-member", "/htx/nhat-ky");
   await page.getByLabel("Trạng thái duyệt").selectOption("pending");
   const table = page.getByRole("table", { name: "Nhật ký canh tác" });
   await table.getByRole("button", { name: new RegExp(`Sửa nhật ký lô ${growing2.code}`) }).first().click();
@@ -61,6 +61,14 @@ test("sửa nhật ký bằng phiên bản mới kèm lý do; thời điểm và
   await dlg.getByRole("button", { name: "Lưu phiên bản mới" }).click();
   await expect(dlg).toHaveCount(0);
   await expect(table.getByRole("row").filter({ hasText: growing2.code }).filter({ hasText: "Phiên bản 2" })).toHaveCount(1);
+});
+
+test("[AH-39] Đại diện HTX chỉ xem nhật ký: không có nút ghi hộ, ghi hàng loạt, sửa", async ({ page }) => {
+  await loginAs(page, "htx", "/htx/nhat-ky");
+  await expect(page.getByRole("table", { name: "Nhật ký canh tác" }).getByRole("row").nth(1)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Ghi hộ nông dân" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Ghi hàng loạt" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^Sửa nhật ký/ })).toHaveCount(0);
 });
 
 test("cán bộ KN chỉ xem nhật ký, không có nút ghi hộ", async ({ page }) => {

@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/shopspring/decimal"
 
+	"github.com/MEKONG-GREEN/hop-tac-xa/contracts/htxroles"
 	port "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/port"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/season/domain"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/season/store"
@@ -45,6 +46,10 @@ func (s *Service) syncAccess(ctx context.Context, scope authz.Scope) (access, bo
 	p, ok := authz.FromContext(ctx)
 	if !ok {
 		return access{}, false, problem.Unauthenticated
+	}
+	// Đồng bộ từ app cho Thành viên HTX chưa mở: app di động thuộc AH-303.
+	if htxroles.IsMemberOnly(p.Has) {
+		return access{}, false, nil
 	}
 	hasAny := false
 	for _, r := range readRoles {
@@ -462,10 +467,27 @@ func (p LogPayload) content() (LogContent, error) {
 		Note: p.Note, FileRefs: files}, nil
 }
 
-// Accept thực hiện syncport.Sink: idempotent theo IdemKey (sổ chống trùng).
+// syncFunctions: dòng ma trận KHMV của từng entity chiều lên.
+var syncFunctions = map[string]string{
+	port.EntitySeasonOpen: fnSeason,
+	port.EntityFarmLog:    fnLog,
+	port.EntityLogBatch:   fnLog,
+	port.EntityHarvest:    fnHarvest,
+}
+
+// Accept thực hiện syncport.Sink: idempotent theo IdemKey (sổ chống trùng). Quyền theo ma trận KHMV như Application
+// API (Đại diện HTX và tài khoản kiêm hai vai chỉ xem → rejected); Thành viên HTX chưa được đồng bộ từ app (AH-303).
 func (snk SyncSink) Accept(ctx context.Context, scope authz.Scope, rec syncport.Record) syncport.Result {
 	s := snk.Svc
-	a, err := s.access(ctx, writeRoles...)
+	if p, ok := authz.FromContext(ctx); ok && htxroles.IsMemberOnly(p.Has) {
+		return rejected(rec.ID, problem.Forbidden.WithDetail("Đồng bộ từ app cho Thành viên HTX chưa mở (AH-303)"))
+	}
+	fn, ok := syncFunctions[rec.Entity]
+	if !ok {
+		return rejected(rec.ID, problem.Validation.WithField("entity", "không thuộc module pf/cooperative (vụ)"))
+	}
+	// Bản ghi bù (sửa) cũng kiểm bằng C: các dòng này chỉ có CRUD hoặc R.
+	a, err := s.matrixAccess(ctx, fn, htxroles.Create, legacyWriteRoles...)
 	if err != nil {
 		return rejected(rec.ID, err)
 	}

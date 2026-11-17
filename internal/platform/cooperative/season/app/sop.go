@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/MEKONG-GREEN/hop-tac-xa/contracts/htxroles"
 	port "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/port"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/season/domain"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/season/store"
@@ -720,9 +721,9 @@ func (s *Service) BindVariety(ctx context.Context, variety string, template uuid
 	return b, err
 }
 
-// Bindings liệt kê gắn giống ↔ SOP hiện hành.
+// Bindings liệt kê gắn giống ↔ SOP hiện hành (KHMV-FN-01 R: cả Thành viên HTX).
 func (s *Service) Bindings(ctx context.Context) ([]store.Binding, error) {
-	p, err := authz.Require(ctx, append(append([]string{}, readRoles...), sopAdminRead...)...)
+	p, err := authz.Require(ctx, append(append([]string{htxroles.Member}, readRoles...), sopAdminRead...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -755,7 +756,7 @@ func (s *Service) ListSOPs(ctx context.Context, in SOPListInput) (Page[store.Tem
 		}
 		tid = p.TenantID
 	} else {
-		a, err := s.access(ctx, readRoles...)
+		a, err := s.matrixAccess(ctx, fnSOP, htxroles.Read, legacyReadRoles...)
 		if err != nil {
 			return Page[store.Template]{}, err
 		}
@@ -801,7 +802,7 @@ func (s *Service) GetSOP(ctx context.Context, ref uuid.UUID, admin bool) (SOPVie
 		}
 		tid = p.TenantID
 	} else {
-		a, err := s.access(ctx, readRoles...)
+		a, err := s.matrixAccess(ctx, fnSOP, htxroles.Read, legacyReadRoles...)
 		if err != nil {
 			return SOPView{}, err
 		}
@@ -866,7 +867,7 @@ func (s *Service) GetSOPVersion(ctx context.Context, id uuid.UUID, admin bool) (
 		}
 		tid = p.TenantID
 	} else {
-		a, err := s.access(ctx, readRoles...)
+		a, err := s.matrixAccess(ctx, fnSOP, htxroles.Read, legacyReadRoles...)
 		if err != nil {
 			return store.Version{}, store.Template{}, err
 		}

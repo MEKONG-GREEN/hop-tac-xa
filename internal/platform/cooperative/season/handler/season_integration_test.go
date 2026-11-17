@@ -55,7 +55,9 @@ func TestOpenSeasonFarmer_HTX_US_SEASON_01(t *testing.T) {
 	if str(r.body, "season", "location_status") != "mismatch" || str(r.body, "event", "distance_m") != "120.0" {
 		t.Fatalf("nhãn lệch vị trí: %s", r.raw)
 	}
-	r = f.managerA().open(f.p3, map[string]any{"gps": map[string]any{"source": "no_device"}})
+	// AH-39: Đại diện HTX chỉ xem vụ; Thành viên HTX mở vụ hộ (KHMV-FN-03).
+	expectCode(t, f.managerA().open(f.p3, nil), http.StatusForbidden, "cropcycle.read_only", "Đại diện HTX không mở vụ")
+	r = f.memberA().open(f.p3, map[string]any{"gps": map[string]any{"source": "no_device"}})
 	expect(t, r, http.StatusCreated, "mở vụ không GPS")
 	if str(r.body, "season", "location_status") != "missing" || str(r.body, "season", "gps_source") != "no_device" ||
 		get(r.body, "season", "on_behalf") != true {
@@ -70,7 +72,7 @@ func TestOpenSeasonFarmer_HTX_US_SEASON_01(t *testing.T) {
 func TestOneOpenSeasonPerPlot_HTX_US_SEASON_04(t *testing.T) {
 	f := newFixture(t)
 	f.publishedSOP("SOP OM5451", "OM5451")
-	mgr := f.managerA()
+	mgr := f.memberA()
 	var wg sync.WaitGroup
 	results := make([]resp, 6)
 	for i := range results {
@@ -101,12 +103,12 @@ func TestOneOpenSeasonPerPlot_HTX_US_SEASON_04(t *testing.T) {
 	}
 }
 
-// HTX US-SEASON-02 + US-SEASON-04 AC-2: quản lý HTX mở vụ hàng loạt; lô đang canh tác
+// HTX US-SEASON-02 + US-SEASON-04 AC-2: Thành viên HTX mở vụ hàng loạt (AH-39); lô đang canh tác
 // hoặc ngoài quyền quản lý bị bỏ qua kèm nhãn lý do.
 func TestBulkOpen_HTX_US_SEASON_02(t *testing.T) {
 	f := newFixture(t)
 	f.publishedSOP("SOP OM5451", "OM5451")
-	mgr := f.managerA()
+	mgr := f.memberA()
 	mgr.mustOpen(f.p3)
 	body := map[string]any{"plot_refs": []string{f.p1.String(), f.p2.String(), f.p3.String(), f.p4.String(), ids.New().String()},
 		"season_code": "DX", "season_year": 2026, "variety_code": "OM5451", "sowing_date": today}
@@ -123,12 +125,17 @@ func TestBulkOpen_HTX_US_SEASON_02(t *testing.T) {
 		t.Fatalf("nhãn lý do: %v", reasons)
 	}
 	expectCode(t, f.farmer(f.h1).post("/v1/cropcycle/seasons/bulk-open", body), http.StatusForbidden, "forbidden", "nông dân không mở hàng loạt")
-	// Quản lý HTX B không thấy vụ của HTX A.
-	if n := len(list(f.managerB().get("/v1/cropcycle/seasons").body, "items")); n != 0 {
-		t.Fatalf("HTX B thấy %d vụ của HTX A", n)
+	expectCode(t, f.managerA().post("/v1/cropcycle/seasons/bulk-open", body), http.StatusForbidden, "cropcycle.read_only", "Đại diện HTX không mở hàng loạt")
+	// Quản lý HTX B, Thành viên HTX B không thấy vụ của HTX A.
+	for _, c := range []caller{f.managerB(), f.memberB()} {
+		if n := len(list(c.get("/v1/cropcycle/seasons").body, "items")); n != 0 {
+			t.Fatalf("HTX B thấy %d vụ của HTX A", n)
+		}
 	}
-	if n := len(list(mgr.get("/v1/cropcycle/seasons?status=open").body, "items")); n != 3 {
-		t.Fatalf("HTX A có 3 vụ mở, thấy %d", n)
+	for _, c := range []caller{mgr, f.managerA()} {
+		if n := len(list(c.get("/v1/cropcycle/seasons?status=open").body, "items")); n != 3 {
+			t.Fatalf("HTX A có 3 vụ mở, thấy %d", n)
+		}
 	}
 }
 
@@ -136,7 +143,7 @@ func TestBulkOpen_HTX_US_SEASON_02(t *testing.T) {
 func TestCopyPreviousSeason_HTX_US_SEASON_03(t *testing.T) {
 	f := newFixture(t)
 	_, ver := f.publishedSOP("SOP OM5451", "OM5451")
-	mgr := f.managerA()
+	mgr := f.memberA()
 	expectCode(t, mgr.get("/v1/cropcycle/plots/"+f.p1.String()+"/previous-config"), http.StatusConflict, "cropcycle.no_previous_season", "chưa có vụ")
 	season := mgr.mustOpen(f.p1)
 	expectCode(t, mgr.get("/v1/cropcycle/plots/"+f.p1.String()+"/previous-config"), http.StatusConflict,
@@ -204,8 +211,8 @@ func TestSeasonCorrectionAndCancel(t *testing.T) {
 func TestTenantIsolationAndHierarchyScope(t *testing.T) {
 	f := newFixture(t)
 	f.publishedSOP("SOP OM5451", "OM5451")
-	sA := f.managerA().mustOpen(f.p1)
-	sB := f.managerB().mustOpen(f.p4)
+	sA := f.memberA().mustOpen(f.p1)
+	sB := f.memberB().mustOpen(f.p4)
 	kn := f.officerA()
 	items := list(kn.get("/v1/cropcycle/seasons").body, "items")
 	if len(items) != 1 || str(items[0], "season_ref") != sA {

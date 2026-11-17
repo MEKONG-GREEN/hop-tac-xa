@@ -15,14 +15,19 @@ import (
 // DataConsentRuleVersion ghi vào cột rule_version của sổ.
 const DataConsentRuleVersion = "pf.accounts.data_consent/v1"
 
-// roleCoopManager là vai quản lý HTX — tài khoản của HTX trong mã hiện tại.
-const roleCoopManager = "coop_manager"
+// Vai tài khoản của HTX: Đại diện HTX (coop_manager) và Thành viên HTX (htx_member, AH-39).
+const (
+	roleCoopManager = "coop_manager"
+	roleHTXMember   = "htx_member"
+)
 
 var consentVersionRe = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,40}$`)
 
-// RequiresDataConsent cho biết tài khoản mang các vai này phải đồng ý thu thập dữ liệu. AH-39 sẽ thêm ba vai mới của
-// HTX vào đây. Tài khoản có cả vai Admin lẫn vai HTX vẫn phải đồng ý; tài khoản chỉ có vai Admin thì không.
-func RequiresDataConsent(roles []string) bool { return slices.Contains(roles, roleCoopManager) }
+// RequiresDataConsent cho biết tài khoản mang các vai này phải đồng ý thu thập dữ liệu: Đại diện HTX hoặc Thành viên
+// HTX. Tài khoản có cả vai Admin lẫn vai HTX vẫn phải đồng ý; tài khoản chỉ có vai Admin thì không.
+func RequiresDataConsent(roles []string) bool {
+	return slices.Contains(roles, roleCoopManager) || slices.Contains(roles, roleHTXMember)
+}
 
 // ValidConsentVersion kiểm dạng mã phiên bản nội dung (cùng quy tắc CHECK của bảng).
 func ValidConsentVersion(v string) bool { return consentVersionRe.MatchString(v) }

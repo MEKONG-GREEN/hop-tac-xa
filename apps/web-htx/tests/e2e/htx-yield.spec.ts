@@ -6,7 +6,7 @@ const [readyA, readyB, readyC, readyD] = byKind(3); // vụ đang mở đã tớ
 const early = plot(1); // chưa tới giai đoạn thu hoạch
 
 test("HTX US-YIELD-02 AC-2 / US-YIELD-03: bảng nhập nhanh lưu nhiều lô một lần; bất thường cần xác nhận", async ({ page }) => {
-  await loginAs(page, "htx", "/htx/san-luong");
+  await loginAs(page, "htx-member", "/htx/san-luong");
   const grid = page.getByRole("form", { name: "Bảng nhập nhanh sản lượng" });
   await grid.getByLabel(`Sản lượng kg lô ${readyA!.code}`).fill("abc");
   await grid.getByRole("button", { name: "Lưu 1 lô" }).click();
@@ -31,7 +31,7 @@ test("HTX US-YIELD-02 AC-2 / US-YIELD-03: bảng nhập nhanh lưu nhiều lô m
 });
 
 test("HTX US-YIELD-02 AC-1: nhập CSV — dòng lỗi bị bỏ qua, dòng hợp lệ vẫn lưu, lỗi hiện ngay trên màn hình", async ({ page }) => {
-  await loginAs(page, "htx", "/htx/san-luong");
+  await loginAs(page, "htx-member", "/htx/san-luong");
   await page.getByRole("button", { name: "Nhập từ Excel" }).click();
   const form = page.getByRole("form", { name: "Nhập sản lượng từ tệp" });
   const csv = ["Mã lô,Sản lượng kg,Độ ẩm", `${readyC!.code},4200,14.5`, "TH9999999,5000,", `${readyD!.code},,`].join("\n");
@@ -42,6 +42,13 @@ test("HTX US-YIELD-02 AC-1: nhập CSV — dòng lỗi bị bỏ qua, dòng hợ
   await expect(table.getByRole("row").filter({ hasText: "Dòng 3" })).toContainText("Không tìm thấy vụ đang mở");
   await expect(table.getByRole("row").filter({ hasText: "Dòng 4" })).toContainText("Thiếu sản lượng");
   await expect(table.getByRole("row").filter({ hasText: "Dòng 2" })).toContainText("Đã lưu");
+});
+
+test("[AH-39] Đại diện HTX chỉ xem sản lượng: không có nút lưu, nhập từ tệp", async ({ page }) => {
+  await loginAs(page, "htx", "/htx/san-luong");
+  await expect(page.getByRole("note")).toContainText("Đại diện HTX chỉ xem");
+  await expect(page.getByRole("button", { name: /^Lưu/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Nhập từ Excel" })).toHaveCount(0);
 });
 
 test("cán bộ KN chỉ xem bảng sản lượng, không có nút lưu", async ({ page }) => {

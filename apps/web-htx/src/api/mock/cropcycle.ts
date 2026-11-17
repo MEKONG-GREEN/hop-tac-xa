@@ -267,13 +267,26 @@ function normName(s: string): string {
 // --------------------------------------------------------------------------
 // Phạm vi theo vai
 // --------------------------------------------------------------------------
-type Access = { kind: "all" } | { kind: "coop"; coop: string } | { kind: "kn"; units: Set<string> | null };
+type Access = { kind: "all" } | { kind: "coop"; coop: string; write: boolean } | { kind: "kn"; units: Set<string> | null };
 
+/**
+ * Ma trận KHMV (AH-39) theo vai có hiệu lực (Admin > Đại diện HTX > Thành viên HTX): Đại diện HTX (kể cả kiêm Thành
+ * viên HTX) chỉ xem vụ, nhật ký, sản lượng; Thành viên HTX ghi trong HTX mình.
+ */
 function accessOf(p: MockPersona): Access | null {
   if (hasRole(p, "platform_admin")) return { kind: "all" };
-  if (hasRole(p, "coop_manager")) return { kind: "coop", coop: p.me.org?.ref ?? "" };
+  if (hasRole(p, "coop_manager")) return { kind: "coop", coop: p.me.org?.ref ?? "", write: false };
+  if (hasRole(p, "htx_member")) return { kind: "coop", coop: p.me.org?.ref ?? "", write: true };
   if (hasRole(p, "kn_officer", "kn_province_admin", "kn_national_admin")) return { kind: "kn", units: p.me.scope.all ? null : new Set(p.me.scope.units) };
   return null;
+}
+/**
+ * Thao tác hàng loạt (mở vụ, nhập sản lượng) theo ma trận KHMV, chưa xét HTX: null = được làm; vai chỉ xem →
+ * cropcycle.read_only; vai khác (kể cả nông dân) → forbidden.
+ */
+function bulkDenied(a: Access | null): Response | null {
+  if (a && (a.kind === "all" || (a.kind === "coop" && a.write))) return null;
+  return a ? problem(403, "cropcycle.read_only", "Read only") : problem(403, "forbidden", "Forbidden");
 }
 function sees(a: Access, coop: string, commune: string): boolean {
   if (a.kind === "all") return true;
@@ -283,7 +296,7 @@ function sees(a: Access, coop: string, commune: string): boolean {
 /** null = được ghi; ngược lại là problem cần trả. */
 function writeDenied(a: Access | null, coop: string): Response | null {
   if (!a) return problem(403, "forbidden", "Forbidden");
-  if (a.kind === "kn") return problem(403, "cropcycle.read_only", "Read only");
+  if (a.kind === "kn" || (a.kind === "coop" && !a.write)) return problem(403, "cropcycle.read_only", "Read only");
   if (a.kind === "coop" && a.coop !== coop) return problem(403, "cropcycle.out_of_scope", "Out of scope");
   return null;
 }
@@ -933,7 +946,8 @@ export const cropcycleAppRoutes: Route[] = [
     pattern: /^\/v1\/cropcycle\/seasons\/bulk-open$/,
     handler: ({ body, persona }) => {
       ensure();
-      if (!hasRole(persona, "coop_manager", "platform_admin")) return hasRole(persona, "kn_officer", "kn_province_admin", "kn_national_admin") ? problem(403, "cropcycle.read_only", "Read only") : problem(403, "forbidden", "Forbidden");
+      const deny = bulkDenied(accessOf(persona));
+      if (deny) return deny;
       const b = bodyOf(body);
       const refs = Array.isArray(b.plot_refs) ? (b.plot_refs as string[]) : [];
       if (refs.length === 0 || refs.length > 200) return validation([{ field: "plot_refs", reason: "chọn từ 1 đến 200 lô" }]);
@@ -1053,7 +1067,8 @@ export const cropcycleAppRoutes: Route[] = [
     pattern: /^\/v1\/cropcycle\/harvests\/bulk$/,
     handler: ({ body, persona }) => {
       ensure();
-      if (!hasRole(persona, "coop_manager", "platform_admin")) return problem(403, hasRole(persona, "kn_officer", "kn_province_admin", "kn_national_admin") ? "cropcycle.read_only" : "forbidden", "Forbidden");
+      const deny = bulkDenied(accessOf(persona));
+      if (deny) return deny;
       const b = bodyOf(body);
       const rows = Array.isArray(b.rows) ? (b.rows as HarvestRowIn[]) : [];
       if (rows.length === 0 || rows.length > 200) return validation([{ field: "rows", reason: "từ 1 đến 200 dòng" }]);
@@ -1067,8 +1082,9 @@ export const cropcycleAppRoutes: Route[] = [
     pattern: /^\/v1\/cropcycle\/harvests\/import$/,
     handler: ({ body, persona, url, request }) => {
       ensure();
-      if (!hasRole(persona, "coop_manager", "platform_admin")) return problem(403, "forbidden", "Forbidden");
       const a = accessOf(persona);
+      const deny = bulkDenied(a);
+      if (deny) return deny;
       const coop = a?.kind === "coop" ? a.coop : url.searchParams.get("cooperative_ref");
       if (isZip(body)) {
         // .xlsx: giả lập không giải nén — kết quả minh hoạ (một dòng hợp lệ, hai dòng lỗi).
@@ -1166,7 +1182,7 @@ export const cropcycleAppRoutes: Route[] = [
     handler: ({ body, persona }) => {
       ensure();
       const a = accessOf(persona);
-      if (a?.kind === "kn") return problem(403, "cropcycle.read_only", "Read only");
+      if (a?.kind === "kn" || (a?.kind === "coop" && !a.write)) return problem(403, "cropcycle.read_only", "Read only");
       const b = bodyOf(body);
       const bad = logContentErrors(b);
       if (bad) return bad;
