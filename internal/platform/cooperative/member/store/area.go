@@ -18,7 +18,7 @@ func ActiveAreas(ctx context.Context, tx pgx.Tx, coop uuid.UUID, refs []uuid.UUI
 	rows, err := tx.Query(ctx, `SELECT household_ref, sum(area_ha)::text
 	  FROM pf_coop.season_current
 	  WHERE cooperative_ref = $1 AND household_ref = ANY($2::uuid[]) AND status = 'open'
-	  GROUP BY household_ref`, coop, refs)
+	  GROUP BY household_ref`, coop, uuidStrings(refs))
 	if err != nil {
 		return nil, err
 	}
