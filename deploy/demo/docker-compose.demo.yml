@@ -1,0 +1,192 @@
+# Hồ sơ máy demo App HTX — chồng lên deploy/compose/docker-compose.yml. MỘT tên miền (PUBLIC_URL), Caddy là cổng
+# vào duy nhất (80/443); mọi dịch vụ khác không mở cổng ra máy. Kịch bản đầy đủ: docs/runbooks/trien-khai-demo-htx.md.
+#
+#   sh deploy/demo/prepare.sh                 # bí mật + realm Keycloak theo tên miền (một lần, chạy lại an toàn)
+#   sh deploy/demo/compose.sh up -d --build --wait
+#
+# Đường dẫn tương đối trong tệp này tính từ thư mục dự án = thư mục của tệp -f ĐẦU TIÊN (deploy/compose).
+# Chỉ dữ liệu tổng hợp/demo. AG_ENV=staging: không phải production (residency RB-7 và guard của kho định danh chỉ
+# áp cho production) nhưng kênh gửi vẫn fail-closed (thiếu SMTP/FCM → tắt, liên kết email đòi https).
+name: htx-demo
+
+x-public-oidc: &public-oidc
+  AG_ENV: staging
+  AG_OIDC_ISSUER: ${PUBLIC_URL:?đặt PUBLIC_URL trong deploy/demo/.env}/auth/realms/agrigreen
+  AG_OIDC_JWKS_URL: http://keycloak:8080/auth/realms/agrigreen/protocol/openid-connect/certs
+
+x-public-kc-admin: &public-kc-admin
+  AG_KC_ADMIN_URL: http://keycloak:8080/auth
+  AG_KC_ACTIONS_REDIRECT_URI: ${PUBLIC_URL}/
+
+x-public-s3: &public-s3
+  # URL ký sẵn trỏ về chính tên miền demo (Caddy chuyển /<bucket>/* sang seaweedfs, giữ Host).
+  AG_S3_PUBLIC_ENDPOINT: ${PUBLIC_HOST:?đặt PUBLIC_HOST trong deploy/demo/.env}
+  AG_S3_PUBLIC_USE_TLS: "true"
+
+services:
+  # ---------------------------------------------------------------- hạ tầng: không mở cổng ra máy
+  postgres:
+    ports: !reset []
+  pgbouncer:
+    ports: !reset []
+  rabbitmq:
+    ports: !reset []
+  valkey:
+    ports: !reset []
+  seaweedfs:
+    ports: !reset []
+  otel-collector:
+    ports: !reset []
+
+  # Một lần: database + vai riêng cho Keycloak (thay H2 của start-dev — tài khoản không mất khi tạo lại container).
+  keycloak-db-init:
+    image: agrigreen/postgres:dev
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      PGPASSWORD: ${PG_SUPERUSER_PASSWORD}
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?chạy deploy/demo/prepare.sh}
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        psql -h postgres -U postgres -d postgres -v ON_ERROR_STOP=1 -v pw="$$KC_DB_PASSWORD" <<'SQL'
+        SELECT 'CREATE ROLE keycloak LOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'keycloak')\gexec
+        ALTER ROLE keycloak PASSWORD :'pw';
+        SELECT 'CREATE DATABASE keycloak OWNER keycloak' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'keycloak')\gexec
+        SQL
+        echo "keycloak-db-init: xong"
+    security_opt: ["no-new-privileges:true"]
+    restart: "no"
+
+  keycloak:
+    # Chế độ production: DB PostgreSQL, sau proxy (Caddy kết thúc TLS), đường dẫn /auth.
+    command: ["start", "--import-realm"]
+    depends_on:
+      keycloak-db-init: { condition: service_completed_successfully }
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      KC_HOSTNAME: ${PUBLIC_URL}/auth
+      KC_HTTP_RELATIVE_PATH: /auth
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HEALTH_ENABLED: "true"
+      # SMTP của realm (quên mật khẩu, xác minh email): để trống = Keycloak không gửi mail.
+      AG_SMTP_HOST: ${AG_SMTP_HOST:-}
+      AG_SMTP_PORT: ${AG_SMTP_PORT:-587}
+      AG_SMTP_FROM: ${AG_SMTP_FROM:-}
+      AG_SMTP_USERNAME: ${AG_SMTP_USERNAME:-}
+      AG_SMTP_PASSWORD: ${AG_SMTP_PASSWORD:-}
+    # Chỉ realm agrigreen đã đổi URL theo tên miền (prepare.sh sinh); KHÔNG nhập realm agrigreen-kn-admin.
+    volumes: !override
+      - "../demo/.generated/keycloak:/opt/keycloak/data/import:ro"
+      - "./keycloak-themes/agrigreen:/opt/keycloak/themes/agrigreen:ro"
+    healthcheck:
+      # Cổng quản trị 9000 dùng chung đường dẫn tương đối /auth.
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /auth/health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q '\"UP\"' <&3"]
+      interval: 10s
+      timeout: 5s
+      start_period: 120s
+      retries: 30
+    ports: !reset []
+
+  # ---------------------------------------------------------------- ứng dụng
+  identity-vault:
+    environment:
+      <<: *public-oidc
+    ports: !reset []
+
+  api-platform:
+    environment:
+      <<: [*public-oidc, *public-kc-admin, *public-s3]
+      # Loại máy: demo. AG_MFA_DISABLED mặc định 0 — giữ MFA cho Admin API; chỉ đặt 1 trong deploy/demo/.env khi
+      # buổi demo bắt buộc bỏ TOTP (guard authz.DemoMFABypassAllowed chỉ cho phép khi AG_DEPLOY_ENV=demo).
+      AG_DEPLOY_ENV: demo
+      AG_MFA_DISABLED: ${AG_MFA_DISABLED:-0}
+      AG_CORS_ORIGINS: ${PUBLIC_URL}
+      # Caddy ở trong mạng compose (dải cố định bên dưới) → đọc X-Forwarded-For cho giới hạn theo IP và nhật ký.
+      AG_TRUSTED_PROXIES: 172.31.250.0/24
+      AG_REPORT_LINK_BASE: ${PUBLIC_URL}/api
+    ports: !reset []
+
+  outbox-publisher:
+    environment:
+      AG_ENV: staging
+
+  worker:
+    environment:
+      <<: [*public-kc-admin, *public-s3]
+      AG_ENV: staging
+      AG_WEB_OPS_URL: ${PUBLIC_URL}
+      AG_REPORT_LINK_BASE: ${PUBLIC_URL}/api
+
+  web-htx:
+    image: agrigreen/web-htx:demo
+    build:
+      args:
+        # Bản thật (không giả lập): next build chặn nếu URL không phải https (src/deployEnv.ts).
+        NEXT_PUBLIC_DEPLOY_ENV: staging
+        NEXT_PUBLIC_API_BASE_URL: ${PUBLIC_URL}/api
+        NEXT_PUBLIC_ADMIN_API_BASE: ${PUBLIC_URL}/admin-api
+        NEXT_PUBLIC_OIDC_ISSUER: ${PUBLIC_URL}/auth/realms/agrigreen
+        NEXT_PUBLIC_OIDC_CLIENT_ID: agrigreen-web-ops
+        NEXT_PUBLIC_API_MOCK: "0"
+        NEXT_PUBLIC_SUPPORT_NAME: ${NEXT_PUBLIC_SUPPORT_NAME:-}
+        NEXT_PUBLIC_SUPPORT_PHONE: ${NEXT_PUBLIC_SUPPORT_PHONE:-}
+        NEXT_PUBLIC_SUPPORT_EMAIL: ${NEXT_PUBLIC_SUPPORT_EMAIL:-}
+    # NEXT_PUBLIC_* đã nhúng lúc build; biến lúc chạy của tệp gốc không còn tác dụng.
+    environment: !reset {}
+    ports: !reset []
+
+  caddy:
+    image: caddy:2.10-alpine
+    depends_on:
+      web-htx: { condition: service_started }
+      api-platform: { condition: service_started }
+      keycloak: { condition: service_healthy }
+    environment:
+      PUBLIC_HOST: ${PUBLIC_HOST}
+      ACME_EMAIL: ${ACME_EMAIL:?đặt ACME_EMAIL trong deploy/demo/.env}
+      ADMIN_ALLOW_CIDR: ${ADMIN_ALLOW_CIDR:?đặt ADMIN_ALLOW_CIDR (IP văn phòng/VPN) trong deploy/demo/.env}
+      ADMIN_API_ALLOW_CIDR: ${ADMIN_API_ALLOW_CIDR:-0.0.0.0/0 ::/0}
+      AG_S3_BUCKET: ${AG_S3_BUCKET:-agrigreen}
+    volumes:
+      - "../demo/Caddyfile:/etc/caddy/Caddyfile:ro"
+      - "caddy_data:/data"
+      - "caddy_config:/config"
+    ports: ["80:80", "443:443", "443:443/udp"]
+    cap_drop: ["ALL"]
+    cap_add: ["NET_BIND_SERVICE"]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
+  # Công cụ một lần: tạo Admin đầu tiên (docs/runbooks/dang-nhap-app-htx.md mục 3).
+  #   sh deploy/demo/compose.sh run --rm bootstrap-admin -tenant <uuid> -org <uuid> -username <tên>
+  bootstrap-admin:
+    profiles: ["tools"]
+    image: agrigreen/bootstrap-admin:demo
+    build: { context: ../.., dockerfile: Dockerfile, args: { CMD: bootstrap-admin } }
+    depends_on:
+      keycloak: { condition: service_healthy }
+    environment:
+      AG_KC_ADMIN_URL: http://keycloak:8080/auth
+      AG_KC_REALM: agrigreen
+      AG_KC_CLIENT_ID: agrigreen-accounts
+      AG_KC_CLIENT_SECRET: ${AG_KC_CLIENT_SECRET}
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    restart: "no"
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.31.250.0/24
+
+volumes:
+  caddy_data: {}
+  caddy_config: {}
