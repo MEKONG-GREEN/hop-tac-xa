@@ -87,7 +87,7 @@ function orgInScope(p: MockPersona, o: Org | undefined): boolean {
 // pf/accounts
 // --------------------------------------------------------------------------
 const MANAGED_ROLES = [
-  "kn_officer", "kn_province_admin", "kn_national_admin", "coop_manager", "cgh_viewer", "cgh_admin", "masterdata_admin", "registry_admin",
+  "kn_officer", "kn_province_admin", "kn_national_admin", "coop_manager", "htx_member", "cgh_viewer", "cgh_admin", "masterdata_admin", "registry_admin",
   "param_setter", "param_approver", "reports_admin", "sync_conflict_resolver", "device_admin", "account_admin", "account_admin_province",
   "vault_eraser", "platform_admin",
 ];
@@ -97,6 +97,7 @@ const ROLE_ORG_KINDS: Record<string, string[]> = {
   kn_province_admin: ["ttkn_province"],
   kn_national_admin: ["ttkn_national"],
   coop_manager: ["cooperative"],
+  htx_member: ["cooperative"],
   cgh_viewer: ["dcrd"],
   cgh_admin: ["dcrd", "mkg"],
   account_admin_province: ["ttkn_province"],
@@ -104,7 +105,7 @@ const ROLE_ORG_KINDS: Record<string, string[]> = {
 
 function grantable(p: MockPersona): string[] {
   if (hasRole(p, "platform_admin")) return MANAGED_ROLES;
-  if (hasRole(p, "account_admin")) return MANAGED_ROLES.filter((r) => !["account_admin", "param_approver", "vault_eraser", "platform_admin"].includes(r));
+  if (hasRole(p, "account_admin")) return MANAGED_ROLES.filter((r) => !["account_admin", "param_approver", "vault_eraser", "platform_admin", "htx_member"].includes(r));
   if (hasRole(p, "account_admin_province")) return ["kn_officer", "coop_manager"];
   return [];
 }
@@ -211,7 +212,7 @@ function checkRoles(p: MockPersona, roles: string[], org: Org): Response | null 
   for (const r of roles) {
     const kinds = ROLE_ORG_KINDS[r];
     if (kinds && !kinds.includes(org.kind)) {
-      return validation([{ field: "org_ref", reason: r === "coop_manager" ? "Vui lòng chọn HTX liên kết." : `Vai ${r} không dùng cho loại tổ chức này.` }]);
+      return validation([{ field: "org_ref", reason: r === "coop_manager" || r === "htx_member" ? "Vui lòng chọn HTX liên kết." : `Vai ${r} không dùng cho loại tổ chức này.` }]);
     }
   }
   return null;

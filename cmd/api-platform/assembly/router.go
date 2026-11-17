@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/MEKONG-GREEN/hop-tac-xa/contracts/htxroles"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/authz"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/clock"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/db"
@@ -104,10 +105,11 @@ type publicRoutes interface {
 	RegisterPublic(rg *gin.RouterGroup)
 }
 
-// chain: xác thực (+ MFA) → middleware của module (KN v7.7: ngữ cảnh phiên X-AG-Context của
-// pf/accounts) → Idempotency-Key.
+// chain: xác thực (+ MFA) → chặn ghi của Thành viên HTX (FN-05/BR-03, memberWriteGuard) → middleware của module
+// (KN v7.7: ngữ cảnh phiên X-AG-Context của pf/accounts) → Idempotency-Key.
 func chain(d Deps, auth ...gin.HandlerFunc) []gin.HandlerFunc {
-	out := append(auth, httpx.Middlewares(d.Modules)...)
+	out := append(auth, memberWriteGuard(htxroles.MemberWriteRoutes()))
+	out = append(out, httpx.Middlewares(d.Modules)...)
 	return append(out, idempotency.Middleware(db.ForModule(d.Ops, db.Ops)))
 }
 

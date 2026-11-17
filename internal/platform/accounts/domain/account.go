@@ -261,7 +261,7 @@ func RolesFitOrgWithCatalog(roles []string, orgKind string, catalog *port.RoleCa
 		kinds := catalog.OrgKinds(r)
 		if len(kinds) > 0 && !slices.Contains(kinds, orgKind) {
 			msg := "vai " + r + " chỉ gắn cho tổ chức loại " + strings.Join(kinds, ", ")
-			if r == "coop_manager" {
+			if r == "coop_manager" || r == "htx_member" {
 				msg = MsgCoopRequired
 			}
 			return FieldError{Field: "org_ref", Msg: msg}

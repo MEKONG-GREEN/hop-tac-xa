@@ -20,7 +20,7 @@ import "slices"
 // Bảng:
 //
 //	platform_admin          → mọi vai trong ManagedRoles (phạm vi toàn quốc)
-//	account_admin           → ManagedRoles trừ account_admin, param_approver, vault_eraser
+//	account_admin           → ManagedRoles trừ account_admin, param_approver, vault_eraser, htx_member
 //	account_admin_province  → kn_officer, coop_manager — chỉ tổ chức trong tỉnh của mình
 //
 // Vai platform_admin, offline_access, default-roles-agrigreen và tài khoản dịch vụ
@@ -34,7 +34,7 @@ var ManagedRoles = []string{
 	RoleAccountAdmin, RoleAccountAdminProvince,
 	"param_setter", "param_approver", "masterdata_admin", "registry_admin", "reports_admin",
 	"consent_writer", "consent_reader",
-	"kn_national_admin", "kn_province_admin", "kn_officer", "coop_manager",
+	"kn_national_admin", "kn_province_admin", "kn_officer", "coop_manager", "htx_member",
 	RoleKNUser, // KN v7.7: cổng vào bề mặt KN; vai nghiệp vụ ở sổ gán vai trò (kn.go)
 	"cgh_viewer", "cgh_admin",
 	"plot_editor", "plot_viewer", "geo_admin",
@@ -83,15 +83,17 @@ var RoleOrgKinds = map[string][]string{
 	"kn_province_admin":       {"ttkn_province"},
 	"kn_officer":              {"extension_team"},
 	"coop_manager":            {"cooperative"},   // HTX US-ACC-01 AC-7: "Vui lòng chọn HTX liên kết."
+	"htx_member":              {"cooperative"},   // Thành viên HTX: phạm vi là HTX của org_ref (FN-05)
 	RoleAccountAdminProvince:  {"ttkn_province"}, // phạm vi tỉnh tính từ TTKN tỉnh
 	"cgh_viewer":              {"dcrd", "mkg"},   // Cục KTHT (CGH FN-01)
 	"content_editor_province": {"ttkn_province"},
 }
 
-// Grants là ma trận cấp vai theo vai quản trị của người gọi.
+// Grants là ma trận cấp vai theo vai quản trị của người gọi. Thành viên HTX (htx_member, FN-05) do Admin
+// (platform_admin) cấp — FN-07; vai gốc account_admin không đổi quyền nên không cấp được vai này.
 var Grants = map[string][]string{
 	"platform_admin":         ManagedRoles,
-	RoleAccountAdmin:         without(ManagedRoles, RoleAccountAdmin, "param_approver", "vault_eraser"),
+	RoleAccountAdmin:         without(ManagedRoles, RoleAccountAdmin, "param_approver", "vault_eraser", "htx_member"),
 	RoleAccountAdminProvince: {"kn_officer", "coop_manager"},
 }
 

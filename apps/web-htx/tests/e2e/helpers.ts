@@ -6,6 +6,7 @@ export type Persona =
   | "tinh"
   | "xa"
   | "htx"
+  | "htx-member"
   | "cuc"
   | "setter"
   | "approver"

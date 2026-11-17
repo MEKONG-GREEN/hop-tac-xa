@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type ComponentProps, type ComponentType, type ReactNode } from "react";
 import { unwrap, type ApiClient } from "@/api/client";
 import { useAuth, type KnSessionState } from "@/auth/AuthProvider";
+import { isHtxAppUser } from "@/auth/permissions";
 import { LEVEL_LABEL, roleLabel, type Principal } from "@/auth/principal";
 import { config } from "@/config";
 import type { MenuTree } from "@/kn/contract";
@@ -136,6 +137,9 @@ export function AppShell({ children, SidebarComponent = Sidebar }: {
   const disabled = useDisabledModules(api, status === "authenticated");
   const menu = useMemo(() => activeMenu(kn, principal, disabled), [kn, principal, disabled]);
   const allowed = isAllowed(pathname, kn, menu, principal, disabled);
+  // Cục KTHT vào "/" → cổng CGH (BRD CGH FN-11 B1). Vai App HTX mở trang không thuộc quyền → trang đầu tiên được xem
+  // (FN-05/AC-03, EX-01); /khong-co-quyen không có trong menu nên luôn được mở — không lặp chuyển hướng.
+  const redirecting = kn.status === "legacy" && !allowed && (pathname === "/" || isHtxAppUser(principal));
 
   useEffect(() => {
     if (bare) return;
@@ -146,10 +150,9 @@ export function AppShell({ children, SidebarComponent = Sidebar }: {
       if (dataConsent.status === "required" || dataConsent.status === "error") router.replace(`/dong-y-thu-thap?returnTo=${encodeURIComponent(pathname)}`);
       else if (kn.status === "choose") router.replace(`/chon-vai-tro?returnTo=${encodeURIComponent(pathname)}`);
       else if (kn.status === "active" && kn.context && pathname === "/") router.replace(kn.context.default_route);
-      // Cục KTHT vào "/" → cổng CGH (BRD CGH FN-11 B1).
-      else if (kn.status === "legacy" && pathname === "/" && !allowed) router.replace(homeFor(principal, disabled));
+      else if (redirecting) router.replace(homeFor(principal, disabled));
     }
-  }, [status, bare, pathname, router, allowed, principal, kn.status, kn.context, disabled, dataConsent.status]);
+  }, [status, bare, pathname, router, redirecting, principal, kn.status, kn.context, disabled, dataConsent.status]);
 
   const note = noteState?.path === pathname ? noteState.text : null;
 
@@ -228,6 +231,8 @@ export function AppShell({ children, SidebarComponent = Sidebar }: {
             ) : null}
             {allowed ? (
               children
+            ) : redirecting ? (
+              <Loading />
             ) : (
               <div className="card sec" role="alert">
                 <h1 style={{ fontSize: 20, marginBottom: 6 }}>Không có quyền truy cập</h1>

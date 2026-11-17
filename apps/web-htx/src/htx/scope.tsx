@@ -2,6 +2,7 @@
 
 // Phạm vi HTX cho màn hình App HTX trên web vận hành:
 //  - coop_manager: CHỈ HTX của mình (Principal.orgRef), không có ô chọn HTX;
+//  - htx_member (Thành viên HTX, FN-05): CHỈ HTX của mình như coop_manager, chỉ xem;
 //  - platform_admin: mọi HTX, ghi được;
 //  - cán bộ KN: HTX trong phạm vi xã/tỉnh, CHỈ XEM (backend trả cropcycle.read_only nếu ghi).
 // Đây chỉ là ẩn/hiện — backend kiểm quyền từng lời gọi (R-55).
@@ -19,6 +20,8 @@ export interface HtxScope {
   coopRef: string;
   setCoopRef: (ref: string) => void;
   isManager: boolean;
+  /** Chỉ HTX của mình (Principal.orgRef): quản lý HTX hoặc Thành viên HTX — không có ô chọn HTX. */
+  ownCoop: boolean;
   canWrite: boolean;
   coops: Cooperative[];
   coopsLoading: boolean;
@@ -29,27 +32,29 @@ export function useHtxScope(): HtxScope {
   const { api, principal } = useAuth();
   const isAdmin = hasRole(principal, ROLES.platformAdmin);
   const isManager = hasRole(principal, ROLES.coopManager) && !isAdmin;
+  const ownCoop = !isAdmin && hasRole(principal, ROLES.coopManager, ROLES.htxMember);
   const canWrite = isAdmin || isManager;
-  const list = useAsync(() => (isManager ? Promise.resolve([] as Cooperative[]) : listAllCooperatives(api, { max: 500 })), [api, isManager]);
+  const list = useAsync(() => (ownCoop ? Promise.resolve([] as Cooperative[]) : listAllCooperatives(api, { max: 500 })), [api, ownCoop]);
   const [picked, setPicked] = useState("");
   const coops = useMemo(() => list.data ?? [], [list.data]);
-  const coopRef = isManager ? (principal?.orgRef ?? "") : picked;
+  const coopRef = ownCoop ? (principal?.orgRef ?? "") : picked;
   const names = useMemo(() => new Map(coops.map((c) => [c.ref, c.name])), [coops]);
   return {
     coopRef,
     setCoopRef: setPicked,
     isManager,
+    ownCoop,
     canWrite,
     coops,
     coopsLoading: list.loading,
-    coopName: (ref) => (!ref ? "—" : isManager && ref === principal?.orgRef ? (principal?.orgName ?? ref) : (names.get(ref) ?? ref.slice(0, 8))),
+    coopName: (ref) => (!ref ? "—" : ownCoop && ref === principal?.orgRef ? (principal?.orgName ?? ref) : (names.get(ref) ?? ref.slice(0, 8))),
   };
 }
 
-/** Ô chọn HTX (ẩn với quản lý HTX — chỉ hiện tên HTX của mình). */
+/** Ô chọn HTX (ẩn với quản lý HTX và Thành viên HTX — chỉ hiện tên HTX của mình). */
 export function CoopPicker({ scope, allowAll = true, id = "htx-coop" }: { scope: HtxScope; allowAll?: boolean; id?: string }) {
   const { principal } = useAuth();
-  if (scope.isManager) {
+  if (scope.ownCoop) {
     return (
       <div className="field">
         <span className="lbl">HTX</span>

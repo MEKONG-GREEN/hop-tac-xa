@@ -2,8 +2,14 @@ import { uuidv7 } from "../idempotency";
 import { COOPERATIVES, findCoop, householdsOf, orgEvents, ORG_EVENTS, ORGS } from "./data";
 import { headerKey, parseCsv } from "./admin-ops";
 import { hasRole, inScope, isZip, json, norm, paginate, problem, scopeUnits, type Route } from "./http";
+import type { MockPersona } from "./personas";
 
 const importedPhones = new Set<string>();
+
+/** FN-05: tài khoản chỉ là Thành viên HTX chỉ xem HTX của mình (party/app.GetCooperative, member/app.isOwnCoopOnly). */
+function otherCoopOfMember(persona: MockPersona, coopRef: string): boolean {
+  return hasRole(persona, "htx_member") && !hasRole(persona, "coop_manager", "platform_admin") && persona.me.org?.ref !== coopRef;
+}
 
 export const appRoutes1: Route[] = [{ method: "GET", pattern: /^\/v1\/me$/, handler: ({ persona }) => json(persona.me) }];
 
@@ -47,6 +53,7 @@ export const appRoutes36: Route[] = [{
       const c = findCoop(params[0]);
       // Ngoài phạm vi trả 404 như backend (không lộ sự tồn tại).
       if (!c || !inScope(persona, c.province_code, c.api.admin_unit_code)) return problem(404, "party.org_not_found", "Not found");
+      if (otherCoopOfMember(persona, c.api.ref)) return problem(404, "party.org_not_found", "Not found");
       return json(c.api);
     },
   }];
@@ -57,6 +64,7 @@ export const appRoutes37: Route[] = [{
     handler: ({ params, url, persona }) => {
       const c = findCoop(params[0]);
       if (!c || !inScope(persona, c.province_code, c.api.admin_unit_code)) return problem(404, "party.org_not_found", "Not found");
+      if (otherCoopOfMember(persona, c.api.ref)) return problem(404, "party.org_not_found", "Not found");
       return json(paginate(householdsOf(c), url));
     },
   }];

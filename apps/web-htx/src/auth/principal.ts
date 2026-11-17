@@ -25,6 +25,8 @@ export const ROLES = {
   geoAdmin: "geo_admin",
   plotEditor: "plot_editor",
   coopManager: "coop_manager",
+  /** Thành viên HTX (App HTX, FN-05): quyền theo ma trận src/auth/permissions.ts. */
+  htxMember: "htx_member",
   waterwayEditor: "waterway_editor",
   waterwayPublisher: "waterway_publisher",
   simulationAnalyst: "simulation_analyst",
@@ -83,6 +85,7 @@ export const ROLE_LABEL: Readonly<Record<string, string>> = {
   kn_province_admin: "Quản lý TTKN tỉnh",
   kn_national_admin: "Quản lý TTKN Quốc gia",
   coop_manager: "Quản lý HTX",
+  htx_member: "Thành viên HTX",
   account_admin: "Quản trị tài khoản",
   account_admin_province: "Quản trị tài khoản tỉnh",
   reports_admin: "Quản trị mẫu báo cáo",

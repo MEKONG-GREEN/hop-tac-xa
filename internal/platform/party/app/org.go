@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/MEKONG-GREEN/hop-tac-xa/contracts/htxroles"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/party/domain"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/party/port"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/party/store"
@@ -806,7 +807,7 @@ func (r *Registry) ListCooperatives(ctx context.Context, q ListQuery) (CoopPage,
 
 // GetCooperative đọc một HTX; ngoài phạm vi → 404 (không lộ sự tồn tại).
 func (r *Registry) GetCooperative(ctx context.Context, ref uuid.UUID) (Cooperative, error) {
-	p, err := authz.Require(ctx, readerRoles...)
+	p, err := authz.Require(ctx, coopReaderRoles...)
 	if err != nil {
 		return Cooperative{}, err
 	}
@@ -819,6 +820,10 @@ func (r *Registry) GetCooperative(ctx context.Context, ref uuid.UUID) (Cooperati
 		return Cooperative{}, err
 	}
 	if c == nil || !visible(sc, c.AdminUnitCode) {
+		return Cooperative{}, ErrOrgNotFound
+	}
+	// Thành viên HTX chỉ xem HTX của mình (FN-03: R), chặt hơn giới hạn theo xã của quản lý HTX ở API này.
+	if htxroles.IsMemberOnly(p.Has) && c.Ref != p.OrgRef {
 		return Cooperative{}, ErrOrgNotFound
 	}
 	return *c, nil

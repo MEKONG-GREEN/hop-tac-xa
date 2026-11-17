@@ -99,7 +99,7 @@ func TestRealmLoginTOTPByRole_D24(t *testing.T) {
 			t.Errorf("D24: cán bộ KN %s phải dùng TOTP", r)
 		}
 	}
-	for _, r := range []string{"farmer", "coop_manager", "mkg_sync", "map_consumer"} {
+	for _, r := range []string{"farmer", "coop_manager", "htx_member", "mkg_sync", "map_consumer"} {
 		if accport.NeedsLoginTOTP([]string{r}) {
 			t.Errorf("vai %s không thuộc D24 (nông hộ, HTX, tài khoản dịch vụ)", r)
 		}

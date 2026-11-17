@@ -14,6 +14,8 @@ const (
 	RoleKNOfficer = "kn_officer"
 	// RoleCoopManager: quản lý HTX — nông hộ của chính HTX mình (HTX US-HH-01).
 	RoleCoopManager = "coop_manager"
+	// RoleHTXMember: Thành viên HTX (App HTX, FN-05) — chỉ xem HTX của mình; quyền theo ma trận contracts/htxroles.
+	RoleHTXMember = "htx_member"
 	// RoleCGHViewer: Cục KTHT xem bản đồ CGH — chỉ đọc hồ sơ HTX.
 	RoleCGHViewer = "cgh_viewer"
 )

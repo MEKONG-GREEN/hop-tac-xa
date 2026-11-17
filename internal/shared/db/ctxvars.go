@@ -74,14 +74,14 @@ func ContextVarsFrom(ctx context.Context) ContextVars {
 // Trả ra ngoài dưới dạng problem.NodeScopeRequired (403 node_scope_required); errors.Is(err, ErrNodeScopeRequired).
 var ErrNodeScopeRequired = errors.New("db: người dùng gắn Nút nhưng ngữ cảnh không có app.node_id")
 
-// Ánh xạ vai → "phải có Nút" (FD). Nguồn: app/HTX/app.yaml (roles: coop_manager — quản lý HTX, phạm vi = HTX của
-// org_ref), app/KN/app.yaml (roles: kn_officer — cán bộ KN, phạm vi tính từ org_ref; context_roles: kn_xa — Cấp
+// Ánh xạ vai → "phải có Nút" (FD). Nguồn: app/HTX/app.yaml (roles: coop_manager — quản lý HTX, htx_member — Thành
+// viên HTX (FN-05); phạm vi = HTX của org_ref), app/KN/app.yaml (roles: kn_officer — cán bộ KN, phạm vi tính từ org_ref; context_roles: kn_xa — Cấp
 // Xã), authz/kn.go. Vai cấp Tỉnh/Quốc gia/Admin (kn_tinh, kn_tw, admin, kn_province_admin, kn_national_admin,
 // platform_admin) giữ nhánh Nút rỗng như trước. Hằng chuỗi (không import port của module — archlint);
 // TestNodeBoundRolesDeclared_FD kiểm các vai này còn khai trong app.yaml.
 var (
 	// NodeBoundRoles: vai realm (Principal không có ngữ cảnh phiên KN) bắt buộc có org_ref.
-	NodeBoundRoles = []string{"coop_manager", "kn_officer"}
+	NodeBoundRoles = []string{"coop_manager", "htx_member", "kn_officer"}
 	// NodeBoundContextRoles: vai ngữ cảnh phiên KN bắt buộc có Nút của lần gán.
 	NodeBoundContextRoles = []string{authz.KNXa}
 	// NodeExemptRoles: vai realm phạm vi tỉnh/toàn quốc/toàn hệ thống — có vai này thì không bắt buộc Nút dù có

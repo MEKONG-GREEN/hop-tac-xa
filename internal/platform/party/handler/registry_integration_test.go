@@ -300,6 +300,38 @@ func TestNoOrgSeesNothing(t *testing.T) {
 	}
 }
 
+// FN-05/AC-01, BR-03 (TECH-01): Thành viên HTX chỉ xem HTX của mình (FN-03: R) — HTX khác, kể cả cùng xã, trả 404;
+// danh sách HTX/tổ chức chưa mở (phạm vi theo HTX thuộc AH-273) nên trả 403. Quản lý HTX giữ giới hạn theo xã.
+func TestFN05_HTXMemberGetCooperativeOwnOnly(t *testing.T) {
+	f := newFixture(t)
+	root := f.root()
+	tr := f.seedTree(root)
+	c3 := root.createOrg(map[string]any{"kind": "cooperative", "name": "HTX Cùng Xã A", "admin_unit_code": "30001", "parent_ref": tr.t30001.String()})
+	member := f.as(f.tenant, tr.c1, port.RoleHTXMember)
+
+	if r := member.appDo(http.MethodGet, "/v1/cooperatives/"+tr.c1.String(), nil); r.status != http.StatusOK || str(r.body, "ref") != tr.c1.String() {
+		t.Fatalf("Thành viên HTX xem HTX mình: %d %v", r.status, r.body)
+	}
+	for _, other := range []uuid.UUID{c3, tr.c2} {
+		if r := member.appDo(http.MethodGet, "/v1/cooperatives/"+other.String(), nil); r.status != http.StatusNotFound || r.body["code"] != "party.org_not_found" {
+			t.Fatalf("Thành viên HTX xem HTX khác %s: %d %v", other, r.status, r.body)
+		}
+	}
+	for _, path := range []string{"/v1/cooperatives", "/v1/orgs"} {
+		if r := member.appDo(http.MethodGet, path, nil); r.status != http.StatusForbidden || r.body["code"] != "forbidden" {
+			t.Fatalf("Thành viên HTX %s: %d %v, cần 403", path, r.status, r.body)
+		}
+	}
+	// Quản lý HTX không đổi: vẫn xem HTX cùng xã ở API này.
+	if r := f.as(f.tenant, tr.c1, port.RoleCoopManager).appDo(http.MethodGet, "/v1/cooperatives/"+c3.String(), nil); r.status != http.StatusOK {
+		t.Fatalf("quản lý HTX xem HTX cùng xã: %d %v", r.status, r.body)
+	}
+	// Kiêm Đại diện HTX → quyền Đại diện HTX (FN-05/BR-02).
+	if r := f.as(f.tenant, tr.c1, port.RoleCoopManager, port.RoleHTXMember).appDo(http.MethodGet, "/v1/cooperatives/"+c3.String(), nil); r.status != http.StatusOK {
+		t.Fatalf("kiêm hai vai xem HTX cùng xã: %d %v", r.status, r.body)
+	}
+}
+
 // HTX US-HTXSTATUS-01/02/03: lý do ≥ 20 ký tự, sự kiện khóa/mở tài khoản, nhật ký chỉ đọc có chuỗi băm.
 func TestDeactivateReactivateCooperative(t *testing.T) {
 	f := newFixture(t)

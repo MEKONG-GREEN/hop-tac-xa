@@ -32,6 +32,16 @@ test.describe("đăng nhập giả lập và điều hướng theo vai/phạm vi
     await expect(page.getByRole("heading", { name: "Không có quyền truy cập" })).toBeVisible();
   });
 
+  test("[FN-05/AC-01, AC-03] Thành viên HTX: chỉ có Quản lý nông hộ; mở thẳng trang Tài khoản → về trang đầu tiên được xem", async ({ page }) => {
+    await loginAs(page, "htx-member", "/htx/nong-ho");
+    await expect(sidebar(page).getByRole("link")).toHaveCount(1);
+    await expect(sidebar(page).getByRole("link", { name: "Quản lý nông hộ" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Sao chép hàng loạt/ })).toHaveCount(0);
+    await page.goto("/quan-tri/tai-khoan");
+    await expect(page).toHaveURL(/\/htx\/nong-ho$/);
+    await expect(page.getByRole("heading", { name: "Không có quyền truy cập" })).toHaveCount(0);
+  });
+
   test("Cục KTHT: vào / được chuyển tới cổng CGH; chỉ CGH + báo cáo; khối vận hành bị chặn", async ({ page }) => {
     await loginAs(page, "cuc", "/");
     await expect(page).toHaveURL(/\/cgh$/);

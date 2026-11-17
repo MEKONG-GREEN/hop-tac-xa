@@ -66,6 +66,7 @@ permissions:
     - consent_reader
     - consent_writer
     - coop_manager
+    - htx_member
     - kn_national_admin
     - kn_officer
     - kn_province_admin

@@ -9,7 +9,7 @@ func NativeRoleCatalog() *RoleCatalog {
 	managed := []string{
 		RoleAccountAdmin, RoleAccountAdminProvince,
 		"param_setter", "param_approver", "masterdata_admin", "registry_admin", "reports_admin",
-		"consent_writer", "consent_reader", "coop_manager",
+		"consent_writer", "consent_reader", "coop_manager", "htx_member",
 		"cgh_viewer", "cgh_admin",
 		"plot_editor", "plot_viewer", "geo_admin",
 		"content_editor_national", "content_editor_province", "content_reviewer",
@@ -20,7 +20,7 @@ func NativeRoleCatalog() *RoleCatalog {
 	// Select native keys, retaining their existing organization-kind policy.
 	// Copy values so extending a catalog cannot mutate the compatibility bridge.
 	kinds := make(map[string][]string)
-	for _, role := range []string{"coop_manager", RoleAccountAdminProvince, "cgh_viewer", "content_editor_province"} {
+	for _, role := range []string{"coop_manager", "htx_member", RoleAccountAdminProvince, "cgh_viewer", "content_editor_province"} {
 		kinds[role] = slices.Clone(RoleOrgKinds[role])
 	}
 	return &RoleCatalog{
@@ -29,7 +29,7 @@ func NativeRoleCatalog() *RoleCatalog {
 		orgKinds: kinds,
 		grants: map[string][]string{
 			"platform_admin":         slices.Clone(managed),
-			RoleAccountAdmin:         without(managed, RoleAccountAdmin, "param_approver", "vault_eraser"),
+			RoleAccountAdmin:         without(managed, RoleAccountAdmin, "param_approver", "vault_eraser", "htx_member"),
 			RoleAccountAdminProvince: {"coop_manager"},
 		},
 		adminRoles: slices.Clone(AdminRoles),

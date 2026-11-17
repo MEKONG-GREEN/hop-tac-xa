@@ -19,6 +19,9 @@ const (
 	// RoleCoopManager là vai quản lý HTX: mở vụ hộ, ghi nhật ký hộ, duyệt nhật ký, nhập sản lượng hàng loạt,
 	// sửa hồ sơ HTX/hộ — chỉ HTX của mình (Principal.OrgRef).
 	RoleCoopManager = "coop_manager"
+	// RoleHTXMember: Thành viên HTX (App HTX, FN-05) — người của HTX được cấp tài khoản; quyền theo ma trận
+	// contracts/htxroles (docs/conventions/vai-tro-app-htx.md), phạm vi HTX của mình (Principal.OrgRef).
+	RoleHTXMember = "htx_member"
 )
 
 // EntitySOPVersion: chiều xuống phiên bản SOP đã phát hành (docs/dev/sync-contract.md).
