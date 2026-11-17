@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/MEKONG-GREEN/hop-tac-xa/contracts/htxroles"
+	accport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/port"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/authz"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/clock"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/db"
@@ -93,11 +94,28 @@ func NewRouter(d Deps) *gin.Engine {
 			p.RegisterPublic(pub)
 		}
 	}
-	v1 := r.Group("/v1", chain(d, httpx.Authenticate(d.Verifier))...)
+	// ADR-0061: vai đăng nhập bằng OTP email (Admin) chỉ dùng được token đã qua yếu tố thứ hai (amr otp hoặc phiên đã qua
+	// mã email) — token chỉ có mật khẩu lấy qua trang Keycloak bị chặn.
+	v1 := r.Group("/v1", chain(d, httpx.AuthenticateAttested(d.Verifier, secondFactor(d)), httpx.RequireMFAForRoles(accport.EmailOTPRoles...))...)
 	for _, m := range d.Modules {
 		m.RegisterApp(v1)
 	}
 	return r
+}
+
+// secondFactorSource (tùy chọn) là module xác nhận yếu tố thứ hai không có trong amr của token (pf/accounts, ADR-0061).
+type secondFactorSource interface {
+	SecondFactorAttestor() httpx.SecondFactorAttestor
+}
+
+// secondFactor trả bộ xác nhận của module đầu tiên có (nil nếu không module nào có).
+func secondFactor(d Deps) httpx.SecondFactorAttestor {
+	for _, m := range d.Modules {
+		if s, ok := m.(secondFactorSource); ok {
+			return s.SecondFactorAttestor()
+		}
+	}
+	return nil
 }
 
 // publicRoutes (tùy chọn) là module có route công khai trên Application API.
@@ -118,7 +136,7 @@ func NewAdminRouter(d Deps) *gin.Engine {
 	r := httpx.NewEngine(d.Log, maxBody)
 	r.Use(httpx.CORS(d.CORSOrigins)) // trước mọi route: preflight đi qua cả nhánh 404/405
 	health(d)(r)
-	v1 := r.Group("/v1", chain(d, httpx.Authenticate(d.Verifier), httpx.RequireMFA())...)
+	v1 := r.Group("/v1", chain(d, httpx.AuthenticateAttested(d.Verifier, secondFactor(d)), httpx.RequireMFA())...)
 	for _, m := range d.Modules {
 		m.RegisterAdmin(v1)
 	}

@@ -164,7 +164,7 @@ services:
     restart: unless-stopped
 
   # Công cụ một lần: tạo Admin đầu tiên (docs/runbooks/dang-nhap-app-htx.md mục 3).
-  #   sh deploy/demo/compose.sh run --rm bootstrap-admin -tenant <uuid> -org <uuid> -username <tên>
+  #   sh deploy/demo/compose.sh run --rm bootstrap-admin -tenant <uuid> -org <uuid> -username <tên> -email <email nhận mã OTP>
   bootstrap-admin:
     profiles: ["tools"]
     image: agrigreen/bootstrap-admin:demo

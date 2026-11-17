@@ -34,12 +34,14 @@ func NewVerifierWithKeys(issuer, audience string, keys oidc.KeySet) *Verifier {
 }
 
 type claims struct {
-	TenantID    string   `json:"tenant_id"`
-	Roles       []string `json:"roles"`
-	AMR         []string `json:"amr"`
-	AuthTime    int64    `json:"auth_time"`
-	OrgRef      string   `json:"org_ref"`
-	RealmAccess struct {
+	TenantID     string   `json:"tenant_id"`
+	Roles        []string `json:"roles"`
+	AMR          []string `json:"amr"`
+	AuthTime     int64    `json:"auth_time"`
+	OrgRef       string   `json:"org_ref"`
+	SID          string   `json:"sid"`
+	SessionState string   `json:"session_state"`
+	RealmAccess  struct {
 		Roles []string `json:"roles"`
 	} `json:"realm_access"`
 }
@@ -205,7 +207,10 @@ func (v *Verifier) Verify(ctx context.Context, raw string) (Principal, error) {
 		return Principal{}, errors.New("authz: token thiếu claim tenant_id")
 	}
 	roles := append(slices.Clone(c.Roles), c.RealmAccess.Roles...)
-	p := Principal{ActorRef: actor, TenantID: tid, Roles: roles, MFA: v.mfa.satisfied(c.AMR, roles)}
+	p := Principal{ActorRef: actor, TenantID: tid, Roles: roles, MFA: v.mfa.satisfied(c.AMR, roles), SessionID: c.SID}
+	if p.SessionID == "" {
+		p.SessionID = c.SessionState
+	}
 	if c.OrgRef != "" {
 		org, err := uuid.Parse(c.OrgRef)
 		if err != nil {

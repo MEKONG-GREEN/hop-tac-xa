@@ -52,6 +52,16 @@ x-kc-admin-env: &kc-admin-env
   AG_KC_ACTIONS_CLIENT_ID: agrigreen-web-ops
   AG_KC_ACTIONS_REDIRECT_URI: http://localhost:3000/
 
+# SMTP gửi mã OTP đăng nhập của Admin (ADR-0061). Để trống AG_SMTP_HOST = kênh email tắt → Admin không đăng nhập được
+# (fail-closed). Mật khẩu SMTP để ở deploy/compose/.env (bí mật), không ghi vào tệp này.
+x-smtp-env: &smtp-env
+  AG_SMTP_HOST: ${AG_SMTP_HOST:-}
+  AG_SMTP_PORT: ${AG_SMTP_PORT:-587}
+  AG_SMTP_FROM: ${AG_SMTP_FROM:-}
+  AG_SMTP_USERNAME: ${AG_SMTP_USERNAME:-}
+  AG_SMTP_PASSWORD: ${AG_SMTP_PASSWORD:-}
+  AG_SMTP_ALLOW_PLAIN: ${AG_SMTP_ALLOW_PLAIN:-false}
+
 x-s3-env: &s3-env
   AG_S3_ENDPOINT: seaweedfs:9000
   AG_S3_BUCKET: ${AG_S3_BUCKET:-agrigreen}
@@ -294,7 +304,7 @@ services:
       keycloak: { condition: service_healthy }
       identity-vault: { condition: service_started }
     environment:
-      <<: [*otel-env, *oidc-env, *s3-env, *kc-admin-env]
+      <<: [*otel-env, *oidc-env, *s3-env, *kc-admin-env, *smtp-env]
       AG_HTTP_ADDR: ":8080"
       AG_ADMIN_HTTP_ADDR: ":8082"
       AG_PF_DB_URL: postgres://pgbouncer:6432/?sslmode=disable

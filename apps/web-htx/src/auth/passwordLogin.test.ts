@@ -66,6 +66,37 @@ describe("passwordLogin.login", () => {
     }
   });
 
+  it("ADR-0061: bước 1 của Admin → otp_required; bước 2 gửi challenge_id và mã", async () => {
+    const step1 = harness(reply(200, { status: "otp_required", challenge_id: "c-1", email_hint: "a***@x.vn", expires_in: 300, resend_after: 60 }));
+    expect(await step1.api.login("admin", "Mat-khau-12!")).toEqual({
+      kind: "otp_required",
+      challengeId: "c-1",
+      emailHint: "a***@x.vn",
+      expiresIn: 300,
+      resendAfter: 60,
+    });
+    expect(await step1.sent[0]!.json()).toEqual({ identifier: "admin", password: "Mat-khau-12!" });
+    expect(await harness(reply(200, { status: "otp_required" })).api.login("a", "b")).toEqual({ kind: "unavailable" });
+
+    const step2 = harness(reply(200, TOKENS));
+    expect((await step2.api.login("admin", "Mat-khau-12!", "123456", "c-1")).kind).toBe("authenticated");
+    expect(await step2.sent[0]!.json()).toEqual({ identifier: "admin", password: "Mat-khau-12!", otp: "123456", challenge_id: "c-1" });
+  });
+
+  it("ADR-0061: ánh xạ mã lỗi của OTP email", async () => {
+    const cases: [Response, unknown][] = [
+      [reply(401, { code: "accounts.login_otp_invalid", remaining_attempts: 3 }), { kind: "otp_invalid", remaining: 3 }],
+      [reply(410, { code: "accounts.login_otp_expired" }), { kind: "otp_expired" }],
+      [reply(410, { code: "khac" }), { kind: "unavailable" }],
+      [reply(403, { code: "accounts.login_otp_email_missing" }), { kind: "otp_email_missing" }],
+      [reply(503, { code: "accounts.login_otp_unavailable" }), { kind: "otp_unavailable" }],
+      [reply(429, { code: "accounts.login_otp_rate_limited", retry_after_minutes: 42 }), { kind: "otp_rate_limited", minutes: 42 }],
+    ];
+    for (const [res, want] of cases) {
+      expect(await harness(res).api.login("a", "b", "123456", "c-1")).toEqual(want);
+    }
+  });
+
   it("không tới được máy chủ → network", async () => {
     expect(await harness(new TypeError("Failed to fetch")).api.login("a", "b")).toEqual({ kind: "network" });
   });

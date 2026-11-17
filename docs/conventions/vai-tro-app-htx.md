@@ -6,7 +6,7 @@ Nguồn: BRD Quản trị phân quyền App HTX v3.0 (FN-05, ADM-01, TECH-01, M�
 
 | Vai BRD | Vai realm trong mã | Ghi chú |
 |---|---|---|
-| Admin | `platform_admin` | Vai quản trị toàn hệ thống, đã có; vẫn bắt buộc yếu tố thứ hai theo chính sách hiện hành. Không kiêm vai khác. |
+| Admin | `platform_admin` | Vai quản trị toàn hệ thống, đã có; bắt buộc yếu tố thứ hai là mã OTP gửi qua email ([ADR-0061](../adr/0061-admin-dang-nhap-otp-email.md)). Không kiêm vai khác. |
 | Đại diện HTX | `coop_manager` | Đã có. Phạm vi là HTX gắn với tài khoản (`org_ref`). |
 | Thành viên HTX | `htx_member` | Vai mới (AH-272). Người của HTX được cấp tài khoản để thao tác (KH-01); phạm vi là HTX của `org_ref`. Không dùng lại `farmer`: `farmer` là nông dân xem ruộng của hộ mình, mà theo KH-01 nông dân không có tài khoản. |
 

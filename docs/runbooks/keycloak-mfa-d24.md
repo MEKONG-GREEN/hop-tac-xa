@@ -40,14 +40,14 @@ R=agrigreen
 kc create roles -r $R -s name=login_totp_required \
   -s 'description=D24 (CEO 13/10/2026): vai ĐÁNH DẤU, không cấp trực tiếp — luồng agrigreen browser bắt TOTP'
 for role in kn_user kn_national_admin kn_province_admin kn_officer \
-            platform_admin param_setter param_approver masterdata_admin registry_admin reports_admin \
+            param_setter param_approver masterdata_admin registry_admin reports_admin \
             cgh_admin geo_admin device_admin sync_conflict_resolver vault_eraser account_admin account_admin_province; do
   kc add-roles -r $R --rname "$role" --rolename login_totp_required
 done
 kc get roles/login_totp_required/users -r $R | head   # rỗng — vai không gán trực tiếp
 ```
 
-Danh sách 17 vai phải khớp `accounts/port.LoginTOTPRoles` (kiểm thử `TestRealmLoginTOTPByRole_D24` giữ realm dev khớp). Vai `farmer`, `coop_manager`, tài khoản dịch vụ **không** được thêm.
+Danh sách 16 vai phải khớp `accounts/port.LoginTOTPRoles` (kiểm thử `TestRealmLoginTOTPByRole_D24` giữ realm dev khớp). Vai `farmer`, `coop_manager`, tài khoản dịch vụ **không** được thêm. `platform_admin` không thuộc danh sách từ 17/11/2026: Admin dùng mã OTP gửi qua email ([ADR-0061](../adr/0061-admin-dang-nhap-otp-email.md)).
 
 ### 3.2 Luồng đăng nhập `agrigreen browser`
 

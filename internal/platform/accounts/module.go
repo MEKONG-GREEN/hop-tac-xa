@@ -33,6 +33,7 @@ import (
 
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/authz"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/clock"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/httpx"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/inbox"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/outbox"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/schedule"
@@ -337,7 +338,14 @@ func LoginFromEnv(dir port.Directory) (port.PasswordLogin, []byte, error) {
 // trả 503 accounts.login_unavailable.
 func (m *Module) UseLogin(l port.PasswordLogin, key []byte) { m.svc.PwLogin, m.svc.LoginIDKey = l, key }
 
-// BootstrapAdmin tạo tài khoản Admin đầu tiên (platform_admin, phải đổi mật khẩu và đăng ký TOTP ở lần đăng nhập đầu) cho
+// UseLoginOTPMailer nối kênh email gửi mã OTP đăng nhập của vai trong port.EmailOTPRoles (ADR-0061; gốc lắp ráp). Không
+// nối (thiếu SMTP) → vai đó không đăng nhập được: bước 1 trả 503 accounts.login_otp_unavailable.
+func (m *Module) UseLoginOTPMailer(mailer app.ResetMailer) { m.svc.LoginOTPMailer = mailer }
+
+// SecondFactorAttestor cho bước xác thực token của hai bề mặt API: phiên đã qua mã OTP email (ADR-0061).
+func (m *Module) SecondFactorAttestor() httpx.SecondFactorAttestor { return m.svc }
+
+// BootstrapAdmin tạo tài khoản Admin đầu tiên (platform_admin, email đã xác minh, phải đổi mật khẩu ở lần đăng nhập đầu) cho
 // cmd/bootstrap-admin; trả (id, mật khẩu tạm — chỉ một lần). Tenant và đơn vị bắt buộc.
 func BootstrapAdmin(ctx context.Context, dir port.Directory, in app.BootstrapAdminInput, rnd io.Reader) (uuid.UUID, string, error) {
 	return app.BootstrapAdmin(ctx, dir, in, rnd)

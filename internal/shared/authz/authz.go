@@ -31,8 +31,10 @@ type Principal struct {
 	// đây ở tầng ứng dụng (ADR-0009, R-33). uuid.Nil nếu token không có.
 	OrgRef   uuid.UUID
 	Roles    []string
-	MFA      bool      // token có amr chứa yếu tố thứ hai
+	MFA      bool      // token có amr chứa yếu tố thứ hai, hoặc phiên đã qua OTP email (httpx.AuthenticateAttested)
 	AuthTime time.Time // thời điểm đăng nhập
+	// SessionID là phiên Keycloak của token (claim sid, dự phòng session_state); rỗng nếu token không mang.
+	SessionID string
 	// SelectedSession is supplied only by a registered server-side owner, never client input.
 	SelectedSession *Session `json:"-"`
 	// KN là ngữ cảnh phiên KN v7.7 (header X-AG-Context) do pf/accounts giải ở server; nil khi

@@ -124,31 +124,38 @@ func (l *Login) decodeTokens(res *http.Response, op string) (port.TokenSet, erro
 	ts := port.TokenSet{
 		AccessToken: tr.AccessToken, RefreshToken: tr.RefreshToken, ExpiresIn: tr.ExpiresIn, RefreshExpiresIn: tr.RefreshExpiresIn,
 	}
-	ts.Roles, ts.AMR = tokenClaims(tr.AccessToken)
+	ts.Roles, ts.AMR, ts.SessionID = tokenClaims(tr.AccessToken)
 	return ts, nil
 }
 
-// tokenClaims đọc realm_access.roles và amr từ phần payload của access token. Token đến thẳng từ Keycloak qua kênh
-// nội bộ nên không cần kiểm chữ ký; payload hỏng → danh sách rỗng (kiểm lại sẽ coi là thiếu OTP).
-func tokenClaims(access string) (roles, amr []string) {
+// tokenClaims đọc realm_access.roles, amr và phiên Keycloak (sid, dự phòng session_state) từ phần payload của access
+// token. Token đến thẳng từ Keycloak qua kênh nội bộ nên không cần kiểm chữ ký; payload hỏng → rỗng (kiểm lại sẽ coi là
+// thiếu OTP, không ghi được phiên đã qua OTP email).
+func tokenClaims(access string) (roles, amr []string, sid string) {
 	parts := strings.Split(access, ".")
 	if len(parts) != 3 {
-		return nil, nil
+		return nil, nil, ""
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
-		return nil, nil
+		return nil, nil, ""
 	}
 	var claims struct {
 		RealmAccess struct {
 			Roles []string `json:"roles"`
 		} `json:"realm_access"`
-		AMR []string `json:"amr"`
+		AMR          []string `json:"amr"`
+		SID          string   `json:"sid"`
+		SessionState string   `json:"session_state"`
 	}
 	if json.Unmarshal(raw, &claims) != nil {
-		return nil, nil
+		return nil, nil, ""
 	}
-	return claims.RealmAccess.Roles, claims.AMR
+	sid = claims.SID
+	if sid == "" {
+		sid = claims.SessionState
+	}
+	return claims.RealmAccess.Roles, claims.AMR, sid
 }
 
 // PasswordGrant thực hiện port.PasswordLogin.

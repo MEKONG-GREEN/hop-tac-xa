@@ -86,6 +86,9 @@ type loginFixture struct {
 	srv    *httptest.Server
 	logs   *syncBuf
 	tenant uuid.UUID
+	mod    *accounts.Module
+	// otpMail nhận email mã OTP đăng nhập của Admin (ADR-0061); nối khi configured.
+	otpMail *fakeMailer
 }
 
 // newLoginFixture dựng module với Keycloak trong bộ nhớ; configured = false → không nối đăng nhập (fail-closed 503).
@@ -100,14 +103,16 @@ func newLoginFixture(t *testing.T, configured bool) *loginFixture {
 	unit := env.Pool(t, migrations.PF, dbadmin.AppPlatform)
 	mod := accounts.New(unit, clk, accounts.Deps{Directory: dir})
 	mod.UsePasswordReset(&fakeMailer{}, resetBase, logger) // đặt logger của module
+	otpMail := &fakeMailer{}
 	if configured {
 		mod.UseLogin(mem, bytes.Repeat([]byte{7}, 32))
+		mod.UseLoginOTPMailer(otpMail)
 	}
 	eng := httpx.NewEngine(logger, 1<<20)
 	mod.RegisterPublic(eng.Group("/v1/public"))
 	srv := httptest.NewServer(eng)
 	t.Cleanup(srv.Close)
-	return &loginFixture{t: t, env: env, clk: clk, mem: mem, dir: dir, srv: srv, logs: logs, tenant: ids.New()}
+	return &loginFixture{t: t, env: env, clk: clk, mem: mem, dir: dir, srv: srv, logs: logs, tenant: ids.New(), mod: mod, otpMail: otpMail}
 }
 
 func (f *loginFixture) account(username, phone string, roles ...string) uuid.UUID {
@@ -468,8 +473,8 @@ func TestLogin_MFA_KhongVaoBangMatKhauDonThuan(t *testing.T) {
 		t.Fatalf("token phải có amr otp: %v", amr)
 	}
 
-	// platform_admin chưa có OTP và không còn required action → không bao giờ phát token.
-	admin := f.account("quan.tri", "", "platform_admin")
+	// Vai bắt TOTP (registry_admin) chưa có OTP và không còn required action → không bao giờ phát token.
+	admin := f.account("quan.tri", "", "registry_admin")
 	f.step()
 	r = f.login("quan.tri", loginPwd, "")
 	if r.status != http.StatusForbidden || r.code() != "accounts.login_setup_required" || r.body["access_token"] != nil {
@@ -551,7 +556,7 @@ func TestLogin_MFA_PhanHoiGiongHetKhiThieuOTP(t *testing.T) {
 // Kiểm lại claim: Directory không thấy vai bắt TOTP nhưng token mang vai đó mà thiếu amr otp → thu hồi, không trả token.
 func TestLogin_MFA_KiemLaiClaimCuaToken(t *testing.T) {
 	f := newLoginFixture(t, true)
-	id := f.account("quan.tri.2", "", "platform_admin")
+	id := f.account("quan.tri.2", "", "registry_admin")
 	f.dir.hideRoles = true
 	r := f.login("quan.tri.2", loginPwd, "")
 	if r.status != http.StatusForbidden || r.code() != "accounts.login_setup_required" || r.body["access_token"] != nil {

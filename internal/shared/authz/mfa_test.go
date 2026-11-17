@@ -126,3 +126,17 @@ func TestMFAPolicyFromEnv(t *testing.T) {
 		t.Fatal("platform_admin không còn trong vai nhạy cảm theo cấu hình → sms được tính")
 	}
 }
+
+// ADR-0061: Principal mang phiên Keycloak (claim sid) để tra phiên đã qua mã OTP email.
+func TestVerify_DocSessionIDTuClaimSid(t *testing.T) {
+	iss := authztest.New(t)
+	v := iss.Verifier()
+	p, err := v.Verify(context.Background(), iss.Sign(t, authztest.Token{Subject: ids.New(), TenantID: ids.New(), SessionID: "phien-1"}))
+	if err != nil || p.SessionID != "phien-1" {
+		t.Fatalf("sid: %q %v", p.SessionID, err)
+	}
+	p, err = v.Verify(context.Background(), iss.Sign(t, authztest.Token{Subject: ids.New(), TenantID: ids.New()}))
+	if err != nil || p.SessionID != "" {
+		t.Fatalf("không có sid: %q %v", p.SessionID, err)
+	}
+}

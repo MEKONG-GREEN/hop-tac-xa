@@ -17,7 +17,7 @@ import (
 )
 
 func bootInput() BootstrapAdminInput {
-	return BootstrapAdminInput{TenantID: uuid.New(), OrgRef: uuid.New(), Username: "Admin.Dau.Tien"}
+	return BootstrapAdminInput{TenantID: uuid.New(), OrgRef: uuid.New(), Username: "Admin.Dau.Tien", Email: " Admin@Example.VN "}
 }
 
 func TestBootstrapAdmin_ThieuTenantHoacDonViThiDung(t *testing.T) {
@@ -26,6 +26,8 @@ func TestBootstrapAdmin_ThieuTenantHoacDonViThiDung(t *testing.T) {
 		"thiếu tenant":   func(in *BootstrapAdminInput) { in.TenantID = uuid.Nil },
 		"thiếu đơn vị":   func(in *BootstrapAdminInput) { in.OrgRef = uuid.Nil },
 		"thiếu tên":      func(in *BootstrapAdminInput) { in.Username = "  " },
+		"thiếu email":    func(in *BootstrapAdminInput) { in.Email = "" },
+		"email sai":      func(in *BootstrapAdminInput) { in.Email = "khong-phai-email" },
 		"không Keycloak": nil,
 	} {
 		in := bootInput()
@@ -44,7 +46,8 @@ func TestBootstrapAdmin_ThieuTenantHoacDonViThiDung(t *testing.T) {
 	}
 }
 
-func TestBootstrapAdmin_TaoPlatformAdminPhaiDoiMatKhauVaTOTP(t *testing.T) {
+// ADR-0061: Admin phải đổi mật khẩu ở lần đầu, không đăng ký TOTP; email đã xác minh để nhận mã OTP đăng nhập.
+func TestBootstrapAdmin_TaoPlatformAdminPhaiDoiMatKhauVaCoEmail(t *testing.T) {
 	ctx := context.Background()
 	dir := keycloak.NewMemory()
 	in := bootInput()
@@ -56,8 +59,11 @@ func TestBootstrapAdmin_TaoPlatformAdminPhaiDoiMatKhauVaTOTP(t *testing.T) {
 	if err != nil || u.Username != "admin.dau.tien" || u.TenantID != in.TenantID || u.OrgRef != in.OrgRef || !u.Enabled {
 		t.Fatalf("tài khoản: %+v %v", u, err)
 	}
-	if !slices.Equal(u.RequiredActions, []string{port.ActionUpdatePassword, port.ActionConfigureTOTP}) {
+	if !slices.Equal(u.RequiredActions, []string{port.ActionUpdatePassword}) {
 		t.Fatalf("required actions: %v", u.RequiredActions)
+	}
+	if u.Email != "admin@example.vn" || !u.EmailVerified {
+		t.Fatalf("email phải chuẩn hóa và đã xác minh: %q %v", u.Email, u.EmailVerified)
 	}
 	if roles, _ := dir.RealmRoles(ctx, id); !slices.Equal(roles, []string{authz.RolePlatformAdmin}) {
 		t.Fatalf("vai: %v", roles)
@@ -70,7 +76,7 @@ func TestBootstrapAdmin_TaoPlatformAdminPhaiDoiMatKhauVaTOTP(t *testing.T) {
 		t.Fatalf("mật khẩu tạm phải đủ độ dài và đủ loại ký tự (độ dài %d)", len(pw))
 	}
 	// Hai lần sinh khác nhau (ngẫu nhiên).
-	_, pw2, err := BootstrapAdmin(ctx, dir, BootstrapAdminInput{TenantID: in.TenantID, OrgRef: in.OrgRef, Username: "admin2"}, nil)
+	_, pw2, err := BootstrapAdmin(ctx, dir, BootstrapAdminInput{TenantID: in.TenantID, OrgRef: in.OrgRef, Username: "admin2", Email: "admin2@example.vn"}, nil)
 	if err != nil || pw2 == pw {
 		t.Fatalf("mật khẩu tạm phải ngẫu nhiên: %v", err)
 	}

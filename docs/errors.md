@@ -487,6 +487,11 @@ Tài khoản cán bộ quản lý trong Keycloak qua Admin REST (KN US-ADM-01..0
 | 423 | `accounts.login_temporarily_locked` | pf/accounts (FN-01/BR-06, QTPQ-Q-03): khóa đăng nhập tạm — 5 lần sai liên tiếp khóa 15 phút, hai lần sai cách nhau dưới 1 giây khóa 60 giây. Thân có `retry_after_minutes` (làm tròn lên), header `Retry-After` (giây); không kiểm mật khẩu trong lúc khóa. Khác trạng thái "Đã khóa" của FN-07; Admin mở sớm bằng nút Mở khóa |
 | 403 | `accounts.login_setup_required` | pf/accounts (FN-01, ADR-0060): đăng nhập đúng mật khẩu nhưng tài khoản còn việc lần đầu (đổi mật khẩu tạm, đăng ký TOTP) hoặc có vai bắt TOTP mà chưa đăng ký OTP — không phát token; hoàn tất ở trang xác thực của Keycloak (đến khi có màn đổi mật khẩu lần đầu AH-269) |
 | 503 | `accounts.login_unavailable` | pf/accounts (FN-01, ADR-0060): đăng nhập riêng chưa cấu hình (thiếu `AG_KC_LOGIN_*`, `AG_LOGIN_ID_KEY` hoặc `AG_KC_ADMIN_URL`) — fail-closed, không chạy ở chế độ nới lỏng |
+| 401 | `accounts.login_otp_invalid` | pf/accounts (ADR-0061): bước 2 đăng nhập của Admin — mã OTP trong email sai. Thân có `remaining_attempts` và `detail` "Mã OTP không đúng. Còn n lần thử."; sai lần thứ 5 thì mã bị hủy (trả `accounts.login_otp_expired`) |
+| 410 | `accounts.login_otp_expired` | pf/accounts (ADR-0061): mã OTP email đã quá 5 phút, đã dùng, đã bị hủy (sai 5 lần) hoặc đã có mã mới — đăng nhập lại để nhận mã mới |
+| 403 | `accounts.login_otp_email_missing` | pf/accounts (ADR-0061): Admin đúng mật khẩu nhưng tài khoản chưa có email đã xác minh để nhận mã OTP — không gửi, không phát token; quản trị hệ thống đặt email trong Keycloak |
+| 429 | `accounts.login_otp_rate_limited` | pf/accounts (ADR-0061): đã gửi 10 mã OTP trong một giờ cho tài khoản. Thân có `retry_after_minutes`, header `Retry-After` (giây) |
+| 503 | `accounts.login_otp_unavailable` | pf/accounts (ADR-0061): không gửi được mã OTP — chưa cấu hình SMTP (`AG_SMTP_HOST`) cho api-platform hoặc máy chủ thư từ chối. Fail-closed: không báo "đã gửi", không phát token |
 | 401 | `accounts.session_expired` | pf/accounts (FN-01, ADR-0060): `POST /v1/public/auth/refresh` — phiên Keycloak đã hết hoặc bị thu hồi (đăng xuất, khóa tài khoản); đăng nhập lại |
 
 KN v7.7 gói P1 — gán vai trò nhiều vai × Nút × phòng ban × xã (FN-AD-04.04), ngữ cảnh phiên `X-AG-Context` (FN-CH-00.01), chế độ hỗ trợ (FN-AD-04.07):

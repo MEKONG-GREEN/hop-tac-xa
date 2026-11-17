@@ -1,9 +1,10 @@
 // Lệnh bootstrap-admin: tạo tài khoản Admin đầu tiên của App HTX khi triển khai (FN-01, QTPQ-Q-01) — không có màn hình.
 //
-//	go run ./cmd/bootstrap-admin -tenant <uuid> -org <uuid> -username <tên đăng nhập> [-email ...] [-first-name ...] [-last-name ...]
+//	go run ./cmd/bootstrap-admin -tenant <uuid> -org <uuid> -username <tên đăng nhập> -email <email> [-first-name ...] [-last-name ...]
 //
-// Tài khoản mang vai platform_admin (quản trị toàn hệ thống; bắt buộc TOTP theo chính sách realm), ở trạng thái phải đổi mật
-// khẩu và đăng ký TOTP ở lần đăng nhập đầu (trang xác thực của Keycloak). Lệnh sinh mật khẩu tạm và in ra stdout ĐÚNG MỘT LẦN:
+// Tài khoản mang vai platform_admin (quản trị toàn hệ thống), email đã xác minh — Admin đăng nhập bằng mật khẩu + mã OTP gửi
+// qua email này (ADR-0061) — và ở trạng thái phải đổi mật khẩu ở lần đăng nhập đầu (trang xác thực của Keycloak). Lệnh sinh
+// mật khẩu tạm và in ra stdout ĐÚNG MỘT LẦN:
 // không ghi qua slog, không ghi tệp, không dán vào ticket hay tài liệu. -tenant và -org bắt buộc, không có giá trị mặc định.
 //
 // Cấu hình: AG_KC_ADMIN_URL, AG_KC_REALM, AG_KC_CLIENT_ID, AG_KC_CLIENT_SECRET (như api-platform).
@@ -43,7 +44,7 @@ func run(ctx context.Context, args []string, dir port.Directory, stdout io.Write
 	tenantFlag := fs.String("tenant", "", "UUID tenant của Admin (bắt buộc)")
 	orgFlag := fs.String("org", "", "UUID đơn vị của Admin (bắt buộc)")
 	username := fs.String("username", "", "tên đăng nhập (bắt buộc)")
-	email := fs.String("email", "", "email (tùy chọn)")
+	email := fs.String("email", "", "email nhận mã OTP đăng nhập (bắt buộc)")
 	first := fs.String("first-name", "", "tên (tùy chọn)")
 	last := fs.String("last-name", "", "họ và tên đệm (tùy chọn)")
 	if err := fs.Parse(args); err != nil {
@@ -63,6 +64,10 @@ func run(ctx context.Context, args []string, dir port.Directory, stdout io.Write
 		fs.Usage()
 		return errors.New("-username bắt buộc")
 	}
+	if *email == "" {
+		fs.Usage()
+		return errors.New("-email bắt buộc: Admin nhận mã OTP đăng nhập qua email này")
+	}
 	if dir == nil {
 		return errors.New("chưa cấu hình AG_KC_ADMIN_URL (cần AG_KC_ADMIN_URL, AG_KC_REALM, AG_KC_CLIENT_ID, AG_KC_CLIENT_SECRET)")
 	}
@@ -77,7 +82,8 @@ func run(ctx context.Context, args []string, dir port.Directory, stdout io.Write
 		"  Mã tài khoản:  %s\n"+
 		"  Mật khẩu tạm:  %s\n\n"+
 		"Mật khẩu chỉ hiển thị MỘT lần này — hãy chuyển cho người nhận qua kênh an toàn, không dán vào ticket hay tài liệu.\n"+
-		"Lần đăng nhập đầu: bấm \"Hoàn tất trên trang xác thực\" để đổi mật khẩu và đăng ký OTP (TOTP) trên trang xác thực của Keycloak.\n",
+		"Lần đăng nhập đầu: bấm \"Hoàn tất trên trang xác thực\" để đổi mật khẩu trên trang xác thực của Keycloak, rồi đăng nhập\n"+
+		"lại ở màn đăng nhập của App HTX: nhập mật khẩu mới, sau đó nhập mã OTP gửi tới email của tài khoản.\n",
 		*username, id, password)
 	return err
 }

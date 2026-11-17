@@ -200,3 +200,61 @@ func TestAdminRealmPasswordPolicy_D24(t *testing.T) {
 		t.Error("realm quản trị phải có chính sách mật khẩu riêng")
 	}
 }
+
+// ADR-0061 (17/11/2026): Admin (accounts/port.EmailOTPRoles) đăng nhập bằng mật khẩu + mã OTP gửi qua email ở màn riêng của
+// App HTX. Realm: vai đó KHÔNG chứa vai đánh dấu TOTP; và email chỉ quản trị sửa được — nếu người dùng tự đổi email trong
+// trang tài khoản Keycloak thì ai có mật khẩu cũng tự nhận được mã.
+func TestRealmAdminEmailOTP_ADR0061(t *testing.T) {
+	realm := loadRealm(t, "agrigreen-realm.json")
+	if len(accport.EmailOTPRoles) == 0 || !accport.NeedsLoginEmailOTP([]string{"platform_admin"}) {
+		t.Fatalf("platform_admin phải đăng nhập bằng OTP email: %v", accport.EmailOTPRoles)
+	}
+	for _, r := range realm.Roles.Realm {
+		if accport.NeedsLoginEmailOTP([]string{r.Name}) && slices.Contains(r.Composites.Realm, accport.RoleLoginTOTP) {
+			t.Errorf("vai %s đăng nhập bằng OTP email nhưng realm vẫn bắt TOTP", r.Name)
+		}
+	}
+	if accport.NeedsLoginTOTP(accport.EmailOTPRoles) {
+		t.Errorf("LoginTOTPRoles không được chứa vai OTP email %v", accport.EmailOTPRoles)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(repoRoot, "deploy", "compose", "keycloak", "agrigreen-realm.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Components map[string][]struct {
+			Config map[string][]string `json:"config"`
+		} `json:"components"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, c := range doc.Components["org.keycloak.userprofile.UserProfileProvider"] {
+		for _, cfg := range c.Config["kc.user.profile.config"] {
+			var up struct {
+				Attributes []struct {
+					Name        string `json:"name"`
+					Permissions struct {
+						Edit []string `json:"edit"`
+					} `json:"permissions"`
+				} `json:"attributes"`
+			}
+			if err := json.Unmarshal([]byte(cfg), &up); err != nil {
+				t.Fatal(err)
+			}
+			for _, a := range up.Attributes {
+				if a.Name == "email" {
+					found = true
+					if !slices.Equal(a.Permissions.Edit, []string{"admin"}) {
+						t.Errorf("email chỉ quản trị sửa được, đang là %v", a.Permissions.Edit)
+					}
+				}
+			}
+		}
+	}
+	if !found {
+		t.Fatal("không thấy thuộc tính email trong cấu hình hồ sơ người dùng của realm")
+	}
+}

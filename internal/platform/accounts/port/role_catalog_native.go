@@ -25,7 +25,8 @@ func NativeRoleCatalog() *RoleCatalog {
 	}
 	return &RoleCatalog{
 		valid: true, managed: managed,
-		mfa: slices.Clone(MFARoles), loginTOTP: slices.Clone(MFARoles),
+		// ADR-0061: vai đăng nhập bằng OTP email (Admin) không đăng ký TOTP.
+		mfa: slices.Clone(MFARoles), loginTOTP: without(MFARoles, EmailOTPRoles...),
 		orgKinds: kinds,
 		grants: map[string][]string{
 			"platform_admin":         slices.Clone(managed),

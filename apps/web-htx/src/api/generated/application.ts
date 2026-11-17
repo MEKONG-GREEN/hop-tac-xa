@@ -3457,7 +3457,7 @@ export interface paths {
         put?: never;
         /**
          * FN-01 Đăng nhập bằng tên đăng nhập hoặc số điện thoại + mật khẩu (ADR-0060) — KHÔNG đăng nhập trước, KHÔNG Idempotency-Key
-         * @description Máy chủ tra tài khoản (khớp đúng tên đăng nhập trước, không có mới tra theo SĐT; SĐT khớp từ hai tài khoản coi như sai), kiểm mật khẩu qua Keycloak (direct grant) và trả token của Keycloak. Mật khẩu không được lưu hay ghi log. Bộ đếm lần sai và khóa tạm do máy chủ giữ: Keycloak đếm cho tài khoản có thật (5 lần sai → khóa 15 phút; hai lần sai cách nhau dưới 1 giây → khóa 60 giây), bộ đếm HMAC riêng cho mã định danh không tồn tại — phản hồi giống hệt nhau. Tài khoản đã bị khóa (FN-07) → 403 accounts.account_locked dù mật khẩu đúng hay sai. Đăng nhập MỘT bước: mỗi lượt gọi Keycloak đúng một lần, gửi mật khẩu kèm otp nếu có. Tài khoản đã đăng ký OTP mà không gửi otp (hoặc gửi sai) → 401 accounts.login_failed giống hệt sai mật khẩu và tính một lần sai (không lộ tài khoản nào có OTP). Tài khoản còn việc lần đầu (đổi mật khẩu tạm, đăng ký TOTP) hoặc có vai bắt TOTP mà chưa đăng ký → 403 accounts.login_setup_required, không bao giờ phát token. Giới hạn theo IP (dồn 10, sau đó 10/phút) → 429. Cache-Control no-store.
+         * @description Máy chủ tra tài khoản (khớp đúng tên đăng nhập trước, không có mới tra theo SĐT; SĐT khớp từ hai tài khoản coi như sai), kiểm mật khẩu qua Keycloak (direct grant) và trả token của Keycloak. Mật khẩu không được lưu hay ghi log. Bộ đếm lần sai và khóa tạm do máy chủ giữ: Keycloak đếm cho tài khoản có thật (5 lần sai → khóa 15 phút; hai lần sai cách nhau dưới 1 giây → khóa 60 giây), bộ đếm HMAC riêng cho mã định danh không tồn tại — phản hồi giống hệt nhau. Tài khoản đã bị khóa (FN-07) → 403 accounts.account_locked dù mật khẩu đúng hay sai. Đăng nhập MỘT bước: mỗi lượt gọi Keycloak đúng một lần, gửi mật khẩu kèm otp nếu có. Tài khoản đã đăng ký OTP mà không gửi otp (hoặc gửi sai) → 401 accounts.login_failed giống hệt sai mật khẩu và tính một lần sai (không lộ tài khoản nào có OTP). Tài khoản còn việc lần đầu (đổi mật khẩu tạm, đăng ký TOTP) hoặc có vai bắt TOTP mà chưa đăng ký → 403 accounts.login_setup_required, không bao giờ phát token. Giới hạn theo IP (dồn 10, sau đó 10/phút) → 429. Cache-Control no-store. ADR-0061 — Admin (platform_admin) đăng nhập HAI bước: bước 1 (identifier + password) đúng mật khẩu → 200 status otp_required kèm challenge_id, email_hint (địa chỉ đã che), expires_in (300), resend_after (giây tới khi xin được mã mới); máy chủ gửi mã 6 số tới email đã xác minh của tài khoản, KHÔNG phát token. Gọi lại bước 1 trong 60 giây trả lại thử thách cũ, không gửi thêm; tối đa 10 mã/giờ → 429 accounts.login_otp_rate_limited. Bước 2 gửi lại identifier + password kèm challenge_id và otp (mã trong email): đúng → 200 authenticated kèm token (phiên được ghi là đã qua yếu tố thứ hai); sai → 401 accounts.login_otp_invalid (remaining_attempts); sai 5 lần, quá 5 phút, đã dùng hoặc đã có mã mới → 410 accounts.login_otp_expired. Thiếu kênh email → 503 accounts.login_otp_unavailable; tài khoản chưa có email đã xác minh → 403 accounts.login_otp_email_missing.
          */
         post: operations["passwordLogin"];
         delete?: never;
@@ -34125,13 +34125,18 @@ export interface operations {
                     identifier: string;
                     /** Format: password */
                     password: string;
-                    /** @description Mã OTP 6 số, chỉ cần khi tài khoản đã bật xác thực hai bước */
+                    /** @description Mã OTP 6 số: TOTP khi tài khoản đã bật xác thực hai bước, hoặc mã trong email ở bước 2 của Admin (bắt buộc khi có challenge_id) */
                     otp?: string;
+                    /**
+                     * Format: uuid
+                     * @description ADR-0061: id thử thách bước 1 trả về — chỉ gửi ở bước 2 của Admin
+                     */
+                    challenge_id?: string;
                 };
             };
         };
         responses: {
-            /** @description authenticated (kèm token) */
+            /** @description authenticated (kèm token) | otp_required (bước 1 của Admin: đã gửi mã qua email, chưa có token) */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -34139,29 +34144,38 @@ export interface operations {
                 content: {
                     "application/json": {
                         /** @enum {string} */
-                        status: "authenticated";
+                        status: "authenticated" | "otp_required";
                         access_token?: string;
                         refresh_token?: string;
+                        /** @description authenticated: hạn access token (giây); otp_required: hạn mã OTP (giây) */
                         expires_in?: number;
                         refresh_expires_in?: number;
                         /** @enum {string} */
                         token_type?: "Bearer";
+                        /** Format: uuid */
+                        challenge_id?: string;
+                        /** @description Email nhận mã đã che, vd a***@mekonggreen.vn */
+                        email_hint?: string;
+                        /** @description Số giây tới khi xin được mã mới */
+                        resend_after?: number;
                     };
                 };
             };
             /** @description bad_request (thân không phải JSON) */
             400: components["responses"]["Problem"];
-            /** @description accounts.login_failed (EX-02): extension remaining_attempts */
+            /** @description accounts.login_failed (EX-02) | accounts.login_otp_invalid: extension remaining_attempts */
             401: components["responses"]["Problem"];
-            /** @description accounts.account_locked (EX-03) | accounts.login_setup_required */
+            /** @description accounts.account_locked (EX-03) | accounts.login_setup_required | accounts.login_otp_email_missing */
             403: components["responses"]["Problem"];
-            /** @description validation_failed (EX-01: thiếu identifier hoặc password) */
+            /** @description accounts.login_otp_expired (mã OTP email hết hạn, đã dùng, đã hủy hoặc đã có mã mới) */
+            410: components["responses"]["Problem"];
+            /** @description validation_failed (EX-01: thiếu identifier hoặc password; có challenge_id mà thiếu otp) */
             422: components["responses"]["Problem"];
             /** @description accounts.login_temporarily_locked: extension retry_after_minutes, header Retry-After (giây) */
             423: components["responses"]["Problem"];
-            /** @description rate_limited */
+            /** @description rate_limited | accounts.login_otp_rate_limited (extension retry_after_minutes, header Retry-After) */
             429: components["responses"]["Problem"];
-            /** @description accounts.login_unavailable | accounts.dependency_unavailable */
+            /** @description accounts.login_unavailable | accounts.dependency_unavailable | accounts.login_otp_unavailable */
             503: components["responses"]["Problem"];
         };
     };
