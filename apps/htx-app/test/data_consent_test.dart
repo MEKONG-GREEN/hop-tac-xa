@@ -13,22 +13,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'support/test_env.dart';
 
-/// Đăng nhập (OIDC giả) → tạo PIN, dừng trước khi vào trang chủ.
-Future<void> loginAndSetPin(WidgetTester tester, TestEnv env) async {
-  await tester.pumpWidget(appUnderTest(env));
-  await settle(tester);
-  await tester.tap(find.text('Đăng nhập'));
-  await settle(tester);
-  for (var round = 0; round < 2; round++) {
-    for (final d in ['1', '3', '5', '7', '9', '2']) {
-      await tester.tap(find.text(d));
-      await tester.pump();
-    }
-    await settle(tester, 10);
-  }
-  await settle(tester, 30);
-}
-
 void main() {
   // AH-23 / REQ-011 / KH-24: Đồng ý thu thập ảnh GPS và dữ liệu sản xuất.
   testWidgets('AC1/AC2: tài khoản HTX chưa đồng ý → sau PIN thấy màn Đồng ý kèm nội dung; '
@@ -186,6 +170,42 @@ void main() {
     expect(find.byType(LoginScreen), findsOneWidget);
     await finish(tester);
   });
+
+  testWidgets(
+    'AH-23 áp cho Thành viên HTX (AH-303): chưa đồng ý → màn Đồng ý, chưa đồng '
+    'bộ; Đồng ý → trang chủ',
+    (tester) async {
+      final env = TestEnv(roles: const ['htx_member'])..seed();
+      env.server.dataConsentRequired = true;
+      await loginAndSetPin(tester, env);
+      expect(find.byType(DataConsentScreen), findsOneWidget);
+      expect(find.byType(HomeScreen), findsNothing);
+      expect(env.server.registeredDevices, isEmpty);
+      expect(env.server.pullCursors, isEmpty);
+      expect(env.server.pushCalls, 0);
+
+      await tester.tap(find.byKey(const ValueKey('consent-accept')));
+      await settle(tester, 30);
+      expect(find.byType(HomeScreen), findsOneWidget);
+      expect(env.server.consentPosts.single['version'], 'tam-1');
+      await finish(tester);
+    },
+  );
+
+  testWidgets(
+    'AH-23 áp cho Thành viên HTX (AH-303): Không đồng ý → về màn đăng nhập',
+    (tester) async {
+      final env = TestEnv(roles: const ['htx_member'])..seed();
+      env.server.dataConsentRequired = true;
+      await loginAndSetPin(tester, env);
+      await tester.tap(find.byKey(const ValueKey('consent-decline')));
+      await settle(tester, 30);
+      expect(find.byType(LoginScreen), findsOneWidget);
+      expect(env.server.consentPosts, isEmpty);
+      expect(await env.store.read('ag.oidc.access'), isNull);
+      await finish(tester);
+    },
+  );
 
   testWidgets('nông dân (farmer) không thấy màn Đồng ý', (tester) async {
     final env = TestEnv()..seed();

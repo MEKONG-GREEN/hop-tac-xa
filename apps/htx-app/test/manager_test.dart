@@ -147,10 +147,9 @@ void main() {
     },
   );
 
-  testWidgets('nông hộ của HTX (nhãn đã che) → lô của hộ → mở vụ hộ', (
-    tester,
-  ) async {
-    final env = TestEnv(roles: const ['coop_manager'])..seed();
+  testWidgets('Thành viên HTX: nông hộ của HTX (nhãn đã che) → lô của hộ → mở '
+      'vụ hộ', (tester) async {
+    final env = TestEnv(roles: const ['htx_member'])..seed();
     final base = env.server.onGet!;
     env.server.onGet = (path, q) async =>
         path == '/v1/cooperatives/$coopRef/households'

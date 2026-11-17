@@ -159,8 +159,12 @@ class TestEnv {
     : oidc = JwtOidc(roles),
       roles = roles,
       server = server ?? FakeServer() {
-    this.server.dataConsentApplies = roles.contains('coop_manager');
+    this.server.dataConsentApplies = _coopRoles.any(roles.contains);
   }
+
+  /// Vai có HTX gắn với tài khoản (`org` của `/v1/me`), áp đồng ý thu thập
+  /// dữ liệu (AH-23, AH-39).
+  static const _coopRoles = ['coop_manager', 'htx_member'];
 
   final List<String> roles;
   final FakeServer server;
@@ -316,7 +320,7 @@ class TestEnv {
     server.onGet = (path, query) async => switch (path) {
       '/v1/me' => {
         'roles': roles,
-        'org': roles.contains('coop_manager')
+        'org': _coopRoles.any(roles.contains)
             ? {'ref': coopRef, 'name': 'HTX Tân Phú', 'kind': 'cooperative'}
             : null,
       },
@@ -384,8 +388,9 @@ Widget appUnderTest(TestEnv env) => ProviderScope(
   child: const HtxApp(),
 );
 
-/// Đăng nhập (OIDC giả) → tạo PIN → trang chủ; đợi lượt đồng bộ đầu.
-Future<HtxServices> loginToHome(WidgetTester tester, TestEnv env) async {
+/// Đăng nhập (OIDC giả) → tạo PIN, dừng ở màn đầu tiên sau khi mở khóa (đồng
+/// ý dữ liệu, màn chặn hoặc trang chủ).
+Future<void> loginAndSetPin(WidgetTester tester, TestEnv env) async {
   await tester.pumpWidget(appUnderTest(env));
   await settle(tester);
   await tester.tap(find.text('Đăng nhập'));
@@ -398,6 +403,11 @@ Future<HtxServices> loginToHome(WidgetTester tester, TestEnv env) async {
     await settle(tester, 10);
   }
   await settle(tester, 30);
+}
+
+/// Đăng nhập (OIDC giả) → tạo PIN → trang chủ; đợi lượt đồng bộ đầu.
+Future<HtxServices> loginToHome(WidgetTester tester, TestEnv env) async {
+  await loginAndSetPin(tester, env);
   expect(find.byType(HomeScreen), findsOneWidget);
   final c = ProviderScope.containerOf(tester.element(find.byType(HomeScreen)));
   final s = c.read(appControllerProvider).services!;

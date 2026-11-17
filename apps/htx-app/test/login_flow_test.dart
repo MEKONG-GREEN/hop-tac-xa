@@ -47,7 +47,8 @@ void main() {
     final env = TestEnv(roles: const ['coop_manager'])..seed();
     await loginToHome(tester, env);
     expect(find.text('Duyệt nhật ký'), findsOneWidget);
-    expect(find.text('Mở vụ hàng loạt'), findsOneWidget);
+    // AH-303: Đại diện HTX chỉ xem vụ (KHMV-FN-03 = R).
+    expect(find.text('Mở vụ hàng loạt'), findsNothing);
     expect(find.text('Ruộng của tôi'), findsNothing);
     await finish(tester);
   });
@@ -91,6 +92,7 @@ void main() {
     ]);
     expect(rolesFromJwt('không-phải-jwt'), isEmpty);
     expect(modeFor(['farmer', 'coop_manager']), HtxMode.manager);
+    expect(modeFor(['htx_member', 'offline_access']), HtxMode.member);
     expect(modeFor(['kn_officer']), HtxMode.none);
   });
 }

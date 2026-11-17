@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/crop_service.dart';
+import '../../domain/role_matrix.dart';
+import '../../domain/roles.dart';
 import '../providers.dart';
 import 'plots_screen.dart' show LogCard;
 
@@ -26,6 +28,7 @@ class FarmLogDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l = ref.watch(_logProvider(logId));
+    final mode = ref.watch(appControllerProvider.select((s) => s.mode));
     return Scaffold(
       appBar: AppBar(title: const Text('Nhật ký canh tác')),
       body: l.when(
@@ -44,10 +47,11 @@ class FarmLogDetailScreen extends ConsumerWidget {
                 children: [
                   LogCard(
                     entry: entry,
-                    onSupplement: (w) =>
-                        Navigator.of(context)
-                            .push(MaterialPageRoute<void>(builder: (_) => w))
-                            .then((_) => ref.invalidate(_logProvider(logId))),
+                    onSupplement: !mode.can(HtxFn.farmLog, HtxAction.update)
+                        ? null
+                        : (w) => Navigator.of(context)
+                              .push(MaterialPageRoute<void>(builder: (_) => w))
+                              .then((_) => ref.invalidate(_logProvider(logId))),
                   ),
                 ],
               ),

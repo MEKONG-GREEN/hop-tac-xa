@@ -12,7 +12,7 @@ Nguồn: BRD Quản trị phân quyền App HTX v3.0 (FN-05, ADM-01, TECH-01, M�
 
 Lý do dùng lại hai vai đang có: không phải sửa phần kiểm quyền ở mọi API và mọi test đang dùng chúng. Đổi lại, tên vai trong mã không trùng tên vai trong BRD; bảng trên là nơi đối chiếu.
 
-`htx_member` có ở realm Keycloak (`deploy/compose/keycloak/agrigreen-realm.json`), máy chủ (`cooperative/port`, `party/port`, `db.NodeBoundRoles`, danh mục vai của `pf/accounts`), `app/HTX/app.yaml` và web (`src/auth/principal.ts`). App di động thuộc AH-303.
+`htx_member` có ở realm Keycloak (`deploy/compose/keycloak/agrigreen-realm.json`), máy chủ (`cooperative/port`, `party/port`, `db.NodeBoundRoles`, danh mục vai của `pf/accounts`), `app/HTX/app.yaml`, web (`src/auth/principal.ts`) và app di động (`apps/htx-app/lib/domain/roles.dart`, AH-303 — mục "App di động" dưới).
 
 ## Ma trận Mục V (bản v3.0)
 
@@ -41,6 +41,7 @@ Trong tệp dữ liệu, FN-01 ghi `R` (nghĩa là "được dùng"); hai dòng 
 
 - Dữ liệu: [`contracts/htxroles/htx-roles.v1.json`](../../contracts/htxroles/htx-roles.v1.json). Máy chủ đọc qua gói Go `contracts/htxroles` (`go:embed`).
 - Web: `apps/web-htx/src/api/generated/htx-roles.ts` sinh từ tệp trên bằng `scripts/gen-role-matrix.mjs`; chạy `npm run gen:api` (hoặc `npm run gen:modules`) trong `apps/web-htx`, kiểm bằng `npm run check:api`. Không sửa tay tệp sinh.
+- App di động: `apps/htx-app/lib/domain/generated/htx_roles.dart` (hằng chuỗi JSON, app đọc lúc chạy) sinh cùng script và cùng lệnh (`npm run gen:modules` trong `apps/web-htx`, hoặc `node scripts/gen-role-matrix.mjs` ở gốc repo), kiểm bằng `npm run check:api`. Test `apps/htx-app/test/role_matrix_test.dart` so bản sinh với tệp JSON gốc, nên job Flutter cũng bắt được bản lỗi thời.
 - Web dựng menu và nút từ ma trận qua `src/auth/permissions.ts`: mục menu gắn mã chức năng (`fn`) được cộng các vai ma trận cho xem (R); nút thao tác ẩn khi `matrixAllows` trả false. Không rải điều kiện theo ba vai trong từng màn.
 - Ẩn menu, ẩn nút chỉ là giao diện. Máy chủ kiểm quyền ở mọi yêu cầu (FN-05/BR-03, TECH-01).
 
@@ -102,7 +103,7 @@ Nguồn: BRD App HTX — Kế hoạch vụ mùa và Nhật ký sản xuất v3.9
 - **Route ghi mở cho Thành viên HTX trong `member_write_routes`:** `POST /v1/cropcycle/seasons`, `…/seasons/bulk-open`, `…/seasons/:ref/corrections`, `…/seasons/:ref/cancel`, `…/seasons/:ref/harvest`, `…/harvests/bulk`, `…/harvests/import`, `…/harvests/:id/corrections`, `…/farm-logs`, `…/farm-logs/batch`, `…/farm-logs/:id/corrections` và `POST /v1/me/data-consent`. Phê duyệt nhật ký (`…/farm-logs/:id/reviews`) không có trong ma trận nên giữ quyền cũ (Đại diện HTX, Admin).
 - **Chưa có API:** lịch thời vụ (AH-51) — chỉ có dòng `KHMV-FN-03-LICH`; kế hoạch mùa vụ (`KHMV-FN-04`) chưa có API riêng — kế hoạch là các bước SOP trong chi tiết vụ; hủy khai báo sản lượng chưa có API.
 - **Thông báo (`KHMV-NTF`):** dòng này chỉ áp cho thông báo của BRD Kế hoạch mùa vụ — bốn loại của AH-22 (lịch thời vụ được phát, việc đến hạn, vụ thiếu nhật ký, quy trình đổi do đổi giống), người nhận là tài khoản có vai `htx_member` của HTX liên quan. Đại diện HTX vẫn nhận bốn loại thông báo khác (nhật ký chờ duyệt, vụ đã được mở, lịch thu gom rơm, bảng kê thu gom) và vẫn thấy màn Thông báo.
-- **Đồng bộ từ app:** chưa mở cho Thành viên HTX (app di động thuộc AH-303): chiều xuống không trả entity, chiều lên bị từ chối. Đại diện HTX và tài khoản kiêm hai vai bị từ chối ghi qua đồng bộ (chỉ xem); nông dân giữ nguyên.
+- **Đồng bộ từ app:** máy chủ chưa mở cho Thành viên HTX (phần máy chủ thuộc AH-310; app đã nhận vai ở AH-303): chiều xuống không trả entity, chiều lên bị từ chối. Đại diện HTX và tài khoản kiêm hai vai bị từ chối ghi qua đồng bộ (chỉ xem); nông dân giữ nguyên.
 - **Web:** mục "Vụ canh tác", "Nhật ký canh tác", "Sản lượng thu hoạch" gắn `KHMV-FN-03-XEM`, `KHMV-FN-05`, `KHMV-FN-06`; nút thao tác ẩn/hiện theo `HtxScope.can(dòng, hành động)`.
 
 ## Kiêm hai vai
@@ -113,10 +114,19 @@ Một tài khoản có thể kiêm Đại diện HTX và Thành viên HTX (FN-05
 - Web: `effectiveRole` và `matrixAllows` (`src/auth/permissions.ts`) theo cùng quy tắc.
 - Hệ quả: tài khoản kiêm hai vai chỉ xem vụ, kế hoạch mùa vụ, nhật ký, sản lượng (không mở vụ, không ghi nhật ký, không khai sản lượng) cho tới AH-270, vì quyền của Thành viên HTX ở phân hệ này không nằm trọn trong quyền của Đại diện HTX.
 
+## App di động (AH-303)
+
+- **Chế độ theo vai có hiệu lực** (`modeFor`, `apps/htx-app/lib/domain/roles.dart`; ma trận đọc qua `role_matrix.dart`): Admin → màn chặn "Tài khoản Admin chỉ dùng trên web…"; Đại diện HTX → chỉ xem vụ, nhật ký, sản lượng; Thành viên HTX → mở vụ, ghi nhật ký, khai sản lượng; tài khoản kiêm hai vai dùng quyền Đại diện HTX (tới AH-270). Không có vai ma trận: vai `farmer` giữ chế độ nông dân (AH-309 sẽ gỡ), còn lại → màn chặn "Tài khoản không dùng được App HTX…".
+- **Màn chặn** (Admin, không có vai) chỉ có nút Đăng xuất; app không hỏi đồng ý dữ liệu, không đăng ký thiết bị, không đồng bộ.
+- **Ẩn/hiện:** màn và nút hỏi `HtxModeAccess.can(fn, action)` và `canView(màn)`, không rải điều kiện theo vai trong từng màn. Thành viên HTX có Nông hộ và Bản đồ lô ruộng ở chế độ chỉ xem (FN-04, `KHMV-FN-02` = R), Mở vụ hàng loạt, Ghi nhật ký hộ, Nhật ký hàng loạt, Khai sản lượng; Đại diện HTX có "Xem vụ và nhật ký hộ" (không có nút thêm, sửa, xóa).
+- **Quy tắc ngoài ma trận** (giữ quyền đang có của Đại diện HTX, PO quyết định sau): Duyệt nhật ký, Thu gom rơm MKG, Tổng quan, sửa ranh thửa trên bản đồ, gọi nông hộ (máy chủ chỉ trả số điện thoại cho vai ghi nông hộ).
+- **Đồng ý thu thập ảnh và GPS (AH-23)** theo trả lời của máy chủ, như mọi vai: Thành viên HTX được hỏi ngay sau khi mở khóa; không đồng ý thì đăng xuất.
+- **Liên kết từ thông báo** tới màn vai không được xem (vd `/htx/thu-gom` với Thành viên HTX): về trang chủ theo vai kèm thanh thông báo "Không tìm thấy dữ liệu, hoặc bạn không có quyền xem dữ liệu này." (`openDeepLink`, `apps/htx-app/lib/ui/navigation.dart`).
+
 ## Mục thay thế tạm cho FN-02 và FN-07
 
 Web chưa có màn "Tài khoản" (FN-07) và "Đơn vị hành chính" (FN-02) của App HTX. Theo quyết định 17/11/2026, quy tắc ẩn/hiện áp trên hai mục đang giữ vai trò tương ứng: "Tài khoản cán bộ" (`/quan-tri/tai-khoan`, gắn `FN-07`) và "Danh mục dùng chung" (`/quan-tri/danh-muc`, gắn `FN-02`). Khi làm FN-02 và FN-07, các ticket đó đăng ký mục menu của mình với mã chức năng tương ứng.
 
 ## Trang đầu tiên được xem
 
-Là mục đầu tiên theo thứ tự menu mà vai đang đăng nhập được xem (`homeFor` của web). Thành viên HTX mở đường dẫn không thuộc quyền (FN-05/AC-03, EX-01) thì được chuyển về trang đó. Vai không xem được mục nào thì về `/khong-co-quyen` ("Tài khoản không có quyền dùng chức năng nào"), không lặp chuyển hướng.
+Là mục đầu tiên theo thứ tự menu mà vai đang đăng nhập được xem (`homeFor` của web). Thành viên HTX mở đường dẫn không thuộc quyền (FN-05/AC-03, EX-01) thì được chuyển về trang đó. Vai không xem được mục nào thì về `/khong-co-quyen` ("Tài khoản không có quyền dùng chức năng nào"), không lặp chuyển hướng. Trên app di động, trang đầu tiên được xem là trang chủ theo vai.

@@ -3,7 +3,9 @@ import 'package:agrigreen_mobile/ui/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../domain/roles.dart';
 import 'providers.dart';
+import 'screens/access_blocked_screen.dart';
 import 'screens/data_consent_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
@@ -42,6 +44,8 @@ class _AuthGate extends ConsumerWidget {
             ? const LoginScreen()
             : st.consent != null
             ? const DataConsentScreen()
+            : st.mode.blocked
+            ? const AccessBlockedScreen()
             : const HomeScreen(),
     };
   }
