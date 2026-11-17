@@ -1,4 +1,5 @@
 import type { ScopeLevel } from "@/auth/principal";
+import { matrixAllows, rolesWith, type HtxFunction } from "@/auth/permissions";
 import { API_CLIENT_ROLES, hasRole, KN_ROLES, METERING_READ_ROLES, MRV_ROLES, ROLES, type Principal } from "@/auth/principal";
 
 export type NavIcon =
@@ -58,6 +59,11 @@ export interface NavItem {
   /** Không vẽ trong menu (vd hộp thư mở từ chuông) nhưng vẫn dùng để kiểm quyền và hiện tiêu đề. */
   hidden?: boolean;
   /**
+   * Mã chức năng App HTX (ma trận FN-05, src/auth/permissions.ts): cộng vào `roles` các vai ma trận cho xem (R), và
+   * ẩn với người có vai App HTX mà ma trận không cho xem.
+   */
+  fn?: HtxFunction;
+  /**
    * Module per_tenant sá»Ÿ há»¯u mÃ n (tÃªn repo, module.yaml). W1.4 (R-MOD-08): module Ä‘Ã£ táº¯t cho Ä‘Æ¡n vá»‹
    * (GET /v1/me/modules) â†’ khÃ´ng hiá»‡n. Bá» trá»‘ng = mÃ n lÃµi, luÃ´n hiá»‡n.
    */
@@ -113,7 +119,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     items: [
       { href: "/htx", label: "Quản lý HTX & nông hộ", icon: "coop", levels: KN },
       { href: "/htx/dashboard", module: "pf/cropcycle", label: "Bảng điều hành sản xuất", icon: "chart", roles: HTX_READ },
-      { href: "/htx/nong-ho", label: "Quản lý nông hộ", icon: "coop", roles: HTX_READ },
+      { href: "/htx/nong-ho", label: "Quản lý nông hộ", icon: "coop", roles: HTX_READ, fn: "FN-04" },
       { href: "/htx/lo-ruong", module: "pf/geo", label: "Lô ruộng & ranh giới", icon: "plot", roles: HTX_READ },
       { href: "/htx/mua-vu", module: "pf/cropcycle", label: "Vụ canh tác", icon: "season", roles: HTX_READ },
       { href: "/htx/nhat-ky", module: "pf/cropcycle", label: "Nhật ký canh tác", icon: "journal", roles: HTX_READ },
@@ -149,8 +155,9 @@ export const NAV_GROUPS: readonly NavGroup[] = [
   {
     label: "6. Quản trị",
     items: [
-      { href: "/quan-tri/tai-khoan", label: "Tài khoản cán bộ", icon: "user", roles: [ROLES.platformAdmin, ROLES.accountAdmin, ROLES.accountAdminProvince] },
-      { href: "/quan-tri/danh-muc", module: "pf/masterdata", label: "Danh mục dùng chung", icon: "catalog", roles: [ROLES.platformAdmin, ROLES.masterdataAdmin] },
+      // FN-05: hai mục giữ vai "Tài khoản" (FN-07) và "Đơn vị hành chính" (FN-02) của App HTX tới khi có màn riêng.
+      { href: "/quan-tri/tai-khoan", label: "Tài khoản cán bộ", icon: "user", roles: [ROLES.platformAdmin, ROLES.accountAdmin, ROLES.accountAdminProvince], fn: "FN-07" },
+      { href: "/quan-tri/danh-muc", module: "pf/masterdata", label: "Danh mục dùng chung", icon: "catalog", roles: [ROLES.platformAdmin, ROLES.masterdataAdmin], fn: "FN-02" },
       {
         href: "/quan-tri/tham-so", module: "pf/masterdata",
         label: "Tham số & phê duyệt",
@@ -214,7 +221,10 @@ export function canSee(item: NavItem, p: Principal | null, disabled: DisabledMod
   // W1.4 (R-MOD-08): mÃ n cá»§a module chÆ°a báº­t cho Ä‘Æ¡n vá»‹ khÃ´ng hiá»‡n (backend tráº£ 403 module_not_enabled).
   if (item.module && disabled.has(item.module)) return false;
   const isAdmin = hasRole(p, ROLES.platformAdmin);
-  if (item.roles && !hasRole(p, ...item.roles)) return false;
+  // FN-05: mục gắn chức năng App HTX — vai ma trận cho xem được cộng vào danh sách vai, và ma trận phải cho xem.
+  const roles = item.fn && item.roles ? [...item.roles, ...rolesWith(item.fn, "R")] : item.roles;
+  if (roles && !hasRole(p, ...roles)) return false;
+  if (item.fn && !matrixAllows(p, item.fn, "R")) return false;
   if (item.levels) {
     // Quản trị nền tảng thấy mọi màn hình (phạm vi All theo ScopeResolver).
     if (isAdmin) return true;

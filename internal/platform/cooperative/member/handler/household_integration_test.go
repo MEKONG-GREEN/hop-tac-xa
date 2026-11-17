@@ -132,6 +132,54 @@ func TestHouseholdEventsKNUSHTX05(t *testing.T) {
 	}
 }
 
+// FN-05/AC-01, BR-03 (TECH-01): Thành viên HTX chỉ xem nông hộ của HTX mình (FN-04: R) — HTX khác, kể cả cùng xã,
+// trả 404 như với quản lý HTX; mọi thao tác thêm, sửa, sao chép, đọc SĐT bị máy chủ từ chối dù gọi thẳng API. Tài
+// khoản kiêm Đại diện HTX dùng quyền Đại diện HTX (BR-02).
+func TestFN05_AC01_HTXMemberHouseholdsReadOnly(t *testing.T) {
+	f := newFixture(t)
+	root := f.root()
+	tr := f.seedTree(root)
+	c3 := root.createOrg(map[string]any{"kind": "cooperative", "name": "HTX Cùng Xã A", "admin_unit_code": "30001", "parent_ref": tr.t30001.String()})
+	mgr := f.as(f.tenant, tr.c1, partyport.RoleCoopManager)
+	h := str(mgr.appDo(http.MethodPost, "/v1/households", farmer(tr.c1, "0907200001")).body, "household", "household_ref")
+	if h == "" {
+		t.Fatal("không tạo được hộ mẫu")
+	}
+	member := f.as(f.tenant, tr.c1, coopport.RoleHTXMember)
+
+	r := member.appDo(http.MethodGet, "/v1/cooperatives/"+tr.c1.String()+"/households", nil)
+	if r.status != http.StatusOK || len(items(r)) != 1 || items(r)[0]["household_ref"] != h {
+		t.Fatalf("Thành viên HTX xem nông hộ HTX mình: %d %v", r.status, r.body)
+	}
+	for _, other := range []uuid.UUID{c3, tr.c2} {
+		if r := member.appDo(http.MethodGet, "/v1/cooperatives/"+other.String()+"/households", nil); r.status != http.StatusNotFound || r.body["code"] != "party.org_not_found" {
+			t.Fatalf("Thành viên HTX xem nông hộ HTX khác %s: %d %v", other, r.status, r.body)
+		}
+	}
+	for _, c := range []struct {
+		method, path string
+		body         any
+	}{
+		{http.MethodPost, "/v1/households", farmer(tr.c1, "0907200002")},
+		{http.MethodPost, "/v1/households/copy", map[string]any{"items": []map[string]any{{"source_ref": h, "full_name": "Trần Văn B", "phone": "0907200003"}}}},
+		{http.MethodPost, "/v1/households/" + h + "/membership", map[string]any{"cooperative_ref": nil, "reason": "Hộ không còn canh tác lúa"}},
+		{http.MethodGet, "/v1/households/" + h + "/contact", nil},
+	} {
+		if r := member.appDo(c.method, c.path, c.body); r.status != http.StatusForbidden || r.body["code"] != "forbidden" {
+			t.Fatalf("Thành viên HTX %s %s: %d %v, cần 403 forbidden", c.method, c.path, r.status, r.body)
+		}
+	}
+	// Kiêm Đại diện HTX → quyền Đại diện HTX (ghi được).
+	both := f.as(f.tenant, tr.c1, partyport.RoleCoopManager, coopport.RoleHTXMember)
+	if r := both.appDo(http.MethodPost, "/v1/households", farmer(tr.c1, "0907200004")); r.status != http.StatusCreated {
+		t.Fatalf("kiêm hai vai tạo hộ: %d %v", r.status, r.body)
+	}
+	// Thiếu đơn vị công tác (org_ref) → không thấy gì.
+	if r := f.as(f.tenant, uuid.Nil, coopport.RoleHTXMember).appDo(http.MethodGet, "/v1/cooperatives/"+tr.c1.String()+"/households", nil); r.status == http.StatusOK {
+		t.Fatalf("Thành viên HTX không org_ref: %d %v", r.status, r.body)
+	}
+}
+
 // KN US-HTX-02: cán bộ xã chỉ tạo nông hộ trong xã phụ trách.
 func TestCommuneOfficerCannotCreateOutsideCommune(t *testing.T) {
 	f := newFixture(t)

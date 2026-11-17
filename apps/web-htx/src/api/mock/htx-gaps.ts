@@ -14,6 +14,8 @@ const NAME_TAKEN = "Tên HTX này đã tồn tại, vui lòng chọn tên khác.
 const RECIPIENT_BAD = "Email đăng ký nhận báo cáo không hợp lệ hoặc gửi thất bại, vui lòng kiểm tra lại.";
 
 const managerOnly = (p: MockPersona) => hasRole(p, "coop_manager") && !hasRole(p, "kn_officer", "kn_province_admin", "kn_national_admin", "registry_admin", "platform_admin");
+/** Chỉ thấy HTX của mình: quản lý HTX hoặc tài khoản chỉ là Thành viên HTX (FN-05, như member/app.isOwnCoopOnly). */
+const ownCoopOnly = (p: MockPersona) => managerOnly(p) || (hasRole(p, "htx_member") && !hasRole(p, "coop_manager", "platform_admin"));
 const admin = (p: MockPersona, ...roles: string[]) => hasRole(p, "platform_admin", ...roles);
 
 // --------------------------------------------------------------------------
@@ -150,7 +152,7 @@ export const htxGapAppRoutes: Route[] = [
     handler: ({ params, url, persona }) => {
       const c = findCoop(params[0]);
       if (!c || !inScope(persona, c.province_code, c.api.admin_unit_code)) return problem(404, "party.org_not_found", "Not found");
-      if (managerOnly(persona) && persona.me.org?.ref !== c.api.ref) return problem(404, "party.org_not_found", "Not found");
+      if (ownCoopOnly(persona) && persona.me.org?.ref !== c.api.ref) return problem(404, "party.org_not_found", "Not found");
       const all = listOf(c);
       const raw = url.searchParams.get("phone");
       if (raw === null || raw.trim() === "") return json(paginate(all, url));

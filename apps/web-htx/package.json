@@ -24,8 +24,8 @@
     "test:watch": "vitest",
     "gen:api": "npm run gen:modules && openapi-typescript ../../contracts/openapi/application.yaml -o src/api/generated/application.ts && openapi-typescript ../../contracts/openapi/admin.yaml -o src/api/generated/admin.ts",
     "check:api": "npm run check:modules && openapi-typescript ../../contracts/openapi/application.yaml -o src/api/generated/application.ts --check && openapi-typescript ../../contracts/openapi/admin.yaml -o src/api/generated/admin.ts --check",
-    "gen:modules": "node ../../scripts/gen-module-mocks.mjs && node ../../scripts/gen-module-openapi.mjs",
-    "check:modules": "node --test ../../scripts/module-registries.test.mjs && node ../../scripts/gen-module-mocks.mjs --check && node ../../scripts/gen-module-openapi.mjs --check"
+    "gen:modules": "node ../../scripts/gen-module-mocks.mjs && node ../../scripts/gen-module-openapi.mjs && node ../../scripts/gen-role-matrix.mjs",
+    "check:modules": "node --test ../../scripts/module-registries.test.mjs && node ../../scripts/gen-module-mocks.mjs --check && node ../../scripts/gen-module-openapi.mjs --check && node ../../scripts/gen-role-matrix.mjs --check"
   },
   "dependencies": {
     "maplibre-gl": "6.11.2",

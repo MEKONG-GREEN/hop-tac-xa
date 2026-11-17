@@ -256,8 +256,7 @@ func (s *Service) ListHouseholds(ctx context.Context, coopRef, after uuid.UUID, 
 	if coop == nil || !visible(sc, coop.AdminUnitCode) {
 		return HouseholdPage{}, ErrOrgNotFound
 	}
-	if p.Has(partyport.RoleCoopManager) && !p.Has(partyport.RoleRegistryAdmin) && !p.Has(partyport.RoleKNProvinceAdmin) &&
-		!p.Has(partyport.RoleKNOfficer) && !p.Has(partyport.RoleKNNationalAdmin) && !p.Has(authz.RolePlatformAdmin) && coop.Ref != p.OrgRef {
+	if isOwnCoopOnly(p) && coop.Ref != p.OrgRef {
 		return HouseholdPage{}, ErrOrgNotFound
 	}
 	var pg HouseholdPage

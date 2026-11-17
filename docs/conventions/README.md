@@ -31,6 +31,7 @@ Một số mục của g1-conventions đã được thay bằng quy ước WH-B:
 | [transactions-and-io.md](transactions-and-io.md) | Không gọi port module khác / I-O ngoài trong DB transaction; mẫu test pool nhỏ |
 | [idempotency.md](idempotency.md) | Một `Idempotency-Key` cho mỗi thao tác người dùng |
 | [fail-closed-config.md](fail-closed-config.md) | Cấu hình kênh ngoài, worker, RLS fail-closed |
+| [vai-tro-app-htx.md](vai-tro-app-htx.md) | Ba vai App HTX (FN-05): vai BRD ↔ vai trong mã, ma trận quyền Mục V, nguồn dùng chung, `member_write_routes` |
 | `docs/kn/ui-kit.md` | Bộ UI kit chung của web (có sau khi [#97](https://github.com/MEKONG-GREEN/Agrigreen_demo_v2/issues/97) gộp) |
 
 ## Giao diện

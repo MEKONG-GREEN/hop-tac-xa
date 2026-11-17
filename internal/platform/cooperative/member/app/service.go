@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/MEKONG-GREEN/hop-tac-xa/contracts/htxroles"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/member/domain"
 	port "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/port"
 	partyport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/party/port"
@@ -39,9 +40,11 @@ var (
 )
 
 // Vai được xem nông hộ (nhãn hiển thị đã che, mục 10.4). Cục KTHT không xem nông hộ.
+// Thành viên HTX (FN-04: R, HTX của mình — ma trận contracts/htxroles) chỉ đọc danh sách, giới hạn như quản lý HTX
+// (isOwnCoopOnly); không đọc SĐT (HouseholdPhone) và không ghi.
 var householdReaderRoles = []string{
 	partyport.RoleRegistryAdmin, partyport.RoleKNNationalAdmin, partyport.RoleKNProvinceAdmin, partyport.RoleKNOfficer,
-	partyport.RoleCoopManager, authz.RolePlatformAdmin,
+	partyport.RoleCoopManager, authz.RolePlatformAdmin, port.RoleHTXMember,
 }
 
 // Vai được tạo nông hộ (TTKN QG chỉ đọc — KN US-HTX-01).
@@ -127,6 +130,12 @@ func visible(sc authz.Scope, unit string) bool {
 func isCoopManagerOnly(p authz.Principal) bool {
 	return p.Has(partyport.RoleCoopManager) && !p.Has(partyport.RoleRegistryAdmin) && !p.Has(partyport.RoleKNProvinceAdmin) &&
 		!p.Has(partyport.RoleKNOfficer) && !p.Has(partyport.RoleKNNationalAdmin) && !p.Has(authz.RolePlatformAdmin)
+}
+
+// isOwnCoopOnly: người gọi chỉ thấy HTX của mình (Principal.OrgRef) — quản lý HTX hoặc tài khoản chỉ là Thành viên HTX
+// (FN-05/BR-02: kiêm Đại diện HTX thì theo quyền Đại diện HTX).
+func isOwnCoopOnly(p authz.Principal) bool {
+	return isCoopManagerOnly(p) || htxroles.IsMemberOnly(p.Has)
 }
 
 // ConsentStates đọc trạng thái đồng ý hiện tại theo mục đích của các nông hộ (G-04) qua pf/party.

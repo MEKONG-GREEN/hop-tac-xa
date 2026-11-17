@@ -74,4 +74,14 @@ func TestRolesAndActions(t *testing.T) {
 	if err := RolesFitOrg([]string{"coop_manager", "plot_editor"}, "cooperative"); err != nil {
 		t.Fatal(err)
 	}
+	// FN-05: Thành viên HTX gắn với HTX như Đại diện HTX; không bắt TOTP.
+	if err := RolesFitOrg([]string{"htx_member"}, "extension_team"); !errors.As(err, &fe) || fe.Msg != MsgCoopRequired {
+		t.Fatalf("htx_member cần HTX: %v", err)
+	}
+	if err := RolesFitOrg([]string{"htx_member"}, "cooperative"); err != nil {
+		t.Fatal(err)
+	}
+	if a := RequiredActions([]string{"htx_member"}); slices.Contains(a, port.ActionConfigureTOTP) {
+		t.Fatalf("htx_member không bắt TOTP: %v", a)
+	}
 }

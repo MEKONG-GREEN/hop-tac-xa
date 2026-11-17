@@ -12,6 +12,7 @@ import { usePagedList } from "@/api/pagination";
 import type { ApiProblem } from "@/api/problem";
 import type { ConsentState, Cooperative, HouseholdCopyResult, HouseholdListItem } from "@/api/types";
 import { useAuth } from "@/auth/AuthProvider";
+import { matrixAllows } from "@/auth/permissions";
 import { hasRole, ROLES } from "@/auth/principal";
 import { Dialog } from "@/components/Dialog";
 import { Icon } from "@/components/Icon";
@@ -210,7 +211,9 @@ export function HouseholdsPanel({ coop }: { coop: Cooperative }) {
   const [version, setVersion] = useState(0);
   const [picked, setPicked] = useState<Map<string, HouseholdListItem>>(new Map());
   const [copying, setCopying] = useState(false);
-  const canWrite = coop.active && hasRole(principal, ROLES.coopManager, ROLES.knOfficer, ROLES.knProvinceAdmin, ROLES.registryAdmin);
+  // FN-05/AC-01: nút thao tác (sao chép, chọn, gọi) theo ma trận — Thành viên HTX (FN-04: R) không thấy.
+  const canWrite =
+    coop.active && hasRole(principal, ROLES.coopManager, ROLES.knOfficer, ROLES.knProvinceAdmin, ROLES.registryAdmin) && matrixAllows(principal, "FN-04", "C");
   const list = usePagedList((cursor) => householdsPage(api, id, cursor, 20), [api, id, version]);
   const found = useAsync(
     () => (search ? unwrap(api.GET("/v1/cooperatives/{ref}/households", { params: { path: { ref: id }, query: { phone: search.phone } } })) : Promise.resolve(null)),

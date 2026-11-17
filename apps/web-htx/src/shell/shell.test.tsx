@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { knMenuFor } from "@/api/mock/kn";
 import { KN_ACCOUNTS } from "@/api/mock/kn-accounts";
+import { MOCK_PERSONAS } from "@/api/mock/personas";
 import type { MenuTree } from "@/kn/contract";
 import { AuthContextForTests, type AuthContextValue, type KnSessionState } from "@/auth/AuthProvider";
 import { buildPrincipal } from "@/auth/principal";
@@ -486,6 +487,57 @@ describe("AppShell: chặn truy cập khi chưa đăng nhập (FN-01/AC-05, EX-0
     );
     expect(nav.replace).toHaveBeenCalledWith("/login?returnTo=%2Fhtx%2Fsan-luong");
     expect(screen.queryByText("Nội dung cần đăng nhập")).toBeNull();
+    nav.pathname = "/";
+  });
+});
+
+describe("AppShell: mở trang không thuộc quyền của vai App HTX (FN-05/AC-03, EX-01)", () => {
+  beforeEach(() => nav.replace.mockClear());
+
+  function renderAs(personaId: string, pathname: string) {
+    nav.pathname = pathname;
+    const p = MOCK_PERSONAS.find((x) => x.id === personaId);
+    if (!p) throw new Error(personaId);
+    const principal = buildPrincipal({ sub: p.me.actor_ref, name: p.displayName, amr: p.amr, realm_access: { roles: p.me.roles } }, p.me);
+    const value = {
+      status: "authenticated",
+      principal,
+      scopeWarning: null,
+      kn: { status: "legacy", assignments: [], context: null, menu: null, badges: null } satisfies KnSessionState,
+      dataConsent: { status: "not_required" },
+      api: { GET: vi.fn(async () => ({ data: { items: [] }, response: { ok: true, status: 200 } })) },
+      logout: vi.fn(),
+      selectContext: vi.fn(),
+      changePassword: vi.fn(),
+    } as unknown as AuthContextValue;
+    render(
+      <AuthContextForTests.Provider value={value}>
+        <AppShell>
+          <p>Nội dung trang</p>
+        </AppShell>
+      </AuthContextForTests.Provider>,
+    );
+  }
+
+  it("Thành viên HTX mở thẳng /quan-tri/tai-khoan → chuyển về trang đầu tiên được xem (/htx/nong-ho)", () => {
+    renderAs("htx-member", "/quan-tri/tai-khoan");
+    expect(nav.replace).toHaveBeenCalledWith("/htx/nong-ho");
+    expect(screen.queryByText("Nội dung trang")).toBeNull();
+    expect(screen.queryByText("Không có quyền truy cập")).toBeNull();
+    nav.pathname = "/";
+  });
+
+  it("vai ngoài App HTX (KNV xã) mở cùng đường dẫn → không chuyển, vẫn thấy thẻ Không có quyền truy cập", () => {
+    renderAs("xa", "/quan-tri/tai-khoan");
+    expect(nav.replace).not.toHaveBeenCalled();
+    expect(screen.getByText("Không có quyền truy cập")).toBeTruthy();
+    nav.pathname = "/";
+  });
+
+  it("Thành viên HTX ở /khong-co-quyen → không chuyển hướng (không lặp)", () => {
+    renderAs("htx-member", "/khong-co-quyen");
+    expect(nav.replace).not.toHaveBeenCalled();
+    expect(screen.getByText("Nội dung trang")).toBeTruthy();
     nav.pathname = "/";
   });
 });

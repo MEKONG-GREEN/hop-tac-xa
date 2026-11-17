@@ -109,6 +109,17 @@ export const MOCK_PERSONAS: readonly MockPersona[] = [
     scope: { all: false, level: "cooperative", units: HTX.api.admin_unit_code ? [HTX.api.admin_unit_code] : [] },
   }),
   persona({
+    id: "htx-member",
+    title: "Thành viên HTX",
+    description: `htx_member — ${HTX.api.name}: chỉ xem nông hộ của HTX mình (FN-05)`,
+    displayName: "Thành viên HTX (giả lập)",
+    amr: ["pwd"],
+    actor: "mock-htx-member-0001",
+    roles: ["htx_member"],
+    org: { ref: HTX.api.ref, kind: "cooperative", name: HTX.api.name, admin_unit_code: HTX.api.admin_unit_code, active: true },
+    scope: { all: false, level: "cooperative", units: HTX.api.admin_unit_code ? [HTX.api.admin_unit_code] : [] },
+  }),
+  persona({
     id: "cuc",
     title: "Cục Kinh tế hợp tác & PTNT",
     description: "Cổng Bản đồ CGH — chỉ xem, toàn vùng; xuất báo cáo CGH",

@@ -55,7 +55,7 @@ provides:
   data_products: []
 consumes:
   events: []
-permissions: [coop_manager, farmer, plot_editor, plot_viewer, sop_admin]
+permissions: [coop_manager, farmer, htx_member, plot_editor, plot_viewer, sop_admin]
 shares: [diary_entry, household, plot, season]
 owns_schema: [pf_coop, pf_cooperative_pub]
 enable: per_tenant

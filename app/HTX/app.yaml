@@ -20,6 +20,7 @@ modules:
   pf/workflow: ">=1.0 <2"      # cap/workflow: duyệt bốn mắt (tham số, cấp quyền chia sẻ — W6.1)
 roles:
   - coop_manager
+  - htx_member # Thành viên HTX (FN-05); trang đầu = mục menu đầu tiên được xem, không đặt landing
   - plot_editor
   - plot_viewer
   - consent_writer

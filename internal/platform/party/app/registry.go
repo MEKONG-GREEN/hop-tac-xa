@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"slices"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -38,6 +39,11 @@ var readerRoles = []string{
 	port.RoleRegistryAdmin, port.RoleKNNationalAdmin, port.RoleKNProvinceAdmin, port.RoleKNOfficer,
 	port.RoleCoopManager, port.RoleCGHViewer, authz.RolePlatformAdmin,
 }
+
+// coopReaderRoles: vai được xem MỘT HTX (GetCooperative) — readerRoles cộng Thành viên HTX (FN-03: R, chỉ HTX của
+// mình — ma trận contracts/htxroles). Danh sách tổ chức/HTX (readerRoles) chưa mở cho Thành viên HTX: chỉ giới hạn
+// theo xã, phạm vi theo HTX thuộc AH-273.
+var coopReaderRoles = append(slices.Clone(readerRoles), port.RoleHTXMember)
 
 // Vai quản trị dữ liệu chủ trên Admin API.
 var adminRoles = []string{port.RoleRegistryAdmin, port.RoleKNProvinceAdmin, authz.RolePlatformAdmin}

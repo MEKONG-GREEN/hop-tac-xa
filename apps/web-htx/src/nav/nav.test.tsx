@@ -160,6 +160,57 @@ describe("menu App HTX theo vai", () => {
   });
 });
 
+describe("FN-05: menu theo ma trận ba vai App HTX", () => {
+  const HTX_PAGES = [
+    "/htx/dashboard",
+    "/htx/nong-ho",
+    "/htx/lo-ruong",
+    "/htx/mua-vu",
+    "/htx/nhat-ky",
+    "/htx/phe-duyet",
+    "/htx/san-luong",
+    "/htx/lich-bao-cao",
+    "/htx/tai-khoan-nong-dan",
+    "/htx/yeu-cau-ho-tro",
+    "/htx/thu-gom",
+  ];
+  const withRoles = (...roles: string[]) => buildPrincipal({ sub: "u", realm_access: { roles } }, null);
+
+  it("[FN-05/AC-01] Thành viên HTX chỉ thấy Quản lý nông hộ, không thấy Tài khoản cán bộ, Danh mục dùng chung", () => {
+    const member = persona("htx-member");
+    expect(hrefs(member)).toEqual(["/htx/nong-ho"]);
+    expect(hrefs(member)).not.toContain("/quan-tri/tai-khoan");
+    expect(hrefs(member)).not.toContain("/quan-tri/danh-muc");
+  });
+
+  it("[FN-05/AC-02] Đại diện HTX không thấy Danh mục dùng chung (Đơn vị hành chính) và vẫn giữ đủ menu HTX", () => {
+    const rep = persona("htx");
+    expect(hrefs(rep)).not.toContain("/quan-tri/danh-muc");
+    expect(hrefs(rep)).toEqual(HTX_PAGES);
+    // Kiêm Đại diện HTX và Thành viên HTX (BR-02) → menu như Đại diện HTX.
+    const both = { ...rep, roles: [...rep.roles, "htx_member"] };
+    expect(hrefs(both)).toEqual(HTX_PAGES);
+    // Admin giữ cả hai mục.
+    expect(hrefs(persona("setter"))).toEqual(expect.arrayContaining(["/htx/nong-ho", "/quan-tri/tai-khoan", "/quan-tri/danh-muc"]));
+  });
+
+  it("[FN-05/AC-03] homeFor(Thành viên HTX) = /htx/nong-ho; canSee(/quan-tri/tai-khoan) = false", () => {
+    const member = persona("htx-member");
+    expect(homeFor(member)).toBe("/htx/nong-ho");
+    const accounts = findNavItem("/quan-tri/tai-khoan");
+    expect(accounts && canSee(accounts, member)).toBe(false);
+    const units = findNavItem("/quan-tri/danh-muc");
+    expect(units && canSee(units, member)).toBe(false);
+  });
+
+  it("vai ngoài ma trận giữ danh sách vai sẵn có; vai App HTX bị ma trận chặn dù có vai gốc", () => {
+    expect(hrefs(withRoles("account_admin"))).toContain("/quan-tri/tai-khoan");
+    expect(hrefs(withRoles("masterdata_admin"))).toContain("/quan-tri/danh-muc");
+    expect(hrefs(withRoles("htx_member", "masterdata_admin"))).not.toContain("/quan-tri/danh-muc");
+    expect(homeFor(withRoles("htx_member", "plot_viewer"))).toBe("/htx/nong-ho");
+  });
+});
+
 describe("<Sidebar>", () => {
   // Khung P6: phạm vi người dùng chuyển lên menu tài khoản ở thanh trên (src/shell/AccountMenu.tsx).
   it("menu cũ: hiển thị nhóm đánh số của người dùng tỉnh, mục chi tiết thuộc mục danh sách", () => {

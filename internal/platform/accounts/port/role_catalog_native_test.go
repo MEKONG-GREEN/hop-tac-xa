@@ -57,6 +57,14 @@ func TestNativeRoleCatalogPreservesNativePolicy(t *testing.T) {
 		!native.NeedsLoginTOTP([]string{"platform_admin"}) {
 		t.Fatal("native administrator or province floor changed")
 	}
+	// FN-05 (AH-272): Admin cấp được Thành viên HTX (FN-07, gắn HTX); vai gốc account_admin không đổi quyền.
+	for _, c := range []*port.RoleCatalog{native, legacy} {
+		if !c.IsManaged("htx_member") || !slices.Contains(c.Grantable([]string{"platform_admin"}), "htx_member") ||
+			slices.Contains(c.Grantable([]string{port.RoleAccountAdmin}), "htx_member") ||
+			!slices.Equal(c.OrgKinds("htx_member"), []string{"cooperative"}) || c.NeedsLoginTOTP([]string{"htx_member"}) {
+			t.Fatal("htx_member: managed, Admin cấp được, gắn HTX, không TOTP; account_admin không cấp")
+		}
+	}
 }
 
 func TestNativeRoleCatalogCompositionRetainsPolicyAndIsolation(t *testing.T) {
