@@ -123,6 +123,74 @@ void main() {
   );
 
   testWidgets(
+    'bản đệm /v1/me cũ là htx_member nhưng access token mới có platform_admin '
+    '→ màn chặn Admin ngay, không hỏi đồng ý, không đồng bộ',
+    (tester) async {
+      // CSDL trên tệp: bản đệm `htx.me` còn lại sau khi đăng xuất.
+      final dir = Directory.systemTemp.createTempSync('htx_me_');
+      addTearDown(() {
+        try {
+          dir.deleteSync(recursive: true);
+        } on FileSystemException {
+          // Test trượt giữa chừng: CSDL còn mở, để lại thư mục tạm.
+        }
+      });
+      final env = TestEnv(
+        roles: const ['htx_member'],
+        opener: MemoryDbOpener(file: p.join(dir.path, 'app.db')),
+      )..seed();
+
+      Future<void> pumpIo() async {
+        for (var i = 0; i < 5; i++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 50)),
+          );
+          await settle(tester);
+        }
+      }
+
+      // Thành viên HTX vào app; lượt đồng bộ đầu ghi bản đệm htx_member.
+      await loginAndSetPin(tester, env);
+      await pumpIo();
+      expect(find.byType(HomeScreen), findsOneWidget);
+      final c = ProviderScope.containerOf(
+        tester.element(find.byType(HomeScreen)),
+      );
+      final cached = await tester.runAsync(
+        () => c.read(appControllerProvider).services!.profile.roles(),
+      );
+      expect(cached, contains('htx_member'));
+
+      // Tài khoản được cấp vai Admin: đăng xuất, đăng nhập lại với token mới.
+      await tester.runAsync(
+        () => c.read(appControllerProvider.notifier).signOut(),
+      );
+      await pumpIo();
+      expect(find.byType(LoginScreen), findsOneWidget);
+      env.oidc.roles = const ['platform_admin'];
+      final devices = env.server.registeredDevices.length;
+      final pulls = env.server.pullCursors.length;
+      final pushes = env.server.pushCalls;
+      await tester.tap(find.text('Đăng nhập'));
+      await pumpIo();
+
+      expect(find.byType(AccessBlockedScreen), findsOneWidget);
+      expect(find.text(msgAdminWebOnly), findsOneWidget);
+      expect(find.byType(HomeScreen), findsNothing);
+      expect(find.byType(DataConsentScreen), findsNothing);
+      expect(env.server.registeredDevices.length, devices);
+      expect(env.server.pullCursors.length, pulls);
+      expect(env.server.pushCalls, pushes);
+
+      // Đóng CSDL trước khi xóa thư mục tạm.
+      await tester.runAsync(
+        () => c.read(appControllerProvider.notifier).lock(),
+      );
+      await finish(tester);
+    },
+  );
+
+  testWidgets(
     'vai bị gỡ giữa phiên khi đang ở màn Nông hộ → lượt đồng bộ đóng màn đó, '
     'chỉ còn màn chặn',
     (tester) async {

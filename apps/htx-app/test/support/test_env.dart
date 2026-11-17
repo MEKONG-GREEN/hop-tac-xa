@@ -95,7 +95,10 @@ String fakeJwt(List<String> roles) {
 
 class JwtOidc implements OidcClient {
   JwtOidc(this.roles);
-  final List<String> roles;
+
+  /// Vai của token cấp ở lần đăng nhập kế tiếp; test đổi để giả vai được cấp
+  /// hoặc gỡ giữa hai lần đăng nhập.
+  List<String> roles;
   int signIns = 0;
 
   @override
