@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"slices"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/MEKONG-GREEN/hop-tac-xa/contracts/htxroles"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/party/domain"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/party/port"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/party/store"
@@ -34,16 +34,17 @@ var (
 	ErrCoopNameTaken = problem.New(http.StatusConflict, "party.cooperative_name_taken", "Tên HTX này đã tồn tại, vui lòng chọn tên khác.")
 )
 
-// Vai được đọc sổ tổ chức và HTX.
+// Vai được đọc sổ tổ chức và HTX. Thành viên HTX (FN-03: R — ma trận contracts/htxroles) và Đại diện HTX chỉ thấy HTX
+// gắn với tài khoản (ownCoopOnly, FN-06).
 var readerRoles = []string{
 	port.RoleRegistryAdmin, port.RoleKNNationalAdmin, port.RoleKNProvinceAdmin, port.RoleKNOfficer,
-	port.RoleCoopManager, port.RoleCGHViewer, authz.RolePlatformAdmin,
+	port.RoleCoopManager, port.RoleCGHViewer, authz.RolePlatformAdmin, port.RoleHTXMember,
 }
 
-// coopReaderRoles: vai được xem MỘT HTX (GetCooperative) — readerRoles cộng Thành viên HTX (FN-03: R, chỉ HTX của
-// mình — ma trận contracts/htxroles). Danh sách tổ chức/HTX (readerRoles) chưa mở cho Thành viên HTX: chỉ giới hạn
-// theo xã, phạm vi theo HTX thuộc AH-273.
-var coopReaderRoles = append(slices.Clone(readerRoles), port.RoleHTXMember)
+// ownCoopOnly: người gọi chỉ thấy HTX gắn với tài khoản (FN-06) — vai rộng hơn: quản trị sổ tổ chức, khuyến nông, Cục KTHT.
+func ownCoopOnly(p authz.Principal) bool {
+	return htxroles.OwnCoopOnly(p.Has, port.RoleRegistryAdmin, port.RoleKNNationalAdmin, port.RoleKNProvinceAdmin, port.RoleKNOfficer, port.RoleCGHViewer)
+}
 
 // Vai quản trị dữ liệu chủ trên Admin API.
 var adminRoles = []string{port.RoleRegistryAdmin, port.RoleKNProvinceAdmin, authz.RolePlatformAdmin}

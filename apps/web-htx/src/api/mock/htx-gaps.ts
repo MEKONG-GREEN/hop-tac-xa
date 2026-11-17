@@ -6,16 +6,13 @@ import { uuidv7 } from "../idempotency";
 import type { ContentKind, ReportSchedule } from "../types";
 import { COOPERATIVES, findCoop, householdCount, householdRefOf, householdsOf, syntheticPhone, type MockCooperative } from "./data";
 import { headerKey, parseCsv } from "./admin-ops";
-import { hasRole, inScope, isZip, json, nowIso, opaque, paginate, problem, reasonOf, validation, type Route } from "./http";
+import { hasRole, inScope, isZip, json, managerOnly, nowIso, opaque, ownCoopOnly, paginate, problem, reasonOf, validation, type Route } from "./http";
 import type { MockPersona } from "./personas";
 
 const NOT_YOURS = "Bạn không có quyền truy cập nông hộ này.";
 const NAME_TAKEN = "Tên HTX này đã tồn tại, vui lòng chọn tên khác.";
 const RECIPIENT_BAD = "Email đăng ký nhận báo cáo không hợp lệ hoặc gửi thất bại, vui lòng kiểm tra lại.";
 
-const managerOnly = (p: MockPersona) => hasRole(p, "coop_manager") && !hasRole(p, "kn_officer", "kn_province_admin", "kn_national_admin", "registry_admin", "platform_admin");
-/** Chỉ thấy HTX của mình: quản lý HTX hoặc tài khoản chỉ là Thành viên HTX (FN-05, như member/app.isOwnCoopOnly). */
-const ownCoopOnly = (p: MockPersona) => managerOnly(p) || (hasRole(p, "htx_member") && !hasRole(p, "coop_manager", "platform_admin"));
 const admin = (p: MockPersona, ...roles: string[]) => hasRole(p, "platform_admin", ...roles);
 
 // --------------------------------------------------------------------------

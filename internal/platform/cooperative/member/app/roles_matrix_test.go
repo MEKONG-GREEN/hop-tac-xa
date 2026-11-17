@@ -39,6 +39,7 @@ func TestIsOwnCoopOnly(t *testing.T) {
 		{[]string{"htx_member", "coop_manager"}, true},
 		{[]string{"htx_member", authz.RolePlatformAdmin}, false},
 		{[]string{"coop_manager", "kn_officer"}, false},
+		{[]string{"htx_member", "kn_officer"}, false},
 		{[]string{"kn_officer"}, false},
 	} {
 		if got := isOwnCoopOnly(authz.Principal{Roles: c.roles, OrgRef: org}); got != c.want {

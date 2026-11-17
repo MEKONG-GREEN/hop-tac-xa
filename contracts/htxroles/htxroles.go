@@ -3,8 +3,9 @@
 // sinh từ chính tệp này (scripts/gen-role-matrix.mjs). Đối chiếu vai BRD ↔ vai trong mã, phạm vi dữ liệu và quy tắc
 // cho các ticket sau: docs/conventions/vai-tro-app-htx.md.
 //
-// Ma trận chỉ nói vai được làm GÌ với từng chức năng; phạm vi dữ liệu ("HTX của mình", "HTX được chia sẻ") do từng
-// API kiểm (AH-273, FN-09). Ẩn menu, ẩn nút trên giao diện không thay cho kiểm quyền ở máy chủ (TECH-01).
+// Ma trận chỉ nói vai được làm GÌ với từng chức năng; phạm vi dữ liệu do từng API kiểm: "HTX của mình" qua
+// OwnCoopOnly (FN-06), "HTX được chia sẻ" thuộc FN-09. Ẩn menu, ẩn nút trên giao diện không thay cho kiểm quyền ở
+// máy chủ (TECH-01).
 package htxroles
 
 import (
@@ -104,6 +105,13 @@ func With(fn string, a Action) []string {
 // (FN-05/BR-02; chọn vai làm việc khi đăng nhập thuộc AH-270).
 func IsMemberOnly(has func(role string) bool) bool {
 	return has(Member) && !has(Representative) && !has(Admin)
+}
+
+// OwnCoopOnly cho biết người có các vai (has) chỉ được thấy dữ liệu của HTX gắn với tài khoản (FN-06/BR-02, BR-03,
+// ADM-02): có Đại diện HTX hoặc Thành viên HTX mà không có Admin và không có vai nào trong wider — các vai có phạm vi
+// rộng hơn mà API đó nhận (khuyến nông, quản trị sổ tổ chức…); kèm vai rộng hơn thì theo phạm vi của vai đó.
+func OwnCoopOnly(has func(role string) bool, wider ...string) bool {
+	return (has(Representative) || has(Member)) && !has(Admin) && !slices.ContainsFunc(wider, has)
 }
 
 // MemberWriteRoutes trả bản sao danh sách route ghi Thành viên HTX được gọi.

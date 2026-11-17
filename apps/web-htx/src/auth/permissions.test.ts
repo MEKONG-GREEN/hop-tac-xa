@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { HTX_ROLE_MATRIX } from "@/api/generated/htx-roles";
-import { isHtxAppUser, matrixAllows, matrixRolesOf, rolesWith } from "./permissions";
+import { isHtxAppUser, lacksCoop, matrixAllows, matrixRolesOf, rolesWith } from "./permissions";
 
 const as = (...roles: string[]) => ({ roles });
 
@@ -26,5 +26,25 @@ describe("ma trận quyền App HTX (FN-05, Mục V)", () => {
     expect(isHtxAppUser(null)).toBe(false);
     expect(isHtxAppUser(as("htx_member"))).toBe(true);
     expect(matrixAllows(as("kn_officer"), "FN-04", "C")).toBe(true);
+  });
+});
+
+describe("[FN-06/EX-02] lacksCoop: tài khoản App HTX chưa gắn HTX", () => {
+  const who = (orgRef: string | null, ...roles: string[]) => ({ roles, orgRef });
+
+  it("Đại diện HTX / Thành viên HTX không có HTX gắn kèm → true; có HTX → false", () => {
+    expect(lacksCoop(who(null, "htx_member"))).toBe(true);
+    expect(lacksCoop(who(null, "coop_manager"))).toBe(true);
+    expect(lacksCoop(who(null, "coop_manager", "htx_member"))).toBe(true);
+    expect(lacksCoop(who("01963011-1234-7123-8123-123456789abc", "htx_member"))).toBe(false);
+    expect(lacksCoop(who("01963011-1234-7123-8123-123456789abc", "coop_manager"))).toBe(false);
+  });
+
+  it("Admin, vai có phạm vi rộng hơn hoặc ngoài App HTX → false", () => {
+    expect(lacksCoop(who(null, "platform_admin"))).toBe(false);
+    expect(lacksCoop(who(null, "coop_manager", "kn_officer"))).toBe(false);
+    expect(lacksCoop(who(null, "htx_member", "registry_admin"))).toBe(false);
+    expect(lacksCoop(who(null, "kn_officer"))).toBe(false);
+    expect(lacksCoop(null)).toBe(false);
   });
 });

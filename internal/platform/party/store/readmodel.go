@@ -53,8 +53,9 @@ func ListOrgsAdmin(ctx context.Context, tx pgx.Tx, f AdminOrgFilter) ([]port.Org
 	      AND ($3 = '' OR kind = $3)
 	      AND ($4::boolean OR active)
 	      AND ($5::uuid IS NULL OR parent_ref = $5::uuid)
-	      AND ref > $6
-	    ORDER BY ref LIMIT $7`, f.All, units(f.Units), f.Kind, f.IncludeInactive, f.ParentRef, f.After, f.Limit)
+	      AND ($6::text[] IS NULL OR ref = ANY($6::text[]::uuid[]))
+	      AND ref > $7
+	    ORDER BY ref LIMIT $8`, f.All, units(f.Units), f.Kind, f.IncludeInactive, f.ParentRef, f.onlyRefs(), f.After, f.Limit)
 	if err != nil {
 		return nil, err
 	}

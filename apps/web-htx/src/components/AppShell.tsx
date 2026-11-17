@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type ComponentProps, type ComponentType, type ReactNode } from "react";
 import { unwrap, type ApiClient } from "@/api/client";
 import { useAuth, type KnSessionState } from "@/auth/AuthProvider";
-import { isHtxAppUser } from "@/auth/permissions";
+import { isHtxAppUser, lacksCoop } from "@/auth/permissions";
 import { LEVEL_LABEL, roleLabel, type Principal } from "@/auth/principal";
 import { config } from "@/config";
 import type { MenuTree } from "@/kn/contract";
@@ -14,6 +14,7 @@ import { canSee, disabledModules, findNavItem, homeFor, visibleNav, type Disable
 import { AccountMenu } from "@/shell/AccountMenu";
 import { Breadcrumb, BreadcrumbTailProvider, useBreadcrumbTailValue, type Crumb } from "@/shell/Breadcrumb";
 import { crumbsFor, legacyMenu, menuAllows, withExtraGroups } from "@/shell/menu";
+import { NoCoopState, OUT_OF_SCOPE_NOTICE, ShellExitContext, ShellNoCoopContext, useShellNotice, writeShellNotice } from "@/shell/notice";
 import { Sidebar } from "@/shell/Sidebar";
 import { useStoredValue, writeStoredValue } from "@/lib/useStoredValue";
 import { Icon } from "./Icon";
@@ -140,6 +141,21 @@ export function AppShell({ children, SidebarComponent = Sidebar }: {
   // Cục KTHT vào "/" → cổng CGH (BRD CGH FN-11 B1). Vai App HTX mở trang không thuộc quyền → trang đầu tiên được xem
   // (FN-05/AC-03, EX-01); /khong-co-quyen không có trong menu nên luôn được mở — không lặp chuyển hướng.
   const redirecting = kn.status === "legacy" && !allowed && (pathname === "/" || isHtxAppUser(principal));
+  // FN-06/EX-01, AC-N2: rời trang chi tiết ngoài phạm vi về trang đầu tiên được xem, kèm câu thông báo ở trang đó.
+  const exit = useCallback(
+    (text: string) => {
+      const to = homeFor(principal, disabled);
+      writeShellNotice({ from: pathname, to, text });
+      router.replace(to);
+    },
+    [principal, disabled, pathname, router],
+  );
+  const notice = useShellNotice(pathname);
+  // FN-06/EX-02, AC-N1: Đại diện HTX / Thành viên HTX chưa gắn HTX → mọi màn App HTX hiện trạng thái rỗng, không gọi API;
+  // màn khác nhận "tài khoản chưa gắn đơn vị" thì ProblemAlert hiện cùng câu (ShellNoCoopContext).
+  const lacksOwnCoop = lacksCoop(principal);
+  const noCoop = lacksOwnCoop && (pathname === "/htx" || pathname.startsWith("/htx/"));
+  const htxExit = isHtxAppUser(principal) ? exit : null;
 
   useEffect(() => {
     if (bare) return;
@@ -150,9 +166,11 @@ export function AppShell({ children, SidebarComponent = Sidebar }: {
       if (dataConsent.status === "required" || dataConsent.status === "error") router.replace(`/dong-y-thu-thap?returnTo=${encodeURIComponent(pathname)}`);
       else if (kn.status === "choose") router.replace(`/chon-vai-tro?returnTo=${encodeURIComponent(pathname)}`);
       else if (kn.status === "active" && kn.context && pathname === "/") router.replace(kn.context.default_route);
+      // Trang chi tiết (vd /htx/<id> thừa hưởng mục /htx) → rời kèm thông báo; trang danh sách giữ FN-05/EX-01.
+      else if (redirecting && findNavItem(pathname)?.href !== pathname) exit(OUT_OF_SCOPE_NOTICE);
       else if (redirecting) router.replace(homeFor(principal, disabled));
     }
-  }, [status, bare, pathname, router, redirecting, principal, kn.status, kn.context, disabled, dataConsent.status]);
+  }, [status, bare, pathname, router, redirecting, principal, kn.status, kn.context, disabled, dataConsent.status, exit]);
 
   const note = noteState?.path === pathname ? noteState.text : null;
 
@@ -229,8 +247,20 @@ export function AppShell({ children, SidebarComponent = Sidebar }: {
                 <span>{scopeWarning}</span>
               </div>
             ) : null}
+            {notice ? (
+              <div className="alert alert-info" role="status" style={{ marginBottom: 16 }}>
+                <Icon name="info" />
+                <span>{notice}</span>
+              </div>
+            ) : null}
             {allowed ? (
-              children
+              noCoop ? (
+                <NoCoopState />
+              ) : (
+                <ShellNoCoopContext.Provider value={lacksOwnCoop}>
+                  <ShellExitContext.Provider value={htxExit}>{children}</ShellExitContext.Provider>
+                </ShellNoCoopContext.Provider>
+              )
             ) : redirecting ? (
               <Loading />
             ) : (

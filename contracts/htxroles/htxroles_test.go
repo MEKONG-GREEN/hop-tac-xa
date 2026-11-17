@@ -123,3 +123,30 @@ func TestIsMemberOnly(t *testing.T) {
 		}
 	}
 }
+
+// FN-06/BR-02, BR-03: Đại diện HTX và Thành viên HTX chỉ thấy HTX gắn với tài khoản; vai có phạm vi rộng hơn mà API
+// nhận (wider) hoặc Admin thì không bị thu hẹp — kể cả khi kèm Thành viên HTX.
+func TestOwnCoopOnly(t *testing.T) {
+	wider := []string{"kn_officer", "registry_admin"}
+	for _, c := range []struct {
+		roles []string
+		want  bool
+	}{
+		{[]string{htxroles.Member}, true},
+		{[]string{htxroles.Representative}, true},
+		{[]string{htxroles.Representative, htxroles.Member}, true},
+		{[]string{htxroles.Representative, "kn_officer"}, false},
+		{[]string{htxroles.Representative, "plot_viewer"}, true},
+		{[]string{htxroles.Representative, htxroles.Admin}, false},
+		{[]string{htxroles.Member, htxroles.Admin}, false},
+		{[]string{htxroles.Member, "kn_officer"}, false},
+		{[]string{htxroles.Member, "registry_admin"}, false},
+		{[]string{htxroles.Member, "plot_viewer"}, true},
+		{[]string{"kn_officer"}, false},
+		{nil, false},
+	} {
+		if got := htxroles.OwnCoopOnly(func(r string) bool { return slices.Contains(c.roles, r) }, wider...); got != c.want {
+			t.Errorf("OwnCoopOnly(%v) = %v, cần %v", c.roles, got, c.want)
+		}
+	}
+}

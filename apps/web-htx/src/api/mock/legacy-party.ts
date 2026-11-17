@@ -1,14 +1,14 @@
 import { uuidv7 } from "../idempotency";
 import { COOPERATIVES, findCoop, householdsOf, orgEvents, ORG_EVENTS, ORGS } from "./data";
 import { headerKey, parseCsv } from "./admin-ops";
-import { hasRole, inScope, isZip, json, norm, paginate, problem, scopeUnits, type Route } from "./http";
+import { hasRole, inScope, isZip, json, norm, ownCoopOnly, paginate, problem, scopeUnits, type Route } from "./http";
 import type { MockPersona } from "./personas";
 
 const importedPhones = new Set<string>();
 
-/** FN-05: tài khoản chỉ là Thành viên HTX chỉ xem HTX của mình (party/app.GetCooperative, member/app.isOwnCoopOnly). */
-function otherCoopOfMember(persona: MockPersona, coopRef: string): boolean {
-  return hasRole(persona, "htx_member") && !hasRole(persona, "coop_manager", "platform_admin") && persona.me.org?.ref !== coopRef;
+/** FN-06: Đại diện HTX / Thành viên HTX chỉ thấy HTX gắn với tài khoản (party/app.ownCoopOnly, member/app.isOwnCoopOnly). */
+function outsideOwnCoop(persona: MockPersona, coopRef: string): boolean {
+  return ownCoopOnly(persona) && persona.me.org?.ref !== coopRef;
 }
 
 export const appRoutes1: Route[] = [{ method: "GET", pattern: /^\/v1\/me$/, handler: ({ persona }) => json(persona.me) }];
@@ -21,7 +21,11 @@ export const appRoutes34: Route[] = [{
       const inactive = url.searchParams.get("include_inactive") === "true";
       const s = scopeUnits(persona);
       const list = ORGS.filter(
-        (o) => (!s || (o.admin_unit_code !== null && s.has(o.admin_unit_code))) && (!kind || o.kind === kind) && (inactive || o.active),
+        (o) =>
+          (!s || (o.admin_unit_code !== null && s.has(o.admin_unit_code))) &&
+          !outsideOwnCoop(persona, o.ref) &&
+          (!kind || o.kind === kind) &&
+          (inactive || o.active),
       );
       return json(paginate(list, url));
     },
@@ -38,6 +42,7 @@ export const appRoutes35: Route[] = [{
       const list = COOPERATIVES.filter(
         (c) =>
           inScope(persona, c.province_code, c.api.admin_unit_code) &&
+          !outsideOwnCoop(persona, c.api.ref) &&
           (!unit || c.province_code === unit || c.api.admin_unit_code === unit) &&
           (inactive || c.api.active) &&
           (!q || norm(`${c.api.name} ${c.api.code} ${c.api.tax_code ?? ""}`).includes(q)),
@@ -53,7 +58,7 @@ export const appRoutes36: Route[] = [{
       const c = findCoop(params[0]);
       // Ngoài phạm vi trả 404 như backend (không lộ sự tồn tại).
       if (!c || !inScope(persona, c.province_code, c.api.admin_unit_code)) return problem(404, "party.org_not_found", "Not found");
-      if (otherCoopOfMember(persona, c.api.ref)) return problem(404, "party.org_not_found", "Not found");
+      if (outsideOwnCoop(persona, c.api.ref)) return problem(404, "party.org_not_found", "Not found");
       return json(c.api);
     },
   }];
@@ -64,7 +69,7 @@ export const appRoutes37: Route[] = [{
     handler: ({ params, url, persona }) => {
       const c = findCoop(params[0]);
       if (!c || !inScope(persona, c.province_code, c.api.admin_unit_code)) return problem(404, "party.org_not_found", "Not found");
-      if (otherCoopOfMember(persona, c.api.ref)) return problem(404, "party.org_not_found", "Not found");
+      if (outsideOwnCoop(persona, c.api.ref)) return problem(404, "party.org_not_found", "Not found");
       return json(paginate(householdsOf(c), url));
     },
   }];
