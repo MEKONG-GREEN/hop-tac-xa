@@ -185,8 +185,8 @@ services:
       KC_HOSTNAME: http://localhost:8180
       KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
       KC_HEALTH_ENABLED: "true"
-    # Theme đăng nhập "agrigreen" (KN v7.7 FN-CH-00.01, Hình 3a; realm đặt loginTheme = agrigreen). VPS
-    # (docker-compose.vps.yml) chỉ ghi đè thư mục import nên kế thừa mount theme này.
+    # Theme đăng nhập "agrigreen" (KN v7.7 FN-CH-00.01, Hình 3a; realm đặt loginTheme = agrigreen). Tệp chồng
+    # của máy demo (deploy/demo/docker-compose.demo.yml) kế thừa mount theme này.
     volumes:
       - "./keycloak:/opt/keycloak/data/import:ro"
       - "./keycloak-themes/agrigreen:/opt/keycloak/themes/agrigreen:ro"
