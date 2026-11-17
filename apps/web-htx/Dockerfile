@@ -1,16 +1,16 @@
-# Web váº­n hÃ nh AgriGreen â€” build nhiá»u táº§ng, runtime tá»‘i thiá»ƒu, cháº¡y khÃ´ng pháº£i root.
+# Web App HTX (MEKONG GREEN) — build nhiều tầng, runtime tối thiểu, chạy không phải root.
 # Build context: apps/web-htx
-#   docker build -t agrigreen/web-ops \
-#     --build-arg NEXT_PUBLIC_API_BASE_URL=https://api.agrigreen.vn \
-#     --build-arg NEXT_PUBLIC_ADMIN_API_BASE=https://admin.agrigreen.vn \
-#     --build-arg NEXT_PUBLIC_OIDC_ISSUER=https://auth.agrigreen.vn/realms/agrigreen \
+#   docker build -t agrigreen/web-htx \
+#     --build-arg NEXT_PUBLIC_API_BASE_URL=https://demo-htx.mekonggreen.vn/api \
+#     --build-arg NEXT_PUBLIC_ADMIN_API_BASE=https://demo-htx.mekonggreen.vn/admin-api \
+#     --build-arg NEXT_PUBLIC_OIDC_ISSUER=https://demo-htx.mekonggreen.vn/auth/realms/agrigreen \
 #     apps/web-htx
-# Biáº¿n NEXT_PUBLIC_* Ä‘Æ°á»£c nhÃºng lÃºc build â†’ má»—i mÃ´i trÆ°á»ng má»™t image.
+# Biến NEXT_PUBLIC_* được nhúng lúc build → mỗi môi trường một image.
 
 FROM node:24-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-# --ignore-scripts: khÃ´ng cháº¡y postinstall cá»§a gÃ³i phá»¥ thuá»™c trong image.
+# --ignore-scripts: không chạy postinstall của gói phụ thuộc trong image.
 RUN npm ci --ignore-scripts --no-audit --no-fund
 
 FROM node:24-alpine AS build
@@ -41,7 +41,7 @@ ENV NEXT_PUBLIC_DEPLOY_ENV=$NEXT_PUBLIC_DEPLOY_ENV \
     NEXT_PUBLIC_API_MOCK=$NEXT_PUBLIC_API_MOCK
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# prebuild chÃ©p worker MapLibre vÃ o public/maplibre rá»“i next build (output: standalone).
+# prebuild chép worker MapLibre vào public/maplibre rồi next build (output: standalone).
 RUN npm run build
 
 FROM node:24-alpine AS runtime

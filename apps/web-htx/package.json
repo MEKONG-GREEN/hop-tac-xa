@@ -2,7 +2,7 @@
   "name": "@agrigreen/web-ops",
   "version": "0.1.0",
   "private": true,
-  "description": "Web váº­n hÃ nh AgriGreen: khuyáº¿n nÃ´ng TW/Tá»‰nh/XÃ£, cá»•ng Báº£n Ä‘á»“ CGH cho Cá»¥c, quáº£n trá»‹",
+  "description": "Web App HTX (MEKONG GREEN): quản trị hợp tác xã, thành viên, mùa vụ và cơ giới hóa",
   "license": "UNLICENSED",
   "engines": {
     "node": ">=24"

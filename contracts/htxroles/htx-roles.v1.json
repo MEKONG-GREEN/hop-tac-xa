@@ -31,5 +31,9 @@
     { "key": "FN-14", "name": "Thống kê vụ của Admin", "grants": { "platform_admin": "R", "coop_manager": "", "htx_member": "" } },
     { "key": "FN-15", "name": "Bộ lọc và xuất báo cáo", "grants": { "platform_admin": "RX", "coop_manager": "RX", "htx_member": "R" } }
   ],
-  "member_write_routes": []
+  "member_write_routes": [
+    "POST /v1/notifications/read-all",
+    "POST /v1/notifications/:id/read",
+    "POST /v1/devices/:id/push-token"
+  ]
 }
