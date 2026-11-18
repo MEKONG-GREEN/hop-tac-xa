@@ -67,7 +67,7 @@ func TestAH61_HouseholdLandCannotDropBelowOpenSeasons(t *testing.T) {
 	}
 	for _, raw := range []string{"0.75", "1.50"} {
 		got, err := f.svc.UpdateKNHousehold(ctx, hh, &raw, "Cập nhật diện tích hợp lệ", key())
-		if err != nil || got.Household.CultivatedAreaHa == nil || !got.Household.CultivatedAreaHa.Equal(decimal.RequireFromString(raw)) {
+		if err != nil || got.CultivatedAreaHa == nil || !got.CultivatedAreaHa.Equal(decimal.RequireFromString(raw)) {
 			t.Fatalf("valid land %s: %+v %v", raw, got, err)
 		}
 	}
