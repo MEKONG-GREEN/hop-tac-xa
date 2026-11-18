@@ -14070,6 +14070,96 @@ paths:
         "404": {description: extension.khtc_form_not_found, $ref: "#/components/responses/Problem"}
         "503": {description: extension.dependency_unavailable, $ref: "#/components/responses/Problem"}
 
+  /v1/cooperatives/{ref}/households/{household_ref}/seasons:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}, description: "HTX đích, server kiểm theo phiên"}
+      - {name: household_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      summary: Mở vụ theo nông hộ và diện tích còn lại (AH-61)
+      description: |
+        Chỉ Thành viên HTX của HTX đích hoặc Admin được mở; Đại diện chỉ đọc.
+        Diện tích dương, tối đa hai chữ số thập phân, không vượt diện tích còn lại.
+        Server khóa hộ và đọc lại tổng diện tích trước ghi. Hộ ngừng tham gia không mở mới.
+        Mốc gốc tự chọn, không áp dụng cửa sổ T−15/T+30 của API theo thửa cũ.
+        SOP đang áp dụng riêng của giống được ưu tiên; không có thì dùng SOP chung của loại cây.
+        Server lưu snapshot SOP, không nhận snapshot do client gửi.
+        Mở vụ cần mạng; không đưa yêu cầu vào hàng đợi đồng bộ. Thiếu hoặc từ chối GPS vẫn lưu được.
+        Thử lại cùng thao tác dùng lại Idempotency-Key và giữ nguyên dữ liệu form.
+      operationId: openHouseholdSeason
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/HouseholdSeasonOpenInput"}
+      responses:
+        "201":
+          description: Vụ đang canh tác và diện tích còn lại tại lần ghi; replay trả đúng phản hồi cũ
+          headers:
+            Location: {schema: {type: string}}
+            Idempotent-Replayed: {schema: {type: string}}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [season, remaining_area_ha]
+                properties:
+                  season: {$ref: "#/components/schemas/HouseholdSeason"}
+                  remaining_area_ha: {$ref: "#/components/schemas/Decimal"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409":
+          description: Diện tích hiện tại không còn đủ, hoặc khóa idempotency đã dùng với dữ liệu khác
+          content:
+            application/problem+json:
+              schema:
+                anyOf:
+                  - {$ref: "#/components/schemas/HouseholdSeasonAreaConflict"}
+                  - {$ref: "#/components/schemas/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+    get:
+      summary: Danh sách vụ theo hộ trong phạm vi HTX (AH-61)
+      description: Thành viên và Đại diện đọc cùng HTX; Admin chọn HTX. Vụ của hộ đã ngừng tham gia vẫn đọc được trong HTX của vụ.
+      operationId: listHouseholdSeasons
+      parameters:
+        - {name: status, in: query, schema: {type: string, enum: [open, completed, cancelled]}}
+        - {name: cursor, in: query, schema: {type: string}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+      responses:
+        "200":
+          description: Một trang vụ theo hộ, không dùng thửa giả
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items: {type: array, items: {$ref: "#/components/schemas/HouseholdSeason"}}
+                  next_cursor: {type: [string, "null"]}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+  /v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}:
+    get:
+      summary: Xem vụ theo hộ và snapshot SOP của vụ (AH-61)
+      operationId: getHouseholdSeason
+      parameters:
+        - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: household_ref, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: season_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Vụ cùng snapshot đã lưu, không đọc thay bằng SOP hiện hành
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/HouseholdSeason"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
   /v1/extension/khtc/periods/{id}/report:
     get:
       summary: "Bản soạn Mẫu 1–5, ô số chỉ đọc và mốc dữ liệu"
@@ -27707,6 +27797,76 @@ components:
         source_version: {type: integer, minimum: 0, description: "0 hoặc bỏ trống = phiên bản mới nhất của biểu nguồn"}
         fields: {type: array, maxItems: 500, items: {$ref: "#/components/schemas/FormsField"}}
       additionalProperties: false
+    HouseholdSeasonAreaInput:
+      type: string
+      description: Ha dạng chuỗi decimal dương, tối đa hai chữ số thập phân; server kiểm với diện tích còn lại
+      pattern: '^(0|[1-9][0-9]{0,9})(\.[0-9]{1,2})?$'
+      not: {enum: ["0", "0.0", "0.00"]}
+      examples: ["0.25", "1.50"]
+    HouseholdSeasonOpenInput:
+      type: object
+      additionalProperties: false
+      required: [crop_code, season_code, season_year, variety_code, area_ha, anchor_date]
+      properties:
+        crop_code: {type: string, pattern: '^[A-Za-z0-9_.-]{1,40}$'}
+        season_code: {type: string, pattern: '^[A-Za-z0-9_]{1,40}$'}
+        season_year: {type: integer, minimum: 2000, maximum: 2100}
+        variety_code: {type: string, pattern: '^[A-Za-z0-9_.-]{1,40}$'}
+        area_ha: {$ref: "#/components/schemas/HouseholdSeasonAreaInput"}
+        anchor_date: {type: string, format: date, description: "Mốc gốc theo ngày nghiệp vụ, không ràng buộc cửa sổ T−15/T+30"}
+        sop_version_id:
+          type: [string, "null"]
+          format: uuid
+          description: Phiên bản đang áp dụng trong nhóm SOP phù hợp. Bỏ trống để server tự chọn nếu chỉ có một SOP phù hợp.
+        gps: {$ref: "#/components/schemas/CropGPS"}
+        channel: {type: string, enum: [app, web], default: app}
+    HouseholdSeasonSOPSnapshot:
+      type: object
+      required: [template_ref, version_id, version_no, crop_code, anchor_name, stages, steps]
+      properties:
+        template_ref: {type: string, format: uuid}
+        version_id: {type: string, format: uuid}
+        version_no: {type: integer, minimum: 1}
+        crop_code: {type: string}
+        name: {type: string}
+        anchor_name: {type: string}
+        stages: {type: array, items: {$ref: "#/components/schemas/CropSOPStage"}}
+        steps: {type: array, items: {$ref: "#/components/schemas/CropSOPStep"}}
+    HouseholdSeason:
+      type: object
+      required: [season_ref, entry_kind, household_ref, cooperative_ref, commune_code, crop_code, season_code, season_year, variety_code, area_ha, anchor_date, expected_harvest_date, harvest_open_date, sop_snapshot, status, current_event_id, version, gps_missing, gps, opened_by, opened_at]
+      properties:
+        season_ref: {type: string, format: uuid}
+        entry_kind: {type: string, enum: [household]}
+        household_ref: {type: string, format: uuid}
+        cooperative_ref: {type: string, format: uuid}
+        commune_code: {type: string}
+        crop_code: {type: string}
+        season_code: {type: string}
+        season_year: {type: integer}
+        variety_code: {type: string}
+        area_ha: {$ref: "#/components/schemas/Decimal"}
+        anchor_date: {type: string, format: date}
+        expected_harvest_date: {type: [string, "null"], format: date}
+        harvest_open_date: {type: [string, "null"], format: date}
+        sop_snapshot: {$ref: "#/components/schemas/HouseholdSeasonSOPSnapshot"}
+        status: {type: string, enum: [open, completed, cancelled]}
+        current_event_id: {type: string, format: uuid}
+        version: {type: integer, minimum: 1}
+        gps_missing: {type: boolean, description: "Thiếu hoặc từ chối GPS, không suy diễn tọa độ thành xác minh ranh đất"}
+        gps: {$ref: "#/components/schemas/CropGPS"}
+        opened_by: {type: string, format: uuid}
+        opened_at: {type: string, format: date-time}
+    HouseholdSeasonAreaConflict:
+      allOf:
+        - {$ref: "#/components/schemas/Problem"}
+        - type: object
+          required: [remaining_area_ha]
+          properties:
+            code: {type: string, enum: [cropcycle.household_area_exceeded]}
+            remaining_area_ha: {$ref: "#/components/schemas/Decimal"}
+            active_area_ha: {$ref: "#/components/schemas/Decimal"}
+            land_area_ha: {$ref: "#/components/schemas/Decimal"}
     KHTCReportSupplement:
       type: object
       required: [id, department, instruction, state, due_at, native_submission_ref, return_applied]
