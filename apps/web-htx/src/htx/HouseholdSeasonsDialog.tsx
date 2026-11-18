@@ -111,15 +111,15 @@ export function HouseholdSeasonsDialog({ coopRef, household, onClose, onSaved }:
     {canCreate && hasCapacity && !opening ? <button className="btn btn-p" onClick={() => setOpening(true)}>Mở vụ mới</button> : null}
     {canCreate && !hasCapacity ? <p role="status">{household.open_season_blocked_reason || "Không còn diện tích hoặc chưa tải lại được số liệu. Đóng và mở lại danh sách hộ để cập nhật."}</p> : null}
     {opening ? <form onSubmit={(e) => void submit(e)} className="stack">
-      <fieldset disabled={busy} className="stack">
-        <label>Loại cây<select required value={crop} onChange={(e) => { setCrop(e.target.value); setVariety(""); setVersion(""); edit(); }}><option value="">Chọn loại cây</option>{metadata.data?.crops.filter((c) => !c.attrs.parent_code).map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}</select></label>
-        <label>Giống<select required value={variety} onChange={(e) => { setVariety(e.target.value); setVersion(""); edit(); }}><option value="">Chọn giống</option>{metadata.data?.varieties.filter((v) => v.attrs.crop_code === crop).map((v) => <option key={v.code} value={v.code}>{v.name}</option>)}</select></label>
-        <label>Mùa vụ<select required value={seasonCode} onChange={(e) => { setSeasonCode(e.target.value); edit(); }}><option value="">Chọn mùa vụ</option>{metadata.data?.seasons.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}</select></label>
-        <label>Năm<input required type="number" min={2000} max={2100} value={year} onChange={(e) => { setYear(e.target.value); edit(); }} /></label>
-        <label>Diện tích vụ (ha)<input required inputMode="decimal" value={area} onChange={(e) => { setArea(e.target.value); edit(); }} placeholder="Ví dụ: 0.25" /></label>
-        <label>SOP đang áp dụng<select required value={selected} onChange={(e) => { setVersion(e.target.value); edit(); }}><option value="">Chọn SOP</option>{choices.data?.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}</select></label>
+      <fieldset disabled={busy} className="stack" style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+        <label className="field">Loại cây<select className="select" required value={crop} onChange={(e) => { setCrop(e.target.value); setVariety(""); setVersion(""); edit(); }}><option value="">Chọn loại cây</option>{metadata.data?.crops.filter((c) => !c.attrs.parent_code).map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}</select></label>
+        <label className="field">Giống<select className="select" required value={variety} onChange={(e) => { setVariety(e.target.value); setVersion(""); edit(); }}><option value="">Chọn giống</option>{metadata.data?.varieties.filter((v) => v.attrs.crop_code === crop).map((v) => <option key={v.code} value={v.code}>{v.name}</option>)}</select></label>
+        <label className="field">Mùa vụ<select className="select" required value={seasonCode} onChange={(e) => { setSeasonCode(e.target.value); edit(); }}><option value="">Chọn mùa vụ</option>{metadata.data?.seasons.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}</select></label>
+        <label className="field">Năm<input className="input" required type="number" min={2000} max={2100} value={year} onChange={(e) => { setYear(e.target.value); edit(); }} /></label>
+        <label className="field">Diện tích vụ (ha)<input className="input" required inputMode="decimal" value={area} onChange={(e) => { setArea(e.target.value); edit(); }} placeholder="Ví dụ: 0.25" /></label>
+        <label className="field">SOP đang áp dụng<select className="select" required value={selected} onChange={(e) => { setVersion(e.target.value); edit(); }}><option value="">Chọn SOP</option>{choices.data?.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}</select></label>
         <button type="button" className="btn btn-o btn-sm" onClick={() => { choices.reload(); setVersion(""); edit(); }}>Tải lại SOP</button>
-        <label>{choices.data?.find((v) => v.id === selected)?.anchor || "Mốc gốc"}<input required type="date" value={anchor} onChange={(e) => { setAnchor(e.target.value); edit(); }} /></label>
+        <label className="field">{choices.data?.find((v) => v.id === selected)?.anchor || "Mốc gốc"}<input className="input" required type="date" value={anchor} onChange={(e) => { setAnchor(e.target.value); edit(); }} /></label>
         <p className="small">Bạn tự chọn mốc gốc. Khi lưu, trình duyệt hỏi quyền vị trí; từ chối vẫn mở vụ được và ghi “Thiếu GPS”.</p>
         <button className="btn btn-p" disabled={metadata.loading || choices.loading || !selected} type="submit">{busy ? "Đang lưu…" : "Lưu vụ"}</button>
       </fieldset>
