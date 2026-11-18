@@ -10072,6 +10072,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/cooperatives/{ref}/households/{household_ref}/seasons": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description HTX đích, server kiểm theo phiên */
+                ref: string;
+                household_ref: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Danh sách vụ theo hộ trong phạm vi HTX (AH-61)
+         * @description Thành viên và Đại diện đọc cùng HTX; Admin chọn HTX. Vụ của hộ đã ngừng tham gia vẫn đọc được trong HTX của vụ.
+         */
+        get: operations["listHouseholdSeasons"];
+        put?: never;
+        /**
+         * Mở vụ theo nông hộ và diện tích còn lại (AH-61)
+         * @description Chỉ Thành viên HTX của HTX đích hoặc Admin được mở; Đại diện chỉ đọc.
+         *     Diện tích dương, tối đa hai chữ số thập phân, không vượt diện tích còn lại.
+         *     Server khóa hộ và đọc lại tổng diện tích trước ghi. Hộ ngừng tham gia không mở mới.
+         *     Mốc gốc tự chọn, không áp dụng cửa sổ T−15/T+30 của API theo thửa cũ.
+         *     SOP đang áp dụng riêng của giống được ưu tiên; không có thì dùng SOP chung của loại cây.
+         *     Server lưu snapshot SOP, không nhận snapshot do client gửi.
+         *     Mở vụ cần mạng; không đưa yêu cầu vào hàng đợi đồng bộ. Thiếu hoặc từ chối GPS vẫn lưu được.
+         *     Thử lại cùng thao tác dùng lại Idempotency-Key và giữ nguyên dữ liệu form.
+         */
+        post: operations["openHouseholdSeason"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Xem vụ theo hộ và snapshot SOP của vụ (AH-61) */
+        get: operations["getHouseholdSeason"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/extension/khtc/periods/{id}/report": {
         parameters: {
             query?: never;
@@ -23719,6 +23771,89 @@ export interface components {
             /** @description 0 hoặc bỏ trống = phiên bản mới nhất của biểu nguồn */
             source_version?: number;
             fields?: components["schemas"]["FormsField"][];
+        };
+        /**
+         * @description Ha dạng chuỗi decimal dương, tối đa hai chữ số thập phân; server kiểm với diện tích còn lại
+         * @example 0.25
+         * @example 1.50
+         */
+        HouseholdSeasonAreaInput: string;
+        HouseholdSeasonOpenInput: {
+            crop_code: string;
+            season_code: string;
+            season_year: number;
+            variety_code: string;
+            area_ha: components["schemas"]["HouseholdSeasonAreaInput"];
+            /**
+             * Format: date
+             * @description Mốc gốc theo ngày nghiệp vụ, không ràng buộc cửa sổ T−15/T+30
+             */
+            anchor_date: string;
+            /**
+             * Format: uuid
+             * @description Phiên bản đang áp dụng trong nhóm SOP phù hợp. Bỏ trống để server tự chọn nếu chỉ có một SOP phù hợp.
+             */
+            sop_version_id?: string | null;
+            gps?: components["schemas"]["CropGPS"];
+            /**
+             * @default app
+             * @enum {string}
+             */
+            channel: "app" | "web";
+        };
+        HouseholdSeasonSOPSnapshot: {
+            /** Format: uuid */
+            template_ref: string;
+            /** Format: uuid */
+            version_id: string;
+            version_no: number;
+            crop_code: string;
+            name?: string;
+            anchor_name: string;
+            stages: components["schemas"]["CropSOPStage"][];
+            steps: components["schemas"]["CropSOPStep"][];
+        };
+        HouseholdSeason: {
+            /** Format: uuid */
+            season_ref: string;
+            /** @enum {string} */
+            entry_kind: "household";
+            /** Format: uuid */
+            household_ref: string;
+            /** Format: uuid */
+            cooperative_ref: string;
+            commune_code: string;
+            crop_code: string;
+            season_code: string;
+            season_year: number;
+            variety_code: string;
+            area_ha: components["schemas"]["Decimal"];
+            /** Format: date */
+            anchor_date: string;
+            /** Format: date */
+            expected_harvest_date: string | null;
+            /** Format: date */
+            harvest_open_date: string | null;
+            sop_snapshot: components["schemas"]["HouseholdSeasonSOPSnapshot"];
+            /** @enum {string} */
+            status: "open" | "completed" | "cancelled";
+            /** Format: uuid */
+            current_event_id: string;
+            version: number;
+            /** @description Thiếu hoặc từ chối GPS, không suy diễn tọa độ thành xác minh ranh đất */
+            gps_missing: boolean;
+            gps: components["schemas"]["CropGPS"];
+            /** Format: uuid */
+            opened_by: string;
+            /** Format: date-time */
+            opened_at: string;
+        };
+        HouseholdSeasonAreaConflict: components["schemas"]["Problem"] & {
+            /** @enum {string} */
+            code?: "cropcycle.household_area_exceeded";
+            remaining_area_ha: components["schemas"]["Decimal"];
+            active_area_ha?: components["schemas"]["Decimal"];
+            land_area_ha?: components["schemas"]["Decimal"];
         };
         KHTCReportSupplement: {
             /** Format: uuid */
@@ -48100,6 +48235,116 @@ export interface operations {
             404: components["responses"]["Problem"];
             /** @description extension.dependency_unavailable */
             503: components["responses"]["Problem"];
+        };
+    };
+    listHouseholdSeasons: {
+        parameters: {
+            query?: {
+                status?: "open" | "completed" | "cancelled";
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description HTX đích, server kiểm theo phiên */
+                ref: string;
+                household_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Một trang vụ theo hộ, không dùng thửa giả */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["HouseholdSeason"][];
+                        next_cursor: string | null;
+                    };
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+        };
+    };
+    openHouseholdSeason: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                /** @description HTX đích, server kiểm theo phiên */
+                ref: string;
+                household_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HouseholdSeasonOpenInput"];
+            };
+        };
+        responses: {
+            /** @description Vụ đang canh tác; replay trả đúng phản hồi cũ. Client tải lại danh sách hộ để cập nhật diện tích hiện tại. */
+            201: {
+                headers: {
+                    Location?: string;
+                    "Idempotent-Replayed"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        season: components["schemas"]["HouseholdSeason"];
+                    };
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            /** @description Diện tích hiện tại không còn đủ, hoặc thao tác cùng khóa idempotency đang xử lý. Khóa đã dùng với dữ liệu khác trả 422 theo middleware chung. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HouseholdSeasonAreaConflict"] | components["schemas"]["Problem"];
+                };
+            };
+            422: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getHouseholdSeason: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Vụ cùng snapshot đã lưu, không đọc thay bằng SOP hiện hành */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HouseholdSeason"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
         };
     };
     extensionKhtcReportGet: {

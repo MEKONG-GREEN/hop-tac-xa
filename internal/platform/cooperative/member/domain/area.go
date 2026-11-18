@@ -23,6 +23,8 @@ func HouseholdAreaAvailability(land *decimal.Decimal, used decimal.Decimal, acti
 		result.Reason = "Chưa có diện tích đất của nông hộ."
 	case !result.Remaining.IsPositive():
 		result.Reason = "Hết diện tích để mở vụ."
+	case result.Remaining.LessThan(decimal.New(1, -2)):
+		result.Reason = "Diện tích còn lại không đủ 0,01 ha để mở vụ."
 	default:
 		result.CanOpen = true
 	}

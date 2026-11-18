@@ -18,8 +18,20 @@ import (
 // commune. It does not authorize that cooperative's data or change write scope.
 // Selected sessions and KN contexts retain their existing database projection.
 func lookupHousehold(ctx context.Context, tx pgx.Tx, p authz.Principal, sc authz.Scope, ref uuid.UUID) (*domain.Household, error) {
-	if p.KN != nil || p.SelectedSession != nil || !isCoopManagerOnly(p) {
+	return lookupHouseholdForWrite(ctx, tx, p, sc, ref, false)
+}
+
+func lookupHouseholdForWrite(ctx context.Context, tx pgx.Tx, p authz.Principal, sc authz.Scope, ref uuid.UUID, lock bool) (*domain.Household, error) {
+	read := func() (*domain.Household, error) {
+		if lock {
+			if err := store.LockHousehold(ctx, tx, ref); err != nil {
+				return nil, err
+			}
+		}
 		return store.HouseholdByRef(ctx, tx, ref)
+	}
+	if p.KN != nil || p.SelectedSession != nil || !isCoopManagerOnly(p) {
+		return read()
 	}
 	if sc.All {
 		return nil, ErrOutOfScope
@@ -36,7 +48,7 @@ func lookupHousehold(ctx context.Context, tx pgx.Tx, p authz.Principal, sc authz
 	if _, err := tx.Exec(ctx, set, vars.Settings()[shareddb.VarXaIDs]); err != nil {
 		return nil, err
 	}
-	h, err := store.HouseholdByRef(ctx, tx, ref)
+	h, err := read()
 	if err != nil {
 		return nil, err // the enclosing transaction rolls back, including SET LOCAL
 	}

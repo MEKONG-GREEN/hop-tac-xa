@@ -84,7 +84,7 @@ func (s *Service) ChangeMembership(ctx context.Context, in ChangeMembershipInput
 	}
 	var res MembershipResult
 	err = tenant.WithTenantTx(ctx, s.DB, p.TenantID, func(tx pgx.Tx) error {
-		h, err := lookupHousehold(ctx, tx, p, sc, in.HouseholdRef)
+		h, err := lookupHouseholdForWrite(ctx, tx, p, sc, in.HouseholdRef, true)
 		if err != nil {
 			return err
 		}

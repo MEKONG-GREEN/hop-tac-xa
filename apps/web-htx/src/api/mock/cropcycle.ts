@@ -260,6 +260,17 @@ function publishedVersionFor(variety: string): VersionRec | undefined {
   if (!rec || rec.t.status !== "published") return undefined;
   return rec.versions.filter((v) => v.status === "published").at(-1);
 }
+
+export function householdMockSOPs(coop: string, crop: string, variety: string) {
+  ensure();
+  const bound = BINDINGS.find((b) => b.variety_code === variety)?.template_ref;
+  const eligible = SOPS.filter(({ t }) => t.status === "published" && t.crop === crop && (!t.variety_code || t.variety_code === variety) && (t.scope === "system" || t.cooperative_ref === coop));
+  const specific = eligible.filter(({ t }) => t.variety_code === variety || t.ref === bound);
+  return (specific.length ? specific : eligible).flatMap(({ t, versions }) => {
+    const v = versions.find((v) => v.status === "published" && v.version_no === t.published_version);
+    return v ? [{ template: t, version: versionOut(t, v, false) }] : [];
+  });
+}
 function normName(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, " ");
 }

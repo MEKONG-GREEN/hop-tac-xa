@@ -11,6 +11,7 @@ import '../widgets.dart';
 import 'farm_log_screen.dart';
 import 'harvest_screen.dart';
 import 'open_season_screen.dart';
+import 'households_screen.dart';
 import 'season_edit_screen.dart';
 import 'supplement_screen.dart';
 
@@ -228,8 +229,11 @@ class PlotDetailScreen extends ConsumerWidget {
               if (se == null) ...[
                 if (canOpen)
                   FilledButton.icon(
-                    onPressed: () =>
-                        open(OpenSeasonScreen(plotRef: d.plot.ref)),
+                    onPressed: () => open(
+                      mode == HtxMode.member
+                          ? const HouseholdsScreen()
+                          : OpenSeasonScreen(plotRef: d.plot.ref),
+                    ),
                     icon: const Icon(Icons.add_circle_outline),
                     label: const Text('Mở vụ mới'),
                   ),

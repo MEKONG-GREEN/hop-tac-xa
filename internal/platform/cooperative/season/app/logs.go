@@ -112,6 +112,11 @@ func (s *Service) logSeason(ctx context.Context, tid uuid.UUID, seasonRef, plotR
 		} else if plotRef != uuid.Nil {
 			cur, e = store.OpenSeasonOfPlot(ctx, tx, plotRef, false)
 		}
+		// Household seasons use their own API; the legacy log/harvest payloads
+		// still require a plot and must not receive a synthetic zero UUID.
+		if cur != nil && cur.EntryKind != "" {
+			cur = nil
+		}
 		return e
 	})
 	return cur, err

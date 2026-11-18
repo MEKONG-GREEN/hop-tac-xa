@@ -412,6 +412,11 @@ Cổng `geo.GpsLog.RecordFix` (module khác gọi, không qua HTTP) trả lỗi 
 | 403 | `cropcycle.read_only` | pf/cropcycle: cán bộ KN chỉ được đọc dữ liệu mùa vụ |
 | 422 | `cropcycle.sowing_date_out_of_window` | pf/cropcycle: "Ngày gieo sạ phải trong khoảng 15 ngày trước đến 30 ngày sau ngày hiện tại." (ngày nghiệp vụ giờ Việt Nam, HTX US-SEASON-01 AC-2) |
 | 409 | `cropcycle.season_already_open` | pf/cropcycle: "Lô ruộng đang canh tác vụ khác, không thể mở vụ mới." (HTX US-SEASON-04); có `open_season_ref` |
+| 404 | `cropcycle.household_not_found` | pf/cooperative: hợp đồng vụ theo hộ AH-63 — hộ hoặc HTX không có trong phạm vi của phiên; không phân biệt hộ không tồn tại với hộ ngoài phạm vi. |
+| 422 | `cropcycle.household_inactive` | pf/cooperative AH-63/AH-64 — hộ đã ngừng tham gia, không mở vụ mới; vụ đang chạy vẫn được đọc/tiếp tục. |
+| 422 | `cropcycle.household_land_unknown` | pf/cooperative AH-63/AH-64 — chưa khai báo diện tích đất của hộ, không suy thành 0 hoặc cho phép mở vụ. |
+| 409 | `cropcycle.household_area_exceeded` | pf/cooperative AH-63/AH-64 — diện tích yêu cầu vượt số còn lại tại thời điểm khóa hộ; trả `remaining_area_ha` và có thể kèm `active_area_ha`, `land_area_ha`. Giữ form và dùng số server để thử lại. |
+| 422 | `cropcycle.no_active_sop_for_crop` | pf/cooperative AH-63/AH-64 — không có SOP đang áp dụng riêng của giống hoặc SOP chung phù hợp loại cây. |
 | 409 | `cropcycle.previous_season_not_completed` | pf/cropcycle: sao chép cấu hình vụ trước khi vụ gần nhất chưa hoàn thành (HTX US-SEASON-03 AC-2) |
 | 409 | `cropcycle.no_previous_season` | pf/cropcycle: thửa chưa có vụ để sao chép cấu hình |
 | 422 | `cropcycle.cooperative_inactive` | pf/cropcycle: HTX không tồn tại hoặc đã ngừng hoạt động |
