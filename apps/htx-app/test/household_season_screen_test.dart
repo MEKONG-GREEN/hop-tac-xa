@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:agrigreen_mobile/data/photo/location_source.dart';
 import 'package:agrigreen_mobile/domain/outbox_record.dart';
 import 'package:flutter/material.dart';
@@ -108,6 +110,52 @@ Future<void> choose(WidgetTester tester, String label, String choice) async {
 }
 
 void main() {
+  testWidgets('AH-71: khóa mốc khi chờ preview, quay lại sửa thì tính mới', (
+    tester,
+  ) async {
+    final env = householdEnv('htx_member');
+    final normalSend = env.server.onSend!;
+    final pending = Completer<Map<String, Object?>>();
+    var delayed = false;
+    env.server.onSend = (method, path, body) async {
+      if (path.endsWith('/season-plan-preview') && !delayed) {
+        delayed = true;
+        return pending.future;
+      }
+      return normalSend(method, path, body);
+    };
+    await loginToHome(tester, env);
+    await openTile(tester, 'Nông hộ');
+    await tapText(tester, 'Hộ thử nghiệm');
+    await tapText(tester, 'Mở vụ mới');
+    await choose(tester, 'Loại cây', 'Lúa');
+    await choose(tester, 'Mùa vụ', 'Đông Xuân');
+    await tapText(tester, 'Tiếp tục');
+    await choose(tester, 'Giống', 'OM18');
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Diện tích vụ (ha)'),
+      '0.25',
+    );
+    await tapText(tester, 'Tiếp tục');
+    final anchor = find.widgetWithText(TextField, 'Mốc gốc (dd/mm/yyyy)');
+    await tester.enterText(anchor, '01/01/2030');
+    await tapText(tester, 'Tiếp tục');
+    expect(tester.widget<TextField>(anchor).enabled, isFalse);
+    pending.complete({'as_of_date': '2026-11-18', 'stages': <Object?>[]});
+    await tester.pumpAndSettle();
+    expect(find.text('Kế hoạch dự kiến'), findsOneWidget);
+    await tapText(tester, 'Quay lại');
+    expect(tester.widget<TextField>(anchor).enabled, isTrue);
+    await tester.enterText(anchor, '02/01/2030');
+    await tapText(tester, 'Tiếp tục');
+    expect(find.text('Kế hoạch dự kiến'), findsOneWidget);
+    final previews = env.server.sendCalls
+        .where((r) => r.$2.endsWith('/season-plan-preview'))
+        .toList();
+    expect(previews, hasLength(2));
+    expect(previews.last.$4?['anchor_date'], '2030-01-02');
+    await finish(tester);
+  });
   testWidgets('AH-61 Đại diện chỉ xem vụ dù hộ còn diện tích', (tester) async {
     final env = householdEnv('coop_manager');
     await loginToHome(tester, env);
