@@ -114,6 +114,13 @@ func TestAH61_OpenReadSnapshotGPSAndIdempotency(t *testing.T) {
 	if events != 2 || legacy != 0 {
 		t.Fatalf("outbox new=%d legacy=%d", events, legacy)
 	}
+	var onBehalf bool
+	if err := pool.QueryRow(context.Background(), `SELECT bool_and(on_behalf) FROM pf_coop.season_event WHERE tenant_id=$1 AND entry_kind='household'`, f.tenant).Scan(&onBehalf); err != nil {
+		t.Fatal(err)
+	}
+	if !onBehalf {
+		t.Fatal("HTX operators must retain the existing on-behalf audit semantics")
+	}
 }
 
 func TestAH61_HouseholdValidationAndRoles(t *testing.T) {

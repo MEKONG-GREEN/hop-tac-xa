@@ -58,6 +58,8 @@ func TestIsDataCollectionRoute_REQ011(t *testing.T) {
 		{"POST", "/v1/files", true},
 		{"POST", "/v1/sync/push", true},
 		{"POST", "/v1/cropcycle/seasons", true},
+		{"POST", "/v1/cooperatives/:ref/households/:household_ref/seasons", true},
+		{"GET", "/v1/cooperatives/:ref/households/:household_ref/seasons", false},
 		{"POST", "/v1/cropcycle/seasons/:ref/harvest", true},
 		{"POST", "/v1/cropcycle/farm-logs", true},
 		{"POST", "/v1/cropcycle/farm-logs/batch", true},

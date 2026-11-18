@@ -159,7 +159,7 @@ func (s *Service) OpenHouseholdSeason(ctx context.Context, in HouseholdOpenInput
 			SeasonCode: in.SeasonCode, SeasonYear: in.SeasonYear, VarietyCode: in.VarietyCode, AreaHa: area,
 			SowingDate: in.AnchorDate, SOPTemplateRef: t.Ref, SOPVersionID: v.ID, SOPVersionNo: v.VersionNo,
 			ExpectedYield: expectedYield(variety), GPS: in.GPS, LocationStatus: loc, Channel: in.Channel,
-			ActorRef: a.p.ActorRef, EventTime: now, IdemKey: key}
+			ActorRef: a.p.ActorRef, OnBehalf: a.onBehalf(), EventTime: now, IdemKey: key}
 		if v.HarvestDayOffset != nil && v.HarvestWindowDays != nil {
 			ev.ExpectedHarvestDate = in.AnchorDate.AddDate(0, 0, *v.HarvestDayOffset)
 			ev.HarvestOpenDate = ev.ExpectedHarvestDate.AddDate(0, 0, -*v.HarvestWindowDays)
