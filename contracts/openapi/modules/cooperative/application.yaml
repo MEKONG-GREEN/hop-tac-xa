@@ -41,7 +41,7 @@ paths:
         "403": {$ref: "#/components/responses/Problem"}
         "404": {$ref: "#/components/responses/Problem"}
         "409":
-          description: Diện tích hiện tại không còn đủ, hoặc khóa idempotency đã dùng với dữ liệu khác
+          description: Diện tích hiện tại không còn đủ, hoặc thao tác cùng khóa idempotency đang xử lý. Khóa đã dùng với dữ liệu khác trả 422 theo middleware chung.
           content:
             application/problem+json:
               schema:

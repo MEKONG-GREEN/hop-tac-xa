@@ -48307,7 +48307,7 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
-            /** @description Diện tích hiện tại không còn đủ, hoặc khóa idempotency đã dùng với dữ liệu khác */
+            /** @description Diện tích hiện tại không còn đủ, hoặc thao tác cùng khóa idempotency đang xử lý. Khóa đã dùng với dữ liệu khác trả 422 theo middleware chung. */
             409: {
                 headers: {
                     [name: string]: unknown;

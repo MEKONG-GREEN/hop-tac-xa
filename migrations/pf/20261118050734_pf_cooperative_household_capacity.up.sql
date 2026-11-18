@@ -8,18 +8,20 @@ CREATE TABLE pf_coop.household_season_capacity (
   PRIMARY KEY (tenant_id, household_ref)
 );
 SELECT shared.apply_tenant_rls('pf_coop.household_season_capacity');
-CREATE POLICY p_scope ON pf_coop.household_season_capacity AS RESTRICTIVE
-  USING (current_user='own_cooperative' OR EXISTS (
+CREATE POLICY p_scope ON pf_coop.household_season_capacity AS RESTRICTIVE FOR SELECT TO r_cooperative
+  USING (EXISTS (
     SELECT 1 FROM pf_coop.household h WHERE h.tenant_id=household_season_capacity.tenant_id
-      AND h.household_ref=household_season_capacity.household_ref))
-  WITH CHECK (current_user='own_cooperative');
+      AND h.household_ref=household_season_capacity.household_ref));
 INSERT INTO pf_coop.household_season_capacity (tenant_id, household_ref, active_area_ha)
   SELECT tenant_id, household_ref, sum(area_ha) FROM pf_coop.season_current
   WHERE status='open' AND household_ref IS NOT NULL GROUP BY tenant_id, household_ref;
 ALTER TABLE pf_coop.household_season_capacity OWNER TO own_cooperative;
 REVOKE ALL ON pf_coop.household_season_capacity FROM PUBLIC;
+REVOKE ALL ON pf_coop.household_season_capacity FROM r_cooperative;
 GRANT SELECT ON pf_coop.household_season_capacity TO r_cooperative;
-GRANT SELECT ON pf_coop.household TO own_cooperative;
+CREATE POLICY p_no_insert ON pf_coop.household_season_capacity AS RESTRICTIVE FOR INSERT TO r_cooperative WITH CHECK (false);
+CREATE POLICY p_no_update ON pf_coop.household_season_capacity AS RESTRICTIVE FOR UPDATE TO r_cooperative USING (false) WITH CHECK (false);
+CREATE POLICY p_no_delete ON pf_coop.household_season_capacity AS RESTRICTIVE FOR DELETE TO r_cooperative USING (false);
 
 CREATE FUNCTION pf_coop.project_household_capacity() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$

@@ -2,15 +2,19 @@ package handler_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"sync"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	port "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/port"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/ids"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/pgtest"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/tenant"
 	"github.com/MEKONG-GREEN/hop-tac-xa/migrations"
 )
 
@@ -56,7 +60,16 @@ func TestAH61_OpenReadSnapshotGPSAndIdempotency(t *testing.T) {
 	if str(replay.body, "season", "season_ref") != ref {
 		t.Fatal("replay allocated another season")
 	}
-	expect(t, c.postKey(path, idem, householdOpenBody(map[string]any{"area_ha": "0.30"})), http.StatusConflict, "same key changed payload")
+	expect(t, c.postKey(path, idem, householdOpenBody(map[string]any{"area_ha": "0.30"})), http.StatusUnprocessableEntity, "same key changed payload")
+	pool := pgtest.Get(t).AdminPool(t, migrations.PF)
+	if _, err := pool.Exec(context.Background(), `DELETE FROM shared.idempotency_key WHERE tenant_id=$1 AND idem_key=$2`, f.tenant, idem); err != nil {
+		t.Fatal(err)
+	}
+	durable := c.postKey(path, idem, body)
+	expect(t, durable, http.StatusCreated, "ledger replay after HTTP receipt expiry")
+	if str(durable.body, "season", "season_ref") != ref {
+		t.Fatal("durable replay created another season")
+	}
 	// Published template metadata can change; a season keeps its own copy.
 	if _, err := pgtest.Get(t).AdminPool(t, migrations.PF).Exec(context.Background(), `UPDATE pf_coop.sop_template SET name='SOP renamed' WHERE tenant_id=$1 AND ref=$2`, f.tenant, uuid.MustParse(tmpl)); err != nil {
 		t.Fatal(err)
@@ -72,10 +85,20 @@ func TestAH61_OpenReadSnapshotGPSAndIdempotency(t *testing.T) {
 			t.Fatal("household appeared in legacy list")
 		}
 	}
-	second := c.post(path, householdOpenBody(map[string]any{"anchor_date": "2020-01-01", "gps": map[string]any{"lon": "105.6", "lat": "10.05", "accuracy_m": "4"}}))
+	pointKey := key()
+	pointBody := householdOpenBody(map[string]any{"anchor_date": "2020-01-01", "gps": map[string]any{"lon": "105.6", "lat": "10.05", "accuracy_m": "4"}})
+	second := c.postKey(path, pointKey, pointBody)
 	expect(t, second, http.StatusCreated, "past anchor and GPS declaration")
 	if second.body["season"].(map[string]any)["gps_missing"] != false {
 		t.Fatal("provided GPS marked missing")
+	}
+	if _, err := pool.Exec(context.Background(), `DELETE FROM shared.idempotency_key WHERE tenant_id=$1 AND idem_key=$2`, f.tenant, pointKey); err != nil {
+		t.Fatal(err)
+	}
+	pointReplay := c.postKey(path, pointKey, pointBody)
+	expect(t, pointReplay, http.StatusCreated, "GPS numeric precision preserved in durable replay")
+	if str(pointReplay.body, "season", "season_ref") != str(second.body, "season", "season_ref") {
+		t.Fatal("GPS replay created another season")
 	}
 	pg := f.managerA().get(path + "?limit=1")
 	expect(t, pg, http.StatusOK, "paginated household seasons")
@@ -224,4 +247,29 @@ func TestAH61_CapacityFollowsHouseholdAcrossCooperatives(t *testing.T) {
 	})
 	expect(t, cancel, http.StatusCreated, "old season can still be cancelled")
 	expect(t, f.memberB().post(path, householdOpenBody(map[string]any{"area_ha": "2.00"})), http.StatusCreated, "closed season releases capacity")
+}
+
+func TestAH61_MultipleCropsShareBudgetAndProjectionIsReadOnly(t *testing.T) {
+	f := newFixture(t)
+	f.publishedSOP("AH61 rice", "OM5451")
+	f.householdLand("1", true)
+	coffee := f.sopAdmin.adminPost("/v1/cropcycle/sops", sopBody("AH61 coffee", map[string]any{"crop": "CAF", "variety_code": "ARA"}))
+	expect(t, coffee, http.StatusCreated, "create crop-specific SOP")
+	version := str(list(coffee.body, "versions")[0].(map[string]any), "id")
+	expect(t, f.sopAdmin.adminPost("/v1/cropcycle/sop-versions/"+version+"/publish", nil), http.StatusOK, "publish coffee SOP")
+	expect(t, f.memberA().post(f.householdPath(), householdOpenBody(map[string]any{"area_ha": "0.50"})), http.StatusCreated, "rice partial household land")
+	expect(t, f.memberA().post(f.householdPath(), householdOpenBody(map[string]any{"area_ha": "0.50", "crop_code": "CAF", "variety_code": "ARA"})), http.StatusCreated, "another crop uses remaining land")
+	r := f.memberA().post(f.householdPath(), householdOpenBody(map[string]any{"area_ha": "0.01"}))
+	expect(t, r, http.StatusConflict, "budget covers both crops")
+	if r.body["remaining_area_ha"] != "0" {
+		t.Fatalf("remaining: %v", r.body)
+	}
+	err := tenant.WithTenantTx(context.Background(), f.db, f.tenant, func(tx pgx.Tx) error {
+		_, err := tx.Exec(context.Background(), `UPDATE pf_coop.household_season_capacity SET active_area_ha=0 WHERE household_ref=$1`, f.h1)
+		return err
+	})
+	var denied *pgconn.PgError
+	if !errors.As(err, &denied) || denied.Code != "42501" {
+		t.Fatalf("application role must not edit derived budget: %v", err)
+	}
 }
