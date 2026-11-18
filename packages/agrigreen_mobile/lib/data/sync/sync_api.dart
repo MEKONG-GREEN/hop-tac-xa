@@ -10,10 +10,13 @@ import '../outbox/outbox_repository.dart';
 
 /// Lỗi HTTP từ Application API (problem+json: `status`, `code`, `title`).
 class ApiException implements Exception {
-  ApiException(this.status, this.code, [this.detail]);
+  ApiException(this.status, this.code, [this.detail, this.problem = const {}]);
   final int status;
   final String code;
   final String? detail;
+
+  /// RFC 9457 extensions (e.g. the server's remaining household area).
+  final Map<String, Object?> problem;
 
   /// 5xx, 429, 408 và 409 idempotency_in_progress → thử lại sau.
   bool get retriable =>
@@ -318,9 +321,11 @@ class HttpSyncApi implements SyncApi {
   static ApiException _problem(http.Response res) {
     var code = 'http_${res.statusCode}';
     String? detail;
+    Map<String, Object?> extensions = const {};
     try {
       final j = jsonDecode(utf8.decode(res.bodyBytes));
       if (j is Map) {
+        extensions = j.cast<String, Object?>();
         final c = j['code'];
         if (c is String && c.isNotEmpty) code = c;
         final d = j['detail'] ?? j['title'];
@@ -342,7 +347,7 @@ class HttpSyncApi implements SyncApi {
       return AccountLockedException(detail);
     }
     if (res.statusCode == 401) return UnauthenticatedException(code);
-    return ApiException(res.statusCode, code, detail);
+    return ApiException(res.statusCode, code, detail, extensions);
   }
 
   Map<String, Object?> _json(http.Response r) =>

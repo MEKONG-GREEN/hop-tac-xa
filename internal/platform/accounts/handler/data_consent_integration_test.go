@@ -109,6 +109,7 @@ func consentGuardedRoutes(t *testing.T) []string {
 	for _, r := range []string{
 		"POST /v1/files", "POST /v1/sync/push",
 		"POST /v1/cropcycle/seasons", "POST /v1/cropcycle/seasons/:ref/harvest",
+		"POST /v1/cooperatives/:ref/households/:household_ref/seasons",
 		"POST /v1/cropcycle/farm-logs", "POST /v1/cropcycle/farm-logs/batch", "POST /v1/cropcycle/farm-logs/:id/corrections",
 		"POST /v1/plots", "POST /v1/plots/:ref/boundaries",
 	} {
@@ -187,7 +188,7 @@ func (f *consentFix) accept(token, version string) resp {
 
 func routeURL(r string) (string, string) {
 	method, path, _ := strings.Cut(r, " ")
-	for _, p := range []string{":ref", ":id"} {
+	for _, p := range []string{":ref", ":id", ":household_ref"} {
 		path = strings.ReplaceAll(path, p, ids.New().String())
 	}
 	return method, path

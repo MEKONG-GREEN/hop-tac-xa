@@ -54,11 +54,12 @@ var dataCollectionRoutes = map[string]bool{
 	"POST /v1/files":     true,
 	"POST /v1/sync/push": true,
 	// pf/cooperative season: DTO có gps.
-	"POST /v1/cropcycle/seasons":                   true,
-	"POST /v1/cropcycle/seasons/:ref/harvest":      true,
-	"POST /v1/cropcycle/farm-logs":                 true,
-	"POST /v1/cropcycle/farm-logs/batch":           true,
-	"POST /v1/cropcycle/farm-logs/:id/corrections": true,
+	"POST /v1/cropcycle/seasons":                                   true,
+	"POST /v1/cooperatives/:ref/households/:household_ref/seasons": true,
+	"POST /v1/cropcycle/seasons/:ref/harvest":                      true,
+	"POST /v1/cropcycle/farm-logs":                                 true,
+	"POST /v1/cropcycle/farm-logs/batch":                           true,
+	"POST /v1/cropcycle/farm-logs/:id/corrections":                 true,
 	// pf/cooperative plot: gps_accuracy_m.
 	"POST /v1/plots":                 true,
 	"POST /v1/plots/:ref/boundaries": true,

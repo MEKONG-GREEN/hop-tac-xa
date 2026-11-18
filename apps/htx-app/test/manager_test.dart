@@ -60,6 +60,10 @@ void main() {
             'next_cursor': null,
           };
         }
+        if (path ==
+            '/v1/cooperatives/$coopRef/households/$householdRef/seasons') {
+          return {'items': <Object?>[], 'next_cursor': null};
+        }
         return base(path, q);
       };
       await loginToHome(tester, env);
@@ -67,6 +71,8 @@ void main() {
       expect(find.text('Hộ hết diện tích'), findsOneWidget);
       expect(find.textContaining('Còn lại: 0,00 ha'), findsOneWidget);
       await tapText(tester, 'Hộ hết diện tích');
+      expect(find.text('Mở vụ mới'), findsNothing);
+      await tapText(tester, 'Xem thửa và vụ theo thửa đang có');
       final tile = tester.widget<ListTile>(
         find.widgetWithText(ListTile, 'T1 · Ruộng bờ kênh'),
       );
@@ -243,8 +249,9 @@ void main() {
     },
   );
 
-  testWidgets('Thành viên HTX: nông hộ của HTX (nhãn đã che) → lô của hộ → mở '
-      'vụ hộ', (tester) async {
+  testWidgets('AH-61: Thành viên HTX chọn nông hộ rồi mở vụ theo hộ', (
+    tester,
+  ) async {
     final env = TestEnv(roles: const ['htx_member'])..seed();
     final base = env.server.onGet!;
     env.server.onGet = (path, q) async =>
@@ -264,6 +271,10 @@ void main() {
             ],
             'next_cursor': null,
           }
+        : path == '/v1/cooperatives/$coopRef/households/$householdRef/seasons'
+        ? {'items': <Object?>[], 'next_cursor': null}
+        : path == '/v1/masterdata/catalogs/crop'
+        ? {'items': <Object?>[], 'next_cursor': null}
         : base(path, q);
     await loginToHome(tester, env);
     await openTile(tester, 'Nông hộ');
@@ -276,8 +287,10 @@ void main() {
       findsOneWidget,
     );
     await tapText(tester, 'Nguyễn V. A.');
-    await tapText(tester, 'T1 · Ruộng bờ kênh');
     expect(find.text('Mở vụ mới'), findsOneWidget);
+    await tapText(tester, 'Mở vụ mới');
+    expect(find.text('Khai báo vụ mới'), findsOneWidget);
+    expect(find.text('Loại cây và mùa vụ'), findsOneWidget);
     await finish(tester);
   });
 }

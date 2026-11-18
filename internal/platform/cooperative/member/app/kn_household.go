@@ -257,6 +257,13 @@ func (s *Service) UpdateKNHousehold(ctx context.Context, ref uuid.UUID, area *st
 			if len(domain.Diff(before, after)) == 0 {
 				return nil
 			}
+			used, err := store.ActiveHouseholdArea(ctx, tx, h.Ref)
+			if err != nil {
+				return err
+			}
+			if used.IsPositive() && (nArea == nil || nArea.LessThan(used)) {
+				return problem.Validation.WithField("cultivated_area_ha", "không được nhỏ hơn tổng diện tích vụ đang canh tác ("+used.String()+" ha)")
+			}
 			ev := s.newProfileEvent(c, store.ProfileHousehold, h.Ref, h.CommuneCode, before, after, reason, key)
 			if err := store.InsertProfileEvent(ctx, tx, &ev); err != nil {
 				return err

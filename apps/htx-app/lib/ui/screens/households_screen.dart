@@ -9,6 +9,7 @@ import '../../domain/cropcycle.dart';
 import '../../domain/roles.dart';
 import '../providers.dart';
 import 'plots_screen.dart';
+import 'household_seasons_screen.dart';
 
 final _householdsProvider = FutureProvider.autoDispose
     .family<List<HouseholdItem>, String?>(
@@ -20,8 +21,8 @@ String _area(String? value) {
   return scaled == null ? '—' : formatScaled(scaled, 4, digits: 2);
 }
 
-/// Nông hộ của HTX (Đại diện HTX, Thành viên HTX — chỉ xem, FN-04). Chạm → lô
-/// của hộ → mở vụ hộ / ghi nhật ký hộ theo ma trận (HTX US-SEASON-02,
+/// Nông hộ của HTX (Đại diện HTX, Thành viên HTX — chỉ xem, FN-04). Chạm → vụ
+/// theo hộ; vẫn có lối xem thửa/vụ cũ để ghi nhật ký theo ma trận (HTX US-SEASON-02,
 /// US-LOG-02); biểu tượng điện thoại → gọi nhanh, chỉ Đại diện HTX (HTX
 /// US-HH-03, SĐT đọc từ máy chủ lúc bấm, không lưu trên máy).
 class HouseholdsScreen extends ConsumerStatefulWidget {
@@ -107,11 +108,13 @@ class _HouseholdsScreenState extends ConsumerState<HouseholdsScreen> {
                       const Icon(Icons.chevron_right),
                     ],
                   ),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => HouseholdPlotsScreen(household: h),
-                    ),
-                  ),
+                  onTap: () => Navigator.of(context)
+                      .push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => HouseholdSeasonsScreen(household: h),
+                        ),
+                      )
+                      .then((_) => ref.invalidate(_householdsProvider(null))),
                 ),
               ),
           ],
