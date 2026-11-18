@@ -198,3 +198,30 @@ func TestAH61_SOPPriorityAndNoActiveSOP(t *testing.T) {
 		t.Fatalf("no SOP: %v", r.body)
 	}
 }
+
+func TestAH61_CapacityFollowsHouseholdAcrossCooperatives(t *testing.T) {
+	f := newFixture(t)
+	f.publishedSOP("AH61 transferred household", "OM5451")
+	f.householdLand("2", true)
+	old := f.memberA().open(f.p1, nil)
+	expect(t, old, http.StatusCreated, "legacy season before transfer")
+	pool := pgtest.Get(t).AdminPool(t, migrations.PF)
+	if _, err := pool.Exec(context.Background(), `UPDATE pf_coop.household_membership SET org_ref=$1 WHERE tenant_id=$2 AND household_ref=$3 AND until_date IS NULL`, f.coopB, f.tenant, f.h1); err != nil {
+		t.Fatal(err)
+	}
+	path := "/v1/cooperatives/" + f.coopB.String() + "/households/" + f.h1.String() + "/seasons"
+	r := f.memberB().post(path, householdOpenBody(map[string]any{"area_ha": "0.60"}))
+	expect(t, r, http.StatusConflict, "old HTX usage still reserves household capacity")
+	if r.body["remaining_area_ha"] != "0.5" {
+		t.Fatalf("capacity after transfer: %v", r.body)
+	}
+	// The new HTX can read the budget, but cannot read the old HTX season.
+	expect(t, f.memberB().get("/v1/cropcycle/seasons/"+str(old.body, "season", "season_ref")), http.StatusNotFound, "old HTX season remains hidden")
+	// Closing the old season updates the aggregate through a trigger even though
+	// that old HTX no longer has household read scope.
+	cancel := f.memberA().post("/v1/cropcycle/seasons/"+str(old.body, "season", "season_ref")+"/cancel", map[string]any{
+		"supersedes_id": str(old.body, "event", "id"), "correction_reason": "Đóng vụ cũ sau khi hộ chuyển HTX",
+	})
+	expect(t, cancel, http.StatusCreated, "old season can still be cancelled")
+	expect(t, f.memberB().post(path, householdOpenBody(map[string]any{"area_ha": "2.00"})), http.StatusCreated, "closed season releases capacity")
+}

@@ -45,7 +45,7 @@ func (f *fixture) seedSourceOrgs() {
 			f.t.Fatal(err)
 		}
 		if _, err := pool.Exec(context.Background(), `INSERT INTO pf_coop.household_membership
-		 (tenant_id,household_ref,org_ref,since_date) VALUES ($1,$2,$3,'2024-01-01')`, f.tenant, h.ref, h.coop); err != nil {
+		 (tenant_id,id,household_ref,org_ref,since_date) VALUES ($1,$2,$3,$4,'2024-01-01')`, f.tenant, ids.New(), h.ref, h.coop); err != nil {
 			f.t.Fatal(err)
 		}
 	}

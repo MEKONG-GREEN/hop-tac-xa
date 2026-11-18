@@ -24,8 +24,12 @@ func TestAH50_HouseholdAreasAndScope(t *testing.T) {
 	}
 	hh := uuid.MustParse(str(h.body, "household", "household_ref"))
 	pool := f.env.AdminPool(t, migrations.PF)
-	seed := func(tid, coop uuid.UUID, area, status string) {
+	seed := func(tid, coop uuid.UUID, area, status string, otherHousehold ...uuid.UUID) {
 		t.Helper()
+		ref := hh
+		if len(otherHousehold) > 0 {
+			ref = otherHousehold[0]
+		}
 		_, err := pool.Exec(context.Background(), `INSERT INTO pf_coop.season_current
 		 (tenant_id, season_ref, plot_ref, plot_code, household_ref, cooperative_ref, commune_code,
 		 season_code, season_year, variety_code, sop_template_ref, sop_version_id, sop_version_no,
@@ -34,7 +38,7 @@ func TestAH50_HouseholdAreasAndScope(t *testing.T) {
 		 VALUES ($1,$2,$3,'AH50',$4,$5,'30001','DX',2026,'OM18',$6,$7,1,
 		 '2026-01-01','2026-04-01','2026-03-20',$8::numeric,$9,$10,1,'missing','denied',false,$11,now(),
 		 CASE WHEN $9='completed' THEN $12::uuid ELSE NULL END)`,
-			tid, ids.New(), ids.New(), hh, coop, ids.New(), ids.New(), area, status, ids.New(), ids.New(), ids.New())
+			tid, ids.New(), ids.New(), ref, coop, ids.New(), ids.New(), area, status, ids.New(), ids.New(), ids.New())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -43,7 +47,7 @@ func TestAH50_HouseholdAreasAndScope(t *testing.T) {
 	seed(f.tenant, tr.c1, "0.50", "open")
 	seed(f.tenant, tr.c1, "10", "completed")
 	seed(f.tenant, tr.c1, "20", "cancelled")
-	seed(f.tenant, tr.c2, "30", "open")
+	seed(f.tenant, tr.c2, "30", "open", ids.New())
 	seed(ids.New(), tr.c1, "40", "open")
 	path := "/v1/cooperatives/" + tr.c1.String() + "/households"
 	assertArea := func(c caller, used, remaining string, allowed bool) {

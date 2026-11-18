@@ -13,8 +13,8 @@ import (
 // LockHousehold before using this total to authorize a write.
 func ActiveHouseholdArea(ctx context.Context, tx pgx.Tx, ref uuid.UUID) (decimal.Decimal, error) {
 	var raw string
-	if err := tx.QueryRow(ctx, `SELECT coalesce(sum(area_ha), 0)::text
-	  FROM pf_coop.season_current WHERE household_ref = $1 AND status = 'open'`, ref).Scan(&raw); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT coalesce(sum(active_area_ha),0)::text
+	  FROM pf_coop.household_season_capacity WHERE household_ref = $1`, ref).Scan(&raw); err != nil {
 		return decimal.Zero, err
 	}
 	return decimal.NewFromString(raw)
@@ -27,10 +27,10 @@ func ActiveAreas(ctx context.Context, tx pgx.Tx, coop uuid.UUID, refs []uuid.UUI
 	if len(refs) == 0 {
 		return out, nil
 	}
-	rows, err := tx.Query(ctx, `SELECT household_ref, sum(area_ha)::text
-	  FROM pf_coop.season_current
-	  WHERE cooperative_ref = $1 AND household_ref = ANY($2::uuid[]) AND status = 'open'
-	  GROUP BY household_ref`, coop, uuidStrings(refs))
+	rows, err := tx.Query(ctx, `SELECT c.household_ref,c.active_area_ha::text
+	  FROM pf_coop.household_season_capacity c
+	  JOIN pf_coop.household_membership m ON m.tenant_id=c.tenant_id AND m.household_ref=c.household_ref
+	  WHERE m.org_ref=$1 AND m.until_date IS NULL AND c.household_ref=ANY($2::uuid[])`, coop, uuidStrings(refs))
 	if err != nil {
 		return nil, err
 	}
