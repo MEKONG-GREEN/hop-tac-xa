@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	ErrHouseholdSeasonArea     = errors.New("Diện tích phải lớn hơn 0, tối đa hai chữ số thập phân và không vượt 9999999999,99 ha")
+	ErrHouseholdSeasonArea     = errors.New("diện tích phải lớn hơn 0, tối đa hai chữ số thập phân và không vượt 9999999999,99 ha")
 	householdSeasonAreaPattern = regexp.MustCompile(`^(0|[1-9][0-9]{0,9})(\.[0-9]{1,2})?$`)
 	householdSeasonMaxArea     = decimal.RequireFromString("9999999999.99")
 )
