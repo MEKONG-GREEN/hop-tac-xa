@@ -116,7 +116,7 @@ func (s *Service) OpenHouseholdSeason(ctx context.Context, in HouseholdOpenInput
 		if err != nil {
 			return SeasonResult{}, err
 		}
-		if h == nil || h.CooperativeRef != in.CooperativeRef {
+		if h == nil || h.TenantID != a.p.TenantID || h.CooperativeRef != in.CooperativeRef {
 			return SeasonResult{}, ErrSeasonHousehold
 		}
 		if !h.Active {
@@ -213,7 +213,7 @@ func sameHouseholdGPS(a, b domain.GPS) bool {
 
 // Existing plot routes allocate from the same household capacity. A legacy plot
 // without a household keeps its old behavior; it cannot allocate a real household.
-func checkLegacyHouseholdArea(ctx context.Context, tx pgx.Tx, coop, hh uuid.UUID, area decimal.Decimal) error {
+func checkLegacyHouseholdArea(ctx context.Context, tx pgx.Tx, tid, coop, hh uuid.UUID, area decimal.Decimal) error {
 	if hh == uuid.Nil {
 		return nil
 	}
@@ -224,7 +224,7 @@ func checkLegacyHouseholdArea(ctx context.Context, tx pgx.Tx, coop, hh uuid.UUID
 	if err != nil {
 		return err
 	}
-	if h == nil || h.CooperativeRef != coop {
+	if h == nil || h.TenantID != tid || h.CooperativeRef != coop {
 		return ErrSeasonHousehold
 	}
 	if !h.Active {

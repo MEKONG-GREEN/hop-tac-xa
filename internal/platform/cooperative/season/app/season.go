@@ -202,7 +202,7 @@ func (s *Service) openSeason(ctx context.Context, a access, in OpenInput) (Seaso
 		} else if prev != nil {
 			return SeasonResult{}, ErrIDReused.WithField("season_ref", "đã dùng cho vụ khác")
 		}
-		if err := checkLegacyHouseholdArea(ctx, tx, pl.CooperativeRef, pl.HouseholdRef, pl.AreaHa); err != nil {
+		if err := checkLegacyHouseholdArea(ctx, tx, a.p.TenantID, pl.CooperativeRef, pl.HouseholdRef, pl.AreaHa); err != nil {
 			return SeasonResult{}, err
 		}
 		choice, err := resolveSOP(ctx, tx, in.SOPVersionID, in.VarietyCode, pl.CooperativeRef)
