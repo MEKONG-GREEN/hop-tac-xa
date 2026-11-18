@@ -48290,7 +48290,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Vụ đang canh tác và diện tích còn lại tại lần ghi; replay trả đúng phản hồi cũ */
+            /** @description Vụ đang canh tác; replay trả đúng phản hồi cũ. Client tải lại danh sách hộ để cập nhật diện tích hiện tại. */
             201: {
                 headers: {
                     Location?: string;
@@ -48300,7 +48300,6 @@ export interface operations {
                 content: {
                     "application/json": {
                         season: components["schemas"]["HouseholdSeason"];
-                        remaining_area_ha: components["schemas"]["Decimal"];
                     };
                 };
             };

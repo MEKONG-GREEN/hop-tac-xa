@@ -14095,7 +14095,7 @@ paths:
             schema: {$ref: "#/components/schemas/HouseholdSeasonOpenInput"}
       responses:
         "201":
-          description: Vụ đang canh tác và diện tích còn lại tại lần ghi; replay trả đúng phản hồi cũ
+          description: Vụ đang canh tác; replay trả đúng phản hồi cũ. Client tải lại danh sách hộ để cập nhật diện tích hiện tại.
           headers:
             Location: {schema: {type: string}}
             Idempotent-Replayed: {schema: {type: string}}
@@ -14103,10 +14103,9 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [season, remaining_area_ha]
+                required: [season]
                 properties:
                   season: {$ref: "#/components/schemas/HouseholdSeason"}
-                  remaining_area_ha: {$ref: "#/components/schemas/Decimal"}
         "400": {$ref: "#/components/responses/Problem"}
         "401": {$ref: "#/components/responses/Problem"}
         "403": {$ref: "#/components/responses/Problem"}
