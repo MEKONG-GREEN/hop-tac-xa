@@ -258,6 +258,11 @@ func TestAH61_CapacityFollowsHouseholdAcrossCooperatives(t *testing.T) {
 
 func TestAH61_MultipleCropsShareBudgetAndProjectionIsReadOnly(t *testing.T) {
 	f := newFixture(t)
+	var missing int
+	if err := pgtest.Get(t).AdminPool(t, migrations.PF).QueryRow(context.Background(),
+		`SELECT count(*) FROM shared.v_missing_rls`).Scan(&missing); err != nil || missing != 0 {
+		t.Fatalf("capacity projection must preserve global RLS gate: %d (%v)", missing, err)
+	}
 	f.publishedSOP("AH61 rice", "OM5451")
 	f.householdLand("1", true)
 	coffee := f.sopAdmin.adminPost("/v1/cropcycle/sops", sopBody("AH61 coffee", map[string]any{"crop": "CAF", "variety_code": "ARA"}))
