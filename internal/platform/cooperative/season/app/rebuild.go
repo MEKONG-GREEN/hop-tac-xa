@@ -85,6 +85,13 @@ func rebuild(ctx context.Context, tx pgx.Tx, tid uuid.UUID) (RebuildResult, erro
 	}
 	steps := make([]step, 0, len(logs)+len(reviews))
 	for i := range logs {
+		if logs[i].EntryKind == "household" {
+			if err := store.SaveHouseholdTask(ctx, tx, logs[i]); err != nil {
+				return res, err
+			}
+			res.Logs++
+			continue
+		}
 		steps = append(steps, step{log: &logs[i], at: logs[i].RecordedAt.UnixNano()})
 	}
 	for i := range reviews {
@@ -116,7 +123,7 @@ func rebuild(ctx context.Context, tx pgx.Tx, tid uuid.UUID) (RebuildResult, erro
 			return res, err
 		}
 	}
-	res.Logs = len(logOrder)
+	res.Logs += len(logOrder)
 
 	keys, err := store.CoopSeasonKeys(ctx, tx)
 	if err != nil {

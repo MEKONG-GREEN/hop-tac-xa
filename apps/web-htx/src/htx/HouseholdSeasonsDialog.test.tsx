@@ -17,6 +17,7 @@ function setup(persona: string) {
   const api = createApiClient({ baseUrl: "https://api.test", getAccessToken: () => "test", fetch: async (input) => {
     const req = input as Request;
     const path = new URL(req.url).pathname;
+    if (path.endsWith("/checklist")) return Response.json({ season_ref: "new-season", current_event_id: "event", progress: { as_of_date: "2026-11-18", stages: [], done: 0, skipped: 0, total: 0, percent: null }, records: [] });
     if (path.endsWith("/plan")) return Response.json({ as_of_date: "2026-11-18", stages: [] });
     if (req.method === "POST") {
       const body = await req.json() as Record<string, unknown>;

@@ -26,6 +26,28 @@ class HouseholdSeasonService {
   final SyncApi api;
   final LocationSource location;
 
+  Future<HouseholdJson> checklist(
+    String coop,
+    String household,
+    String season,
+  ) => api.getJson(
+    '/v1/cooperatives/$coop/households/$household/seasons/$season/checklist',
+  );
+
+  Future<HouseholdJson> completeTask(
+    String coop,
+    String household,
+    String season,
+    HouseholdJson body,
+    String key,
+  ) => api.sendJson(
+    method: 'POST',
+    path:
+        '/v1/cooperatives/$coop/households/$household/seasons/$season/task-completions',
+    idempotencyKey: key,
+    body: {...body, 'channel': 'app'},
+  );
+
   Future<SeasonPlan> previewPlan(
     String coop,
     String household,

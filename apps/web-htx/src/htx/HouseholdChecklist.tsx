@@ -1,0 +1,83 @@
+"use client";
+
+import { useState } from "react";
+import { unwrap } from "@/api/client";
+import type { components } from "@/api/generated/application";
+import { newIdempotencyKey } from "@/api/idempotency";
+import { useAuth } from "@/auth/AuthProvider";
+import { matrixAllows } from "@/auth/permissions";
+import { ProblemAlert } from "@/components/ProblemAlert";
+import { Loading } from "@/components/ui";
+import { formatDate } from "@/lib/format";
+import { toApiProblem, useAsync } from "@/lib/useAsync";
+import type { ApiProblem } from "@/api/problem";
+
+type S = components["schemas"];
+const LABEL: Record<string, string> = { upcoming: "Chưa đến hạn", due: "Đến hạn", overdue: "Trễ hạn", waiting_anchor: "Chờ mốc", done: "Đã xong", done_early: "Xong sớm", done_on_time: "Xong đúng hạn", done_late: "Xong trễ", skipped: "Bỏ qua", not_started: "Chưa thực hiện", in_progress: "Đang thực hiện" };
+
+// A bounded, best-effort capture. Cancellation of the confirmation never posts.
+function captureGPS(): Promise<S["CropGPS"]> {
+  if (!navigator.geolocation) return Promise.resolve({ source: "no_device" });
+  return new Promise((resolve) => {
+    let finished = false;
+    const timer = setTimeout(() => finish({ source: "no_device" }), 2000);
+    const finish = (gps: S["CropGPS"]) => { if (!finished) { finished = true; clearTimeout(timer); resolve(gps); } };
+    try { navigator.geolocation.getCurrentPosition((p) => finish({ source: "device", lon: p.coords.longitude.toFixed(7), lat: p.coords.latitude.toFixed(7), accuracy_m: p.coords.accuracy.toFixed(2) }), () => finish({ source: "denied" }), { timeout: 2000, maximumAge: 60000 }); }
+    catch { finish({ source: "denied" }); }
+  });
+}
+
+export function HouseholdChecklist({ coopRef, householdRef, seasonRef }: { coopRef: string; householdRef: string; seasonRef: string }) {
+  const { api, principal } = useAuth();
+  const canWrite = matrixAllows(principal, "KHMV-FN-05", "C");
+  const path = { ref: coopRef, household_ref: householdRef, season_ref: seasonRef };
+  const load = useAsync(() => unwrap(api.GET("/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/checklist", { params: { path } })), [api, coopRef, householdRef, seasonRef]);
+  const [updated, setUpdated] = useState<S["HouseholdChecklist"] | null>(null);
+  const [pending, setPending] = useState<{ seq: number; name: string; event: string; key: string; gps: Promise<S["CropGPS"]> } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ApiProblem | null>(null);
+  const data = !load.loading && !load.error && load.data ? load.data : updated ?? undefined;
+  const refresh = () => { setUpdated(null); load.reload(); };
+  const confirm = async () => {
+    if (!pending || busy) return;
+    setBusy(true); setError(null);
+    try {
+      const gps = await pending.gps;
+      const result = await unwrap(api.POST("/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/task-completions", {
+        params: { path, header: { "Idempotency-Key": pending.key } },
+        body: { step_seq: pending.seq, expected_season_event_id: pending.event, gps, channel: "web" },
+      }));
+      setUpdated(result.checklist); setPending(null); load.reload();
+    } catch (e) {
+      const problem = toApiProblem(e); setError(problem);
+      if ((problem.status === 409 && problem.code !== "idempotency_in_progress") || problem.code === "cropcycle.task_season_state" || problem.code === "cropcycle.task_stage_locked") { setPending(null); refresh(); }
+    } finally { setBusy(false); }
+  };
+  return <section aria-label="Checklist công việc">
+    <h3>Checklist công việc</h3>
+    {load.loading && !updated ? <Loading /> : null}
+    {load.error ? <ProblemAlert problem={load.error} onRetry={refresh} /> : null}
+    {error ? <ProblemAlert problem={error} /> : null}
+    {data ? <>
+      <p>Tiến độ: <strong>{data.progress.percent == null ? "—" : `${data.progress.percent}%`}</strong> · {data.progress.done}/{data.progress.total - data.progress.skipped} việc</p>
+      {data.progress.stages.map((stage) => <section key={stage.seq} aria-label={stage.name}>
+        <h4>{stage.name} · {stage.status === "done" ? "Đã xong" : LABEL[stage.status]}</h4>
+        <ul>{stage.tasks.map((task) => {
+          const record = data.records.find((r) => r.step_seq === task.seq && r.state === "done");
+          return <li key={task.seq}>
+            {canWrite && task.can_complete ? <label><input type="checkbox" aria-label={`Hoàn thành ${task.name}`} checked={pending?.seq === task.seq} disabled={busy} onChange={() => { setError(null); setPending(pending?.seq === task.seq ? null : { seq: task.seq, name: task.name, event: data.current_event_id, key: newIdempotencyKey(), gps: captureGPS() }); }} /> {task.name}</label> : <span>{task.name}</span>}
+            <span className="chip c-info">{LABEL[task.completion_status] ?? task.completion_status}</span>
+            {task.undated ? <span> · Chưa đặt ngày</span> : task.from_date ? <span> · {formatDate(task.from_date)}{task.to_date ? ` – ${formatDate(task.to_date)}` : " trở đi"}</span> : null}
+            {record ? <span> · Làm xong {formatDate(record.done_on)}{record.gps_missing ? " · Thiếu GPS" : " · Đã ghi nhận vị trí"}{record.inputs.map((i) => ` · ${i.name}: ${i.qty} ${i.unit}`).join("")}</span> : null}
+          </li>;
+        })}</ul>
+      </section>)}
+      <button type="button" className="btn btn-o btn-sm" disabled={busy} onClick={() => { setPending(null); refresh(); }}>Tải lại checklist</button>
+    </> : null}
+    {pending ? <div role="region" aria-label="Xác nhận hoàn thành" className="row" style={{ position: "sticky", bottom: 0, background: "var(--bg)", padding: 12, borderTop: "1px solid var(--line)", zIndex: 2 }}>
+      <span>{pending.name} · Ngày làm xong: Hôm nay (giờ Việt Nam)</span>
+      <button type="button" className="btn btn-o" disabled={busy} onClick={() => setPending(null)}>Hủy</button>
+      <button type="button" className="btn btn-p" disabled={busy} onClick={() => void confirm()}>{busy ? "Đang ghi…" : "Xác nhận"}</button>
+    </div> : null}
+  </section>;
+}
