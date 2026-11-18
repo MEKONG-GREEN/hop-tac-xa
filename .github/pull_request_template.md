@@ -1,4 +1,4 @@
-<!-- Quy tắc đầy đủ: AGENTS.md. PR chỉ vào `dev`, không vào `main`. Liên kết trong mẫu dùng URL đầy đủ (blob/dev) vì thân PR không hiểu đường dẫn tương đối theo tệp. -->
+<!-- Quy tắc đầy đủ: AGENTS.md. PR của agent vào `dev-agent`; PR đưa bản tích hợp vào `dev` cần review chéo. Không vào `main`. Thay <base> bằng nhánh đích thật khi ghi bằng chứng kiểm thử. -->
 
 ## Ticket
 
@@ -29,7 +29,7 @@
 ## Checklist
 
 - [ ] Mọi lệnh `go` (test, cổng, sinh lại) chạy với `GOTOOLCHAIN` = dòng `toolchain` trong `go.mod`, `go version` khớp — Go mới hơn của máy có thể gây lỗi giả (#144) ([AGENTS.md §8](https://github.com/MEKONG-GREEN/hop-tac-xa/blob/dev/AGENTS.md#toolchain-go-đặt-trước-mọi-lệnh-go))
-- [ ] Nhánh từ `origin/dev`, không xếp chồng (nếu có: SHA gốc + `git rebase --onto` đã ghi trong issue)
+- [ ] Gói agent tạo từ `origin/dev-agent`, PR vào `dev-agent`; dependency đã có trên nhánh đích. PR đưa vào `dev` ghi rõ phạm vi tích hợp.
 - [ ] Commit tiếng Việt `<PKG>: …`; commit AI có `Co-Authored-By`
 - [ ] Không gọi port module khác / I-O ngoài trong DB transaction ([quy ước](https://github.com/MEKONG-GREEN/hop-tac-xa/blob/dev/docs/conventions/transactions-and-io.md))
 - [ ] Cấu hình kênh ngoài fail-closed; worker kiểm phụ thuộc; claim nguyên tử ([quy ước](https://github.com/MEKONG-GREEN/hop-tac-xa/blob/dev/docs/conventions/fail-closed-config.md))
@@ -41,7 +41,9 @@
 - [ ] Tài liệu gói (`docs/kn/gia-dinh/<PKG>.md`, `docs/roadmap.d/…/<PKG>.md`, mã lỗi) — `docscheck` xanh
 - [ ] Không bí mật, không đường dẫn riêng của máy
 
-## Review chéo
+## Review
+
+PR vào `dev-agent`: ghi kết quả tự review và CI tại đúng SHA đầu PR; agent merge sau khi mọi cổng đạt. PR đưa vào `dev`: review chéo như dưới đây.
 
 <!-- Bên khác chủ gói bình luận một dòng ở đầu dòng (không trong khối code), SHA phải trùng đầu PR; đầu PR đổi thì review lại. -->
 `Review OK — <claude|codex|tên> (review chéo tại <sha đầu PR>)`

@@ -10,7 +10,10 @@ Repo này tách từ Agrigreen_demo_v2 (xem [README.md](README.md#nguồn-gốc)
 
 ## Nhánh và commit
 
-- Một nhánh mỗi gói việc, tạo từ `dev`; gộp vào `dev` qua Pull Request. Không push thẳng `main`.
+- Công việc do agent thực hiện: một nhánh mỗi gói việc, tạo từ `dev-agent`; tạo Pull Request vào `dev-agent`. Agent tự review diff, kiểm dependency đã có trên nhánh đích, chờ toàn bộ CI xanh ở đúng SHA rồi được merge vào `dev-agent` theo chỉ đạo của chủ repo ngày 18/11/2026. Không bỏ qua kiểm thử hoặc bịa bằng chứng review.
+- `dev-agent` là nhánh tích hợp để ticket sau dùng kết quả ticket trước mà không chờ đưa vào `dev`. Dependency kỹ thuật vẫn phải được triển khai và kiểm tra; không chỉ đổi trạng thái Jira để coi dependency đã xong.
+- Đưa thay đổi từ `dev-agent` vào `dev` qua PR riêng và review chéo. Không tự merge vào `dev` hoặc push thẳng `main` nếu chưa có chỉ đạo cho lần đưa lên đó.
+- Các lệnh migratecheck/contractcheck của gói agent so với `origin/dev-agent`; CI lấy base từ nhánh đích PR. Không sửa migration đã có trên nhánh đích hoặc `dev`.
 - Commit message tiếng Việt, tiền tố mã gói.
 
 ## Tệp sinh — không sửa tay

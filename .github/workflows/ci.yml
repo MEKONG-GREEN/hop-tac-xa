@@ -4,9 +4,9 @@ name: ci
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main, dev, dev-agent]
   pull_request:
-    branches: [main, dev]
+    branches: [main, dev, dev-agent]
   workflow_dispatch:
 
 permissions:
