@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../application/household_season_service.dart';
 import '../../application/manager_service.dart';
 import '../../domain/roles.dart';
+import '../../domain/season_plan.dart';
+import '../season_plan_view.dart';
 import '../providers.dart';
 import 'households_screen.dart';
 import 'open_season_screen.dart' show parseDisplayDay;
@@ -55,8 +57,13 @@ class _HouseholdSeasonsScreenState
   void _reload() => setState(() {
     _data = _load();
   });
-  void _show(HouseholdJson season) {
+  void _show(String coop, HouseholdJson season) {
     final snapshot = (season['sop_snapshot'] as Map).cast<String, Object?>();
+    final plan = ref.services.crop.householdSeasons.plan(
+      coop,
+      widget.household.ref,
+      season['season_ref'] as String,
+    );
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
@@ -78,6 +85,20 @@ class _HouseholdSeasonsScreenState
               Text('${snapshot['name']} · SOP bản ${snapshot['version_no']}'),
               for (final step in snapshot['steps'] as List? ?? const [])
                 if (step is Map) Text('• ${step['name']}'),
+              FutureBuilder<SeasonPlan>(
+                future: plan,
+                builder: (context, state) {
+                  if (state.connectionState != ConnectionState.done) {
+                    return const CircularProgressIndicator();
+                  }
+                  if (state.hasError) {
+                    return const Text(
+                      'Không tải được kế hoạch. Vui lòng đóng và mở lại để thử lại.',
+                    );
+                  }
+                  return SeasonPlanView(plan: state.data!);
+                },
+              ),
             ],
           ),
         ),
@@ -174,7 +195,7 @@ class _HouseholdSeasonsScreenState
                           subtitle: Text(
                             '${s['area_ha']} ha · ${s['status'] == 'open' ? 'Đang canh tác' : s['status']}',
                           ),
-                          onTap: () => _show(s),
+                          onTap: () => _show(d.coop, s),
                         ),
                       ),
                   ],
@@ -208,6 +229,8 @@ class _HouseholdSeasonOpenScreenState
   final _anchor = TextEditingController();
   final _ids = UuidV7Generator();
   late String _key;
+  late String _previewKey;
+  SeasonPlan? _plan;
   late Future<List<List<HouseholdJson>>> _catalogs;
   Future<List<HouseholdSopChoice>>? _sops;
   List<HouseholdSopChoice> _options = [];
@@ -221,6 +244,7 @@ class _HouseholdSeasonOpenScreenState
   void initState() {
     super.initState();
     _key = _ids.newId();
+    _previewKey = _ids.newId();
     _remaining = widget.household.remainingAreaHa;
     _catalogs = Future.wait(
       ['crop', 'rice_variety', 'season'].map(_service.catalog),
@@ -237,6 +261,8 @@ class _HouseholdSeasonOpenScreenState
 
   void _edit() {
     _key = _ids.newId();
+    _previewKey = _ids.newId();
+    _plan = null;
     _error = null;
   }
 
@@ -269,7 +295,39 @@ class _HouseholdSeasonOpenScreenState
       setState(() => _error = error);
       return;
     }
-    if (_step == 2 && _gps == null) {
+    if (_step == 2 && _plan == null) {
+      setState(() => _saving = true);
+      try {
+        final date = parseDisplayDay(_anchor.text)!;
+        final plan = await _service.previewPlan(
+          widget.coop,
+          widget.household.ref,
+          {
+            'crop_code': _crop,
+            'variety_code': _variety,
+            'sop_version_id': chosen,
+            'area_ha': _area.text,
+            'anchor_date': date.toIso8601String().substring(0, 10),
+          },
+          _previewKey,
+        );
+        if (!mounted) return;
+        setState(() => _plan = plan);
+      } catch (e) {
+        if (mounted) {
+          setState(
+            () => _error = e is ApiException
+                ? (e.detail ??
+                      'Không tính được kế hoạch. Kiểm tra dữ liệu rồi thử lại.')
+                : 'Cần mạng để tính kế hoạch. Dữ liệu nhập được giữ lại.',
+          );
+        }
+        return;
+      } finally {
+        if (mounted) setState(() => _saving = false);
+      }
+    }
+    if (_step == 3 && _gps == null) {
       setState(() => _saving = true);
       final gps = await _service.gps();
       if (!mounted) return;
@@ -278,7 +336,7 @@ class _HouseholdSeasonOpenScreenState
         _saving = false;
       });
     }
-    if (_step < 3) {
+    if (_step < 4) {
       setState(() {
         _step++;
         _error = null;
@@ -410,7 +468,7 @@ class _HouseholdSeasonOpenScreenState
                           child: Text(
                             _saving
                                 ? 'Đang xử lý…'
-                                : _step == 3
+                                : _step == 4
                                 ? 'Lưu vụ'
                                 : 'Tiếp tục',
                           ),
@@ -568,8 +626,17 @@ class _HouseholdSeasonOpenScreenState
                       ),
                     ),
                     Step(
-                      title: const Text('Xác nhận'),
+                      title: const Text('Kế hoạch'),
                       isActive: _step >= 3,
+                      content: _plan == null
+                          ? const Text(
+                              'Chọn giống, SOP và mốc gốc để tính kế hoạch.',
+                            )
+                          : SeasonPlanView(plan: _plan!),
+                    ),
+                    Step(
+                      title: const Text('Xác nhận'),
+                      isActive: _step >= 4,
                       content: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [

@@ -73,6 +73,9 @@ TestEnv householdEnv(String role) {
     return base(path, query);
   };
   env.server.onSend = (method, path, body) async {
+    if (path.endsWith('/season-plan-preview')) {
+      return {'as_of_date': '2026-11-18', 'stages': <Object?>[]};
+    }
     if (path != '/v1/cooperatives/$coopRef/households/$householdRef/seasons') {
       return null;
     }
@@ -136,6 +139,20 @@ void main() {
         '01/01/2030',
       );
       await tapText(tester, 'Tiếp tục');
+      expect(find.text('Kế hoạch dự kiến'), findsOneWidget);
+      await tapText(tester, 'Quay lại');
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Mốc gốc (dd/mm/yyyy)'),
+        '02/01/2030',
+      );
+      await tapText(tester, 'Tiếp tục');
+      final previews = env.server.sendCalls
+          .where((r) => r.$2.endsWith('/season-plan-preview'))
+          .toList();
+      expect(previews, hasLength(2));
+      expect(previews.last.$4?['anchor_date'], '2030-01-02');
+      expect(previews.last.$3, isNot(previews.first.$3));
+      await tapText(tester, 'Tiếp tục');
       expect(find.text('Thiếu GPS — vẫn lưu được.'), findsOneWidget);
       await tapText(tester, 'Lưu vụ');
       final posted = env.server.sendCalls
@@ -145,7 +162,7 @@ void main() {
                 '/v1/cooperatives/$coopRef/households/$householdRef/seasons',
           )
           .single;
-      expect(posted.$4?['anchor_date'], '2030-01-01');
+      expect(posted.$4?['anchor_date'], '2030-01-02');
       expect(posted.$4?['area_ha'], '0.25');
       expect(posted.$4?['gps'], {'source': 'denied'});
       expect(

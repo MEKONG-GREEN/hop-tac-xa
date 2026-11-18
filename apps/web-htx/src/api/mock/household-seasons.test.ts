@@ -29,6 +29,15 @@ describe("AH-61 mock route registration and budget", () => {
     const representative = client("htx");
     const detail = await unwrap(representative.GET("/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}", { params: { path: { ...path, season_ref: first.season.season_ref } } }));
     expect(detail.sop_snapshot).toEqual(first.season.sop_snapshot);
+    const readPlan = await unwrap(representative.GET("/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/plan", { params: { path: { ...path, season_ref: first.season.season_ref } } }));
+    expect(readPlan.sop_version_id).toBe(first.season.sop_snapshot.version_id);
+    expect(readPlan.current_event_id).toBe(first.season.current_event_id);
+    const planInput = { crop_code: body.crop_code, variety_code: body.variety_code, anchor_date: body.anchor_date, area_ha: body.area_ha, sop_version_id: first.season.sop_snapshot.version_id };
+    const preview = await unwrap(api.POST("/v1/cooperatives/{ref}/households/{household_ref}/season-plan-preview", { params: { path, header: { "Idempotency-Key": newIdempotencyKey() } }, body: planInput }));
+    expect(preview.current_event_id).toBeNull();
+    expect(preview.stages).toEqual(readPlan.stages);
+    const deniedPlan = await representative.POST("/v1/cooperatives/{ref}/households/{household_ref}/season-plan-preview", { params: { path, header: { "Idempotency-Key": newIdempotencyKey() } }, body: planInput });
+    expect(deniedPlan.response.status).toBe(403);
     const denied = await representative.POST("/v1/cooperatives/{ref}/households/{household_ref}/seasons", { params: { path, header: { "Idempotency-Key": newIdempotencyKey() } }, body });
     expect(denied.response.status).toBe(403);
   });

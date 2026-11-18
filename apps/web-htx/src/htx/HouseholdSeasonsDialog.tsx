@@ -16,6 +16,7 @@ import { LoadMore, Loading } from "@/components/ui";
 import { usePagedList } from "@/api/pagination";
 import { formatDecimal } from "@/lib/decimal";
 import { toApiProblem, useAsync } from "@/lib/useAsync";
+import { SeasonPlan } from "./SeasonPlan";
 
 type S = components["schemas"];
 type GPS = S["CropGPS"];
@@ -78,6 +79,15 @@ export function HouseholdSeasonsDialog({ coopRef, household, onClose, onSaved }:
     })).then((rows) => rows.filter((r) => r !== null));
   }, [api, metadata.data, coopRef, crop, variety]);
   const selected = version || (choices.data?.length === 1 ? choices.data[0]?.id ?? "" : "");
+  const planReady = opening && canCreate && matrixAllows(principal, "KHMV-FN-04", "C") && !choices.loading &&
+    !!crop && !!variety && !!selected && !householdAreaError(area) && /^\d{4}-\d{2}-\d{2}$/.test(anchor);
+  const preview = useAsync(async () => planReady ? unwrap(api.POST("/v1/cooperatives/{ref}/households/{household_ref}/season-plan-preview", {
+    params: { path, header: { "Idempotency-Key": newIdempotencyKey() } },
+    body: { crop_code: crop, variety_code: variety, sop_version_id: selected, area_ha: area, anchor_date: anchor },
+  })) : null, [api, coopRef, household.household_ref, planReady, crop, variety, selected, area, anchor]);
+  const detailPlan = useAsync(async () => detail ? unwrap(api.GET("/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/plan", {
+    params: { path: { ...path, season_ref: detail.season_ref } },
+  })) : null, [api, coopRef, household.household_ref, detail?.season_ref, detail?.current_event_id]);
   const edit = () => { setKey(newIdempotencyKey()); setInputError(null); setProblem(null); };
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -120,8 +130,9 @@ export function HouseholdSeasonsDialog({ coopRef, household, onClose, onSaved }:
         <label className="field">SOP đang áp dụng<select className="select" required value={selected} onChange={(e) => { setVersion(e.target.value); edit(); }}><option value="">Chọn SOP</option>{choices.data?.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}</select></label>
         <button type="button" className="btn btn-o btn-sm" onClick={() => { choices.reload(); setVersion(""); edit(); }}>Tải lại SOP</button>
         <label className="field">{choices.data?.find((v) => v.id === selected)?.anchor || "Mốc gốc"}<input className="input" required type="date" value={anchor} onChange={(e) => { setAnchor(e.target.value); edit(); }} /></label>
+        {!planReady ? <p>Chọn giống, SOP, diện tích và mốc gốc để xem kế hoạch.</p> : preview.loading ? <Loading label="Đang tính kế hoạch…" /> : preview.error ? <ProblemAlert problem={preview.error} onRetry={preview.reload} /> : preview.data ? <SeasonPlan plan={preview.data} /> : null}
         <p className="small">Bạn tự chọn mốc gốc. Khi lưu, trình duyệt hỏi quyền vị trí; từ chối vẫn mở vụ được và ghi “Thiếu GPS”.</p>
-        <button className="btn btn-p" disabled={metadata.loading || choices.loading || !selected} type="submit">{busy ? "Đang lưu…" : "Lưu vụ"}</button>
+        <button className="btn btn-p" disabled={metadata.loading || choices.loading || !selected || (planReady && (preview.loading || !!preview.error))} type="submit">{busy ? "Đang lưu…" : "Lưu vụ"}</button>
       </fieldset>
       {inputError ? <p role="alert">{inputError}</p> : null}
       {problem ? <ProblemAlert problem={problem} /> : null}
@@ -139,6 +150,7 @@ export function HouseholdSeasonsDialog({ coopRef, household, onClose, onSaved }:
       <p>{detail.sop_snapshot.anchor_name}: {detail.anchor_date} · {detail.gps_missing ? "Thiếu GPS" : "Đã ghi nhận vị trí"}</p>
       <p>SOP bản {detail.sop_snapshot.version_no} · Diện tích {formatDecimal(detail.area_ha, 2)} ha</p>
       <ol>{detail.sop_snapshot.steps.map((step, i) => <li key={i}>{step.name}</li>)}</ol>
+      {detailPlan.loading ? <Loading label="Đang tải kế hoạch…" /> : detailPlan.error ? <ProblemAlert problem={detailPlan.error} onRetry={detailPlan.reload} /> : detailPlan.data ? <SeasonPlan plan={detailPlan.data} /> : null}
     </section> : null}
   </Dialog>;
 }
