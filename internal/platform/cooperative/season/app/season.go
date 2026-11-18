@@ -202,6 +202,9 @@ func (s *Service) openSeason(ctx context.Context, a access, in OpenInput) (Seaso
 		} else if prev != nil {
 			return SeasonResult{}, ErrIDReused.WithField("season_ref", "đã dùng cho vụ khác")
 		}
+		if err := checkLegacyHouseholdArea(ctx, tx, pl.CooperativeRef, pl.HouseholdRef, pl.AreaHa); err != nil {
+			return SeasonResult{}, err
+		}
 		choice, err := resolveSOP(ctx, tx, in.SOPVersionID, in.VarietyCode, pl.CooperativeRef)
 		if err != nil {
 			return SeasonResult{}, err
@@ -505,7 +508,7 @@ func (s *Service) correctSeason(ctx context.Context, a access, in CorrectSeasonI
 		if err != nil {
 			return SeasonResult{}, err
 		}
-		if cur == nil || !a.sees(cur.CommuneCode, cur.CooperativeRef, cur.HouseholdRef) {
+		if cur == nil || cur.EntryKind != "" || !a.sees(cur.CommuneCode, cur.CooperativeRef, cur.HouseholdRef) {
 			return SeasonResult{}, ErrSeasonNotFound
 		}
 		if err := a.canWrite(cur.CooperativeRef, cur.HouseholdRef); err != nil {
@@ -603,7 +606,7 @@ func (s *Service) GetSeason(ctx context.Context, ref uuid.UUID) (SeasonDetail, e
 		if err != nil {
 			return err
 		}
-		if cur == nil || !a.sees(cur.CommuneCode, cur.CooperativeRef, cur.HouseholdRef) {
+		if cur == nil || cur.EntryKind != "" || !a.sees(cur.CommuneCode, cur.CooperativeRef, cur.HouseholdRef) {
 			return ErrSeasonNotFound
 		}
 		d.Season = *cur

@@ -363,7 +363,7 @@ func ListSeasons(ctx context.Context, tx pgx.Tx, f SeasonFilter) ([]Season, erro
 	    AND ($5::uuid IS NULL OR s.cooperative_ref = $5::uuid) AND ($6::uuid IS NULL OR s.plot_ref = $6::uuid)
 	    AND ($7::text = '' OR s.status = $7::text) AND ($8::text = '' OR s.season_code = $8::text)
 	    AND ($9::int = 0 OR s.season_year = $9::int) AND ($10::text = '' OR s.variety_code = $10::text)
-	    AND s.season_ref > $11::uuid
+	    AND s.entry_kind IS NULL AND s.season_ref > $11::uuid
 	  ORDER BY s.season_ref LIMIT $12::int`, args...)
 	if err != nil {
 		return nil, err
@@ -377,7 +377,7 @@ func StageSeasons(ctx context.Context, tx pgx.Tx, scope Filter, coop uuid.UUID, 
 	args := append(scope.args(), nilIfZero(coop), commune, doneSince.UTC(), limit)
 	rows, err := tx.Query(ctx, "SELECT "+seasonCols+` FROM (
 	    SELECT DISTINCT ON (x.plot_ref) x.* FROM pf_coop.season_current x
-	    WHERE (x.status = 'open' OR (x.status = 'completed' AND x.completed_at >= $7::timestamptz))
+	    WHERE x.entry_kind IS NULL AND (x.status = 'open' OR (x.status = 'completed' AND x.completed_at >= $7::timestamptz))
 	    ORDER BY x.plot_ref, (x.status = 'open') DESC, x.opened_at DESC, x.season_ref DESC) s
 	  WHERE `+scopeSQL("s", 1)+`
 	    AND ($5::uuid IS NULL OR s.cooperative_ref = $5::uuid) AND ($6::text = '' OR s.commune_code = $6::text)
@@ -392,7 +392,7 @@ func StageSeasons(ctx context.Context, tx pgx.Tx, scope Filter, coop uuid.UUID, 
 func SeasonsChangedAfter(ctx context.Context, tx pgx.Tx, scope Filter, after int64, limit int) ([]Season, error) {
 	args := append(scope.args(), after, limit)
 	rows, err := tx.Query(ctx, "SELECT "+seasonCols+" FROM pf_coop.season_current s WHERE "+scopeSQL("s", 1)+`
-	    AND s.sync_seq > $5::bigint ORDER BY s.sync_seq LIMIT $6::int`, args...)
+	    AND s.entry_kind IS NULL AND s.sync_seq > $5::bigint ORDER BY s.sync_seq LIMIT $6::int`, args...)
 	if err != nil {
 		return nil, err
 	}
