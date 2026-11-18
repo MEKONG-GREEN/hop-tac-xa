@@ -186,6 +186,10 @@ func sumExpr(tbl string) string {
 		// AH-8 thêm cột variety_code, anchor_name (mẫu) và stages (phiên bản), AH-21 thêm deleted_at (mẫu) sau W3.3;
 		// dữ liệu cũ không đổi → bỏ các cột mới khỏi dấu vân tay.
 		return "(to_jsonb(x) - 'variety_code' - 'anchor_name' - 'stages' - 'deleted_at')::text"
+	case "season_current":
+		// AH-62 adds nullable, no-default household metadata after W3.3. Compare
+		// every original field; assert the new fields remain NULL separately.
+		return "(to_jsonb(x) - 'entry_kind' - 'crop_code' - 'sop_snapshot')::text"
 	}
 	return "to_jsonb(x)::text"
 }
@@ -262,6 +266,17 @@ func TestCooperativeSchemaMoveRehearsal_W33(t *testing.T) {
 	t.Logf("pf 000131–000133 + phần còn lại: %s", time.Since(start))
 
 	after := coopStats(ctx, t, admin, func(string) string { return "pf_coop" })
+	var rewrittenLegacyMetadata bool
+	if err := admin.QueryRow(ctx, `SELECT EXISTS (
+	    SELECT 1 FROM pf_coop.season_current WHERE entry_kind IS NOT NULL OR crop_code IS NOT NULL OR sop_snapshot IS NOT NULL
+	    UNION ALL
+	    SELECT 1 FROM pf_coop.season_event WHERE entry_kind IS NOT NULL OR crop_code IS NOT NULL OR sop_snapshot IS NOT NULL
+	  )`).Scan(&rewrittenLegacyMetadata); err != nil {
+		t.Fatal(err)
+	}
+	if rewrittenLegacyMetadata {
+		t.Fatal("AH-62 must leave household metadata NULL on pre-migration seasons/events")
+	}
 	for _, tbl := range movedTables {
 		if after[tbl] != before[tbl] {
 			t.Errorf("%s: trước %+v, sau %+v", tbl, before[tbl], after[tbl])

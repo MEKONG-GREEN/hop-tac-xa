@@ -58,6 +58,22 @@ func parseDecPtr(s *string) (*decimal.Decimal, error) {
 
 func day(t time.Time) string { return domain.FormatDay(t) }
 
+// optionalDay preserves unknown forecasts for household SOPs without a harvest step.
+func optionalDay(t time.Time) *string {
+	if t.IsZero() {
+		return nil
+	}
+	d := day(t)
+	return &d
+}
+
+func dateValue(t *time.Time) time.Time {
+	if t == nil {
+		return time.Time{}
+	}
+	return *t
+}
+
 // uuids chuyển danh sách UUID sang []string cho tham số ::uuid[] (chế độ thực thi
 // của PgBouncer mã hóa tham số dạng văn bản).
 func uuids(u []uuid.UUID) []string {

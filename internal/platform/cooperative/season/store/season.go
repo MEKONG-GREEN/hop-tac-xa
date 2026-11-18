@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -20,6 +21,9 @@ type SeasonEvent struct {
 	Seq                 int64
 	SeasonRef           uuid.UUID
 	Action              string
+	EntryKind           string
+	CropCode            string
+	SOPSnapshot         json.RawMessage
 	PlotRef             uuid.UUID
 	PlotCode            string
 	HouseholdRef        uuid.UUID
@@ -63,38 +67,41 @@ func InsertSeasonEvent(ctx context.Context, tx pgx.Tx, e *SeasonEvent) error {
 	     season_code, season_year, variety_code, sop_template_ref, sop_version_id, sop_version_no, sowing_date,
 	     expected_harvest_date, harvest_open_date, area_ha, expected_yield_t_per_ha, copied_from_season_ref, harvest_id, reason,
 	     gps, gps_accuracy_m, gps_source, location_status, distance_m, on_behalf, channel, event_time, supersedes_id,
-	     correction_reason, actor_ref, device_id, idem_key, rule_version)
+	     correction_reason, actor_ref, device_id, idem_key, rule_version, entry_kind, crop_code, sop_snapshot)
 	  VALUES ($1::uuid, $2::uuid, $3::text, $4::uuid, $5::text, $6::uuid, $7::text, $8::uuid, $9::uuid, $10::text,
 	     $11::text, $12::int, $13::text, $14::uuid, $15::uuid, $16::int, $17::date,
 	     $18::date, $19::date, $20::numeric, $21::numeric, $22::uuid, $23::uuid, $24::text,
 	     `+gpsInsertSQL("$25", "$26")+`, $27::numeric, $28::text, $29::text, $30::numeric, $31::boolean, $32::text, $33::timestamptz, $34::uuid,
-	     $35::text, $36::uuid, $37::text, $38::text, $39::text)
+	     $35::text, $36::uuid, $37::text, $38::text, $39::text, $40::text, $41::text, $42::jsonb)
 	  RETURNING seq, recorded_at`,
-		e.ID, e.TenantID, StreamSeason(e.SeasonRef), e.SeasonRef, e.Action, e.PlotRef, e.PlotCode, nilIfZero(e.HouseholdRef), e.CooperativeRef, e.CommuneCode,
+		e.ID, e.TenantID, StreamSeason(e.SeasonRef), e.SeasonRef, e.Action, nilIfZero(e.PlotRef), nilIfEmpty(e.PlotCode), nilIfZero(e.HouseholdRef), e.CooperativeRef, e.CommuneCode,
 		e.SeasonCode, e.SeasonYear, e.VarietyCode, e.SOPTemplateRef, e.SOPVersionID, e.SOPVersionNo, day(e.SowingDate),
-		day(e.ExpectedHarvestDate), day(e.HarvestOpenDate), e.AreaHa.String(), decPtr(e.ExpectedYield), nilIfZero(e.CopiedFrom), nilIfZero(e.HarvestID), nilIfEmpty(e.Reason),
+		optionalDay(e.ExpectedHarvestDate), optionalDay(e.HarvestOpenDate), e.AreaHa.String(), decPtr(e.ExpectedYield), nilIfZero(e.CopiedFrom), nilIfZero(e.HarvestID), nilIfEmpty(e.Reason),
 		decPtr(e.GPS.Lon), decPtr(e.GPS.Lat), decPtr(e.GPS.AccuracyM), e.GPS.Source, e.LocationStatus, decPtr(e.DistanceM), e.OnBehalf, e.Channel, e.EventTime.UTC(), e.SupersedesID,
-		e.CorrectionReason, e.ActorRef, e.DeviceID, e.IdemKey, domain.RuleVersion).Scan(&e.Seq, &e.RecordedAt)
+		e.CorrectionReason, e.ActorRef, e.DeviceID, e.IdemKey, domain.RuleVersion, nilIfEmpty(e.EntryKind), nilIfEmpty(e.CropCode), nilIfEmpty(string(e.SOPSnapshot))).Scan(&e.Seq, &e.RecordedAt)
 }
 
-const seasonEventCols = `id, tenant_id, seq, season_ref, action, plot_ref, plot_code, household_ref, cooperative_ref, commune_code,
+const seasonEventCols = `id, tenant_id, seq, season_ref, action, plot_ref, coalesce(plot_code, ''), household_ref, cooperative_ref, commune_code,
   season_code, season_year, variety_code, sop_template_ref, sop_version_id, sop_version_no, sowing_date, expected_harvest_date,
   harvest_open_date, area_ha::text, expected_yield_t_per_ha::text, copied_from_season_ref, harvest_id, coalesce(reason, ''),
   ` + gpsSelect + `, gps_accuracy_m::text, gps_source, location_status, distance_m::text, on_behalf, channel, event_time, recorded_at,
-  supersedes_id, correction_reason, actor_ref, device_id, idem_key`
+  supersedes_id, correction_reason, actor_ref, device_id, idem_key, coalesce(entry_kind, ''), coalesce(crop_code, ''), sop_snapshot`
 
 func scanSeasonEvent(row pgx.Row) (SeasonEvent, error) {
 	var e SeasonEvent
-	var hh, copied, harvest *uuid.UUID
+	var plot, hh, copied, harvest *uuid.UUID
+	var expectedDate, harvestDate *time.Time
 	var area string
 	var expected, lon, lat, acc, dist *string
-	if err := row.Scan(&e.ID, &e.TenantID, &e.Seq, &e.SeasonRef, &e.Action, &e.PlotRef, &e.PlotCode, &hh, &e.CooperativeRef, &e.CommuneCode,
-		&e.SeasonCode, &e.SeasonYear, &e.VarietyCode, &e.SOPTemplateRef, &e.SOPVersionID, &e.SOPVersionNo, &e.SowingDate, &e.ExpectedHarvestDate,
-		&e.HarvestOpenDate, &area, &expected, &copied, &harvest, &e.Reason,
+	if err := row.Scan(&e.ID, &e.TenantID, &e.Seq, &e.SeasonRef, &e.Action, &plot, &e.PlotCode, &hh, &e.CooperativeRef, &e.CommuneCode,
+		&e.SeasonCode, &e.SeasonYear, &e.VarietyCode, &e.SOPTemplateRef, &e.SOPVersionID, &e.SOPVersionNo, &e.SowingDate, &expectedDate,
+		&harvestDate, &area, &expected, &copied, &harvest, &e.Reason,
 		&lon, &lat, &acc, &e.GPS.Source, &e.LocationStatus, &dist, &e.OnBehalf, &e.Channel, &e.EventTime, &e.RecordedAt,
-		&e.SupersedesID, &e.CorrectionReason, &e.ActorRef, &e.DeviceID, &e.IdemKey); err != nil {
+		&e.SupersedesID, &e.CorrectionReason, &e.ActorRef, &e.DeviceID, &e.IdemKey, &e.EntryKind, &e.CropCode, &e.SOPSnapshot); err != nil {
 		return e, err
 	}
+	e.PlotRef = deref(plot)
+	e.ExpectedHarvestDate, e.HarvestOpenDate = dateValue(expectedDate), dateValue(harvestDate)
 	e.HouseholdRef, e.CopiedFrom, e.HarvestID = deref(hh), deref(copied), deref(harvest)
 	var err error
 	if e.AreaHa, err = decimal.NewFromString(area); err != nil {
@@ -170,6 +177,9 @@ func collectSeasonEvents(rows pgx.Rows) ([]SeasonEvent, error) {
 // Season là trạng thái hiện tại của một vụ.
 type Season struct {
 	SeasonRef           uuid.UUID
+	EntryKind           string
+	CropCode            string
+	SOPSnapshot         json.RawMessage
 	PlotRef             uuid.UUID
 	PlotCode            string
 	HouseholdRef        uuid.UUID
@@ -219,6 +229,8 @@ func ApplySeasonEvent(cur *Season, e SeasonEvent) Season {
 	case "cancelled":
 		s.Status = "cancelled"
 	}
+	s.EntryKind, s.CropCode = e.EntryKind, e.CropCode
+	s.SOPSnapshot = append(json.RawMessage(nil), e.SOPSnapshot...)
 	s.PlotRef, s.PlotCode, s.HouseholdRef, s.CooperativeRef, s.CommuneCode = e.PlotRef, e.PlotCode, e.HouseholdRef, e.CooperativeRef, e.CommuneCode
 	s.SeasonCode, s.SeasonYear, s.VarietyCode = e.SeasonCode, e.SeasonYear, e.VarietyCode
 	s.SOPTemplateRef, s.SOPVersionID, s.SOPVersionNo = e.SOPTemplateRef, e.SOPVersionID, e.SOPVersionNo
@@ -237,11 +249,11 @@ func SaveSeason(ctx context.Context, tx pgx.Tx, tid uuid.UUID, s Season) error {
 	    (tenant_id, season_ref, plot_ref, plot_code, household_ref, cooperative_ref, commune_code, season_code, season_year,
 	     variety_code, sop_template_ref, sop_version_id, sop_version_no, sowing_date, expected_harvest_date, harvest_open_date,
 	     area_ha, expected_yield_t_per_ha, status, current_event_id, version, location_status, gps_source, on_behalf, opened_by,
-	     opened_at, copied_from_season_ref, harvest_id, completed_at)
+	     opened_at, copied_from_season_ref, harvest_id, completed_at, entry_kind, crop_code, sop_snapshot)
 	  VALUES ($1::uuid, $2::uuid, $3::uuid, $4::text, $5::uuid, $6::uuid, $7::text, $8::text, $9::int,
 	     $10::text, $11::uuid, $12::uuid, $13::int, $14::date, $15::date, $16::date,
 	     $17::numeric, $18::numeric, $19::text, $20::uuid, $21::bigint, $22::text, $23::text, $24::boolean, $25::uuid,
-	     $26::timestamptz, $27::uuid, $28::uuid, $29::timestamptz)
+	     $26::timestamptz, $27::uuid, $28::uuid, $29::timestamptz, $30::text, $31::text, $32::jsonb)
 	  ON CONFLICT (tenant_id, season_ref) DO UPDATE SET
 	     plot_ref = EXCLUDED.plot_ref, plot_code = EXCLUDED.plot_code, household_ref = EXCLUDED.household_ref,
 	     cooperative_ref = EXCLUDED.cooperative_ref, commune_code = EXCLUDED.commune_code, season_code = EXCLUDED.season_code,
@@ -253,30 +265,34 @@ func SaveSeason(ctx context.Context, tx pgx.Tx, tid uuid.UUID, s Season) error {
 	     gps_source = EXCLUDED.gps_source, on_behalf = EXCLUDED.on_behalf, opened_by = EXCLUDED.opened_by,
 	     opened_at = EXCLUDED.opened_at, copied_from_season_ref = EXCLUDED.copied_from_season_ref,
 	     harvest_id = EXCLUDED.harvest_id, completed_at = EXCLUDED.completed_at,
+	     entry_kind = EXCLUDED.entry_kind, crop_code = EXCLUDED.crop_code, sop_snapshot = EXCLUDED.sop_snapshot,
 	     sync_seq = nextval('pf_coop.season_sync_seq'), updated_at = now()`,
-		tid, s.SeasonRef, s.PlotRef, s.PlotCode, nilIfZero(s.HouseholdRef), s.CooperativeRef, s.CommuneCode, s.SeasonCode, s.SeasonYear,
-		s.VarietyCode, s.SOPTemplateRef, s.SOPVersionID, s.SOPVersionNo, day(s.SowingDate), day(s.ExpectedHarvestDate), day(s.HarvestOpenDate),
+		tid, s.SeasonRef, nilIfZero(s.PlotRef), nilIfEmpty(s.PlotCode), nilIfZero(s.HouseholdRef), s.CooperativeRef, s.CommuneCode, s.SeasonCode, s.SeasonYear,
+		s.VarietyCode, s.SOPTemplateRef, s.SOPVersionID, s.SOPVersionNo, day(s.SowingDate), optionalDay(s.ExpectedHarvestDate), optionalDay(s.HarvestOpenDate),
 		s.AreaHa.String(), decPtr(s.ExpectedYield), s.Status, s.CurrentEventID, s.Version, s.LocationStatus, s.GPSSource, s.OnBehalf, s.OpenedBy,
-		s.OpenedAt.UTC(), nilIfZero(s.CopiedFrom), nilIfZero(s.HarvestID), s.CompletedAt)
+		s.OpenedAt.UTC(), nilIfZero(s.CopiedFrom), nilIfZero(s.HarvestID), s.CompletedAt, nilIfEmpty(s.EntryKind), nilIfEmpty(s.CropCode), nilIfEmpty(string(s.SOPSnapshot)))
 	return err
 }
 
-const seasonCols = `s.season_ref, s.plot_ref, s.plot_code, s.household_ref, s.cooperative_ref, s.commune_code, s.season_code,
+const seasonCols = `s.season_ref, s.plot_ref, coalesce(s.plot_code, ''), s.household_ref, s.cooperative_ref, s.commune_code, s.season_code,
   s.season_year, s.variety_code, s.sop_template_ref, s.sop_version_id, s.sop_version_no, s.sowing_date, s.expected_harvest_date,
   s.harvest_open_date, s.area_ha::text, s.expected_yield_t_per_ha::text, s.status, s.current_event_id, s.version, s.location_status,
-  s.gps_source, s.on_behalf, s.opened_by, s.opened_at, s.copied_from_season_ref, s.harvest_id, s.completed_at, s.sync_seq, s.updated_at`
+  s.gps_source, s.on_behalf, s.opened_by, s.opened_at, s.copied_from_season_ref, s.harvest_id, s.completed_at, s.sync_seq, s.updated_at, coalesce(s.entry_kind, ''), coalesce(s.crop_code, ''), s.sop_snapshot`
 
 func scanSeason(row pgx.Row) (Season, error) {
 	var s Season
-	var hh, copied, harvest *uuid.UUID
+	var plot, hh, copied, harvest *uuid.UUID
+	var expectedDate, harvestDate *time.Time
 	var area string
 	var expected *string
-	if err := row.Scan(&s.SeasonRef, &s.PlotRef, &s.PlotCode, &hh, &s.CooperativeRef, &s.CommuneCode, &s.SeasonCode,
-		&s.SeasonYear, &s.VarietyCode, &s.SOPTemplateRef, &s.SOPVersionID, &s.SOPVersionNo, &s.SowingDate, &s.ExpectedHarvestDate,
-		&s.HarvestOpenDate, &area, &expected, &s.Status, &s.CurrentEventID, &s.Version, &s.LocationStatus,
-		&s.GPSSource, &s.OnBehalf, &s.OpenedBy, &s.OpenedAt, &copied, &harvest, &s.CompletedAt, &s.SyncSeq, &s.UpdatedAt); err != nil {
+	if err := row.Scan(&s.SeasonRef, &plot, &s.PlotCode, &hh, &s.CooperativeRef, &s.CommuneCode, &s.SeasonCode,
+		&s.SeasonYear, &s.VarietyCode, &s.SOPTemplateRef, &s.SOPVersionID, &s.SOPVersionNo, &s.SowingDate, &expectedDate,
+		&harvestDate, &area, &expected, &s.Status, &s.CurrentEventID, &s.Version, &s.LocationStatus,
+		&s.GPSSource, &s.OnBehalf, &s.OpenedBy, &s.OpenedAt, &copied, &harvest, &s.CompletedAt, &s.SyncSeq, &s.UpdatedAt, &s.EntryKind, &s.CropCode, &s.SOPSnapshot); err != nil {
 		return s, err
 	}
+	s.PlotRef = deref(plot)
+	s.ExpectedHarvestDate, s.HarvestOpenDate = dateValue(expectedDate), dateValue(harvestDate)
 	s.HouseholdRef, s.CopiedFrom, s.HarvestID = deref(hh), deref(copied), deref(harvest)
 	var err error
 	if s.AreaHa, err = decimal.NewFromString(area); err != nil {
