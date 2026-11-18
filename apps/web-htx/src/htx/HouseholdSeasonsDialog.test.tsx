@@ -9,6 +9,7 @@ import { HouseholdSeasonsDialog, householdAreaError } from "./HouseholdSeasonsDi
 
 function setup(persona: string) {
   const calls: { key: string | null; body: Record<string, unknown> }[] = [];
+  const plans: { key: string | null; body: Record<string, unknown> }[] = [];
   const onSaved = vi.fn();
   const p = MOCK_PERSONAS.find((p) => p.id === persona)!;
   const principal = buildPrincipal({ sub: p.me.actor_ref, name: p.displayName, amr: p.amr, realm_access: { roles: p.me.roles } }, p.me);
@@ -16,8 +17,13 @@ function setup(persona: string) {
   const api = createApiClient({ baseUrl: "https://api.test", getAccessToken: () => "test", fetch: async (input) => {
     const req = input as Request;
     const path = new URL(req.url).pathname;
+    if (path.endsWith("/plan")) return Response.json({ as_of_date: "2026-11-18", stages: [] });
     if (req.method === "POST") {
       const body = await req.json() as Record<string, unknown>;
+      if (path.endsWith("/season-plan-preview")) {
+        plans.push({ key: req.headers.get("Idempotency-Key"), body });
+        return Response.json({ as_of_date: "2026-11-18", stages: [] });
+      }
       calls.push({ key: req.headers.get("Idempotency-Key"), body });
       if (body.area_ha !== "0.20") return Response.json({ type: "", title: "Diện tích vượt", status: 409, code: "cropcycle.household_area_exceeded", remaining_area_ha: "0.20" }, { status: 409 });
       return Response.json({ season: { ...body, season_ref: "new-season", entry_kind: "household", status: "open", gps_missing: true, sop_snapshot: { name: "SOP đã chụp", anchor_name: "Ngày xuống giống", version_no: 1, steps: [{ name: "Chăm sóc" }] } } }, { status: 201 });
@@ -35,7 +41,7 @@ function setup(persona: string) {
   render(<AuthContextForTests.Provider value={{ status: "authenticated", api, principal } as AuthContextValue}>
     <HouseholdSeasonsDialog coopRef="coop" household={household} onClose={() => {}} onSaved={onSaved} />
   </AuthContextForTests.Provider>);
-  return { calls, onSaved };
+  return { calls, onSaved, plans };
 }
 
 describe("AH-61 mở vụ theo hộ trên web", () => {
@@ -50,7 +56,7 @@ describe("AH-61 mở vụ theo hộ trên web", () => {
   });
   it("giữ form và key khi xung đột, đổi key khi sửa, vẫn lưu khi GPS bị từ chối", async () => {
     Object.defineProperty(navigator, "geolocation", { configurable: true, value: { getCurrentPosition: (_ok: unknown, fail: () => void) => fail() } });
-    const { calls, onSaved } = setup("htx-member");
+    const { calls, onSaved, plans } = setup("htx-member");
     fireEvent.click(screen.getByRole("button", { name: "Mở vụ mới" }));
     await screen.findByRole("option", { name: "Lúa" });
     fireEvent.change(screen.getByLabelText("Loại cây"), { target: { value: "LUA" } });
@@ -60,6 +66,7 @@ describe("AH-61 mở vụ theo hộ trên web", () => {
     fireEvent.change(screen.getByLabelText("Diện tích vụ (ha)"), { target: { value: "0.50" } });
     await screen.findByRole("option", { name: "Quy trình lúa · bản 1" });
     fireEvent.change(screen.getByLabelText("Ngày xuống giống"), { target: { value: "2030-01-01" } });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Lưu vụ" })).not.toBeDisabled());
     fireEvent.click(screen.getByRole("button", { name: "Lưu vụ" }));
     await waitFor(() => expect(calls).toHaveLength(1));
     await waitFor(() => expect(screen.getByRole("button", { name: "Lưu vụ" })).not.toBeDisabled());
@@ -70,10 +77,13 @@ describe("AH-61 mở vụ theo hộ trên web", () => {
     expect(calls[1]?.key).toBe(calls[0]?.key);
     await waitFor(() => expect(screen.getByRole("button", { name: "Lưu vụ" })).not.toBeDisabled());
     fireEvent.change(screen.getByLabelText("Diện tích vụ (ha)"), { target: { value: "0.20" } });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Lưu vụ" })).not.toBeDisabled());
     fireEvent.click(screen.getByRole("button", { name: "Lưu vụ" }));
     await waitFor(() => expect(onSaved).toHaveBeenCalledOnce());
     expect(calls[2]?.key).not.toBe(calls[0]?.key);
     expect(calls[2]?.body.gps).toEqual({ source: "denied" });
+    expect(plans.map((p) => p.body.area_ha)).toEqual(["0.50", "0.20"]);
+    expect(plans[1]?.key).not.toBe(plans[0]?.key);
     expect(await screen.findByText("Thiếu GPS", { exact: false })).toBeTruthy();
     expect(screen.getByText("Chăm sóc")).toBeTruthy();
   });

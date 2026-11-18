@@ -1,6 +1,8 @@
 import 'package:agrigreen_mobile/data/photo/location_source.dart';
 import 'package:agrigreen_mobile/data/sync/sync_api.dart';
 
+import '../domain/season_plan.dart';
+
 typedef HouseholdJson = Map<String, Object?>;
 
 class HouseholdSopChoice {
@@ -23,6 +25,28 @@ class HouseholdSeasonService {
   const HouseholdSeasonService({required this.api, required this.location});
   final SyncApi api;
   final LocationSource location;
+
+  Future<SeasonPlan> previewPlan(
+    String coop,
+    String household,
+    HouseholdJson body,
+    String key,
+  ) async {
+    final result = await api.sendJson(
+      method: 'POST',
+      path: '/v1/cooperatives/$coop/households/$household/season-plan-preview',
+      idempotencyKey: key,
+      body: body,
+    );
+    return SeasonPlan.fromJson(result);
+  }
+
+  Future<SeasonPlan> plan(String coop, String household, String season) async =>
+      SeasonPlan.fromJson(
+        await api.getJson(
+          '/v1/cooperatives/$coop/households/$household/seasons/$season/plan',
+        ),
+      );
 
   Future<List<HouseholdJson>> _pages(
     String path, {

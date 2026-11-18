@@ -10124,6 +10124,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/cooperatives/{ref}/households/{household_ref}/season-plan-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Lập hoặc tính lại kế hoạch trước mở vụ (AH-71)
+         * @description Chỉ Thành viên HTX/Admin. Đủ giống, SOP và mốc gốc mới lập kế hoạch. Không ghi vụ hoặc sản lượng. Mỗi lần đổi input dùng một Idempotency-Key mới. Ngày nghiệp vụ GMT+7; Không ngày luôn đến hạn, Mở không có ngày Đến.
+         */
+        post: operations["previewHouseholdSchedule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Đọc lịch theo snapshot và mốc hiện tại của vụ (AH-71)
+         * @description Đại diện được đọc cùng HTX. SOP master phát hành mới hoặc ngừng không thay lịch của vụ đã ghim. Kết quả dẫn xuất không sửa sản lượng ghi tay. Snapshot cũ thiếu cửa sổ ngày trả 422, không bịa ngày từ offset tạm.
+         */
+        get: operations["getHouseholdSchedule"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/extension/khtc/periods/{id}/report": {
         parameters: {
             query?: never;
@@ -23854,6 +23901,58 @@ export interface components {
             remaining_area_ha: components["schemas"]["Decimal"];
             active_area_ha?: components["schemas"]["Decimal"];
             land_area_ha?: components["schemas"]["Decimal"];
+        };
+        SeasonSchedulePreviewInput: {
+            crop_code: string;
+            variety_code: string;
+            /** Format: uuid */
+            sop_version_id: string;
+            area_ha: components["schemas"]["HouseholdSeasonAreaInput"];
+            /** Format: date */
+            anchor_date: string;
+        };
+        SeasonSchedule: {
+            /** Format: date */
+            anchor_date: string;
+            /** Format: date */
+            as_of_date: string;
+            /** Format: date */
+            expected_harvest_date: string | null;
+            /** Format: uuid */
+            sop_version_id: string;
+            /** Format: uuid */
+            current_event_id: string | null;
+            stages: {
+                seq: number;
+                name: string;
+                /** Format: date */
+                from_date: string | null;
+                /** Format: date */
+                to_date: string | null;
+                steps: components["schemas"]["SeasonScheduleStep"][];
+            }[];
+        };
+        SeasonScheduleStep: {
+            seq: number;
+            stage_seq: number;
+            task_seq: number;
+            name: string;
+            activity_code: string;
+            /** @enum {string} */
+            window_kind: "date_range" | "open" | "stage" | "none";
+            /** Format: date */
+            from_date: string | null;
+            /** Format: date */
+            to_date: string | null;
+            /**
+             * Format: date
+             * @description Ngày Từ; không lấy Đến
+             */
+            expected_date: string | null;
+            /** @enum {string} */
+            status: "upcoming" | "due" | "overdue" | "waiting_anchor";
+            /** @description Chỉ true cho Không ngày; luôn due, không overdue */
+            undated: boolean;
         };
         KHTCReportSupplement: {
             /** Format: uuid */
@@ -48345,6 +48444,69 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+        };
+    };
+    previewHouseholdSchedule: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                ref: string;
+                household_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SeasonSchedulePreviewInput"];
+            };
+        };
+        responses: {
+            /** @description Kế hoạch theo SOP đang áp dụng, current_event_id null */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeasonSchedule"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getHouseholdSchedule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Kế hoạch cùng current_event_id của vụ; ngày tính theo GMT+7 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeasonSchedule"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
         };
     };
     extensionKhtcReportGet: {

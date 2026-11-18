@@ -14,6 +14,7 @@ const (
 	fnSOP        = "KHMV-FN-01"     // danh mục cây trồng, giống và SOP
 	fnSeason     = "KHMV-FN-03"     // mở vụ, sửa vụ, dừng/hủy vụ
 	fnSeasonView = "KHMV-FN-03-XEM" // xem chi tiết vụ, tiến độ, kế hoạch mùa vụ
+	fnPlan       = "KHMV-FN-04"     // lập và tính lại kế hoạch mùa vụ
 	fnLog        = "KHMV-FN-05"     // nhật ký canh tác
 	fnHarvest    = "KHMV-FN-06"     // khai báo sản lượng (gồm nhập hàng loạt, nhập từ tệp — FN-06.2)
 )

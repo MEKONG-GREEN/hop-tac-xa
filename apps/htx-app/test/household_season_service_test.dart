@@ -20,6 +20,40 @@ HouseholdSeasonService service(
 );
 
 void main() {
+  test(
+    'AH-71: preview dùng key riêng và đọc kế hoạch theo vụ, không ghi mở vụ',
+    () async {
+      final requests = <http.Request>[];
+      final s = service((request) async {
+        requests.add(request);
+        return http.Response(
+          jsonEncode({'as_of_date': '2026-11-18', 'stages': <Object?>[]}),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      });
+      final body = <String, Object?>{
+        'crop_code': 'LUA',
+        'variety_code': 'OM18',
+        'area_ha': '0.25',
+        'sop_version_id': 'version',
+        'anchor_date': '2030-01-01',
+      };
+      await s.previewPlan('coop', 'household', body, 'preview-key');
+      await s.plan('coop', 'household', 'season');
+      expect(
+        requests.first.url.path,
+        '/v1/cooperatives/coop/households/household/season-plan-preview',
+      );
+      expect(requests.first.headers['Idempotency-Key'], 'preview-key');
+      expect(jsonDecode(requests.first.body), body);
+      expect(requests.last.method, 'GET');
+      expect(
+        requests.last.url.path,
+        '/v1/cooperatives/coop/households/household/seasons/season/plan',
+      );
+    },
+  );
   test('AH-61 rejects non-positive, precision-losing and non-decimal area', () {
     for (final raw in [
       '0',

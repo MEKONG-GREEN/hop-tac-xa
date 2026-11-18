@@ -1,4 +1,52 @@
 paths:
+# @ag-order: 10002
+  /v1/cooperatives/{ref}/households/{household_ref}/season-plan-preview:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: household_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: previewHouseholdSchedule
+      summary: Lập hoặc tính lại kế hoạch trước mở vụ (AH-71)
+      description: Chỉ Thành viên HTX/Admin. Đủ giống, SOP và mốc gốc mới lập kế hoạch. Không ghi vụ hoặc sản lượng. Mỗi lần đổi input dùng một Idempotency-Key mới. Ngày nghiệp vụ GMT+7; Không ngày luôn đến hạn, Mở không có ngày Đến.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/SeasonSchedulePreviewInput"}
+      responses:
+        "200":
+          description: Kế hoạch theo SOP đang áp dụng, current_event_id null
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SeasonSchedule"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+# @ag-order: 10003
+  /v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/plan:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: household_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: season_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: getHouseholdSchedule
+      summary: Đọc lịch theo snapshot và mốc hiện tại của vụ (AH-71)
+      description: Đại diện được đọc cùng HTX. SOP master phát hành mới hoặc ngừng không thay lịch của vụ đã ghim. Kết quả dẫn xuất không sửa sản lượng ghi tay. Snapshot cũ thiếu cửa sổ ngày trả 422, không bịa ngày từ offset tạm.
+      responses:
+        "200":
+          description: Kế hoạch cùng current_event_id của vụ; ngày tính theo GMT+7
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SeasonSchedule"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
 # @ag-order: 10000
   /v1/cooperatives/{ref}/households/{household_ref}/seasons:
     parameters:
@@ -167,3 +215,54 @@ components:
             remaining_area_ha: {$ref: "#/components/schemas/Decimal"}
             active_area_ha: {$ref: "#/components/schemas/Decimal"}
             land_area_ha: {$ref: "#/components/schemas/Decimal"}
+
+# @ag-order: 10005
+    SeasonSchedulePreviewInput:
+      type: object
+      additionalProperties: false
+      required: [crop_code, variety_code, sop_version_id, area_ha, anchor_date]
+      properties:
+        crop_code: {type: string}
+        variety_code: {type: string, minLength: 1}
+        sop_version_id: {type: string, format: uuid}
+        area_ha: {$ref: "#/components/schemas/HouseholdSeasonAreaInput"}
+        anchor_date: {type: string, format: date}
+# @ag-order: 10006
+    SeasonSchedule:
+      type: object
+      required: [anchor_date, as_of_date, expected_harvest_date, sop_version_id, current_event_id, stages]
+      properties:
+        anchor_date: {type: string, format: date}
+        as_of_date: {type: string, format: date}
+        expected_harvest_date: {type: [string, "null"], format: date}
+        sop_version_id: {type: string, format: uuid}
+        current_event_id: {type: [string, "null"], format: uuid}
+        stages:
+          type: array
+          items:
+            type: object
+            required: [seq, name, from_date, to_date, steps]
+            properties:
+              seq: {type: integer}
+              name: {type: string}
+              from_date: {type: [string, "null"], format: date}
+              to_date: {type: [string, "null"], format: date}
+              steps:
+                type: array
+                items: {$ref: "#/components/schemas/SeasonScheduleStep"}
+# @ag-order: 10007
+    SeasonScheduleStep:
+      type: object
+      required: [seq, stage_seq, task_seq, name, activity_code, window_kind, from_date, to_date, expected_date, status, undated]
+      properties:
+        seq: {type: integer}
+        stage_seq: {type: integer}
+        task_seq: {type: integer}
+        name: {type: string}
+        activity_code: {type: string}
+        window_kind: {type: string, enum: [date_range, open, stage, none]}
+        from_date: {type: [string, "null"], format: date}
+        to_date: {type: [string, "null"], format: date}
+        expected_date: {type: [string, "null"], format: date, description: "Ngày Từ; không lấy Đến"}
+        status: {type: string, enum: [upcoming, due, overdue, waiting_anchor]}
+        undated: {type: boolean, description: "Chỉ true cho Không ngày; luôn due, không overdue"}
