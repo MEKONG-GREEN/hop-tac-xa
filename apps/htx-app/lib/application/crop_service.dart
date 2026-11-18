@@ -10,6 +10,7 @@ import 'package:agrigreen_mobile/domain/outbox_record.dart';
 
 import '../domain/cropcycle.dart';
 import 'profile_service.dart';
+import 'household_season_service.dart';
 
 class CropError implements Exception {
   CropError(this.message);
@@ -128,6 +129,12 @@ class BatchSummary {
 /// **mọi thao tác ghi đều làm được khi ngoại tuyến** (HTX US-LOG-04,
 /// US-YIELD-01 AC-3). Quy tắc kiểm trên máy trùng máy chủ; máy chủ vẫn quyết.
 class CropService {
+  HouseholdSeasonService get householdSeasons {
+    final api = _api;
+    if (api == null) throw CropError('Mở vụ theo hộ cần kết nối mạng.');
+    return HouseholdSeasonService(api: api, location: _location);
+  }
+
   CropService({
     required OutboxRepository outbox,
     required ReferenceRepository refs,

@@ -1,0 +1,6 @@
+{
+  "id": "household-seasons",
+  "source": "./household-seasons",
+  "app": [{ "export": "householdSeasonRoutes", "order": 175 }],
+  "admin": []
+}

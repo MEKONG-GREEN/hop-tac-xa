@@ -23,6 +23,7 @@ import { dialUri } from "@/lib/dial";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { toApiProblem, useAsync } from "@/lib/useAsync";
 import { ResultList } from "./common";
+import { HouseholdSeasonsDialog } from "./HouseholdSeasonsDialog";
 import { CANNOT_CALL, copyDraftErrors, copyPayload, householdQuery, likelyCanCall, type CopyDraft } from "./households";
 
 /** Mục đích xử lý dữ liệu (R-42) → nhãn ngắn. */
@@ -202,7 +203,7 @@ function CopyDialog({ coop, sources, onClose, onDone }: { coop: Cooperative; sou
 }
 
 /** Danh sách nông hộ của một HTX kèm tìm SĐT, gọi nhanh, chọn để sao chép hàng loạt. */
-export function HouseholdsPanel({ coop, readOnly = false }: { coop: Cooperative; readOnly?: boolean }) {
+export function HouseholdsPanel({ coop, readOnly = false, showSeasons = false }: { coop: Cooperative; readOnly?: boolean; showSeasons?: boolean }) {
   const { api, principal } = useAuth();
   const id = coop.ref;
   const [query, setQuery] = useState("");
@@ -211,6 +212,8 @@ export function HouseholdsPanel({ coop, readOnly = false }: { coop: Cooperative;
   const [version, setVersion] = useState(0);
   const [picked, setPicked] = useState<Map<string, HouseholdListItem>>(new Map());
   const [copying, setCopying] = useState(false);
+  const [seasonHousehold, setSeasonHousehold] = useState<HouseholdListItem | null>(null);
+  const canViewSeasons = showSeasons && hasRole(principal, ROLES.platformAdmin, ROLES.coopManager, ROLES.htxMember) && matrixAllows(principal, "KHMV-FN-03-XEM", "R");
   // FN-05/AC-01: nút thao tác (sao chép, chọn, gọi) theo ma trận — Thành viên HTX (FN-04: R) không thấy.
   const canWrite =
     !readOnly && coop.active && hasRole(principal, ROLES.coopManager, ROLES.knOfficer, ROLES.knProvinceAdmin, ROLES.registryAdmin) && matrixAllows(principal, "FN-04", "C");
@@ -305,6 +308,7 @@ export function HouseholdsPanel({ coop, readOnly = false }: { coop: Cooperative;
               <th scope="col">Vào HTX</th>
               <th scope="col">Đồng ý chia sẻ dữ liệu</th>
               <th scope="col">Trạng thái</th>
+              {canViewSeasons ? <th scope="col">Vụ canh tác</th> : null}
               {canWrite ? <th scope="col">Liên hệ</th> : null}
             </tr>
           </thead>
@@ -332,6 +336,7 @@ export function HouseholdsPanel({ coop, readOnly = false }: { coop: Cooperative;
                   <ConsentBadges consents={h.consents} />
                 </td>
                 <td>{h.active ? <span className="chip c-ok">Thành viên</span> : <span className="chip c-mute">Đã rời</span>}</td>
+                {canViewSeasons ? <td><button className="btn btn-o btn-sm" onClick={() => setSeasonHousehold(h)}>Xem vụ</button></td> : null}
                 {canWrite ? (
                   <td style={{ minWidth: 150 }}>
                     <CallButton h={h} />
@@ -345,6 +350,7 @@ export function HouseholdsPanel({ coop, readOnly = false }: { coop: Cooperative;
       {(search ? found.loading : list.loading) ? <Loading /> : null}
       {!search && !list.loading && list.items.length === 0 && !list.error ? <Empty>Chưa có nông hộ.</Empty> : null}
       {!search ? <LoadMore hasMore={list.hasMore} loading={list.loading} onClick={list.loadMore} /> : null}
+      {seasonHousehold ? <HouseholdSeasonsDialog coopRef={id} household={seasonHousehold} onClose={() => setSeasonHousehold(null)} onSaved={() => setVersion((v) => v + 1)} /> : null}
       {copying ? (
         <CopyDialog
           coop={coop}

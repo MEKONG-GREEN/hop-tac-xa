@@ -8,6 +8,7 @@ import { COOPERATIVES, findCoop, householdCount, householdRefOf, householdsOf, s
 import { headerKey, parseCsv } from "./admin-ops";
 import { hasRole, inScope, isZip, json, managerOnly, nowIso, opaque, ownCoopOnly, paginate, problem, reasonOf, validation, type Route } from "./http";
 import type { MockPersona } from "./personas";
+import { householdMockArea } from "./household-season-state";
 
 const NOT_YOURS = "Bạn không có quyền truy cập nông hộ này.";
 const NAME_TAKEN = "Tên HTX này đã tồn tại, vui lòng chọn tên khác.";
@@ -45,14 +46,14 @@ const maskedLabel = (name: string) => {
   return parts.length > 1 ? `${parts[0]} ${parts.slice(1).map((p) => `${p[0]}.`).join(" ")}` : `${parts[0]}.`;
 };
 
-function listOf(coop: MockCooperative) {
+export function householdMockRows(coop: MockCooperative) {
   const extra = COPIED.filter((h) => h.coop === coop.api.ref).map((h) => ({
     household_ref: h.ref, cooperative_ref: coop.api.ref, commune_code: coop.api.admin_unit_code ?? "", cultivated_area_ha: h.area,
     member_since: nowIso().slice(0, 10), active: true, label: h.label, masked_phone: `09******${h.phone.slice(-2)}`, label_unavailable: false, consents: [],
     active_area_ha: "0", remaining_area_ha: h.area, can_open_season: h.area != null && Number(h.area) > 0,
     open_season_blocked_reason: h.area == null ? "Chưa có diện tích đất của nông hộ." : Number(h.area) > 0 ? "" : "Hết diện tích để mở vụ.",
   }));
-  return [...householdsOf(coop), ...extra];
+  return [...householdsOf(coop), ...extra].map((h) => householdMockArea(coop.api.ref, h));
 }
 
 const normPhone = (s: string) => {
@@ -152,7 +153,7 @@ export const htxGapAppRoutes: Route[] = [
       const c = findCoop(params[0]);
       if (!c || !inScope(persona, c.province_code, c.api.admin_unit_code)) return problem(404, "party.org_not_found", "Not found");
       if (ownCoopOnly(persona) && persona.me.org?.ref !== c.api.ref) return problem(404, "party.org_not_found", "Not found");
-      const all = listOf(c);
+      const all = householdMockRows(c);
       const raw = url.searchParams.get("phone");
       if (raw === null || raw.trim() === "") return json(paginate(all, url));
       const phone = normPhone(raw.trim());
