@@ -19,8 +19,8 @@
 | `go version` (sau khi đặt `GOTOOLCHAIN` = `toolchain` trong `go.mod`) | |
 | `gofmt -l` / `go build ./...` / `go vet ./...` | |
 | `go run ./tools/archlint ./...` · `modgen -check` · `contractcheck` · `docscheck` | |
-| `go run ./tools/migratecheck -base origin/dev migrations` | |
-| `go run ./tools/knboundary -base origin/dev` | |
+| `go run ./tools/migratecheck -base origin/<base> migrations` | |
+| `go run ./tools/knboundary -base origin/<base>` | |
 | `golangci-lint run ./...` | |
 | `go test -v -count=1 -p 1 <gói>` (dev-env / pg-ephemeral) | `--- PASS` … |
 | web: `check:api` · `lint` · `tsc --noEmit` · `vitest run` · `build:mock` | |
