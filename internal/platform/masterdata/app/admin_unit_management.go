@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/base32"
 	"errors"
 	"net/http"
 	"strings"
@@ -277,7 +278,10 @@ func (s *Service) insertManagedUnit(ctx context.Context, tx pgx.Tx, p authz.Prin
 	if in.Level == partyport.LevelCommune {
 		prefix = "X-"
 	}
-	code := prefix + strings.ToUpper(strings.ReplaceAll(ids.New().String(), "-", ""))
+	// Vault và đồng bộ thiết bị nhận area_code tối đa 32 ký tự. Base32 giữ
+	// đủ 128 bit UUIDv7 nhưng mã có tiền tố chỉ dài 28, dùng được xuyên module.
+	ref := ids.New()
+	code := prefix + base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(ref[:])
 	base := domain.Unit{Code: code, Name: in.Name, Level: in.Level, ParentCode: in.ParentCode, ValidFrom: domain.DayOf(s.Clock.Now())}
 	if err := store.InsertUnit(ctx, tx, p.TenantID, base, "AH-271 operational catalog", p.ActorRef); err != nil {
 		return store.ManagedUnit{}, err

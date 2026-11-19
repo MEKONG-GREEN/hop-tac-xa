@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -90,6 +91,13 @@ func TestAH271_CatalogCRUDAndOldReferences(t *testing.T) {
 	p := province["code"].(string)
 	commune := create("Xã Tân Hòa AH271", "commune", p, "c-create")
 	c := commune["code"].(string)
+	// Public consumers (Vault area_code/device key distribution) accept at most
+	// 32 ASCII identifier characters, even though the legal catalog allows 40.
+	for _, code := range []string{p, c} {
+		if len(code) > 32 || strings.Trim(code, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-") != "" {
+			t.Fatalf("generated administrative code cannot be used by identity consumers: %q", code)
+		}
+	}
 	if p == c || p == "" || c == "" {
 		t.Fatal("server must generate distinct codes")
 	}

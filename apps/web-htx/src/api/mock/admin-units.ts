@@ -12,7 +12,8 @@ function view(u: (typeof ADMIN_UNITS)[number]): ManagedUnit {
   return { code: u.code, name: u.name, level: u.level as "province" | "commune", parent_code: u.parent_code ?? "", valid_from: u.valid_from, active: u.active !== false, selectable: adminUnitSelectable(u), revision: revisions.get(u.code) ?? 0, commune_count: ADMIN_UNITS.filter((c) => c.level === "commune" && c.parent_code === u.code).length, cooperative_count: u.level === "commune" ? COOPERATIVES.filter((c) => c.api.admin_unit_code === u.code).length : null };
 }
 function insert(name: string, level: "province" | "commune", parent: string, active: boolean) {
-  const code = `${level === "province" ? "P" : "X"}-${uuidv7().replace(/-/g, "").toUpperCase()}`;
+  const compact = BigInt(`0x${uuidv7().replace(/-/g, "")}`).toString(32).toUpperCase().padStart(26, "0");
+  const code = `${level === "province" ? "P" : "X"}-${compact}`;
   const unit = { code, name: name.trim().replace(/\s+/g, " "), level, parent_code: parent || null, active, valid_from: new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }), valid_to: null, successor_codes: [] };
   ADMIN_UNITS.push(unit); revisions.set(code, 1); return view(unit);
 }
