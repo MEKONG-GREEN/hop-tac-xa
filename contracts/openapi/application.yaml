@@ -14259,6 +14259,137 @@ paths:
         "404": {$ref: "#/components/responses/Problem"}
         "409": {$ref: "#/components/responses/Problem"}
         "422": {$ref: "#/components/responses/Problem"}
+  /v1/cooperatives/{ref}/season-calendars:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      tags: [CropCycle]
+      operationId: listSeasonCalendars
+      summary: Lịch của HTX; Thành viên chỉ nhận lịch mình được chọn, chưa hủy
+      parameters:
+        - {name: after, in: query, schema: {type: string, format: uuid}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100}}
+      responses:
+        "200":
+          description: Danh sách trong phạm vi
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items: {type: array, items: {$ref: "#/components/schemas/SeasonCalendar"}}
+                  next_cursor: {type: [string, "null"], format: uuid}
+        default: {$ref: "#/components/responses/Problem"}
+    post:
+      tags: [CropCycle]
+      operationId: publishSeasonCalendar
+      summary: Admin hoặc Đại diện phát lịch và xếp thông báo sau commit
+      parameters:
+        - {$ref: "#/components/parameters/IdempotencyKey"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/SeasonCalendarInput"}
+      responses:
+        "201":
+          description: Lịch đã phát; không khẳng định push đã gửi
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SeasonCalendar"}
+        default: {$ref: "#/components/responses/Problem"}
+  /v1/cooperatives/{ref}/season-calendars/{calendar_ref}/revisions:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: calendar_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      tags: [CropCycle]
+      operationId: reviseSeasonCalendar
+      summary: Sửa lịch đã phát và xếp thông báo mới
+      parameters:
+        - {$ref: "#/components/parameters/IdempotencyKey"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/SeasonCalendarRevisionInput"}
+      responses:
+        "201":
+          description: Phiên bản mới, hoặc replay cùng key và nội dung
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SeasonCalendar"}
+        default: {$ref: "#/components/responses/Problem"}
+  /v1/cooperatives/{ref}/season-calendars/{calendar_ref}/cancel:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: calendar_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      tags: [CropCycle]
+      operationId: cancelSeasonCalendar
+      summary: Hủy, không gửi thông báo và không sửa vụ đã mở
+      parameters:
+        - {$ref: "#/components/parameters/IdempotencyKey"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_event_id]
+              properties:
+                expected_event_id: {type: string, format: uuid}
+      responses:
+        "201":
+          description: Lịch đã hủy
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SeasonCalendar"}
+        default: {$ref: "#/components/responses/Problem"}
+  /v1/cropcycle/calendars/{calendar_ref}:
+    get:
+      tags: [CropCycle]
+      operationId: getSeasonCalendar
+      summary: Đích deep link thông báo; kiểm phiên bản và quyền hiện tại
+      parameters:
+        - {name: calendar_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Lịch; không lộ người nhận khác cho Thành viên
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SeasonCalendar"}
+        default: {$ref: "#/components/responses/Problem"}
+  /v1/cooperatives/{ref}/season-calendar-recipients:
+    get:
+      tags: [CropCycle]
+      operationId: listSeasonCalendarRecipients
+      summary: Danh bạ Thành viên hoạt động, chỉ Admin và Đại diện đúng HTX
+      parameters:
+        - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: offset, in: query, schema: {type: integer, minimum: 0, maximum: 1000000}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100}}
+      responses:
+        "200":
+          description: Cache-Control no-store; trang có thể rỗng nhưng còn next_offset khi lọc vai
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_offset]
+                properties:
+                  next_offset: {type: integer, minimum: 0}
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [actor_ref, label]
+                      properties:
+                        actor_ref: {type: string, format: uuid}
+                        label: {type: string, description: "Tên hiển thị nếu có, không thay bằng SĐT/tên đăng nhập"}
+        default: {$ref: "#/components/responses/Problem"}
   /v1/extension/khtc/periods/{id}/report:
     get:
       summary: "Bản soạn Mẫu 1–5, ô số chỉ đọc và mốc dữ liệu"
@@ -28083,6 +28214,46 @@ components:
                   name: {type: string}
                   status: {type: string, enum: [not_started, in_progress, done]}
                   tasks: {type: array, items: {$ref: "#/components/schemas/HouseholdTaskProgress"}}
+    SeasonCalendarInput:
+      type: object
+      additionalProperties: false
+      required: [crop_code, season_code, season_year, sow_from, sow_to, recipients]
+      properties:
+        crop_code: {type: string, pattern: '^[A-Za-z0-9_.-]{1,40}$'}
+        season_code: {type: string, pattern: '^[A-Za-z0-9_.-]{1,40}$'}
+        season_year: {type: integer, minimum: 2000, maximum: 2100}
+        sow_from: {type: string, format: date}
+        sow_to: {type: string, format: date}
+        recipients: {type: array, minItems: 1, maxItems: 500, items: {type: string, format: uuid}}
+    SeasonCalendarRevisionInput:
+      type: object
+      additionalProperties: false
+      required: [expected_event_id, crop_code, season_code, season_year, sow_from, sow_to, recipients]
+      properties:
+        expected_event_id: {type: string, format: uuid}
+        crop_code: {type: string, pattern: '^[A-Za-z0-9_.-]{1,40}$'}
+        season_code: {type: string, pattern: '^[A-Za-z0-9_.-]{1,40}$'}
+        season_year: {type: integer, minimum: 2000, maximum: 2100}
+        sow_from: {type: string, format: date}
+        sow_to: {type: string, format: date}
+        recipients: {type: array, minItems: 1, maxItems: 500, items: {type: string, format: uuid}}
+    SeasonCalendar:
+      type: object
+      required: [calendar_ref, cooperative_ref, current_event_id, version, status, crop_code, season_code, season_year, sow_from, sow_to, can_manage, updated_at]
+      properties:
+        calendar_ref: {type: string, format: uuid}
+        cooperative_ref: {type: string, format: uuid}
+        current_event_id: {type: string, format: uuid}
+        version: {type: integer, minimum: 1}
+        status: {type: string, enum: [published, cancelled]}
+        crop_code: {type: string}
+        season_code: {type: string}
+        season_year: {type: integer}
+        sow_from: {type: string, format: date}
+        sow_to: {type: string, format: date}
+        can_manage: {type: boolean}
+        recipients: {type: array, description: "Chỉ có khi can_manage=true", items: {type: string, format: uuid}}
+        updated_at: {type: string, format: date-time}
     KHTCReportSupplement:
       type: object
       required: [id, department, instruction, state, due_at, native_submission_ref, return_applied]

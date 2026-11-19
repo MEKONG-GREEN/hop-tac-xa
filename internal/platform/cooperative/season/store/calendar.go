@@ -28,6 +28,34 @@ type CalendarEvent struct {
 
 func StreamCalendar(ref uuid.UUID) string { return "season_calendar:" + ref.String() }
 
+// Serialize a retry even for first publication, whose calendar_ref is generated
+// by the server and therefore cannot be the initial idempotency lock key.
+func LockCalendarOperation(ctx context.Context, tx pgx.Tx, key string) error {
+	_, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended('pf_coop.calendar_operation:'||current_setting('app.tenant_id',true)||':'||$1::text,0))", key)
+	return err
+}
+
+func ListCalendars(ctx context.Context, tx pgx.Tx, coop, recipient, after uuid.UUID, limit int, management bool) ([]CalendarEvent, error) {
+	rows, err := tx.Query(ctx, "SELECT "+calendarCols+` FROM pf_coop.season_calendar_event
+ WHERE id IN (SELECT id FROM pf_coop.season_calendar_current
+  WHERE cooperative_ref=$1::uuid AND ($2::boolean OR (status='published' AND $3::uuid=ANY(recipients)))
+    AND ($4::uuid IS NULL OR calendar_ref<$4::uuid) ORDER BY calendar_ref DESC LIMIT $5::int)
+ ORDER BY calendar_ref DESC`, coop, management, recipient, nilIfZero(after), limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []CalendarEvent{}
+	for rows.Next() {
+		e, err := scanCalendar(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
 // LockCalendar serializes both first publication and later edits, including
 // durable idempotency lookup when no current projection exists yet.
 func LockCalendar(ctx context.Context, tx pgx.Tx, ref uuid.UUID) error {

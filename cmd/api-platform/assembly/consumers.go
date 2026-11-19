@@ -41,6 +41,8 @@ type Consumer struct {
 //   - pf.metrics.layer_log (G3): nhật ký thay đổi lớp GIS từ sự kiện geo/cropcycle/mechanization/waterway (GIS US-EVL-01).
 //   - pf.metering.statement (G5): bảng kê kỳ tháng của pf/metering (ADR-0023).
 var Consumers = []Consumer{
+	{Name: coopport.CalendarNoticeConsumer, Module: cooperative.DBModule, Events: []string{coopport.EventSeasonCalendarPublished},
+		Handler: func(m Modules) inbox.Handler { return m.Cooperative.CalendarNoticeHandler() }},
 	{Name: mechport.AreaSyncConsumer, Module: mechanization.DBModule, Events: []string{coopport.EventCoopSeasonAreaChanged},
 		Handler: func(m Modules) inbox.Handler { return m.Mechanization.AreaSyncHandler() }},
 	{Name: geoport.HubValveConsumer, Module: geo.DBModule, Events: []string{geoport.EventMKGHubFacilityPublished, geoport.EventMKGHubCapacityPublished},

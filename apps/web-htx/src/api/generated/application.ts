@@ -10219,6 +10219,100 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/cooperatives/{ref}/season-calendars": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        /** Lịch của HTX; Thành viên chỉ nhận lịch mình được chọn, chưa hủy */
+        get: operations["listSeasonCalendars"];
+        put?: never;
+        /** Admin hoặc Đại diện phát lịch và xếp thông báo sau commit */
+        post: operations["publishSeasonCalendar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperatives/{ref}/season-calendars/{calendar_ref}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                calendar_ref: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sửa lịch đã phát và xếp thông báo mới */
+        post: operations["reviseSeasonCalendar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperatives/{ref}/season-calendars/{calendar_ref}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                calendar_ref: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Hủy, không gửi thông báo và không sửa vụ đã mở */
+        post: operations["cancelSeasonCalendar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cropcycle/calendars/{calendar_ref}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Đích deep link thông báo; kiểm phiên bản và quyền hiện tại */
+        get: operations["getSeasonCalendar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperatives/{ref}/season-calendar-recipients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Danh bạ Thành viên hoạt động, chỉ Admin và Đại diện đúng HTX */
+        get: operations["listSeasonCalendarRecipients"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/extension/khtc/periods/{id}/report": {
         parameters: {
             query?: never;
@@ -24068,6 +24162,51 @@ export interface components {
                     tasks: components["schemas"]["HouseholdTaskProgress"][];
                 }[];
             };
+        };
+        SeasonCalendarInput: {
+            crop_code: string;
+            season_code: string;
+            season_year: number;
+            /** Format: date */
+            sow_from: string;
+            /** Format: date */
+            sow_to: string;
+            recipients: string[];
+        };
+        SeasonCalendarRevisionInput: {
+            /** Format: uuid */
+            expected_event_id: string;
+            crop_code: string;
+            season_code: string;
+            season_year: number;
+            /** Format: date */
+            sow_from: string;
+            /** Format: date */
+            sow_to: string;
+            recipients: string[];
+        };
+        SeasonCalendar: {
+            /** Format: uuid */
+            calendar_ref: string;
+            /** Format: uuid */
+            cooperative_ref: string;
+            /** Format: uuid */
+            current_event_id: string;
+            version: number;
+            /** @enum {string} */
+            status: "published" | "cancelled";
+            crop_code: string;
+            season_code: string;
+            season_year: number;
+            /** Format: date */
+            sow_from: string;
+            /** Format: date */
+            sow_to: string;
+            can_manage: boolean;
+            /** @description Chỉ có khi can_manage=true */
+            recipients?: string[];
+            /** Format: date-time */
+            updated_at: string;
         };
         KHTCReportSupplement: {
             /** Format: uuid */
@@ -48690,6 +48829,185 @@ export interface operations {
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
+        };
+    };
+    listSeasonCalendars: {
+        parameters: {
+            query?: {
+                after?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Danh sách trong phạm vi */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["SeasonCalendar"][];
+                        /** Format: uuid */
+                        next_cursor: string | null;
+                    };
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    publishSeasonCalendar: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SeasonCalendarInput"];
+            };
+        };
+        responses: {
+            /** @description Lịch đã phát; không khẳng định push đã gửi */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeasonCalendar"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    reviseSeasonCalendar: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                ref: string;
+                calendar_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SeasonCalendarRevisionInput"];
+            };
+        };
+        responses: {
+            /** @description Phiên bản mới, hoặc replay cùng key và nội dung */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeasonCalendar"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    cancelSeasonCalendar: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                ref: string;
+                calendar_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    expected_event_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Lịch đã hủy */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeasonCalendar"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getSeasonCalendar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                calendar_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Lịch; không lộ người nhận khác cho Thành viên */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeasonCalendar"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listSeasonCalendarRecipients: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cache-Control no-store; trang có thể rỗng nhưng còn next_offset khi lọc vai */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        next_offset: number;
+                        items: {
+                            /** Format: uuid */
+                            actor_ref: string;
+                            /** @description Tên hiển thị nếu có, không thay bằng SĐT/tên đăng nhập */
+                            label: string;
+                        }[];
+                    };
+                };
+            };
+            default: components["responses"]["Problem"];
         };
     };
     extensionKhtcReportGet: {

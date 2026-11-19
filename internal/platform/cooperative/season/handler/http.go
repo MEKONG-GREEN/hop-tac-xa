@@ -28,6 +28,12 @@ type Handler struct{ Svc *app.Service }
 
 // RegisterApp gắn route Application API vào nhóm /v1 (OIDC + Idempotency-Key cho POST).
 func (h Handler) RegisterApp(rg *gin.RouterGroup) {
+	rg.GET("/cropcycle/calendars/:calendar_ref", h.calendar)
+	rg.GET("/cooperatives/:ref/season-calendars", h.calendars)
+	rg.GET("/cooperatives/:ref/season-calendar-recipients", h.calendarRecipients)
+	rg.POST("/cooperatives/:ref/season-calendars", h.writeCalendar("published"))
+	rg.POST("/cooperatives/:ref/season-calendars/:calendar_ref/revisions", h.writeCalendar("edited"))
+	rg.POST("/cooperatives/:ref/season-calendars/:calendar_ref/cancel", h.writeCalendar("cancelled"))
 	rg.GET("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/checklist", h.householdChecklist)
 	rg.POST("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/task-completions", h.completeHouseholdTask)
 	rg.POST("/cooperatives/:ref/households/:household_ref/season-plan-preview", h.previewHouseholdSchedule)
