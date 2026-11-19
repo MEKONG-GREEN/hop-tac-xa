@@ -190,6 +190,10 @@ func sumExpr(tbl string) string {
 		// AH-62 adds nullable, no-default household metadata after W3.3. Compare
 		// every original field; assert the new fields remain NULL separately.
 		return "(to_jsonb(x) - 'entry_kind' - 'crop_code' - 'sop_snapshot')::text"
+	case "household":
+		// AH-283 adds nullable livestock area after W3.3. Keep comparing every
+		// original field; verify below that legacy rows stay unreported (NULL).
+		return "(to_jsonb(x) - 'livestock_area_ha')::text"
 	}
 	return "to_jsonb(x)::text"
 }
@@ -276,6 +280,13 @@ func TestCooperativeSchemaMoveRehearsal_W33(t *testing.T) {
 	}
 	if rewrittenLegacyMetadata {
 		t.Fatal("AH-62 must leave household metadata NULL on pre-migration seasons/events")
+	}
+	var rewrittenLegacyLivestock bool
+	if err := admin.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pf_coop.household WHERE livestock_area_ha IS NOT NULL)`).Scan(&rewrittenLegacyLivestock); err != nil {
+		t.Fatal(err)
+	}
+	if rewrittenLegacyLivestock {
+		t.Fatal("AH-283 must preserve NULL livestock area on pre-migration households")
 	}
 	for _, tbl := range movedTables {
 		if after[tbl] != before[tbl] {
