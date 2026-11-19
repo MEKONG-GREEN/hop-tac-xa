@@ -205,7 +205,8 @@ var opPurposes = map[string]map[string]bool{
 	OpDisplay: set("registry.admin", "extension.contact", "extension.field_support",
 		"mechanization.owner", "mrv.evidence", PurposeHRMProfile, PurposePriceSurvey),
 	// #251 (ADR-0056 mục 4): extension.contact — sửa họ tên/SĐT chủ hộ chăn nuôi CNTS (lịch sử HCN-09).
-	OpAmend:        set(PurposeHRMProfile, PurposeContactDirectory, "extension.contact"),
+	// AH-283: quản trị liên hệ HTX; vẫn cần vai registrar và kiểm phạm vi ở caller.
+	OpAmend:        set(PurposeHRMProfile, PurposeContactDirectory, "extension.contact", "registry.admin"),
 	OpSectionWrite: set(PurposeHRMProfile, PurposeHRMSensitive, PurposeContactDirectory),
 	OpSectionRead:  set(PurposeHRMProfile, PurposeHRMSensitive, PurposeContactDirectory),
 	// W11.23: thẻ danh bạ (pf/contact, FN-13) — CHỈ mục đích danh bạ.

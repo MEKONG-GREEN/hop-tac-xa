@@ -46,7 +46,8 @@ func (s *Service) AmendRevision(ctx context.Context, purpose client.Purpose, ref
 	}
 	name := domain.NormalizeName(in.FullName)
 	v, bad := problem.Validation, false
-	if n := utf8.RuneCountInString(name); n < 1 || n > 200 {
+	optionalName := purpose == client.PurposeRegistryAdmin && in.Phone != ""
+	if n := utf8.RuneCountInString(name); (n < 1 && !optionalName) || n > 200 {
 		v, bad = v.WithField("full_name", "bắt buộc, tối đa 200 ký tự"), true
 	}
 	if utf8.RuneCountInString(in.Address) > 500 {
@@ -105,6 +106,20 @@ func (s *Service) amendOnce(ctx context.Context, p authz.Principal, purpose clie
 			result = st.fail
 			return err
 		}
+		if name == "" && st.subj.Kind != string(client.SubjectPerson) {
+			result = problem.Validation.WithField("full_name", "họ tên chủ hộ là bắt buộc")
+			return nil
+		}
+		if purpose == client.PurposeRegistryAdmin {
+			contact, err := store.CreatedForPurpose(ctx, tx, ref, string(client.PurposeRegistryAdmin))
+			if err != nil {
+				return err
+			}
+			if st.subj.Kind != string(client.SubjectPerson) || !contact {
+				result = problem.Validation.WithField("purpose", "registry.admin chỉ sửa liên hệ được tạo cho quản trị hồ sơ")
+				return nil
+			}
+		}
 		sealed, err := fetchIdentity(ctx, tx, ref)
 		key = sealed.key
 		return err
@@ -124,7 +139,11 @@ func (s *Service) amendOnce(ctx context.Context, p authz.Principal, purpose clie
 		use   string
 		value string
 	}{{&row.FullNameCT, useName, name}, {&row.PhoneCT, usePhone, phone}, {&row.AddressCT, useAddress, address}} {
-		if *f.dst, err = sealField(s.rand(), dk, domain.AAD(f.use, tid, ref), f.value); err != nil {
+		seal := sealField
+		if f.use == useName {
+			seal = sealValue
+		}
+		if *f.dst, err = seal(s.rand(), dk, domain.AAD(f.use, tid, ref), f.value); err != nil {
 			return nil, err
 		}
 	}

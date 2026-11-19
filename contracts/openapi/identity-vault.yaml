@@ -278,6 +278,7 @@ paths:
       summary: >-
         Sửa họ tên, SĐT, địa chỉ (W11.22; mục đích hrm.profile, contact.directory, extension.contact — #251; CCCD giữ nguyên; SĐT trùng
         chủ thể khác → 409) — vai vault_registrar. Mỗi lần sửa ghi một bản sửa (bản mã họ tên/SĐT trước và sau), trả revision_ref.
+        AH-283: registry.admin chỉ sửa person có nguồn tạo registry.admin; được để trống tên khi có SĐT hợp lệ.
       operationId: amendSubject
       parameters:
         - $ref: "#/components/parameters/Ref"
