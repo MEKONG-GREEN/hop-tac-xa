@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { unwrap } from "@/api/client";
+import { invalidateUnitResolver } from "@/api/adapters/units";
 import { newIdempotencyKey } from "@/api/idempotency";
 import type { ApiProblem } from "@/api/problem";
 import { useAuth } from "@/auth/AuthProvider";
@@ -55,7 +56,7 @@ function UnitForm({ parent, item, onClose, onSaved }: { parent: ManagedUnit | nu
 }
 
 function UnitLevel({ parent, onBack, onProvince }: { parent: ManagedUnit | null; onBack: () => void; onProvince: (u: ManagedUnit) => void }) {
-  const { adminApi } = useAuth();
+  const { adminApi, api } = useAuth();
   const data = useAsync(() => listManagedUnits(adminApi, parent?.code ?? ""), [adminApi, parent?.code]);
   const [query, setQuery] = useState(""); const [tab, setTab] = useState("all");
   const [page, setPage] = useState(1); const [sort, setSort] = useState<SortState | null>(null);
@@ -63,11 +64,12 @@ function UnitLevel({ parent, onBack, onProvince }: { parent: ManagedUnit | null;
   const term = normalizeVi(query);
   const list = clientList(data.data ?? [], { tabs, tab, page, sort, filter: (u) => !term || normalizeVi(`${u.code} ${u.name}`).includes(term), sortValue: (u, key) => key === "count" ? (parent ? u.cooperative_count ?? -1 : u.commune_count) : key === "active" ? Number(u.active) : key === "name" ? u.name : u.code });
   function reset<T>(set: (v: T) => void) { return (v: T) => { set(v); setPage(1); }; }
-  function saved() { setEditing(null); data.reload(); }
+  function refresh() { invalidateUnitResolver(api); data.reload(); }
+  function saved() { setEditing(null); refresh(); }
   return <>
     <PageHead title={parent ? `Xã / phường · ${parent.name}` : "Đơn vị hành chính"} subtitle="Danh mục tỉnh – xã dùng chung cho hồ sơ HTX và nông hộ" actions={<div className="row">
       {parent ? <button className="btn btn-o" onClick={onBack}>Danh sách tỉnh</button> : null}
-      <button className="btn btn-o" onClick={data.reload}>Tải lại</button>
+      <button className="btn btn-o" onClick={refresh}>Tải lại</button>
       <button className="btn btn-o" onClick={() => setImporting(true)}>Nhập từ Excel</button>
       <button className="btn btn-p" disabled={parent?.active === false} onClick={() => setEditing("new")}>{parent ? "Thêm xã / phường" : "Thêm tỉnh / thành phố"}</button>
     </div>} />
@@ -84,7 +86,7 @@ function UnitLevel({ parent, onBack, onProvince }: { parent: ManagedUnit | null;
       rows={list.rows} rowKey={(u) => u.code} total={list.total} page={list.page} onPage={setPage} sort={sort} onSort={reset(setSort)} empty="Chưa có đơn vị hành chính khớp bộ lọc."
     />}
     {editing ? <UnitForm parent={parent} item={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} onSaved={saved} /> : null}
-    {importing ? <AdminUnitImport onClose={() => setImporting(false)} onImported={data.reload} /> : null}
+    {importing ? <AdminUnitImport onClose={() => setImporting(false)} onImported={refresh} /> : null}
   </>;
 }
 

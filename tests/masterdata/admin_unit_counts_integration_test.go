@@ -69,7 +69,7 @@ func TestAH271_HTXCountsUsePartyOutsideCatalogTransaction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	var body struct {
 		Items []struct {
 			Code  string `json:"code"`

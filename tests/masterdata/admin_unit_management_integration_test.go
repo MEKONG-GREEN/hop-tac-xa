@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/masterdata"
+	partyport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/party/port"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/authz"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/tabular"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/tenant"
@@ -53,6 +54,19 @@ func TestAH271_PastNamesAndDisabledParentPreserveScope(t *testing.T) {
 	codes, err := f.mod.AdminUnits().Descendants(admin.ctx(), p["code"].(string), time.Now())
 	if err != nil || !slices.Contains(codes, code) {
 		t.Fatalf("operational switch cut geographic scope: %v %v", codes, err)
+	}
+	children, err := f.mod.AdminUnits().(partyport.AdminUnitTree).Children(admin.ctx(), p["code"].(string), time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, child := range children {
+		if child.Code == code {
+			found = child.Disabled
+		}
+	}
+	if !found {
+		t.Fatal("geographic tree must retain disabled nodes for boundaries and old profiles")
 	}
 	status, b = admin.do(f.app, http.MethodGet, "/v1/masterdata/admin-units?parent="+p["code"].(string), "", nil)
 	if status != 200 || len(b["items"].([]any)) != 0 {

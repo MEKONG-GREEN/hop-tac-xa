@@ -30,9 +30,8 @@ func (p UnitsPort) Children(ctx context.Context, parent string, at time.Time) ([
 				return err
 			}
 			for _, u := range units {
-				if u.Selectable {
-					out = append(out, ToPortUnit(u.Unit))
-				}
+				u.Unit.Disabled = !u.Selectable
+				out = append(out, ToPortUnit(u.Unit))
 			}
 			return nil
 		}
