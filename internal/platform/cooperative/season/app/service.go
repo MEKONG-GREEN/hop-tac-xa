@@ -106,9 +106,11 @@ type Service struct {
 	Farmers  port.FarmerHouseholds   // liên kết tài khoản ↔ nông hộ; thiếu → vai farmer nhận 503
 	GpsLog   geoport.GpsLog          // log GPS của pf/geo (consumer port.GpsLogConsumer); thiếu → consumer lỗi, giao lại
 	// Sharing (ADR-0020): cấp quyền chia sẻ + sổ đọc của bề mặt đối tác (pf/party); thiếu → 403.
-	Sharing partyport.PartnerAccess
-	Names   partyport.ActorNames // tùy chọn: tên người phát hành SOP
-	Log     *slog.Logger
+	Sharing          partyport.PartnerAccess
+	Names            partyport.ActorNames // tùy chọn: tên người phát hành SOP
+	Log              *slog.Logger
+	CalendarMembers  port.CalendarMembers
+	CalendarNotifier port.CalendarNotifier
 }
 
 func (s *Service) now() time.Time { return s.Clock.Now().UTC() }

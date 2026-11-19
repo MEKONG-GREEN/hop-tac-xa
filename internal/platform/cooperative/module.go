@@ -264,6 +264,19 @@ func (m *Module) SyncSinks() []syncport.Sink {
 // GpsLogHandler là inbox.Handler của consumer port.GpsLogConsumer (tên consumer giữ "pf.cropcycle.gps_log").
 func (m *Module) GpsLogHandler() inbox.Handler { return m.season.HandleGpsLog }
 
+func (m *Module) UseCalendars(members port.CalendarMembers, notifier port.CalendarNotifier) {
+	m.season.CalendarMembers, m.season.CalendarNotifier = members, notifier
+}
+
+func (m *Module) CalendarNoticeHandler() inbox.Handler { return m.season.HandleCalendarNotice }
+
+func (m *Module) CalendarNoticeReady() error {
+	if m.season.CalendarMembers == nil || m.season.CalendarNotifier == nil {
+		return errors.New("calendar: configure accounts directory before starting calendar notice consumer")
+	}
+	return nil
+}
+
 // ---- bộ ghép nội bộ ----
 
 // cooperatives ghép hồ sơ HTX (member) và tâm vùng HTX (plot) thành port.Cooperatives.

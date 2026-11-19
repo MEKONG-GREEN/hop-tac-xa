@@ -18,6 +18,8 @@ depends:
   vault/identity: ">=1.0 <2"
 provides:
   ports:
+    - CalendarMembers
+    - CalendarNotifier
     - Cooperatives
     - Diary
     - FarmerHouseholds

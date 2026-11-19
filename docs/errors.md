@@ -421,6 +421,9 @@ Cổng `geo.GpsLog.RecordFix` (module khác gọi, không qua HTTP) trả lỗi 
 | 422 | `cropcycle.task_stage_locked` | AH-88: sau thu hoạch chỉ ghi việc chưa xong của giai đoạn cuối. |
 | 409 | `cropcycle.task_already_resolved` | AH-88: việc đã xong hoặc bỏ qua; tải lại checklist. |
 | 409 | `cropcycle.task_season_changed` | AH-88: expected_season_event_id không còn hiện hành; tải lại trước khi xác nhận. |
+| 404 | `cropcycle.calendar_not_found` | AH-58: không có lịch trong tenant/HTX/phạm vi người nhận hiện tại; Member không đọc lịch đã hủy. |
+| 409 | `cropcycle.calendar_changed` | AH-58: expected_event_id khác phiên bản hiện hành, tải lại trước khi sửa/hủy. |
+| 409 | `cropcycle.calendar_cancelled` | AH-58: không sửa/phát lại lịch đã hủy; giữ lịch sử. |
 | 409 | `cropcycle.previous_season_not_completed` | pf/cropcycle: sao chép cấu hình vụ trước khi vụ gần nhất chưa hoàn thành (HTX US-SEASON-03 AC-2) |
 | 409 | `cropcycle.no_previous_season` | pf/cropcycle: thửa chưa có vụ để sao chép cấu hình |
 | 422 | `cropcycle.cooperative_inactive` | pf/cropcycle: HTX không tồn tại hoặc đã ngừng hoạt động |

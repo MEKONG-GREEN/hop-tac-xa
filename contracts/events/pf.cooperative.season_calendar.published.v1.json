@@ -1,0 +1,22 @@
+{
+ "$schema":"https://json-schema.org/draft/2020-12/schema",
+ "$id":"https://contracts.agrigreen.vn/events/pf.cooperative.season_calendar.published/v1",
+ "title":"pf.cooperative.season_calendar.published — payload",
+ "x-event-type":"pf.cooperative.season_calendar.published",
+ "x-schema-version":1,
+ "x-producer":"pf/cooperative",
+ "type":"object",
+ "additionalProperties":false,
+ "required":["source_id","calendar_ref","cooperative_ref","crop_name","season_name","season_year","sow_from","sow_to","recipients"],
+ "properties":{
+  "source_id":{"type":"string","format":"uuid"},
+  "calendar_ref":{"type":"string","format":"uuid"},
+  "cooperative_ref":{"type":"string","format":"uuid"},
+  "crop_name":{"type":"string","minLength":1,"maxLength":200},
+  "season_name":{"type":"string","minLength":1,"maxLength":200},
+  "season_year":{"type":"integer","minimum":2000,"maximum":2100},
+  "sow_from":{"type":"string","format":"date"},
+  "sow_to":{"type":"string","format":"date"},
+  "recipients":{"type":"array","minItems":1,"maxItems":500,"uniqueItems":true,"items":{"type":"string","format":"uuid"}}
+ }
+}
