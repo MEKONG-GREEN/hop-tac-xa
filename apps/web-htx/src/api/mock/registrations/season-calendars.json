@@ -1,0 +1,6 @@
+{
+  "id": "season-calendars",
+  "source": "./season-calendars",
+  "app": [{ "export": "seasonCalendarRoutes", "order": 176 }],
+  "admin": []
+}

@@ -18,6 +18,19 @@ InboxItem _item(
 );
 
 void main() {
+  test('AH-59: calendar deep link accepts UUID and rejects external/invalid routes', () {
+    const id = '01920000-0000-7000-8000-00000000ca11';
+    expect(DeepLink.parse('/cropcycle/calendars/$id'), const CalendarLink(id));
+    expect(
+      DeepLink.parse('/cropcycle/calendars/${id.toUpperCase()}'),
+      const CalendarLink(id),
+    );
+    expect(
+      DeepLink.parse('https://evil.test/cropcycle/calendars/$id'),
+      const InboxLink(),
+    );
+    expect(DeepLink.parse('/cropcycle/calendars/$id/extra'), const InboxLink());
+  });
   // 10:00 ngày 01/10/2026 giờ Việt Nam.
   final now = DateTime.utc(2026, 10, 1, 3);
 

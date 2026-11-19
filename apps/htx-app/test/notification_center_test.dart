@@ -126,26 +126,24 @@ void main() {
     },
   );
 
-  testWidgets(
-    'AH-22 AC2: bấm thông báo nhật ký (NTF.3) → màn vụ; thông báo lịch chưa có '
-    'màn đích → ở lại trung tâm, ghi "Chưa có màn hình liên kết"',
-    (tester) async {
-      await _tall(tester);
-      final env = TestEnv(roles: const ['coop_manager'])
-        ..seed(season: true, extra: _notices());
-      await loginToHome(tester, env);
-      await tapOn(tester, find.byTooltip('Thông báo'));
+  testWidgets('AH-59: Đại diện không mở lịch trên mobile; NTF.3 vẫn mở vụ', (
+    tester,
+  ) async {
+    await _tall(tester);
+    final env = TestEnv(roles: const ['coop_manager'])
+      ..seed(season: true, extra: _notices());
+    await loginToHome(tester, env);
+    await tapOn(tester, find.byTooltip('Thông báo'));
 
-      expect(find.text('Chưa có màn hình liên kết'), findsOneWidget);
-      await tapText(tester, 'Lịch thời vụ mới: Lúa, vụ Đông Xuân/2026');
-      await settle(tester);
-      expect(find.byType(NotificationsScreen), findsOneWidget);
-      expect(find.byType(PlotDetailScreen), findsNothing);
-
-      await tapText(tester, 'Vụ đã 4 ngày chưa có nhật ký');
-      await settle(tester);
-      expect(find.byType(PlotDetailScreen), findsOneWidget);
-      await finish(tester);
-    },
-  );
+    expect(find.text('Chưa có màn hình liên kết'), findsNothing);
+    await tapText(tester, 'Lịch thời vụ mới: Lúa, vụ Đông Xuân/2026');
+    await settle(tester);
+    expect(find.byType(NotificationsScreen), findsNothing);
+    expect(find.byType(PlotDetailScreen), findsNothing);
+    await tapOn(tester, find.byTooltip('Thông báo'));
+    await tapText(tester, 'Vụ đã 4 ngày chưa có nhật ký');
+    await settle(tester);
+    expect(find.byType(PlotDetailScreen), findsOneWidget);
+    await finish(tester);
+  });
 }

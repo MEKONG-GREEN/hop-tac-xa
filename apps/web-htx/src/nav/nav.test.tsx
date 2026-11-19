@@ -114,6 +114,7 @@ describe("menu App HTX theo vai", () => {
     "/htx/nong-ho",
     "/htx/lo-ruong",
     "/htx/mua-vu",
+    "/htx/lich-thoi-vu",
     "/htx/nhat-ky",
     "/htx/phe-duyet",
     "/htx/san-luong",
@@ -133,7 +134,8 @@ describe("menu App HTX theo vai", () => {
   it("cán bộ KN xem được (chỉ đọc) nhưng không có màn hình phê duyệt và lịch báo cáo HTX", () => {
     for (const id of ["xa", "tinh", "tw"]) {
       const h = hrefs(persona(id));
-      expect(h).toEqual(expect.arrayContaining(HTX_PAGES.filter((x) => !MANAGER_ONLY.includes(x))));
+      expect(h).toEqual(expect.arrayContaining(HTX_PAGES.filter((x) => !MANAGER_ONLY.includes(x) && x !== "/htx/lich-thoi-vu")));
+      expect(h).not.toContain("/htx/lich-thoi-vu");
       for (const x of MANAGER_ONLY) expect(h).not.toContain(x);
     }
     expect(hrefs(persona("cuc")).some((x) => x.startsWith("/htx"))).toBe(false);
@@ -166,6 +168,7 @@ describe("FN-05: menu theo ma trận ba vai App HTX", () => {
     "/htx/nong-ho",
     "/htx/lo-ruong",
     "/htx/mua-vu",
+    "/htx/lich-thoi-vu",
     "/htx/nhat-ky",
     "/htx/phe-duyet",
     "/htx/san-luong",
@@ -178,7 +181,7 @@ describe("FN-05: menu theo ma trận ba vai App HTX", () => {
 
   it("[FN-05/AC-01, AH-39] Thành viên HTX thấy Quản lý nông hộ, Vụ, Nhật ký, Sản lượng; không thấy Tài khoản cán bộ, Danh mục dùng chung", () => {
     const member = persona("htx-member");
-    expect(hrefs(member)).toEqual(["/htx/nong-ho", "/htx/mua-vu", "/htx/nhat-ky", "/htx/san-luong"]);
+    expect(hrefs(member)).toEqual(["/htx/nong-ho", "/htx/mua-vu", "/htx/lich-thoi-vu", "/htx/nhat-ky", "/htx/san-luong"]);
     expect(hrefs(member)).not.toContain("/quan-tri/tai-khoan");
     expect(hrefs(member)).not.toContain("/quan-tri/danh-muc");
   });

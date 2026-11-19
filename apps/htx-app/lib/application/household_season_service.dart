@@ -5,6 +5,42 @@ import '../domain/season_plan.dart';
 
 typedef HouseholdJson = Map<String, Object?>;
 
+/// A copied suggestion, never a live constraint on the season being opened.
+class SeasonCalendarPrefill {
+  const SeasonCalendarPrefill({
+    required this.cropCode,
+    required this.seasonCode,
+    required this.year,
+    required this.anchorDate,
+  });
+  final String cropCode, seasonCode, anchorDate;
+  final int year;
+  factory SeasonCalendarPrefill.fromJson(HouseholdJson value) {
+    final day = value['sow_from'];
+    final year = value['season_year'];
+    if (day is! String ||
+        !RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(day) ||
+        DateTime.tryParse(day)?.toIso8601String().substring(0, 10) != day ||
+        year is! int ||
+        year < 2000 ||
+        year > 2100 ||
+        value['crop_code'] is! String ||
+        value['season_code'] is! String) {
+      throw const FormatException('Lịch thời vụ không hợp lệ.');
+    }
+    return SeasonCalendarPrefill(
+      cropCode: value['crop_code']! as String,
+      seasonCode: value['season_code']! as String,
+      year: year,
+      anchorDate: day,
+    );
+  }
+  String get displayAnchor {
+    final parts = anchorDate.split('-');
+    return '${parts[2]}/${parts[1]}/${parts[0]}';
+  }
+}
+
 class HouseholdSopChoice {
   const HouseholdSopChoice(this.id, this.name, this.anchor);
   final String id;
@@ -25,6 +61,14 @@ class HouseholdSeasonService {
   const HouseholdSeasonService({required this.api, required this.location});
   final SyncApi api;
   final LocationSource location;
+
+  Future<List<HouseholdJson>> calendars(String coop) => _pages(
+    '/v1/cooperatives/${Uri.encodeComponent(coop)}/season-calendars',
+    pageSize: 100,
+    cursorParameter: 'after',
+  );
+  Future<HouseholdJson> calendar(String calendar) =>
+      api.getJson('/v1/cropcycle/calendars/${Uri.encodeComponent(calendar)}');
 
   Future<HouseholdJson> checklist(
     String coop,
@@ -73,6 +117,8 @@ class HouseholdSeasonService {
   Future<List<HouseholdJson>> _pages(
     String path, {
     Map<String, String> query = const {},
+    int pageSize = 200,
+    String cursorParameter = 'cursor',
   }) async {
     final items = <HouseholdJson>[];
     final seen = <String>{};
@@ -80,7 +126,7 @@ class HouseholdSeasonService {
     do {
       final result = await api.getJson(
         path,
-        query: {...query, 'limit': '200', 'cursor': ?cursor},
+        query: {...query, 'limit': '$pageSize', cursorParameter: ?cursor},
       );
       for (final row in (result['items'] as List? ?? const [])) {
         if (row is Map) items.add(row.cast<String, Object?>());

@@ -20,6 +20,27 @@ HouseholdSeasonService service(
 );
 
 void main() {
+  test('AH-59: calendar pagination uses after and limit 100', () async {
+    final seen = <String?>[];
+    final s = service((req) async {
+      seen.add(req.url.queryParameters['after']);
+      expect(req.url.queryParameters['limit'], '100');
+      return http.Response.bytes(
+        utf8.encode(
+          jsonEncode({
+            'items': [
+              {'calendar_ref': 'c${seen.length}'},
+            ],
+            'next_cursor': seen.length == 1 ? 'next-calendar' : null,
+          }),
+        ),
+        200,
+        headers: {'content-type': 'application/json'},
+      );
+    });
+    expect((await s.calendars('coop')).length, 2);
+    expect(seen, [null, 'next-calendar']);
+  });
   test(
     'AH-71: preview dùng key riêng và đọc kế hoạch theo vụ, không ghi mở vụ',
     () async {

@@ -13,6 +13,7 @@ import 'support/test_env.dart';
 const _memberTiles = [
   'Nông hộ',
   'Bản đồ lô ruộng',
+  'Lịch thời vụ',
   'Mở vụ hàng loạt',
   'Ghi nhật ký hộ',
   'Nhật ký hàng loạt',
@@ -72,47 +73,39 @@ Future<void> _back(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets(
-    '[FN-05/AC-01] Thành viên HTX: trang chủ đúng 8 ô; nông hộ và bản đồ chỉ '
-    'xem (không gọi, không thêm/sửa/xóa, không sửa ranh); chi tiết lô có nút '
-    'ghi nhật ký, khai sản lượng, sửa/hủy vụ',
-    (tester) async {
-      final env = _env(const ['htx_member']);
-      await loginToHome(tester, env);
-      expect(_tiles(tester), _memberTiles);
-      expect(_all('AgriGreen HTX · Thành viên HTX'), findsOneWidget);
+  testWidgets('[FN-05/AC-01, AH-59] Thành viên HTX: trang chủ đúng 9 ô; nông hộ và bản đồ chỉ '
+      'xem (không gọi, không thêm/sửa/xóa, không sửa ranh); chi tiết lô có nút '
+      'ghi nhật ký, khai sản lượng, sửa/hủy vụ', (tester) async {
+    final env = _env(const ['htx_member']);
+    await loginToHome(tester, env);
+    expect(_tiles(tester), _memberTiles);
+    expect(_all('AgriGreen HTX · Thành viên HTX'), findsOneWidget);
 
-      await openTile(tester, 'Nông hộ');
-      expect(find.text('Nguyễn V. A.'), findsOneWidget);
-      expect(find.byIcon(Icons.phone, skipOffstage: false), findsNothing);
-      for (final icon in [Icons.add, Icons.edit, Icons.delete]) {
-        expect(find.byIcon(icon, skipOffstage: false), findsNothing);
-      }
-      for (final label in ['Thêm', 'Sửa', 'Xóa']) {
-        expect(_all(label), findsNothing);
-      }
-      await _back(tester);
+    await openTile(tester, 'Nông hộ');
+    expect(find.text('Nguyễn V. A.'), findsOneWidget);
+    expect(find.byIcon(Icons.phone, skipOffstage: false), findsNothing);
+    for (final icon in [Icons.add, Icons.edit, Icons.delete]) {
+      expect(find.byIcon(icon, skipOffstage: false), findsNothing);
+    }
+    for (final label in ['Thêm', 'Sửa', 'Xóa']) {
+      expect(_all(label), findsNothing);
+    }
+    await _back(tester);
 
-      await openTile(tester, 'Bản đồ lô ruộng');
-      expect(find.textContaining('T1', skipOffstage: false), findsWidgets);
-      expect(_all('Vẽ lô mới'), findsNothing);
-      expect(_all('Vẽ ranh giới'), findsNothing);
-      expect(_all('Sửa ranh giới'), findsNothing);
-      await _back(tester);
+    await openTile(tester, 'Bản đồ lô ruộng');
+    expect(find.textContaining('T1', skipOffstage: false), findsWidgets);
+    expect(_all('Vẽ lô mới'), findsNothing);
+    expect(_all('Vẽ ranh giới'), findsNothing);
+    expect(_all('Sửa ranh giới'), findsNothing);
+    await _back(tester);
 
-      await openTile(tester, 'Ghi nhật ký hộ');
-      await tapText(tester, 'T1 · Ruộng bờ kênh');
-      for (final label in [
-        'Ghi nhật ký',
-        'Khai sản lượng',
-        'Sửa vụ',
-        'Hủy vụ',
-      ]) {
-        expect(_inPlot(label), findsOneWidget, reason: label);
-      }
-      await finish(tester);
-    },
-  );
+    await openTile(tester, 'Ghi nhật ký hộ');
+    await tapText(tester, 'T1 · Ruộng bờ kênh');
+    for (final label in ['Ghi nhật ký', 'Khai sản lượng', 'Sửa vụ', 'Hủy vụ']) {
+      expect(_inPlot(label), findsOneWidget, reason: label);
+    }
+    await finish(tester);
+  });
 
   testWidgets(
     'Đại diện HTX: không có ô ghi; xem vụ và nhật ký hộ không có nút thêm, '
