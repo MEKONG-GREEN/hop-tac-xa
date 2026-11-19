@@ -1,7 +1,7 @@
 import type { AppGet, ParamVersion } from "../types";
 import { uuidv7 } from "../idempotency";
 import { seasonUseCount } from "./cropcycle";
-import { ADMIN_UNITS, CATALOGS, PARAM_VERSIONS, ACTOR_NAMES } from "./data";
+import { ADMIN_UNITS, CATALOGS, PARAM_VERSIONS, ACTOR_NAMES, adminUnitSelectable } from "./data";
 import { hasRole, json, paginate, problem, type Route } from "./http";
 import { checkDisplayProposal, DISPLAY_DEFAULTS, displayConfig, isColorKey, isPercentKey, PERCENT_TITLE, RESTORE_REASON } from "./display";
 
@@ -24,7 +24,7 @@ export const appRoutes30: Route[] = [{
     handler: ({ url }) => {
       const parent = url.searchParams.get("parent");
       if (parent && !ADMIN_UNITS.some((u) => u.code === parent)) return problem(404, "masterdata.admin_unit_not_found", "Not found");
-      return json(paginate(ADMIN_UNITS.filter((u) => (parent ? u.parent_code === parent : u.parent_code === null)), url));
+      return json(paginate(ADMIN_UNITS.filter((u) => adminUnitSelectable(u) && (parent ? u.parent_code === parent : u.parent_code === null)), url));
     },
   }];
 
@@ -33,7 +33,7 @@ export const appRoutes31: Route[] = [{
     pattern: /^\/v1\/masterdata\/admin-units\/([0-9A-Z.-]+)$/,
     handler: ({ params }) => {
       const u = ADMIN_UNITS.find((x) => x.code === params[0]);
-      return u ? json(u) : problem(404, "masterdata.admin_unit_not_found", "Not found");
+      return u ? json({ ...u, active: adminUnitSelectable(u) }) : problem(404, "masterdata.admin_unit_not_found", "Not found");
     },
   }];
 

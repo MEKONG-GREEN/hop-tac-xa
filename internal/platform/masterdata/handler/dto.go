@@ -18,6 +18,7 @@ import (
 type Handler struct{ Svc *app.Service }
 
 type unitDTO struct {
+	Active         bool     `json:"active"`
 	Code           string   `json:"code"`
 	Name           string   `json:"name"`
 	Level          string   `json:"level"`
@@ -28,7 +29,7 @@ type unitDTO struct {
 }
 
 func toUnitDTO(u domain.Unit) unitDTO {
-	d := unitDTO{Code: u.Code, Name: u.Name, Level: string(u.Level), ValidFrom: u.ValidFrom.Format(time.DateOnly), SuccessorCodes: u.Successors}
+	d := unitDTO{Active: !u.Disabled, Code: u.Code, Name: u.Name, Level: string(u.Level), ValidFrom: u.ValidFrom.Format(time.DateOnly), SuccessorCodes: u.Successors}
 	if d.SuccessorCodes == nil {
 		d.SuccessorCodes = []string{}
 	}

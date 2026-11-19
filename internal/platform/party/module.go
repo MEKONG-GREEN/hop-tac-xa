@@ -134,6 +134,9 @@ func (m *Module) Orgs() port.Orgs { return m.reg }
 // OrgDirectory cho pf/cooperative đọc Nút theo lô (danh sách, thống kê, marker HTX — W3.3).
 func (m *Module) OrgDirectory() port.OrgDirectory { return m.reg }
 
+// UnitCounts exposes tenant-scoped HTX counts to the administration catalog.
+func (m *Module) UnitCounts() port.CooperativeUnitCounts { return m.reg }
+
 // ConsentStates cho pf/cooperative đọc trạng thái đồng ý của nông hộ trong danh sách (G-04, W3.3).
 func (m *Module) ConsentStates() port.ConsentStates { return m.reg }
 

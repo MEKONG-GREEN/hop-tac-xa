@@ -102,6 +102,15 @@ func (m *Module) UseCatalogUsage(u port.CatalogUsage) { m.svc.Usage = append(m.s
 // UseSeasonUsage (AH-7) nối nguồn đếm số vụ đang dùng mỗi mùa vụ cho cột "Đang dùng" của màn Danh mục mùa vụ.
 func (m *Module) UseSeasonUsage(u port.SeasonUsage) { m.svc.Seasons = u }
 
+// UseUnitUsage connects organization counts for FN-02 outside the catalog tx.
+func (m *Module) UseUnitUsage(u port.UnitUsage) { m.svc.UnitUsage = u }
+
+// RebuildUnitProfiles restores operational catalog projections from their
+// source ledger; reserved for operator tooling, not exposed as an HTTP write.
+func (m *Module) RebuildUnitProfiles(ctx context.Context, tenantID uuid.UUID) error {
+	return m.svc.RebuildUnitProfiles(ctx, tenantID)
+}
+
 // UseApprovals (W6.1) nối cap/workflow (pf/workflow): gửi duyệt/duyệt/từ chối phiên bản tham số ghi thêm yêu cầu
 // và quyết định vào sổ pf_workflow cùng giao dịch. Không nối → luồng cũ.
 func (m *Module) UseApprovals(a wfport.Approvals) { m.svc.Approvals = a }

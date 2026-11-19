@@ -24,7 +24,9 @@ const (
 
 // AdminUnit là một đơn vị hành chính tại một thời điểm.
 type AdminUnit struct {
-	Code       string // mã theo danh mục của Tổng cục Thống kê / Bộ Nội vụ
+	// Disabled prevents new assignments; it never invalidates old references.
+	Disabled   bool   `json:",omitempty"`
+	Code       string // mã nền chính thức hoặc mã cục bộ do hệ thống sinh; bất biến
 	Name       string
 	Level      Level
 	ParentCode string     // tỉnh của xã; rỗng với tỉnh
@@ -52,4 +54,9 @@ type AdminUnits interface {
 // các bản giả trong kiểm thử (G-05, G-02).
 type AdminUnitTree interface {
 	Children(ctx context.Context, parent string, at time.Time) ([]AdminUnit, error)
+}
+
+// CooperativeUnitCounts counts registered HTXs, including inactive profiles.
+type CooperativeUnitCounts interface {
+	CooperativeCountsByUnits(context.Context, []string) (map[string]int64, error)
 }

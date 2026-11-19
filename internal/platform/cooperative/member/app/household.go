@@ -115,6 +115,19 @@ func (s *Service) createHousehold(ctx context.Context, p authz.Principal, sc aut
 	if !sc.Allows(commune) {
 		return HouseholdResult{}, ErrOutOfScope.WithDetail("xã của nông hộ ngoài phạm vi phụ trách")
 	}
+	if s.Units == nil {
+		return HouseholdResult{}, ErrDependency.WithDetail("chưa nối danh mục đơn vị hành chính")
+	}
+	unit, err := s.Units.Get(ctx, commune, now)
+	if errors.Is(err, partyport.ErrUnitNotFound) {
+		return HouseholdResult{}, problem.Validation.WithField("commune_code", "Chọn xã / phường đang sử dụng")
+	}
+	if err != nil {
+		return HouseholdResult{}, err
+	}
+	if unit.Level != partyport.LevelCommune || unit.Disabled {
+		return HouseholdResult{}, problem.Validation.WithField("commune_code", "Chọn xã / phường đang sử dụng")
+	}
 
 	createdRef, err := s.Vault.RegisterHousehold(ctx, port.HouseholdIdentity{
 		FullName: strings.TrimSpace(in.Identity.FullName), Phone: strings.TrimSpace(in.Identity.Phone),
