@@ -13702,6 +13702,8 @@ export interface components {
             tax_code: string | null;
             /** @description Diện tích đăng ký hành chính (ha) */
             area_ha: components["schemas"]["Decimal"] | null;
+            /** @description Tổng diện tích hộ hiện thuộc HTX; null khi chưa nối nguồn, không dùng area_ha đăng ký KN */
+            household_areas?: components["schemas"]["CooperativeHouseholdAreas"] | null;
             /** Format: date */
             established_on: string | null;
             location: components["schemas"]["Point"] | null;
@@ -13729,6 +13731,8 @@ export interface components {
             cooperative_ref: string | null;
             commune_code: string;
             cultivated_area_ha: components["schemas"]["Decimal"] | null;
+            /** @description Diện tích chăn nuôi của hộ; null khi chưa khai báo */
+            livestock_area_ha?: components["schemas"]["Decimal"] | null;
             /** Format: date */
             member_since: string | null;
             active: boolean;
@@ -13800,6 +13804,8 @@ export interface components {
             /** @description Bỏ trống = xã của HTX */
             commune_code?: string;
             cultivated_area_ha?: components["schemas"]["Decimal"];
+            /** @description Tùy chọn; không âm, tối đa 4 số lẻ */
+            livestock_area_ha?: components["schemas"]["Decimal"];
             /** Format: date */
             member_since?: string;
             /** @description Chỉ chuyển vào kho định danh (mục đích registry.admin), không lưu ở pf_party */
@@ -27648,6 +27654,15 @@ export interface components {
             base_version: number;
             checkin: components["schemas"]["CNTSLivestockCheckin"];
             reason?: string;
+        };
+        CooperativeHouseholdAreas: {
+            /** @description null nếu còn hộ chưa khai diện tích trồng trọt */
+            cultivated_ha: components["schemas"]["Decimal"] | null;
+            /** @description null nếu còn hộ chưa khai diện tích chăn nuôi */
+            livestock_ha: components["schemas"]["Decimal"] | null;
+            households: number;
+            missing_cultivated: number;
+            missing_livestock: number;
         };
     };
     responses: {

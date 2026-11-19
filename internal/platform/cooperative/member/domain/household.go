@@ -21,6 +21,7 @@ type Household struct {
 	Ref              uuid.UUID // = Created.Ref của kho định danh
 	CommuneCode      string
 	CultivatedAreaHa *decimal.Decimal
+	LivestockAreaHa  *decimal.Decimal
 	Active           bool
 	CooperativeRef   uuid.UUID  // HTX hiện tại; Nil nếu chưa là thành viên
 	MemberSince      *time.Time // ngày vào HTX hiện tại

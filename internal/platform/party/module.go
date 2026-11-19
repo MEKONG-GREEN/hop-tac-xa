@@ -145,6 +145,9 @@ func (m *Module) ConsentStates() port.ConsentStates { return m.reg }
 // HTX trả 503 party.dependency_unavailable.
 func (m *Module) UseCoopProfiles(p port.CoopProfiles) { m.reg.Profiles, m.share.Profiles = p, p }
 
+// UseCooperativeAreas nối nguồn diện tích hộ; không dùng diện tích đăng ký KN.
+func (m *Module) UseCooperativeAreas(p port.CooperativeAreaSource) { m.reg.Areas = p }
+
 // ScopeResolver cho module khác tính phạm vi theo cây phân cấp (qua port, ADR-0009).
 func (m *Module) ScopeResolver() port.ScopeResolver { return m.reg }
 

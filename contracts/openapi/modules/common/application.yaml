@@ -5278,6 +5278,7 @@ components:
             confirmation_label: {type: string, enum: ["Đã xác nhận", "Chưa xác nhận"]}
             tax_code: {type: [string, "null"], pattern: "^[0-9]{10}(-[0-9]{3})?$"}
             area_ha: {oneOf: [{$ref: "#/components/schemas/Decimal"}, {type: "null"}], description: "Diện tích đăng ký hành chính (ha)"}
+            household_areas: {oneOf: [{$ref: "#/components/schemas/CooperativeHouseholdAreas"}, {type: "null"}], description: "Tổng diện tích hộ hiện thuộc HTX; null khi chưa nối nguồn, không dùng area_ha đăng ký KN"}
             established_on: {type: [string, "null"], format: date}
             location: {oneOf: [{$ref: "#/components/schemas/Point"}, {type: "null"}]}
             location_provisional: {type: boolean, description: "true = chưa có toạ độ; bản đồ hiển thị tâm xã, nhãn \"vị trí tạm\""}
@@ -5300,6 +5301,7 @@ components:
         cooperative_ref: {type: [string, "null"], format: uuid}
         commune_code: {type: string}
         cultivated_area_ha: {oneOf: [{$ref: "#/components/schemas/Decimal"}, {type: "null"}]}
+        livestock_area_ha: {oneOf: [{$ref: "#/components/schemas/Decimal"}, {type: "null"}], description: "Diện tích chăn nuôi của hộ; null khi chưa khai báo"}
         member_since: {type: [string, "null"], format: date}
         active: {type: boolean}
 # @ag-order: 564
@@ -5360,6 +5362,7 @@ components:
         cooperative_ref: {type: string, format: uuid}
         commune_code: {type: string, description: "Bỏ trống = xã của HTX"}
         cultivated_area_ha: {$ref: "#/components/schemas/Decimal"}
+        livestock_area_ha: {$ref: "#/components/schemas/Decimal", description: "Tùy chọn; không âm, tối đa 4 số lẻ"}
         member_since: {type: string, format: date}
         identity:
           type: object

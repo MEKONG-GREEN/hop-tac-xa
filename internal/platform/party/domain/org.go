@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
+	"golang.org/x/text/unicode/norm"
 
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/party/port"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/clock"
@@ -16,6 +17,12 @@ import (
 
 // OrgRuleVersion ghim vào mọi bản ghi sổ biến động tổ chức.
 const OrgRuleVersion = "pf.party.org/v1"
+
+// CooperativeNameKey dùng cùng một quy tắc Unicode cho so trùng và khóa ghi,
+// không phụ thuộc LC_CTYPE của PostgreSQL. Dấu tiếng Việt vẫn được giữ nguyên.
+func CooperativeNameKey(name string) string {
+	return strings.ToLower(norm.NFC.String(strings.Join(strings.Fields(name), " ")))
+}
 
 // Độ dài tối thiểu của lý do.
 const (

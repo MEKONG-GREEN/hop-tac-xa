@@ -102,17 +102,26 @@ type pointDTO struct {
 
 type coopDTO struct {
 	orgDTO
-	StatusReason  *string          `json:"status_reason"`
-	TaxCode       *string          `json:"tax_code"`
-	AreaHa        *decimal.Decimal `json:"area_ha"`
-	EstablishedOn *string          `json:"established_on"`
-	Location      *pointDTO        `json:"location"`
-	Address       *string          `json:"address"`
+	HouseholdAreas *cooperativeAreasDTO `json:"household_areas"`
+	StatusReason   *string              `json:"status_reason"`
+	TaxCode        *string              `json:"tax_code"`
+	AreaHa         *decimal.Decimal     `json:"area_ha"`
+	EstablishedOn  *string              `json:"established_on"`
+	Location       *pointDTO            `json:"location"`
+	Address        *string              `json:"address"`
 	// LocationProvisional: chưa có toạ độ — bản đồ hiển thị tâm xã kèm nhãn "vị trí tạm" (CGH FN-03 AC-03).
 	LocationProvisional bool `json:"location_provisional"`
 	// D2 (ADR-0052): HTX tạm do KN/MKG lập → unconfirmed / "Chưa xác nhận" tới khi HTX thật nhận quyền theo MST.
 	ConfirmationStatus string `json:"confirmation_status"`
 	ConfirmationLabel  string `json:"confirmation_label"`
+}
+
+type cooperativeAreasDTO struct {
+	CultivatedHa      *decimal.Decimal `json:"cultivated_ha"`
+	LivestockHa       *decimal.Decimal `json:"livestock_ha"`
+	Households        int64            `json:"households"`
+	MissingCultivated int64            `json:"missing_cultivated"`
+	MissingLivestock  int64            `json:"missing_livestock"`
 }
 
 // confirmation đổi cờ đã xác nhận của hồ sơ HTX thành (mã, nhãn) hiển thị.
@@ -129,6 +138,10 @@ func toCoopDTO(c app.Cooperative) coopDTO {
 		AreaHa: c.Profile.AreaHa, LocationProvisional: c.Profile.Location == nil, Address: strPtr(c.Profile.Address),
 	}
 	d.ConfirmationStatus, d.ConfirmationLabel = confirmation(c.Profile.Confirmed)
+	if c.Areas != nil {
+		d.HouseholdAreas = &cooperativeAreasDTO{CultivatedHa: c.Areas.CultivatedHa, LivestockHa: c.Areas.LivestockHa,
+			Households: c.Areas.Households, MissingCultivated: c.Areas.MissingCultivated, MissingLivestock: c.Areas.MissingLivestock}
+	}
 	if c.Profile.EstablishedOn != nil {
 		s := c.Profile.EstablishedOn.Format(time.DateOnly)
 		d.EstablishedOn = &s

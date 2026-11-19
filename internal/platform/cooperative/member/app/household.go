@@ -36,6 +36,7 @@ type CreateHouseholdInput struct {
 	CooperativeRef   uuid.UUID
 	CommuneCode      string // rỗng = xã của HTX
 	CultivatedAreaHa *decimal.Decimal
+	LivestockAreaHa  *decimal.Decimal
 	MemberSince      *time.Time
 	// Source: nguồn đăng ký ghi vào pf.party.household.registered; rỗng → suy từ vai
 	// (quản lý HTX → htx_app, còn lại → kn_app).
@@ -84,6 +85,9 @@ func (s *Service) createHousehold(ctx context.Context, p authz.Principal, sc aut
 	}
 	if err := domain.ValidateHousehold(in.CultivatedAreaHa, in.MemberSince, now); err != nil {
 		return HouseholdResult{}, fieldProblem(err)
+	}
+	if in.LivestockAreaHa != nil && !domain.ValidArea(*in.LivestockAreaHa) {
+		return HouseholdResult{}, problem.Validation.WithField("livestock_area_ha", domain.ErrArea.Error())
 	}
 	if s.Vault == nil {
 		return HouseholdResult{}, ErrDependency.WithDetail("chưa nối kho định danh")
@@ -145,7 +149,8 @@ func (s *Service) createHousehold(ctx context.Context, p authz.Principal, sc aut
 
 	h := domain.Household{
 		Ref: createdRef, CommuneCode: commune, CultivatedAreaHa: in.CultivatedAreaHa, Active: true,
-		CooperativeRef: coop.Ref, MemberSince: in.MemberSince, CreatedAt: now,
+		LivestockAreaHa: in.LivestockAreaHa,
+		CooperativeRef:  coop.Ref, MemberSince: in.MemberSince, CreatedAt: now,
 	}
 	res := HouseholdResult{Duplicate: dup}
 	err = tenant.WithTenantTx(ctx, s.DB, p.TenantID, func(tx pgx.Tx) error {

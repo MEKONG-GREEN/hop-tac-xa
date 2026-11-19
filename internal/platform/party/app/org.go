@@ -51,8 +51,8 @@ type CreateOrgInput struct {
 	Representative    *Representative
 	Cooperative       *domain.CooperativeProfile
 	IdemKey           string
-	// UniqueName: chặn tạo HTX trùng tên (không phân biệt hoa thường) — nhập hàng loạt
-	// và sao chép hồ sơ HTX (HTX US-HTX-02/03). Tạo đơn lẻ G1 giữ hành vi cũ.
+	// UniqueName giữ tương thích với caller nhập/sao chép cũ; mọi cách tạo
+	// HTX đều chặn trùng tên theo AH-283.
 	UniqueName bool
 }
 
@@ -313,7 +313,7 @@ func (r *Registry) createOrg(ctx context.Context, p authz.Principal, in CreateOr
 			return OrgResult{}, ErrInvalidHierarchy.WithDetail("đơn vị hành chính không thuộc địa bàn của tổ chức cấp trên")
 		}
 		code := in.Code
-		if isCoop && in.UniqueName {
+		if isCoop {
 			if err := store.LockCooperativeName(ctx, tx, in.Name); err != nil {
 				return OrgResult{}, err
 			}
@@ -604,6 +604,18 @@ func (r *Registry) changeStatusIn(ctx context.Context, p authz.Principal, sc aut
 		}
 		switch action {
 		case domain.ActionRenamed:
+			if cur.Kind == port.OrgCooperative {
+				if err := store.LockCooperativeName(ctx, tx, in.Name); err != nil {
+					return OrgResult{}, err
+				}
+				owner, err := store.CooperativeNameOwner(ctx, tx, in.Name, cur.Ref)
+				if err != nil {
+					return OrgResult{}, err
+				}
+				if owner != uuid.Nil {
+					return OrgResult{}, ErrCoopNameTaken.With("existing_ref", owner.String())
+				}
+			}
 			o.Name = strings.TrimSpace(in.Name)
 		case domain.ActionDeactivated:
 			n, err := store.CountActiveChildren(ctx, tx, cur.Ref)
@@ -828,18 +840,27 @@ func (r *Registry) GetCooperative(ctx context.Context, ref uuid.UUID) (Cooperati
 	if err != nil {
 		return Cooperative{}, err
 	}
-	c, err := r.cooperativeByRef(ctx, p.TenantID, ref, false)
+	// Kiểm quyền trên Nút của module này trước khi đọc số liệu hồ sơ/hộ
+	// từ module khác; không gọi port với ref HTX do client tự chọn ngoài quyền.
+	if ownCoopOnly(p) && ref != p.OrgRef {
+		return Cooperative{}, ErrOrgNotFound
+	}
+	var org *store.CoopOrg
+	if err := tenant.WithTenantTx(ctx, r.DB, p.TenantID, func(tx pgx.Tx) error {
+		var err error
+		org, err = store.CoopOrgByRef(ctx, tx, ref)
+		return err
+	}); err != nil {
+		return Cooperative{}, err
+	}
+	if org == nil || !visible(sc, org.AdminUnitCode) {
+		return Cooperative{}, ErrOrgNotFound
+	}
+	cs, err := r.cooperatives(ctx, p.TenantID, []store.CoopOrg{*org}, false)
 	if err != nil {
 		return Cooperative{}, err
 	}
-	if c == nil || !visible(sc, c.AdminUnitCode) {
-		return Cooperative{}, ErrOrgNotFound
-	}
-	// Đại diện HTX, Thành viên HTX chỉ xem HTX gắn với tài khoản (FN-06/BR-02, BR-03), chặt hơn phạm vi theo xã.
-	if ownCoopOnly(p) && c.Ref != p.OrgRef {
-		return Cooperative{}, ErrOrgNotFound
-	}
-	return *c, nil
+	return cs[0], nil
 }
 
 // OrgHistory trả nhật ký biến động chỉ đọc của một tổ chức (US-HTXSTATUS-03).

@@ -39,6 +39,7 @@ type Cooperative struct {
 	UpdatedAt time.Time
 	// HouseholdCount: nông hộ đang là thành viên (chỉ màn KN đọc).
 	HouseholdCount int
+	Areas          *port.CooperativeAreas
 }
 
 func (r *Registry) coopProfiles() (port.CoopProfiles, error) {
@@ -169,8 +170,18 @@ func (r *Registry) cooperatives(ctx context.Context, tid uuid.UUID, orgs []store
 			return nil, ErrDependency.WithDetail("không đọc được nông hộ của HTX").WithCause(err)
 		}
 	}
+	var areas map[uuid.UUID]port.CooperativeAreas
+	if r.Areas != nil {
+		areas, err = r.Areas.CooperativeAreas(tctx, refs)
+		if err != nil {
+			return nil, ErrDependency.WithDetail("không đọc được tổng diện tích hộ của HTX").WithCause(err)
+		}
+	}
 	for _, o := range orgs {
 		c := Cooperative{OrgState: o.OrgState, UpdatedAt: o.UpdatedAt, HouseholdCount: int(members[o.Ref])}
+		if a, ok := areas[o.Ref]; ok {
+			c.Areas = &a
+		}
 		if p, ok := profs[o.Ref]; ok {
 			c.Profile = toDomainProfile(p)
 			if p.UpdatedAt.After(c.UpdatedAt) {

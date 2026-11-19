@@ -84,6 +84,8 @@ type Registry struct {
 	// Profiles: hồ sơ HTX và số nông hộ thành viên (pf/cooperative, W3.3). Thiếu → thao tác cần hồ sơ HTX trả
 	// 503 party.dependency_unavailable.
 	Profiles port.CoopProfiles
+	// Areas là nguồn diện tích hộ của FN-03, khác AreaHa đăng ký KN.
+	Areas port.CooperativeAreaSource
 }
 
 var (
