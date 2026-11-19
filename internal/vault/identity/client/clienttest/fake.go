@@ -35,12 +35,11 @@ type Access struct {
 }
 
 type subject struct {
-	createdFor client.Purpose
-	tenant     uuid.UUID
-	id         client.Identity
-	pub        *[32]byte
-	priv       *[32]byte
-	erased     bool
+	tenant uuid.UUID
+	id     client.Identity
+	pub    *[32]byte
+	priv   *[32]byte
+	erased bool
 	// sections: ngăn hồ sơ (W11.22) — bản sao, không chia sẻ map với người gọi.
 	sections map[string]client.Fields
 }
@@ -58,10 +57,12 @@ type blindKey struct {
 
 // Fake là client.Client trong bộ nhớ, an toàn khi dùng song song.
 type Fake struct {
-	mu       sync.Mutex
-	subjects map[uuid.UUID]*subject
-	blind    map[blindKey]uuid.UUID
-	log      []Access
+	htxContacts map[[2]uuid.UUID]client.HTXContact
+	htxCommands map[[2]uuid.UUID]htxContactCommand
+	mu          sync.Mutex
+	subjects    map[uuid.UUID]*subject
+	blind       map[blindKey]uuid.UUID
+	log         []Access
 	// revisions: bản sửa họ tên/SĐT (#251) — giá trị đã chuẩn hóa trước/sau, chỉ trả nhãn che bớt.
 	revisions map[uuid.UUID]revision
 	// Fail, nếu khác nil, được gọi đầu mỗi thao tác; trả lỗi khác nil → thao tác trả lỗi đó.
@@ -145,8 +146,7 @@ func (f *Fake) Create(ctx context.Context, purpose client.Purpose, id client.Ide
 		id.NationalID = n
 		keys = append(keys, blindKey{tid, domain.BlindNationalID, n})
 	}
-	optionalName := id.Kind == client.SubjectPerson && purpose == client.PurposeRegistryAdmin && id.Phone != ""
-	if (domain.NormalizeName(id.FullName) == "" && !optionalName) || !domain.ValidArea(id.AreaCode) {
+	if id.FullName == "" || !domain.ValidArea(id.AreaCode) {
 		return client.Created{}, problem.Validation.WithField("full_name", "bắt buộc; area_code bắt buộc")
 	}
 	id.FullName = domain.NormalizeName(id.FullName)
@@ -163,7 +163,7 @@ func (f *Fake) Create(ctx context.Context, purpose client.Purpose, id client.Ide
 		return client.Created{}, err
 	}
 	ref := ids.New()
-	f.subjects[ref] = &subject{tenant: tid, id: id, pub: pub, priv: priv, createdFor: purpose}
+	f.subjects[ref] = &subject{tenant: tid, id: id, pub: pub, priv: priv}
 	for _, k := range keys {
 		f.blind[k] = ref
 	}
@@ -347,7 +347,7 @@ func (f *Fake) AmendRevision(ctx context.Context, purpose client.Purpose, ref uu
 	if !domain.AllowedPurpose(domain.OpAmend, string(purpose)) {
 		return uuid.Nil, problem.Validation.WithField("purpose", "không thuộc danh mục của thao tác amend")
 	}
-	if domain.NormalizeName(id.FullName) == "" && (purpose != client.PurposeRegistryAdmin || id.Phone == "") {
+	if id.FullName == "" {
 		return uuid.Nil, problem.Validation.WithField("full_name", "bắt buộc")
 	}
 	var phone string
@@ -362,12 +362,6 @@ func (f *Fake) AmendRevision(ctx context.Context, purpose client.Purpose, ref uu
 	f.record(domain.OpAmend, purpose, ref, actor)
 	if err != nil {
 		return uuid.Nil, err
-	}
-	if domain.NormalizeName(id.FullName) == "" && s.id.Kind != client.SubjectPerson {
-		return uuid.Nil, problem.Validation.WithField("full_name", "họ tên chủ hộ là bắt buộc")
-	}
-	if purpose == client.PurposeRegistryAdmin && (s.id.Kind != client.SubjectPerson || s.createdFor != client.PurposeRegistryAdmin) {
-		return uuid.Nil, problem.Validation.WithField("purpose", "registry.admin chỉ sửa liên hệ được tạo cho quản trị hồ sơ")
 	}
 	k := blindKey{tid, domain.BlindPhone, phone}
 	if phone != "" {

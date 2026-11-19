@@ -97,6 +97,20 @@ func (r *Registry) HTXProfile(ctx context.Context, ref uuid.UUID) (HTXProfile, e
 	}
 	fullContact := p.Has(authz.RolePlatformAdmin) || p.Has(port.RoleCoopManager)
 	out := HTXProfile{Cooperative: c, CanEdit: fullContact && c.Active, ContactMasked: !fullContact}
+	if contacts, ok := client.AsHTXContacts(r.Vault); ok {
+		purpose := client.PurposeRegistryAdmin
+		if !fullContact {
+			purpose = client.PurposeContact
+		}
+		contact, err := contacts.ReadHTXContact(ctx, purpose, ref, !fullContact)
+		if err == nil {
+			out.RepresentativeName, out.Phone = contact.FullName, localHTXPhone(contact.Phone)
+			return out, nil
+		}
+		if !errors.Is(err, client.ErrNotFound) {
+			return HTXProfile{}, vaultError(err)
+		}
+	}
 	if c.RepresentativeRef == uuid.Nil {
 		return out, nil
 	}
@@ -137,13 +151,21 @@ func (r *Registry) CreateHTXProfile(ctx context.Context, in HTXProfileInput) (Or
 		return OrgResult{}, problem.IdempotencyRequired
 	}
 	key := "htx-profile:create:" + p.ActorRef.String() + ":" + in.IdemKey
+	if err := validateHTXProfile(&in); err != nil {
+		return OrgResult{}, err
+	}
+	digest, err := htxProfileHash(UpdateHTXProfileInput{HTXProfileInput: in})
+	if err != nil {
+		return OrgResult{}, err
+	}
 	if prev, err := r.replay(ctx, p.TenantID, key); err != nil {
 		return OrgResult{}, err
 	} else if prev != nil {
-		return r.completeCoop(ctx, p.TenantID, *prev)
-	}
-	if err := validateHTXProfile(&in); err != nil {
-		return OrgResult{}, err
+		completed, err := r.completeCoop(ctx, p.TenantID, *prev)
+		if err != nil {
+			return OrgResult{}, err
+		}
+		return r.finishHTXCreateContact(ctx, p.TenantID, completed, in, digest)
 	}
 	unit, err := r.unitInfo(ctx, port.OrgCooperative, in.CommuneCode, "commune_code")
 	if err != nil {
@@ -165,15 +187,41 @@ func (r *Registry) CreateHTXProfile(ctx context.Context, in HTXProfileInput) (Or
 	}); err != nil {
 		return OrgResult{}, err
 	}
-	if r.Vault == nil {
-		return OrgResult{}, ErrDependency.WithDetail("chưa nối kho định danh")
+	if _, ok := client.AsHTXContacts(r.Vault); !ok {
+		return OrgResult{}, ErrDependency.WithDetail("chưa nối liên hệ độc lập theo HTX")
 	}
-	contact, err := r.Vault.Create(ctx, client.PurposeRegistryAdmin, client.Identity{
-		Kind: client.SubjectPerson, FullName: in.RepresentativeName, Phone: in.Phone, AreaCode: in.CommuneCode,
-	})
-	if err != nil && (!errors.Is(err, client.ErrDuplicate) || contact.Ref == uuid.Nil) {
-		return OrgResult{}, vaultError(err)
+	result, err := r.CreateOrg(ctx, CreateOrgInput{Kind: port.OrgCooperative, Name: in.Name, AdminUnitCode: in.CommuneCode,
+		Cooperative: &domain.CooperativeProfile{Address: in.HeadOffice}, IdemKey: key, HTXProfileHash: digest})
+	if err != nil {
+		return OrgResult{}, err
 	}
-	return r.CreateOrg(ctx, CreateOrgInput{Kind: port.OrgCooperative, Name: in.Name, AdminUnitCode: in.CommuneCode,
-		RepresentativeRef: contact.Ref, Cooperative: &domain.CooperativeProfile{Address: in.HeadOffice}, IdemKey: key})
+	return r.finishHTXCreateContact(ctx, p.TenantID, result, in, digest)
+}
+
+func (r *Registry) finishHTXCreateContact(ctx context.Context, tid uuid.UUID, result OrgResult, in HTXProfileInput, digest string) (OrgResult, error) {
+	if result.Event.Details["htx_contact"] != true || result.Event.Details["request_sha256"] != digest {
+		return OrgResult{}, problem.IdempotencyConflict
+	}
+	var done bool
+	if err := tenant.WithTenantTx(ctx, r.DB, tid, func(tx pgx.Tx) error {
+		var e error
+		done, e = store.HTXProfileCompleted(ctx, tx, result.Event.ID)
+		return e
+	}); err != nil {
+		return OrgResult{}, err
+	}
+	if done {
+		return result, nil
+	}
+	contacts, ok := client.AsHTXContacts(r.Vault)
+	if !ok {
+		return OrgResult{}, ErrDependency.WithDetail("chưa nối liên hệ độc lập theo HTX")
+	}
+	if err := contacts.WriteHTXContact(ctx, client.PurposeRegistryAdmin, result.Org.Ref, result.Event.ID, client.HTXContact{FullName: in.RepresentativeName, Phone: in.Phone}); err != nil {
+		return OrgResult{}, ErrDependency.WithDetail("chưa hoàn tất liên hệ HTX, thử lại cùng thao tác").WithCause(err)
+	}
+	if err := tenant.WithTenantTx(ctx, r.DB, tid, func(tx pgx.Tx) error { return store.CompleteHTXProfile(ctx, tx, result.Org.Ref, result.Event.ID) }); err != nil {
+		return OrgResult{}, err
+	}
+	return result, nil
 }

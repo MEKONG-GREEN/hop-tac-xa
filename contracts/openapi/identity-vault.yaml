@@ -17,6 +17,74 @@ servers:
 security:
   - oidc: []
 paths:
+  /v1/htx-contacts/{ref}/read:
+    post:
+      summary: Đọc liên hệ riêng HTX; Admin mọi HTX, Đại diện HTX mình, Member chỉ bản che
+      operationId: readHTXContact
+      description: |
+        Không suy rộng vai nghiệp vụ thành vault_registrar. Kiểm org_ref trong token
+        cho Đại diện/Member; Member không được yêu cầu bản rõ. Mục đích registry.admin
+        cho bản rõ, extension.contact cho bản che. Phản hồi no-store, không qua receipt cache.
+      parameters:
+        - $ref: "#/components/parameters/Ref"
+        - $ref: "#/components/parameters/Purpose"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [masked]
+              properties:
+                purpose: { type: string }
+                masked: { type: boolean }
+      responses:
+        "200":
+          description: Liên hệ HTX theo quyền
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HTXContact" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/htx-contacts/{ref}/commands/{command}:
+    post:
+      summary: Ghi liên hệ HTX theo command UUIDv7 bền vững; Admin hoặc Đại diện HTX mình
+      operationId: writeHTXContact
+      description: |
+        Mục đích registry.admin. Mỗi HTX giữ liên hệ độc lập, không chống trùng SĐT
+        với người/hộ/HTX khác. Command là ID sự kiện ý định của Party. Cùng command
+        khác nội dung hoặc HTX trả 422; retry cũ không ghi đè command mới. Bản mã
+        và khóa bọc ở Vault; audit append-only. Phản hồi ghi không chứa PII.
+      parameters:
+        - $ref: "#/components/parameters/Ref"
+        - $ref: "#/components/parameters/Purpose"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: command
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contact]
+              properties:
+                purpose: { type: string }
+                contact: { $ref: "#/components/schemas/HTXContact" }
+      responses:
+        "204": { description: Đã ghi hoặc đã áp cùng command trước đó }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
   /v1/subjects:
     post:
       summary: Tạo chủ thể (hộ hoặc người), sinh cặp khóa X25519 — vai vault_registrar
@@ -273,59 +341,11 @@ paths:
         "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
-  /v1/subjects/{ref}/registry-contact/validate:
-    post:
-      summary: "AH-283: kiểm liên hệ có nguồn registry.admin trước khi ghi ý định sửa HTX; không trả PII"
-      operationId: validateRegistryContact
-      parameters:
-        - $ref: "#/components/parameters/Ref"
-        - $ref: "#/components/parameters/Purpose"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                purpose: {type: string, const: registry.admin}
-      responses:
-        "204": {description: "Person được tạo với registry.admin; có thể sửa liên hệ"}
-        "403": {$ref: "#/components/responses/Problem"}
-        "404": {$ref: "#/components/responses/Problem"}
-        "422": {$ref: "#/components/responses/Problem"}
-  /v1/subjects/{ref}/registry-contact/revisions/{command}:
-    post:
-      summary: "AH-283: sửa liên hệ đúng một lần bền vững theo UUIDv7 ý định; retry cũ không ghi đè bản mới"
-      operationId: amendRegistryContact
-      parameters:
-        - $ref: "#/components/parameters/Ref"
-        - $ref: "#/components/parameters/Purpose"
-        - $ref: "#/components/parameters/IdempotencyKey"
-        - {name: command, in: path, required: true, schema: {type: string, format: uuid}, description: "UUIDv7 của ý định đã ghi sổ tại caller; dùng làm revision_ref"}
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required: [phone]
-              properties:
-                purpose: {type: string, const: registry.admin}
-                full_name: {type: string, maxLength: 200, default: ""}
-                phone: {type: string, description: "SĐT hợp lệ, không được rỗng"}
-      responses:
-        "200": {$ref: "#/components/responses/Written"}
-        "403": {$ref: "#/components/responses/Problem"}
-        "404": {$ref: "#/components/responses/Problem"}
-        "409": {$ref: "#/components/responses/Problem"}
-        "422": {$ref: "#/components/responses/Problem"}
   /v1/subjects/{ref}/amend:
     post:
       summary: >-
         Sửa họ tên, SĐT, địa chỉ (W11.22; mục đích hrm.profile, contact.directory, extension.contact — #251; CCCD giữ nguyên; SĐT trùng
         chủ thể khác → 409) — vai vault_registrar. Mỗi lần sửa ghi một bản sửa (bản mã họ tên/SĐT trước và sau), trả revision_ref.
-        AH-283: registry.admin chỉ sửa person có nguồn tạo registry.admin; được để trống tên khi có SĐT hợp lệ.
       operationId: amendSubject
       parameters:
         - $ref: "#/components/parameters/Ref"
@@ -558,6 +578,13 @@ components:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
   schemas:
+    HTXContact:
+      type: object
+      required: [full_name, phone, masked]
+      properties:
+        full_name: { type: string, maxLength: 200, description: Có thể rỗng khi chưa khai đại diện }
+        phone: { type: string, description: Ghi số địa phương 10 chữ số bắt đầu 0; đọc bản rõ chuẩn hóa 84 }
+        masked: { type: boolean, description: Bản ghi phải false; Member chỉ đọc bản true }
     CreateSubject:
       type: object
       required: [kind, full_name, area_code]

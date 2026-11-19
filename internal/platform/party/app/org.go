@@ -42,6 +42,8 @@ type Representative struct {
 
 // CreateOrgInput là dữ liệu vào của CreateOrg.
 type CreateOrgInput struct {
+	// HTXProfileHash chỉ dùng bởi flow FN-03 đã kiểm dữ liệu; không nhận từ HTTP tổ chức.
+	HTXProfileHash    string
 	Kind              port.OrgKind
 	Code              string // bỏ trống với HTX: hệ thống tự sinh (CGH BR-01)
 	Name              string
@@ -342,6 +344,10 @@ func (r *Registry) createOrg(ctx context.Context, p authz.Principal, in CreateOr
 		ev := newEvent(p, o, domain.ActionCreated, now, in.IdemKey)
 		if isCoop {
 			ev.Details = profileDetails(profile)
+			if in.HTXProfileHash != "" {
+				ev.Details["htx_contact"] = true
+				ev.Details["request_sha256"] = in.HTXProfileHash
+			}
 		}
 		if err := store.InsertOrgEvent(ctx, tx, &ev); err != nil {
 			return OrgResult{}, err

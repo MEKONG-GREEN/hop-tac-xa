@@ -31,7 +31,6 @@ import (
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/ids"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/pgtest"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/telemetry"
-	vc "github.com/MEKONG-GREEN/hop-tac-xa/internal/vault/identity/client"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/vault/identity/client/clienttest"
 	"github.com/MEKONG-GREEN/hop-tac-xa/migrations"
 )
@@ -66,7 +65,8 @@ func TestAH283HTXProfileOwnersAndRecovery(t *testing.T) {
 		return pool
 	}
 	pf := one(migrations.PF, dbadmin.AppPlatform)
-	vault := clienttest.NewPersistent(t, one(migrations.Vault, "vault_app"))
+	issuer := authztest.New(t)
+	vault := clienttest.NewPersistentHTTP(t, one(migrations.Vault, "vault_app"), httpx.Authenticate(issuer.Verifier()))
 	md := masterdata.New(pf, clock.System{})
 	pty := party.New(pf, clock.System{}, party.Deps{AdminUnits: md.AdminUnits(), Vault: vault})
 	coop := cooperative.New(pf, clock.System{}, cooperative.Deps{Orgs: pty.Orgs(), Dir: pty.OrgDirectory(), Scope: pty.ScopeResolver(), Consents: pty.ConsentStates()})
@@ -74,8 +74,7 @@ func TestAH283HTXProfileOwnersAndRecovery(t *testing.T) {
 	owner := &retryProfileOwner{CoopProfiles: profiles, editor: profiles.(pp.HTXProfileEditor)}
 	pty.UseCoopProfiles(owner)
 	pty.UseCooperativeAreas(coop.CooperativeAreas())
-	issuer := authztest.New(t)
-	adminToken := issuer.Sign(t, authztest.Token{Subject: ids.New(), TenantID: f.tid, MFA: true, Roles: []string{authz.RolePlatformAdmin, vc.RoleRegistrar}})
+	adminToken := issuer.Sign(t, authztest.Token{Subject: ids.New(), TenantID: f.tid, MFA: true, Roles: []string{authz.RolePlatformAdmin}})
 	log := telemetry.NewLogger("test", io.Discard)
 	application, admin := httpx.NewEngine(log, 1<<20), httpx.NewEngine(log, 1<<20)
 	errorsSeen := make(chan error, 16)
@@ -173,7 +172,7 @@ func TestAH283HTXProfileOwnersAndRecovery(t *testing.T) {
 	if status != http.StatusOK || result["name"] != second["name"] || result["address"] != second["head_office"] || result["representative_name"] != second["representative_name"] {
 		t.Fatalf("retry cũ không được ghi đè hồ sơ mới: %d %v", status, result)
 	}
-	member := issuer.Sign(t, authztest.Token{Subject: ids.New(), TenantID: f.tid, OrgRef: org, MFA: true, Roles: []string{pp.RoleHTXMember, vc.RoleDisplay}})
+	member := issuer.Sign(t, authztest.Token{Subject: ids.New(), TenantID: f.tid, OrgRef: org, Roles: []string{pp.RoleHTXMember}})
 	status, result = call(appServer.URL, member, http.MethodGet, profilePath, "", nil)
 	if status != http.StatusOK || result["contact_masked"] != true || result["phone"] == input["phone"] || strings.Contains(result["phone"].(string), "0907248350") {
 		t.Fatalf("Member không được nhận SĐT gốc: %d %v", status, result)
@@ -181,14 +180,14 @@ func TestAH283HTXProfileOwnersAndRecovery(t *testing.T) {
 	if status, _ := call(appServer.URL, member, http.MethodPost, profilePath+"/revisions", "ah283-member-denied", second); status != http.StatusForbidden {
 		t.Fatalf("Member không được sửa: %d", status)
 	}
-	representative := issuer.Sign(t, authztest.Token{Subject: ids.New(), TenantID: f.tid, OrgRef: org, MFA: true,
-		Roles: []string{pp.RoleCoopManager, vc.RoleRegistrar}})
+	representative := issuer.Sign(t, authztest.Token{Subject: ids.New(), TenantID: f.tid, OrgRef: org,
+		Roles: []string{pp.RoleCoopManager}})
 	second["expected_revision"], second["name"] = 3, "HTX do Đại diện sửa"
 	if status, result = call(appServer.URL, representative, http.MethodPost, profilePath+"/revisions", "ah283-own-representative", second); status != http.StatusOK {
 		t.Fatalf("Đại diện được sửa đúng HTX mình qua owner thật: %d %v", status, result)
 	}
 	foreignRepresentative := issuer.Sign(t, authztest.Token{Subject: ids.New(), TenantID: f.tid, OrgRef: ref(107), MFA: true,
-		Roles: []string{pp.RoleCoopManager, vc.RoleRegistrar}})
+		Roles: []string{pp.RoleCoopManager}})
 	if status, _ := call(appServer.URL, foreignRepresentative, http.MethodPost, profilePath+"/revisions", "ah283-other-representative", second); status != http.StatusNotFound {
 		t.Fatalf("Đại diện không sửa HTX khác: %d", status)
 	}

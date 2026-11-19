@@ -55,6 +55,19 @@ Retry command cũ sau một lần sửa mới không ghi đè thông tin mới. 
 request gốc khi command chưa hoàn tất thì cần phục hồi thao tác; gói này
 chưa cung cấp worker tự phục hồi PII sau khi trình duyệt mất bản nháp.
 
+Liên hệ FN-03 được Vault lưu theo `(tenant, HTX)` với khóa bọc và bản mã
+riêng cho từng command. Không dùng SĐT để chống trùng định danh người/hộ:
+hai HTX dùng chung SĐT vẫn giữ tên đại diện độc lập. API Vault hẹp kiểm vai
+nghiệp vụ cùng org_ref của token; không tự thêm vault_registrar/vault_display
+cho người dùng. Member chỉ nhận bản che do chính Vault tạo. Các endpoint
+định danh người, sửa nhân sự và quyền Resolve/Unwrap hiện hữu không đổi.
+MFA của Admin giữ ở API nền tảng theo phiên đăng nhập hiện hành; không thêm
+điều kiện MFA cho Đại diện ngoài ma trận quyền HTX.
+
+Ý định tạo cũng đánh dấu liên hệ chờ hoàn tất, dùng ID sự kiện tạo làm command
+bền vững. Khi Vault chưa xong, hồ sơ chưa được trả như một bản đầy đủ thiếu
+SĐT. Request tạo lặp khác nội dung bị từ chối bằng digest, không ghi PII vào PF.
+
 Máy móc có port riêng cho AH-260, chưa nối nguồn và hiện `—` theo comment
 requirement. Không thay bằng số máy từ nghiệp vụ cơ giới KN.
 

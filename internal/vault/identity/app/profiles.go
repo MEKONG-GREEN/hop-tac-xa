@@ -40,18 +40,13 @@ func (s *Service) Amend(ctx context.Context, purpose client.Purpose, ref uuid.UU
 
 // AmendRevision như Amend, trả mã bản sửa (revision_ref) giữ bản mã họ tên/SĐT trước và sau lần sửa (ADR-0056 mục 4).
 func (s *Service) AmendRevision(ctx context.Context, purpose client.Purpose, ref uuid.UUID, in client.Identity) (uuid.UUID, error) {
-	return s.amendRevision(ctx, purpose, ref, ids.New(), in, false)
-}
-
-func (s *Service) amendRevision(ctx context.Context, purpose client.Purpose, ref, rev uuid.UUID, in client.Identity, durable bool) (uuid.UUID, error) {
 	p, err := s.begin(ctx, domain.OpAmend, purpose, client.RoleRegistrar)
 	if err != nil {
 		return uuid.Nil, err
 	}
 	name := domain.NormalizeName(in.FullName)
 	v, bad := problem.Validation, false
-	optionalName := purpose == client.PurposeRegistryAdmin && in.Phone != ""
-	if n := utf8.RuneCountInString(name); (n < 1 && !optionalName) || n > 200 {
+	if n := utf8.RuneCountInString(name); n < 1 || n > 200 {
 		v, bad = v.WithField("full_name", "bắt buộc, tối đa 200 ký tự"), true
 	}
 	if utf8.RuneCountInString(in.Address) > 500 {
@@ -69,19 +64,11 @@ func (s *Service) amendRevision(ctx context.Context, purpose client.Purpose, ref
 	if bad {
 		return uuid.Nil, v
 	}
-	if durable {
-		if done, err := s.registryContactReplay(ctx, p, ref, rev, name, phone); err != nil || done {
-			return rev, err
-		}
-	}
+	rev := ids.New()
 	var err2 error
 	for attempt := 1; attempt <= amendAttempts; attempt++ {
 		var result error
-		result, err2 = s.amendOnce(ctx, p, purpose, ref, rev, name, phone, in.Address, blind, durable)
-		if errors.Is(err2, errRegistryContactReplayed) {
-			_, err := s.registryContactReplay(ctx, p, ref, rev, name, phone)
-			return rev, err
-		}
+		result, err2 = s.amendOnce(ctx, p, purpose, ref, rev, name, phone, in.Address, blind)
 		if errors.Is(err2, errAmendKeyChanged) {
 			continue
 		}
@@ -108,7 +95,7 @@ var errAmendKeyChanged = errors.New("vault: khóa dữ liệu của chủ thể 
 // amendOnce: P0-POOL-SHARED (#126) — giao dịch 1 chỉ đọc khóa đã bọc; KMS mở khóa + mã hóa trường mới NGOÀI giao
 // dịch; giao dịch 2 khóa chủ thể (FOR UPDATE), kiểm lại trạng thái + khóa không đổi, ghi định danh + chỉ mục mù + sổ.
 func (s *Service) amendOnce(ctx context.Context, p authz.Principal, purpose client.Purpose, ref, rev uuid.UUID, name, phone, address string,
-	blind *store.Blind, durable bool) (error, error) {
+	blind *store.Blind) (error, error) {
 	tid := p.TenantID
 	var result error
 	var key *store.Key
@@ -117,16 +104,6 @@ func (s *Service) amendOnce(ctx context.Context, p authz.Principal, purpose clie
 		if err != nil || st.fail != nil {
 			result = st.fail
 			return err
-		}
-		if name == "" && st.subj.Kind != string(client.SubjectPerson) {
-			result = problem.Validation.WithField("full_name", "họ tên chủ hộ là bắt buộc")
-			return nil
-		}
-		if purpose == client.PurposeRegistryAdmin {
-			if err := validateRegistryContact(ctx, tx, st.subj); err != nil {
-				result = err
-				return nil
-			}
 		}
 		sealed, err := fetchIdentity(ctx, tx, ref)
 		key = sealed.key
@@ -147,33 +124,15 @@ func (s *Service) amendOnce(ctx context.Context, p authz.Principal, purpose clie
 		use   string
 		value string
 	}{{&row.FullNameCT, useName, name}, {&row.PhoneCT, usePhone, phone}, {&row.AddressCT, useAddress, address}} {
-		seal := sealField
-		if f.use == useName {
-			seal = sealValue
-		}
-		if *f.dst, err = seal(s.rand(), dk, domain.AAD(f.use, tid, ref), f.value); err != nil {
+		if *f.dst, err = sealField(s.rand(), dk, domain.AAD(f.use, tid, ref), f.value); err != nil {
 			return nil, err
 		}
 	}
 	err = tenant.WithTenantTx(ctx, s.DB, tid, func(tx pgx.Tx) error {
-		if durable {
-			if err := store.LockRegistryContactCommand(ctx, tx, rev); err != nil {
-				return err
-			}
-		}
 		st, err := s.subjectState(ctx, tx, p, ref, domain.OpAmend, purpose, true)
 		if err != nil || st.fail != nil {
 			result = st.fail
 			return err
-		}
-		if durable {
-			receipt, err := store.Revisions(ctx, tx, []uuid.UUID{rev})
-			if err != nil {
-				return err
-			}
-			if len(receipt) > 0 {
-				return errRegistryContactReplayed
-			}
 		}
 		if blind != nil {
 			other, found, err := store.FindBlind(ctx, tx, []store.Blind{*blind})

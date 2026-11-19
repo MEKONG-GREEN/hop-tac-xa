@@ -14,6 +14,7 @@ import (
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/problem"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/tenant"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/vault/identity/client"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/vault/identity/client/clienttest"
 )
 
 // fakeUnits là danh mục đơn vị hành chính giả (masterdata đang được làm song song).
@@ -73,14 +74,23 @@ func (f *fakeUnits) Current(_ context.Context, code string, _ time.Time) ([]stri
 
 // fakeVault là kho định danh giả trong bộ nhớ: chống trùng theo SĐT/CCCD trong tenant.
 type fakeVault struct {
-	mu       sync.Mutex
-	subjects map[uuid.UUID]client.Identity
-	index    map[string]uuid.UUID // tenant|khóa mù → ref
-	purposes []client.Purpose
+	htxContacts *clienttest.Fake
+	mu          sync.Mutex
+	subjects    map[uuid.UUID]client.Identity
+	index       map[string]uuid.UUID // tenant|khóa mù → ref
+	purposes    []client.Purpose
 }
 
 func newFakeVault() *fakeVault {
-	return &fakeVault{subjects: map[uuid.UUID]client.Identity{}, index: map[string]uuid.UUID{}}
+	return &fakeVault{subjects: map[uuid.UUID]client.Identity{}, index: map[string]uuid.UUID{}, htxContacts: clienttest.New()}
+}
+
+func (v *fakeVault) ReadHTXContact(ctx context.Context, purpose client.Purpose, ref uuid.UUID, masked bool) (client.HTXContact, error) {
+	return v.htxContacts.ReadHTXContact(ctx, purpose, ref, masked)
+}
+
+func (v *fakeVault) WriteHTXContact(ctx context.Context, purpose client.Purpose, ref, command uuid.UUID, in client.HTXContact) error {
+	return v.htxContacts.WriteHTXContact(ctx, purpose, ref, command, in)
 }
 
 var errNotImplemented = errors.New("fakeVault: không dùng trong kiểm thử")

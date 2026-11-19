@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -114,9 +113,8 @@ func (r *Registry) UpdateHTXProfile(ctx context.Context, in UpdateHTXProfileInpu
 	}); err != nil {
 		return OrgResult{}, err
 	}
-	contact, amend, err := r.prepareHTXContact(ctx, current.RepresentativeRef, in.HTXProfileInput)
-	if err != nil {
-		return OrgResult{}, err
+	if _, ok := client.AsHTXContacts(r.Vault); !ok {
+		return OrgResult{}, ErrDependency.WithDetail("chưa nối liên hệ độc lập theo HTX")
 	}
 	result, err := r.write(ctx, p.TenantID, key, func(tx pgx.Tx) (OrgResult, error) {
 		cur, err := store.OrgByRef(ctx, tx, in.Ref, true)
@@ -145,7 +143,7 @@ func (r *Registry) UpdateHTXProfile(ctx context.Context, in UpdateHTXProfileInpu
 			return OrgResult{}, ErrCoopNameTaken
 		}
 		org := cur.Org
-		org.Name, org.AdminUnitCode, org.RepresentativeRef = in.Name, in.CommuneCode, contact
+		org.Name, org.AdminUnitCode = in.Name, in.CommuneCode
 		// HTX là đơn vị ngang hàng. Khi đổi địa bàn của hồ sơ cũ, tách khỏi
 		// cha KN cũ để không giữ một cây có xã thuộc sai tỉnh.
 		if org.AdminUnitCode != cur.AdminUnitCode {
@@ -153,7 +151,7 @@ func (r *Registry) UpdateHTXProfile(ctx context.Context, in UpdateHTXProfileInpu
 		}
 		event := newEvent(p, org, domain.ActionProfileUpdated, r.now(), key)
 		event.PrevAdminUnit, event.PrevParentRef = cur.AdminUnitCode, cur.ParentRef
-		event.Details = map[string]any{"request_sha256": digest, "head_office": in.HeadOffice, "contact_amend": amend,
+		event.Details = map[string]any{"request_sha256": digest, "head_office": in.HeadOffice, "htx_contact": true,
 			"previous_name": cur.Name, "previous_representative_ref": cur.RepresentativeRef.String()}
 		if err := store.InsertOrgEvent(ctx, tx, &event); err != nil {
 			return OrgResult{}, err
@@ -177,43 +175,6 @@ func (r *Registry) UpdateHTXProfile(ctx context.Context, in UpdateHTXProfileInpu
 	return r.finishHTXProfile(ctx, p, result, in, digest)
 }
 
-func (r *Registry) prepareHTXContact(ctx context.Context, ref uuid.UUID, in HTXProfileInput) (uuid.UUID, bool, error) {
-	if r.Vault == nil {
-		return uuid.Nil, false, ErrDependency.WithDetail("chưa nối kho định danh")
-	}
-	var identity client.Identity
-	var err error
-	if ref != uuid.Nil {
-		identity, err = r.Vault.Resolve(ctx, client.PurposeRegistryAdmin, ref)
-		if err != nil {
-			return uuid.Nil, false, vaultError(err)
-		}
-	}
-	if ref == uuid.Nil || localHTXPhone(identity.Phone) != in.Phone {
-		created, err := r.Vault.Create(ctx, client.PurposeRegistryAdmin, client.Identity{Kind: client.SubjectPerson,
-			FullName: in.RepresentativeName, Phone: in.Phone, AreaCode: in.CommuneCode})
-		if err != nil && (!errors.Is(err, client.ErrDuplicate) || created.Ref == uuid.Nil) {
-			return uuid.Nil, false, vaultError(err)
-		}
-		ref = created.Ref
-		identity, err = r.Vault.Resolve(ctx, client.PurposeRegistryAdmin, ref)
-		if err != nil {
-			return uuid.Nil, false, vaultError(err)
-		}
-	}
-	amend := identity.FullName != in.RepresentativeName || localHTXPhone(identity.Phone) != in.Phone
-	if amend {
-		contacts, ok := client.AsRegistryContacts(r.Vault)
-		if !ok {
-			return uuid.Nil, false, ErrDependency.WithDetail("chưa nối thao tác sửa liên hệ HTX")
-		}
-		if err := contacts.ValidateRegistryContact(ctx, client.PurposeRegistryAdmin, ref); err != nil {
-			return uuid.Nil, false, vaultError(err)
-		}
-	}
-	return ref, amend, nil
-}
-
 func (r *Registry) finishHTXProfile(ctx context.Context, p authz.Principal, result OrgResult, in UpdateHTXProfileInput, digest string) (OrgResult, error) {
 	event := result.Event
 	if event.Action != domain.ActionProfileUpdated || event.Org.Ref != in.Ref || event.Details["request_sha256"] != digest {
@@ -230,15 +191,13 @@ func (r *Registry) finishHTXProfile(ctx context.Context, p authz.Principal, resu
 	if done {
 		return result, nil
 	}
-	if event.Details["contact_amend"] == true {
-		contacts, ok := client.AsRegistryContacts(r.Vault)
-		if !ok {
-			return OrgResult{}, ErrDependency.WithDetail("chưa nối thao tác sửa liên hệ HTX")
-		}
-		if _, err := contacts.AmendRegistryContact(ctx, client.PurposeRegistryAdmin, event.Org.RepresentativeRef, event.ID,
-			client.Identity{FullName: in.RepresentativeName, Phone: in.Phone}); err != nil {
-			return OrgResult{}, ErrDependency.WithDetail("chưa hoàn tất liên hệ HTX, thử lại cùng thao tác").WithCause(err)
-		}
+	contacts, ok := client.AsHTXContacts(r.Vault)
+	if !ok {
+		return OrgResult{}, ErrDependency.WithDetail("chưa nối liên hệ độc lập theo HTX")
+	}
+	if err := contacts.WriteHTXContact(ctx, client.PurposeRegistryAdmin, event.Org.Ref, event.ID,
+		client.HTXContact{FullName: in.RepresentativeName, Phone: in.Phone}); err != nil {
+		return OrgResult{}, ErrDependency.WithDetail("chưa hoàn tất liên hệ HTX, thử lại cùng thao tác").WithCause(err)
 	}
 	if r.ProfileEditor == nil {
 		return OrgResult{}, ErrDependency.WithDetail("chưa nối thao tác sửa hồ sơ HTX")

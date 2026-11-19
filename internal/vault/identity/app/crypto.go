@@ -16,12 +16,6 @@ func sealField(r io.Reader, key, aad []byte, value string) ([]byte, error) {
 	if value == "" {
 		return nil, nil
 	}
-	return sealValue(r, key, aad, value)
-}
-
-// sealValue giữ bản mã cả với chuỗi rỗng. Dùng cho full_name_ct NOT NULL
-// khi liên hệ HTX chưa khai tên; không tạo tên giả và vẫn mã hóa bằng AEAD.
-func sealValue(r io.Reader, key, aad []byte, value string) ([]byte, error) {
 	aead, err := newGCM(key)
 	if err != nil {
 		return nil, err

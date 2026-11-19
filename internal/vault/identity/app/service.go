@@ -151,10 +151,7 @@ func (s *Service) Create(ctx context.Context, purpose client.Purpose, in client.
 	if in.Kind != client.SubjectHousehold && in.Kind != client.SubjectPerson {
 		v, bad = v.WithField("kind", "phải là household hoặc person"), true
 	}
-	// AH-283: hồ sơ HTX có SĐT liên hệ nhưng người đại diện không bắt buộc.
-	// Chỉ registry.admin/person được để trống tên, và vẫn phải có SĐT hợp lệ.
-	optionalName := in.Kind == client.SubjectPerson && purpose == client.PurposeRegistryAdmin && in.Phone != ""
-	if n := utf8.RuneCountInString(name); (n < 1 && !optionalName) || n > 200 {
+	if n := utf8.RuneCountInString(name); n < 1 || n > 200 {
 		v, bad = v.WithField("full_name", "bắt buộc, tối đa 200 ký tự"), true
 	}
 	if utf8.RuneCountInString(in.Address) > 500 {
@@ -213,11 +210,7 @@ func (s *Service) Create(ctx context.Context, purpose client.Purpose, in client.
 		{&row.FullNameCT, useName, name}, {&row.PhoneCT, usePhone, phone},
 		{&row.NationalIDCT, useNational, nid}, {&row.AddressCT, useAddress, in.Address},
 	} {
-		seal := sealField
-		if f.use == useName {
-			seal = sealValue
-		}
-		if *f.dst, err = seal(s.rand(), dataKey, domain.AAD(f.use, tid, ref), f.value); err != nil {
+		if *f.dst, err = sealField(s.rand(), dataKey, domain.AAD(f.use, tid, ref), f.value); err != nil {
 			return client.Created{}, err
 		}
 	}
