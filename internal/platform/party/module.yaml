@@ -32,7 +32,9 @@ provides:
     - FormAvailability
     - FourEyes
     - GrantLookup
+    - HTXProfileEditor
     - Households
+    - InventoryMachineSource
     - ModuleEnablement
     - OrgCodes
     - OrgDirectory

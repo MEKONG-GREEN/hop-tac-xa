@@ -210,9 +210,9 @@ func InsertOrg(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, o port.Org, e
 // UpdateOrg ghi trạng thái sau một biến động (R-21: cùng giao dịch với sổ).
 func UpdateOrg(ctx context.Context, tx pgx.Tx, o port.Org, statusReason string, e domain.OrgEvent) error {
 	_, err := tx.Exec(ctx, `UPDATE pf_party.org SET name = $2, admin_unit_code = $3, parent_ref = $4, active = $5,
-	    status_reason = $6, last_event_id = $7, last_seq = $8, updated_at = now()
+	    status_reason = $6, last_event_id = $7, last_seq = $8, representative_ref=$9, updated_at = now()
 	  WHERE ref = $1`,
-		o.Ref, o.Name, nilIfEmpty(o.AdminUnitCode), nilIfZero(o.ParentRef), o.Active, nilIfEmpty(statusReason), e.ID, e.Seq)
+		o.Ref, o.Name, nilIfEmpty(o.AdminUnitCode), nilIfZero(o.ParentRef), o.Active, nilIfEmpty(statusReason), e.ID, e.Seq, nilIfZero(o.RepresentativeRef))
 	return err
 }
 

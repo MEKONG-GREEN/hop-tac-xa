@@ -40,6 +40,10 @@ func (s *Service) Amend(ctx context.Context, purpose client.Purpose, ref uuid.UU
 
 // AmendRevision như Amend, trả mã bản sửa (revision_ref) giữ bản mã họ tên/SĐT trước và sau lần sửa (ADR-0056 mục 4).
 func (s *Service) AmendRevision(ctx context.Context, purpose client.Purpose, ref uuid.UUID, in client.Identity) (uuid.UUID, error) {
+	return s.amendRevision(ctx, purpose, ref, ids.New(), in, false)
+}
+
+func (s *Service) amendRevision(ctx context.Context, purpose client.Purpose, ref, rev uuid.UUID, in client.Identity, durable bool) (uuid.UUID, error) {
 	p, err := s.begin(ctx, domain.OpAmend, purpose, client.RoleRegistrar)
 	if err != nil {
 		return uuid.Nil, err
@@ -65,11 +69,19 @@ func (s *Service) AmendRevision(ctx context.Context, purpose client.Purpose, ref
 	if bad {
 		return uuid.Nil, v
 	}
-	rev := ids.New()
+	if durable {
+		if done, err := s.registryContactReplay(ctx, p, ref, rev, name, phone); err != nil || done {
+			return rev, err
+		}
+	}
 	var err2 error
 	for attempt := 1; attempt <= amendAttempts; attempt++ {
 		var result error
-		result, err2 = s.amendOnce(ctx, p, purpose, ref, rev, name, phone, in.Address, blind)
+		result, err2 = s.amendOnce(ctx, p, purpose, ref, rev, name, phone, in.Address, blind, durable)
+		if errors.Is(err2, errRegistryContactReplayed) {
+			_, err := s.registryContactReplay(ctx, p, ref, rev, name, phone)
+			return rev, err
+		}
 		if errors.Is(err2, errAmendKeyChanged) {
 			continue
 		}
@@ -96,7 +108,7 @@ var errAmendKeyChanged = errors.New("vault: khóa dữ liệu của chủ thể 
 // amendOnce: P0-POOL-SHARED (#126) — giao dịch 1 chỉ đọc khóa đã bọc; KMS mở khóa + mã hóa trường mới NGOÀI giao
 // dịch; giao dịch 2 khóa chủ thể (FOR UPDATE), kiểm lại trạng thái + khóa không đổi, ghi định danh + chỉ mục mù + sổ.
 func (s *Service) amendOnce(ctx context.Context, p authz.Principal, purpose client.Purpose, ref, rev uuid.UUID, name, phone, address string,
-	blind *store.Blind) (error, error) {
+	blind *store.Blind, durable bool) (error, error) {
 	tid := p.TenantID
 	var result error
 	var key *store.Key
@@ -111,12 +123,8 @@ func (s *Service) amendOnce(ctx context.Context, p authz.Principal, purpose clie
 			return nil
 		}
 		if purpose == client.PurposeRegistryAdmin {
-			contact, err := store.CreatedForPurpose(ctx, tx, ref, string(client.PurposeRegistryAdmin))
-			if err != nil {
-				return err
-			}
-			if st.subj.Kind != string(client.SubjectPerson) || !contact {
-				result = problem.Validation.WithField("purpose", "registry.admin chỉ sửa liên hệ được tạo cho quản trị hồ sơ")
+			if err := validateRegistryContact(ctx, tx, st.subj); err != nil {
+				result = err
 				return nil
 			}
 		}
@@ -148,10 +156,24 @@ func (s *Service) amendOnce(ctx context.Context, p authz.Principal, purpose clie
 		}
 	}
 	err = tenant.WithTenantTx(ctx, s.DB, tid, func(tx pgx.Tx) error {
+		if durable {
+			if err := store.LockRegistryContactCommand(ctx, tx, rev); err != nil {
+				return err
+			}
+		}
 		st, err := s.subjectState(ctx, tx, p, ref, domain.OpAmend, purpose, true)
 		if err != nil || st.fail != nil {
 			result = st.fail
 			return err
+		}
+		if durable {
+			receipt, err := store.Revisions(ctx, tx, []uuid.UUID{rev})
+			if err != nil {
+				return err
+			}
+			if len(receipt) > 0 {
+				return errRegistryContactReplayed
+			}
 		}
 		if blind != nil {
 			other, found, err := store.FindBlind(ctx, tx, []store.Blind{*blind})

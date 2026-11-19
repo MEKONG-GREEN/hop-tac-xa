@@ -143,10 +143,17 @@ func (m *Module) ConsentStates() port.ConsentStates { return m.reg }
 // UseCoopProfiles (W3.3) nối hồ sơ HTX và số nông hộ thành viên của pf/cooperative cho các màn HTX của sổ tổ
 // chức (G1, HTX US-HTX-*, KN FN-XA-03.03, danh bạ đối tác) và bước 2 của tạo HTX. Thiếu → thao tác cần hồ sơ
 // HTX trả 503 party.dependency_unavailable.
-func (m *Module) UseCoopProfiles(p port.CoopProfiles) { m.reg.Profiles, m.share.Profiles = p, p }
+func (m *Module) UseCoopProfiles(p port.CoopProfiles) {
+	m.reg.Profiles, m.share.Profiles = p, p
+	m.reg.ProfileEditor, _ = p.(port.HTXProfileEditor)
+}
 
 // UseCooperativeAreas nối nguồn diện tích hộ; không dùng diện tích đăng ký KN.
 func (m *Module) UseCooperativeAreas(p port.CooperativeAreaSource) { m.reg.Areas = p }
+
+// UseInventoryMachines nối nguồn AH-260 khi có. Không tự dùng máy cơ giới KN
+// thay thế; chưa nối thì API trả null và giao diện hiện "—" theo quyết định PO.
+func (m *Module) UseInventoryMachines(p port.InventoryMachineSource) { m.reg.InventoryMachines = p }
 
 // ScopeResolver cho module khác tính phạm vi theo cây phân cấp (qua port, ADR-0009).
 func (m *Module) ScopeResolver() port.ScopeResolver { return m.reg }

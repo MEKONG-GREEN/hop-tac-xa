@@ -1,0 +1,76 @@
+paths:
+# @ag-order: 283010
+  /v1/cooperatives/{ref}/profile:
+    get:
+      summary: "FN-03: hồ sơ HTX; Admin mọi HTX, Đại diện/Thành viên chỉ HTX mình"
+      operationId: htxProfileGet
+      parameters:
+        - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: "Không cache. Liên hệ đầy đủ cho Admin/Đại diện của HTX; Thành viên nhận nhãn/SĐT che ngay tại server."
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/HTXProfile"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+# @ag-order: 283012
+  /v1/cooperatives/{ref}/profile/revisions:
+    post:
+      summary: "FN-03: Admin sửa mọi HTX, Đại diện chỉ sửa HTX mình"
+      operationId: htxProfileUpdate
+      parameters:
+        - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+        - {$ref: "#/components/parameters/IdempotencyKey"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/HTXProfileUpdate"}
+      responses:
+        "200":
+          description: "Đã hoàn tất tại các owner; không lưu PII trong receipt PF."
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/HTXProfileWritten"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+components:
+  schemas:
+# @ag-order: 283011
+    HTXProfile:
+      allOf:
+        - {$ref: "#/components/schemas/Cooperative"}
+        - type: object
+          required: [revision, representative_name, phone, contact_masked, can_edit]
+          properties:
+            revision: {type: integer, minimum: 1, description: "Phiên bản sổ tổ chức; dùng khi sửa"}
+            representative_name: {type: string, description: "Chỉ ở bộ nhớ/Vault; có thể rỗng. Thành viên nhận nhãn che."}
+            phone: {type: string, description: "Admin/Đại diện HTX mình: 10 số bắt đầu bằng 0. Thành viên: SĐT đã che."}
+            contact_masked: {type: boolean}
+            can_edit: {type: boolean}
+# @ag-order: 283013
+    HTXProfileUpdate:
+      type: object
+      additionalProperties: false
+      required: [name, commune_code, head_office, phone, expected_revision]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 200}
+        commune_code: {type: string, minLength: 1, maxLength: 40}
+        head_office: {type: string, minLength: 1, maxLength: 500}
+        representative_name: {type: string, maxLength: 200, default: ""}
+        phone: {type: string, pattern: "^0[0-9]{9}$"}
+        expected_revision: {type: integer, minimum: 1}
+# @ag-order: 283014
+    HTXProfileWritten:
+      type: object
+      required: [ref, code, revision]
+      properties:
+        ref: {type: string, format: uuid}
+        code: {type: string}
+        revision: {type: integer, minimum: 1}

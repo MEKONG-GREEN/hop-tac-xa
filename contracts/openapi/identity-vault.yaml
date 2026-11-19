@@ -273,6 +273,53 @@ paths:
         "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
+  /v1/subjects/{ref}/registry-contact/validate:
+    post:
+      summary: "AH-283: kiểm liên hệ có nguồn registry.admin trước khi ghi ý định sửa HTX; không trả PII"
+      operationId: validateRegistryContact
+      parameters:
+        - $ref: "#/components/parameters/Ref"
+        - $ref: "#/components/parameters/Purpose"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                purpose: {type: string, const: registry.admin}
+      responses:
+        "204": {description: "Person được tạo với registry.admin; có thể sửa liên hệ"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /v1/subjects/{ref}/registry-contact/revisions/{command}:
+    post:
+      summary: "AH-283: sửa liên hệ đúng một lần bền vững theo UUIDv7 ý định; retry cũ không ghi đè bản mới"
+      operationId: amendRegistryContact
+      parameters:
+        - $ref: "#/components/parameters/Ref"
+        - $ref: "#/components/parameters/Purpose"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - {name: command, in: path, required: true, schema: {type: string, format: uuid}, description: "UUIDv7 của ý định đã ghi sổ tại caller; dùng làm revision_ref"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [phone]
+              properties:
+                purpose: {type: string, const: registry.admin}
+                full_name: {type: string, maxLength: 200, default: ""}
+                phone: {type: string, description: "SĐT hợp lệ, không được rỗng"}
+      responses:
+        "200": {$ref: "#/components/responses/Written"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
   /v1/subjects/{ref}/amend:
     post:
       summary: >-

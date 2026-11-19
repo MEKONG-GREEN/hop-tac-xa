@@ -1,0 +1,50 @@
+paths:
+# @ag-order: 283010
+  /v1/cooperative-profiles:
+    post:
+      summary: "FN-03: Admin tạo hồ sơ HTX, không bắt buộc MST/neo KN"
+      operationId: htxProfileCreate
+      parameters:
+        - {$ref: "#/components/parameters/IdempotencyKey"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/HTXProfileInput"}
+      responses:
+        "201":
+          description: "Đã tạo; client tải GET profile riêng. Receipt ghi không có PII."
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/HTXProfileWritten"}
+        "200":
+          description: "Phát lại kết quả đã ghi"
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/HTXProfileWritten"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+components:
+  schemas:
+# @ag-order: 283011
+    HTXProfileInput:
+      type: object
+      additionalProperties: false
+      required: [name, commune_code, head_office, phone]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 200}
+        commune_code: {type: string, minLength: 1, maxLength: 40, description: "Xã còn được sử dụng trong danh mục AH-271"}
+        head_office: {type: string, minLength: 1, maxLength: 500}
+        representative_name: {type: string, maxLength: 200, default: ""}
+        phone: {type: string, pattern: "^0[0-9]{9}$"}
+# @ag-order: 283012
+    HTXProfileWritten:
+      type: object
+      required: [ref, code, revision]
+      properties:
+        ref: {type: string, format: uuid}
+        code: {type: string, description: "Mã HTX hệ thống sinh, không sửa"}
+        revision: {type: integer, minimum: 1}

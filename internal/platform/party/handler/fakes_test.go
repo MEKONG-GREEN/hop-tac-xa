@@ -122,7 +122,10 @@ func (v *fakeVault) Display(_ context.Context, purpose client.Purpose, ref uuid.
 		return client.Display{}, client.ErrNotFound
 	}
 	parts := strings.Fields(id.FullName)
-	label := parts[0]
+	label := ""
+	if len(parts) > 0 {
+		label = parts[0]
+	}
 	if len(parts) > 1 {
 		label += " " + string([]rune(parts[len(parts)-1])[0]) + "."
 	}

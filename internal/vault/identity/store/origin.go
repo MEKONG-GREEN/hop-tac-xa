@@ -15,3 +15,11 @@ func CreatedForPurpose(ctx context.Context, tx pgx.Tx, ref uuid.UUID, purpose st
 WHERE subject_ref = $1 AND op = 'create' AND outcome = 'ok' AND purpose = $2)`, ref, purpose).Scan(&ok)
 	return ok, err
 }
+
+// LockRegistryContactCommand tuần tự hóa cùng command trên mọi subject trước
+// khi khóa subject, để việc dùng lại command sai ref cũng nhận lỗi nghiệp vụ.
+func LockRegistryContactCommand(ctx context.Context, tx pgx.Tx, command uuid.UUID) error {
+	_, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended(
+'vault.registry-contact:' || shared.current_tenant()::text || ':' || $1::text, 0))`, command.String())
+	return err
+}

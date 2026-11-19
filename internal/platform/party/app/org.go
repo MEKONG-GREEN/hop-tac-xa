@@ -842,6 +842,9 @@ func (r *Registry) GetCooperative(ctx context.Context, ref uuid.UUID) (Cooperati
 	}
 	// Kiểm quyền trên Nút của module này trước khi đọc số liệu hồ sơ/hộ
 	// từ module khác; không gọi port với ref HTX do client tự chọn ngoài quyền.
+	if ownCoopOnly(p) && p.OrgRef == uuid.Nil {
+		return Cooperative{}, problem.NodeScopeRequired
+	}
 	if ownCoopOnly(p) && ref != p.OrgRef {
 		return Cooperative{}, ErrOrgNotFound
 	}

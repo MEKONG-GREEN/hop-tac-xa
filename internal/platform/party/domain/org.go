@@ -36,11 +36,12 @@ type OrgAction string
 
 // Các biến động.
 const (
-	ActionCreated     OrgAction = "created"
-	ActionMoved       OrgAction = "moved"
-	ActionRenamed     OrgAction = "renamed"
-	ActionDeactivated OrgAction = "deactivated"
-	ActionReactivated OrgAction = "reactivated"
+	ActionCreated        OrgAction = "created"
+	ActionMoved          OrgAction = "moved"
+	ActionRenamed        OrgAction = "renamed"
+	ActionProfileUpdated OrgAction = "profile_updated"
+	ActionDeactivated    OrgAction = "deactivated"
+	ActionReactivated    OrgAction = "reactivated"
 )
 
 // Lỗi kiểm dữ liệu.

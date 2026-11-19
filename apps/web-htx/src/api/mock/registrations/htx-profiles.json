@@ -1,0 +1,6 @@
+{
+  "id": "htx-profiles",
+  "source": "./htx-profiles",
+  "app": [{ "export": "htxProfileAppRoutes", "order": 283 }],
+  "admin": [{ "export": "htxProfileAdminRoutes", "order": 283 }]
+}

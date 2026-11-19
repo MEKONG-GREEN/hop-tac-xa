@@ -40,6 +40,7 @@ type Cooperative struct {
 	// HouseholdCount: nông hộ đang là thành viên (chỉ màn KN đọc).
 	HouseholdCount int
 	Areas          *port.CooperativeAreas
+	Inventory      *port.InventoryMachineSummary
 }
 
 func (r *Registry) coopProfiles() (port.CoopProfiles, error) {
@@ -177,10 +178,20 @@ func (r *Registry) cooperatives(ctx context.Context, tid uuid.UUID, orgs []store
 			return nil, ErrDependency.WithDetail("không đọc được tổng diện tích hộ của HTX").WithCause(err)
 		}
 	}
+	var machines map[uuid.UUID]port.InventoryMachineSummary
+	if r.InventoryMachines != nil {
+		machines, err = r.InventoryMachines.InventoryMachines(tctx, refs)
+		if err != nil {
+			return nil, ErrDependency.WithDetail("không đọc được số lượng máy móc của HTX").WithCause(err)
+		}
+	}
 	for _, o := range orgs {
 		c := Cooperative{OrgState: o.OrgState, UpdatedAt: o.UpdatedAt, HouseholdCount: int(members[o.Ref])}
 		if a, ok := areas[o.Ref]; ok {
 			c.Areas = &a
+		}
+		if inventory, ok := machines[o.Ref]; ok {
+			c.Inventory = &inventory
 		}
 		if p, ok := profs[o.Ref]; ok {
 			c.Profile = toDomainProfile(p)

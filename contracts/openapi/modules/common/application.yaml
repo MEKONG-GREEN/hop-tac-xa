@@ -5279,6 +5279,17 @@ components:
             tax_code: {type: [string, "null"], pattern: "^[0-9]{10}(-[0-9]{3})?$"}
             area_ha: {oneOf: [{$ref: "#/components/schemas/Decimal"}, {type: "null"}], description: "Diện tích đăng ký hành chính (ha)"}
             household_areas: {oneOf: [{$ref: "#/components/schemas/CooperativeHouseholdAreas"}, {type: "null"}], description: "Tổng diện tích hộ hiện thuộc HTX; null khi chưa nối nguồn, không dùng area_ha đăng ký KN"}
+            machine_count: {type: [integer, "null"], minimum: 0, description: "Tổng cột Số lượng từ AH-260; null khi chưa có nguồn, không dùng dữ liệu máy KN thay thế"}
+            machine_groups:
+              type: [array, "null"]
+              description: "Nhóm theo danh mục loại máy động; null khi chưa có nguồn"
+              items:
+                type: object
+                required: [type_ref, type_name, quantity]
+                properties:
+                  type_ref: {type: string, format: uuid}
+                  type_name: {type: string}
+                  quantity: {type: integer, minimum: 0}
             established_on: {type: [string, "null"], format: date}
             location: {oneOf: [{$ref: "#/components/schemas/Point"}, {type: "null"}]}
             location_provisional: {type: boolean, description: "true = chưa có toạ độ; bản đồ hiển thị tâm xã, nhãn \"vị trí tạm\""}
