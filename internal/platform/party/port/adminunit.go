@@ -25,7 +25,7 @@ const (
 // AdminUnit là một đơn vị hành chính tại một thời điểm.
 type AdminUnit struct {
 	// Disabled prevents new assignments; it never invalidates old references.
-	Disabled   bool
+	Disabled   bool   `json:",omitempty"`
 	Code       string // mã nền chính thức hoặc mã cục bộ do hệ thống sinh; bất biến
 	Name       string
 	Level      Level

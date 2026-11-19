@@ -44,7 +44,7 @@ var (
 type Unit struct {
 	// Disabled is operational availability, not legal validity. Old references
 	// remain readable even when the option can no longer be selected.
-	Disabled   bool
+	Disabled   bool `json:",omitempty"`
 	Code       string
 	Name       string
 	Level      partyport.Level
