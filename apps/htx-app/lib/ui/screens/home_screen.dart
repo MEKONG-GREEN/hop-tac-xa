@@ -22,6 +22,7 @@ import 'plots_screen.dart';
 import 'review_screen.dart';
 import 'staff_screen.dart';
 import 'support_screen.dart';
+import 'season_calendars_screen.dart';
 import 'sync_queue_screen.dart';
 
 /// Trang chủ theo vai (HTX US-LOGIN-01 AC-1, FN-05): nông dân, Đại diện HTX
@@ -113,6 +114,14 @@ class HomeScreen extends ConsumerWidget {
               icon: Icons.map_outlined,
               label: 'Bản đồ lô ruộng',
               onTap: () => open(const PlotMapScreen()),
+            ),
+          ),
+          (
+            HtxScreen.seasonCalendars,
+            BigTile(
+              icon: Icons.calendar_month,
+              label: 'Lịch thời vụ',
+              onTap: () => open(const SeasonCalendarsScreen()),
             ),
           ),
           (

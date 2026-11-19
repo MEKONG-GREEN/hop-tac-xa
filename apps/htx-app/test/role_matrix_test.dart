@@ -24,6 +24,7 @@ void main() {
         HtxFn.plotsAndArea,
         HtxFn.season,
         HtxFn.seasonView,
+        HtxFn.calendar,
         HtxFn.farmLog,
         HtxFn.harvest,
       ]) {
@@ -108,6 +109,7 @@ void main() {
       },
       HtxMode.member: {
         ...common,
+        HtxScreen.seasonCalendars,
         HtxScreen.households,
         HtxScreen.plotMap,
         HtxScreen.bulkOpen,

@@ -5,6 +5,11 @@ import { KIND_LABEL } from "@/notify/notify";
 const ID = "01927b3e-0ff1-7000-8000-00000000abcd";
 
 describe("deepLinkHref — liên kết thông báo sang trang web", () => {
+  it("AH-59: lịch mở đúng đích, không nhận đường dẫn bên ngoài",()=>{
+    expect(deepLinkHref(`/cropcycle/calendars/${ID.toUpperCase()}`,"season_calendar_published")).toBe(`/htx/lich-thoi-vu?calendar=${ID}`);
+    expect(deepLinkHref(`https://evil.test/cropcycle/calendars/${ID}`)).toBeNull();
+    expect(deepLinkHref(`/cropcycle/calendars/bad-id`)).toBeNull();
+  });
   it("W11.26: chỉ nhận UUID đợt đầy đủ, bỏ query/hash và có đích HRM dự phòng", () => {
     const base = "/kn/nhan-su/danh-gia";
     expect(deepLinkHref(`${base}/dot/${ID.toUpperCase()}?x=1#y`, "hrm_appraisal")).toBe(`${base}/dot/${ID}`);
@@ -112,7 +117,7 @@ describe("AH-22 AC2: thông báo Thành viên HTX tới đúng vụ, việc ho�
     expect(deepLinkHref(null, "season_log_missing")).toBe("/htx/mua-vu");
   });
 
-  it("AH22_AC2: lịch thời vụ (NTF.1) chưa có màn đích → null, thông báo ở lại trung tâm", () => {
-    expect(deepLinkHref(`/cropcycle/calendars/${ID}`, "season_calendar_published")).toBeNull();
+  it("AH22_AC2 + AH-59: lịch thời vụ (NTF.1) mở lịch hiện hành", () => {
+    expect(deepLinkHref(`/cropcycle/calendars/${ID}`, "season_calendar_published")).toBe(`/htx/lich-thoi-vu?calendar=${ID}`);
   });
 });

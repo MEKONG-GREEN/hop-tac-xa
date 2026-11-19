@@ -174,9 +174,11 @@ class HouseholdSeasonOpenScreen extends ConsumerStatefulWidget {
     super.key,
     required this.coop,
     required this.household,
+    this.calendarPrefill,
   });
   final String coop;
   final HouseholdItem household;
+  final SeasonCalendarPrefill? calendarPrefill;
   @override
   ConsumerState<HouseholdSeasonOpenScreen> createState() =>
       _HouseholdSeasonOpenScreenState();
@@ -206,9 +208,29 @@ class _HouseholdSeasonOpenScreenState
     _key = _ids.newId();
     _previewKey = _ids.newId();
     _remaining = widget.household.remainingAreaHa;
-    _catalogs = Future.wait(
-      ['crop', 'rice_variety', 'season'].map(_service.catalog),
-    );
+    final prefill = widget.calendarPrefill;
+    if (prefill != null) {
+      _crop = prefill.cropCode;
+      _season = prefill.seasonCode;
+      _year.text = '${prefill.year}';
+      _anchor.text = prefill.displayAnchor;
+    }
+    _catalogs =
+        Future.wait(['crop', 'rice_variety', 'season'].map(_service.catalog))
+            .then((rows) {
+              if (!rows[0].any(
+                (c) =>
+                    c['code'] == _crop &&
+                    ((c['attrs'] as Map?)?['parent_code'] == null ||
+                        (c['attrs'] as Map?)?['parent_code'] == ''),
+              )) {
+                _crop = null;
+              }
+              if (!rows[2].any((s) => s['code'] == _season)) {
+                _season = null;
+              }
+              return rows;
+            });
   }
 
   @override

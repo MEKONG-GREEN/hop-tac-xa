@@ -126,6 +126,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
       { href: "/htx/lo-ruong", module: "pf/geo", label: "Lô ruộng & ranh giới", icon: "plot", roles: HTX_READ },
       // AH-39: gắn dòng ma trận KHMV — Thành viên HTX thấy (và thao tác) vụ, nhật ký, sản lượng của HTX mình.
       { href: "/htx/mua-vu", module: "pf/cropcycle", label: "Vụ canh tác", icon: "season", roles: HTX_READ, fn: "KHMV-FN-03-XEM" },
+      { href: "/htx/lich-thoi-vu", module: "pf/cooperative", label: "Lịch thời vụ", icon: "season", roles: HTX_WRITE, fn: "KHMV-FN-03-LICH" },
       { href: "/htx/nhat-ky", module: "pf/cropcycle", label: "Nhật ký canh tác", icon: "journal", roles: HTX_READ, fn: "KHMV-FN-05" },
       { href: "/htx/phe-duyet", module: "pf/cropcycle", label: "Phê duyệt nhật ký", icon: "approve", roles: HTX_WRITE },
       { href: "/htx/san-luong", module: "pf/cropcycle", label: "Sản lượng thu hoạch", icon: "harvest", roles: HTX_READ, fn: "KHMV-FN-06" },

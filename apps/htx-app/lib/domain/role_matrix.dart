@@ -24,6 +24,7 @@ abstract final class HtxFn {
 
   /// Khai báo mở vụ mới; D = hủy vụ.
   static const season = 'KHMV-FN-03';
+  static const calendar = 'KHMV-FN-03-LICH';
 
   /// Xem chi tiết vụ, tiến độ, kế hoạch mùa vụ.
   static const seasonView = 'KHMV-FN-03-XEM';

@@ -62,11 +62,12 @@ import { notifyHealthAdminRoutes as route50 } from "./notify-health";
 import { opsRoutes as route51 } from "./ops";
 import { orgCreateRoutes as route52 } from "./orgs-create";
 import { rosterRoutes as route53 } from "./roster";
-import { seasonCatalogAdminRoutes as route54 } from "./season-catalog";
-import { simulationRoutes as route55 } from "./simulation";
-import { syncMonitorRoutes as route56 } from "./syncmonitor";
-import { waterwayAppRoutes as route57 } from "./waterway";
-import { waterwayAdminRoutes as route58 } from "./waterway";
+import { seasonCalendarRoutes as route54 } from "./season-calendars";
+import { seasonCatalogAdminRoutes as route55 } from "./season-catalog";
+import { simulationRoutes as route56 } from "./simulation";
+import { syncMonitorRoutes as route57 } from "./syncmonitor";
+import { waterwayAppRoutes as route58 } from "./waterway";
+import { waterwayAdminRoutes as route59 } from "./waterway";
 
 export const commonRouteRegistrations: RouteRegistration[] = [
   { surface: "admin", order: 13, routes: route0 },
@@ -123,11 +124,12 @@ export const commonRouteRegistrations: RouteRegistration[] = [
   { surface: "app", order: 48, routes: route51 },
   { surface: "admin", order: 14, routes: route52 },
   { surface: "app", order: 49, routes: route53 },
-  { surface: "admin", order: 121, routes: route54 },
-  { surface: "app", order: 52, routes: route55 },
-  { surface: "admin", order: 15, routes: route56 },
-  { surface: "app", order: 51, routes: route57 },
-  { surface: "admin", order: 18, routes: route58 },
+  { surface: "app", order: 176, routes: route54 },
+  { surface: "admin", order: 121, routes: route55 },
+  { surface: "app", order: 52, routes: route56 },
+  { surface: "admin", order: 15, routes: route57 },
+  { surface: "app", order: 51, routes: route58 },
+  { surface: "admin", order: 18, routes: route59 },
 ];
 
 const registrations = [...commonRouteRegistrations, ...registeredKnRoutes()];
