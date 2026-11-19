@@ -15,6 +15,7 @@ import (
 // RebuildResult đếm số dòng đã dựng lại.
 type RebuildResult struct {
 	Seasons, Logs, CoopAreas int
+	Calendars                int
 }
 
 // RebuildProjections dựng lại toàn bộ bảng chiếu của tenant từ các sổ (R-22):
@@ -37,6 +38,11 @@ func (s *Service) RebuildProjections(ctx context.Context) (RebuildResult, error)
 
 func rebuild(ctx context.Context, tx pgx.Tx, tid uuid.UUID) (RebuildResult, error) {
 	var res RebuildResult
+	calendars, err := store.RebuildCalendars(ctx, tx)
+	if err != nil {
+		return res, err
+	}
+	res.Calendars = calendars
 	if err := store.ClearProjections(ctx, tx); err != nil {
 		return res, err
 	}

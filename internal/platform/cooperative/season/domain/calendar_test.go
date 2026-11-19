@@ -1,9 +1,11 @@
 package domain
 
 import (
-	"github.com/google/uuid"
 	"reflect"
 	"testing"
+	"time"
+
+	"github.com/google/uuid"
 )
 
 func calendarDraft() CalendarDraft {
@@ -22,6 +24,9 @@ func TestCalendarGuidanceCrossYearAndNoMutation(t *testing.T) {
 	if out.CropCode != "LUA" || len(out.Recipients) != 2 || !reflect.DeepEqual(in.Recipients, original) || FormatDay(out.SowTo) != "2027-01-05" {
 		t.Fatalf("out=%+v input=%+v", out, in)
 	}
+	if out.Recipients[0].String() >= out.Recipients[1].String() {
+		t.Fatal("recipient normalization is not stable")
+	}
 	in.SowTo = in.SowFrom
 	if _, err = NormalizeCalendarDraft(in); err != nil {
 		t.Fatalf("inclusive one-day frame: %v", err)
@@ -34,7 +39,8 @@ func TestCalendarRejectsInvalidFields(t *testing.T) {
 		mutate func(*CalendarDraft)
 	}{
 		{"reversed", func(d *CalendarDraft) { d.SowTo = d.SowFrom.AddDate(0, 0, -1) }},
-		{"missing date", func(d *CalendarDraft) { d.SowFrom = d.SowFrom.AddDate(-2026, 0, 0) }},
+		{"missing date", func(d *CalendarDraft) { d.SowFrom = time.Time{} }},
+		{"out of range date", func(d *CalendarDraft) { d.SowFrom = d.SowFrom.AddDate(-2026, 0, 0) }},
 		{"invalid crop", func(d *CalendarDraft) { d.CropCode = "" }},
 		{"invalid season", func(d *CalendarDraft) { d.SeasonCode = "bad/code" }},
 		{"year", func(d *CalendarDraft) { d.SeasonYear = 2101 }},
