@@ -1,0 +1,21 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://contracts.agrigreen.vn/events/pf.party.org.deleted/v1",
+  "title":"pf.party.org.deleted — payload",
+  "description":"Tombstone metadata của HTX chưa phát sinh dữ liệu theo FN-03/DATA-03. Giữ seq qua replica/rebuild, không chứa tên người hay SĐT. Không dùng consumer khóa tài khoản của thao tác vô hiệu hóa.",
+  "x-event-type":"pf.party.org.deleted","x-schema-version":1,"x-producer":"pf/party",
+  "type":"object","additionalProperties":false,
+  "required":["org_ref","kind","code","admin_unit_code","parent_ref","active","reason","actor_ref","event_time","seq"],
+  "properties":{
+    "org_ref":{"type":"string","format":"uuid"},
+    "kind":{"type":"string","const":"cooperative"},
+    "code":{"type":"string","minLength":1,"maxLength":40},
+    "admin_unit_code":{"type":"string"},
+    "parent_ref":{"type":["string","null"],"format":"uuid"},
+    "active":{"type":"boolean","const":false},
+    "reason":{"type":"string","minLength":20},
+    "actor_ref":{"type":"string","format":"uuid"},
+    "event_time":{"type":"string","format":"date-time"},
+    "seq":{"type":"integer","minimum":1}
+  }
+}

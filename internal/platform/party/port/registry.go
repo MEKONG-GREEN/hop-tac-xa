@@ -25,8 +25,26 @@ const (
 	EventOrgCreated     = "pf.party.org.created"
 	EventOrgMoved       = "pf.party.org.moved"
 	EventOrgDeactivated = "pf.party.org.deactivated"
+	EventOrgDeleted     = "pf.party.org.deleted"
 	EventOrgReactivated = "pf.party.org.reactivated"
 )
+
+// OrgDeletedV1 là tombstone metadata của HTX chưa dùng. Tách khỏi vô hiệu hóa
+// để không gọi consumer khóa tài khoản/IAM cho một HTX vốn không có tài khoản.
+//
+//ag:event pf.party.org.deleted v1
+type OrgDeletedV1 struct {
+	OrgRef        uuid.UUID  `json:"org_ref"`
+	Kind          string     `json:"kind"`
+	Code          string     `json:"code"`
+	AdminUnitCode string     `json:"admin_unit_code"`
+	ParentRef     *uuid.UUID `json:"parent_ref"`
+	Active        bool       `json:"active"`
+	Reason        string     `json:"reason"`
+	ActorRef      uuid.UUID  `json:"actor_ref"`
+	EventTime     string     `json:"event_time"`
+	Seq           int64      `json:"seq"`
+}
 
 // OrgCreatedV1 là payload của pf.party.org.created: ảnh chụp Nút mới (W2.5, ADR-0029 — worker pf.kref
 // dựng k_ref.org + k_ref.node_closure). Chỉ mã, loại, đơn vị hành chính, cha, trạng thái — không tên, không PII.

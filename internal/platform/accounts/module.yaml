@@ -45,11 +45,12 @@ provides:
     - pf.accounts.user.locked/v1
     - pf.accounts.user.unlocked/v1
   internal_events: []
-  publications: []
+  publications: [pf_accounts_pub.cooperative_references/v1]
   data_products: []
 consumes:
   events: [pf.party.org.deactivated/v1, pf.party.org.reactivated/v1]
+  publications: [pf_party_pub.cooperative_tombstones/v1]
 permissions: [account_admin, account_admin_province, farmer, kn_user, login_totp_required]
 shares: []
-owns_schema: [pf_accounts]
+owns_schema: [pf_accounts, pf_accounts_pub]
 enable: always

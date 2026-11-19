@@ -70,7 +70,7 @@ func (s krefSource) ActiveShareGrants(ctx context.Context, tid uuid.UUID) ([]kre
 // tenant_id, pf 000092), cho lần dựng lại k_ref mọi tenant.
 func KRefTenants(pool *pgxpool.Pool) func(ctx context.Context) ([]uuid.UUID, error) {
 	return func(ctx context.Context) ([]uuid.UUID, error) {
-		rows, err := pool.Query(ctx, `SELECT tenant_id FROM pf_party.org UNION SELECT tenant_id FROM pf_party.share_grant`)
+		rows, err := pool.Query(ctx, `SELECT tenant_id FROM pf_party.org UNION SELECT tenant_id FROM pf_party.share_grant UNION SELECT tenant_id FROM pf_party.org_event WHERE action='deleted' AND kind='cooperative'`)
 		if err != nil {
 			return nil, err
 		}

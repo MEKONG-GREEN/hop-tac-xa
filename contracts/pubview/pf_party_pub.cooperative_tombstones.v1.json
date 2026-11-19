@@ -1,0 +1,33 @@
+{
+  "view": "pf_party_pub.v1_cooperative_tombstones",
+  "directive": "pf_party_pub.cooperative_tombstones/v1",
+  "owner": "pf/party",
+  "status": "published",
+  "package": "AH-283",
+  "migration": "pf 20261119090316",
+  "consumers": [
+    "Module writers through declared publication membership"
+  ],
+  "purpose": "Permanent cooperative deletion tombstones. Only tenant/cooperative references, from immutable org_event; prevent late references and snapshot resurrection.",
+  "grain": "tenant x deleted cooperative",
+  "key": [
+    "tenant_id",
+    "cooperative_ref"
+  ],
+  "closed_rule": "A deleted event is permanent; no current-time approximation or active-only filter.",
+  "personal_data": false,
+  "columns": [
+    {
+      "name": "tenant_id",
+      "type": "uuid",
+      "nullable": false,
+      "description": "Tenant of the source"
+    },
+    {
+      "name": "cooperative_ref",
+      "type": "uuid",
+      "nullable": false,
+      "description": "Referenced organization; consumer selects the cooperative being deleted"
+    }
+  ]
+}

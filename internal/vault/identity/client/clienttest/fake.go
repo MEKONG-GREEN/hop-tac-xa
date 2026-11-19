@@ -59,6 +59,7 @@ type blindKey struct {
 type Fake struct {
 	htxContacts map[[2]uuid.UUID]client.HTXContact
 	htxCommands map[[2]uuid.UUID]htxContactCommand
+	htxErased   map[[2]uuid.UUID]uuid.UUID
 	mu          sync.Mutex
 	subjects    map[uuid.UUID]*subject
 	blind       map[blindKey]uuid.UUID

@@ -88,6 +88,7 @@ type Registry struct {
 	Areas             port.CooperativeAreaSource
 	ProfileEditor     port.HTXProfileEditor
 	InventoryMachines port.InventoryMachineSource
+	AccountUsers      port.CooperativeAccountUsers
 }
 
 var (

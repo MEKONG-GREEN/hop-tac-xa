@@ -16,7 +16,7 @@ provides:
     - pf.notify.notification.created/v1
     - pf.notify.push.requested/v1
   internal_events: []
-  publications: []
+  publications: [pf_notify_pub.cooperative_references/v1]
   data_products: []
 consumes:
   events:
@@ -37,7 +37,8 @@ consumes:
     - pf.sync.conflict.opened/v1
     - pf.sync.device.revoked/v1
     - pf.sync.integration.dead_lettered/v1
+  publications: [pf_party_pub.cooperative_tombstones/v1]
 permissions: []
 shares: []
-owns_schema: [pf_notify]
+owns_schema: [pf_notify, pf_notify_pub]
 enable: per_tenant

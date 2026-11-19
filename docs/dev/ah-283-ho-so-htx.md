@@ -84,10 +84,46 @@ Integration thật bao gồm Party/Cooperative cùng pool một kết nối, Vau
 lỗi owner giữa hai bước, retry sau khi xóa receipt HTTP, sửa của Đại diện và
 chặn HTX khác. Bộ regression FN-06 giữ nguyên 403 khi tài khoản chưa gắn HTX.
 
-**Chưa hoàn thành AH-283:** còn xóa HTX chưa dùng, đếm cả hộ/tài khoản lịch sử,
-chặn chia sẻ và dữ liệu nghiệp vụ; phải có chốt ghi đồng thời giữa các owner.
-Chưa mở endpoint xóa khi chưa có đủ nguồn kiểm tra. Chỉ gộp gói này sau toàn
-bộ CI đúng SHA; giữ story In Progress đến khi đủ AC.
+## Xóa HTX chưa phát sinh dữ liệu
+
+Admin kiểm tra `GET /v1/cooperatives/{ref}/deletion`, rồi xác nhận qua POST
+`/deletions` với `expected_revision` và một Idempotency-Key. Đại diện và
+Thành viên không được gọi thao tác này. Backend kiểm lại mọi nguồn khi ghi;
+số hộ bao gồm membership lịch sử/ngừng tham gia, số tài khoản là hợp của
+IAM và sổ tài khoản, kể cả khóa hoặc đã đổi đơn vị. Thiếu nguồn trả lỗi 503.
+Các yêu cầu và lịch sử chia sẻ cùng mọi dữ liệu nghiệp vụ khác đều chặn xóa.
+
+Mỗi owner công bố `v1_cooperative_references` qua schema `_pub`, chỉ gồm mã
+tham chiếu và loại nguồn, không có PII. Writer giữ khóa shared theo tenant/HTX;
+xóa giữ khóa exclusive trước khi khóa dòng tổ chức và đếm lại. Catalog guard
+kiểm các cột tham chiếu UUID/UUID[] đã có cả trigger lẫn dependency view.
+Owner mới phải cập nhật publication trong migration và khai hợp đồng; thiếu
+coverage chặn xóa cả ở runtime lẫn CI. Module chỉ-DB chỉ thêm khai báo view,
+không khôi phục mã nghiệp vụ hay mở rộng danh sách ngoại lệ DBOnly.
+
+Tạo/chuyển đơn vị tài khoản đặt reservation trước khi gọi IAM, hoàn tất cùng
+transaction sổ tài khoản. Mỗi attempt có reservation riêng; bù một attempt
+không mở khóa attempt khác. Lỗi IAM không rõ kết quả giữ reservation để chặn
+xóa; chưa có cơ chế tự hết hạn hoặc tự đối soát các attempt không rõ kết quả.
+
+Chỉ projection HTX chưa dùng được xóa vật lý; sổ tổ chức bất biến vẫn giữ lại.
+Ngoại lệ archlint DATA-03 chỉ chấp nhận đúng câu SQL của
+`party/store.RemoveCooperativeProjection`, không miễn cả hàm hay package.
+DB yêu cầu purpose, actor và sự kiện xóa tương ứng, rồi kiểm nguồn lần nữa.
+Projection hồ sơ Cooperative được dọn theo FK D7 hiện hành; không cascade
+sang hộ hoặc nghiệp vụ. Sự kiện `pf.party.org.deleted` và nguồn dựng lại k_ref
+giữ snapshot inactive/seq xóa để sự kiện created tới trễ không phục hồi HTX.
+
+Sau commit Party, Vault xóa bản mã liên hệ riêng HTX, giữ tombstone và audit.
+Định danh người/hộ không bị xóa theo. Receipt hoàn tất được ghi sau khi Vault
+thành công; cùng yêu cầu tiếp tục được dù projection tổ chức đã mất. Web giữ
+khóa/phiên bản trong RAM khi lỗi chưa rõ kết quả; chưa có worker phục hồi khi
+mất yêu cầu gốc. Chế độ mock chưa có đầy đủ lịch sử owner nên trả 503 cho
+thao tác xóa thay vì giả số 0. API thực và UI đã có integration/interaction
+tests cho các nguồn chặn, provisioning đồng thời, xóa và retry sau gián đoạn.
+
+Giữ AH-283 In Progress đến khi gói xóa được review, đủ toàn bộ CI đúng SHA
+và merge vào dev-agent.
 
 ## Thứ tự tiếp theo
 

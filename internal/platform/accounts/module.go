@@ -168,6 +168,9 @@ func (m *Module) SessionContext() partyport.SessionContext { return app.SessionC
 // DepartmentUsage cho pf/party: số tài khoản theo phòng ban (P2 UseDepartmentUsage — mở khóa `xóa` phòng ban).
 func (m *Module) DepartmentUsage() partyport.DepartmentUsage { return m.svc }
 
+// CooperativeAccountUsers gồm cả tài khoản IAM đã khóa, không lọc vai còn hiệu lực.
+func (m *Module) CooperativeAccountUsers() partyport.CooperativeAccountUsers { return m.svc }
+
 // OrgImpact cho pf/party: dòng `accounts` của bảng Ảnh hưởng (FN-AD-04.02).
 func (m *Module) OrgImpact() partyport.OrgImpactSource { return app.OrgImpact{S: m.svc} }
 

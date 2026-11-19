@@ -4598,6 +4598,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/cooperatives/{ref}/deletion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FN-03: Admin kiểm tra toàn bộ dữ liệu trước khi xóa HTX */
+        get: operations["htxDeletionCheck"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperatives/{ref}/deletions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** FN-03: Admin xóa HTX tạo nhầm chưa phát sinh dữ liệu; giữ sổ kiểm toán */
+        post: operations["htxDelete"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -7035,6 +7069,19 @@ export interface components {
             /** @description Mã HTX hệ thống sinh, không sửa */
             code: string;
             revision: number;
+        };
+        HTXDeletionCheck: {
+            /** Format: uuid */
+            ref: string;
+            code: string;
+            name: string;
+            revision: number;
+            households: number;
+            accounts: number;
+            pending_accounts: number;
+            has_sharing: boolean;
+            has_business: boolean;
+            can_delete: boolean;
         };
         ParamValue: {
             key: string;
@@ -16542,6 +16589,71 @@ export interface operations {
             };
             400: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    htxDeletionCheck: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Không cache; hộ gồm ngừng hoạt động, tài khoản gồm lịch sử và khóa. Thiếu nguồn kiểm tra trả 503. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTXDeletionCheck"];
+                };
+            };
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    htxDelete: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    expected_revision: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Đã xóa hồ sơ và liên hệ riêng HTX; cùng khóa tiếp tục thao tác khi Vault gián đoạn. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTXProfileWritten"] & {
+                        /** @constant */
+                        deleted: true;
+                    };
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
             503: components["responses"]["Problem"];

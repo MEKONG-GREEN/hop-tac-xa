@@ -5,6 +5,17 @@ import { hasRole, ROLES, type Principal } from "@/auth/principal";
 
 export type HTXProfile = App["schemas"]["HTXProfile"];
 export type HTXProfileInput = Admin["schemas"]["HTXProfileInput"];
+export type HTXDeletionCheck = Admin["schemas"]["HTXDeletionCheck"];
+
+export function checkHTXDeletion(api: AdminApiClient, ref: string): Promise<HTXDeletionCheck> {
+  return unwrap(api.GET("/v1/cooperatives/{ref}/deletion", { params: { path: { ref } } }));
+}
+
+export function deleteHTX(api: AdminApiClient, ref: string, revision: number, key: string) {
+  return unwrap(api.POST("/v1/cooperatives/{ref}/deletions", {
+    params: { path: { ref }, header: { "Idempotency-Key": key } }, body: { expected_revision: revision },
+  }));
+}
 
 export function canEditHTXProfile(principal: Principal | null, ref?: string): boolean {
   return hasRole(principal, ROLES.platformAdmin) || Boolean(ref && principal?.orgRef === ref && hasRole(principal, ROLES.coopManager));

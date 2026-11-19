@@ -22,6 +22,9 @@ func (f *Fake) ReadHTXContact(ctx context.Context, purpose client.Purpose, ref u
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if _, ok := f.htxErased[[2]uuid.UUID{tid, ref}]; ok {
+		return client.HTXContact{}, client.ProblemErased
+	}
 	out, ok := f.htxContacts[[2]uuid.UUID{tid, ref}]
 	if !ok {
 		return client.HTXContact{}, client.ProblemNotFound
@@ -42,6 +45,9 @@ func (f *Fake) WriteHTXContact(ctx context.Context, purpose client.Purpose, ref,
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if _, ok := f.htxErased[[2]uuid.UUID{tid, ref}]; ok {
+		return client.ProblemErased
+	}
 	if f.htxContacts == nil {
 		f.htxContacts = map[[2]uuid.UUID]client.HTXContact{}
 		f.htxCommands = map[[2]uuid.UUID]htxContactCommand{}
@@ -62,5 +68,40 @@ func (f *Fake) WriteHTXContact(ctx context.Context, purpose client.Purpose, ref,
 	f.htxCommands[key] = htxContactCommand{ref: ref, contact: in}
 	f.htxContacts[[2]uuid.UUID{tid, ref}] = in
 	f.log = append(f.log, Access{Op: "htx_contact_write", Purpose: purpose, Ref: ref, Actor: actor})
+	return nil
+}
+
+func (f *Fake) ValidateHTXContactErasure(ctx context.Context, purpose client.Purpose, ref uuid.UUID) error {
+	_, _, err := f.start(ctx, "htx_contact_erasure_check", purpose, true)
+	return err
+}
+
+func (f *Fake) EraseHTXContact(ctx context.Context, purpose client.Purpose, ref, command uuid.UUID) error {
+	tid, actor, err := f.start(ctx, "htx_contact_erase", purpose, true)
+	if err != nil {
+		return err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.htxErased == nil {
+		f.htxErased = map[[2]uuid.UUID]uuid.UUID{}
+	}
+	for scope, previous := range f.htxErased {
+		if scope[0] == tid && previous == command && scope[1] != ref {
+			return problem.IdempotencyConflict
+		}
+	}
+	key := [2]uuid.UUID{tid, ref}
+	if _, ok := f.htxErased[key]; ok {
+		return nil
+	}
+	f.htxErased[key] = command
+	delete(f.htxContacts, key)
+	for key, value := range f.htxCommands {
+		if key[0] == tid && value.ref == ref {
+			delete(f.htxCommands, key)
+		}
+	}
+	f.log = append(f.log, Access{Op: "htx_contact_erase", Purpose: purpose, Ref: ref, Actor: actor})
 	return nil
 }

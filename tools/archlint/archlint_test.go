@@ -81,7 +81,7 @@ func TestPIILog(t *testing.T) {
 
 // RB-1, ADR-0011: không xóa cứng dữ liệu nghiệp vụ; chỉ Rebuild*/Clear* dựng lại bảng chiếu.
 func TestNoHardDelete_ADR0011(t *testing.T) {
-	analysistest.Run(t, analysistest.TestData(), NoHardDelete, "example.com/ag/internal/platform/beta/store")
+	analysistest.Run(t, analysistest.TestData(), NoHardDelete, "example.com/ag/internal/platform/beta/store", "example.com/ag/internal/platform/party/store")
 }
 
 // ADR-0028, R-DB-02/03: không trạng thái mức phiên trong chuỗi SQL; SET LOCAL ROLE chỉ trong shared/db.

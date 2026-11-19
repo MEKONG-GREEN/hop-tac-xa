@@ -25,6 +25,7 @@ import { formatDecimal, formatInt } from "@/lib/decimal";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { useAsync } from "@/lib/useAsync";
 import { HTXProfileOverview } from "@/htx/HTXProfileOverview";
+import { HTXDeleteButton } from "@/htx/HTXDeleteButton";
 import { canEditHTXProfile } from "@/htx/profiles";
 
 const PLOT_STATUS: Record<PlotStatus, { cls: string; text: string }> = {
@@ -364,6 +365,7 @@ export default function CooperativeDetailPage() {
               <>
                 {coop.data.active ? <span className="chip c-ok">Đang hoạt động</span> : <span className="chip c-mute">Đã vô hiệu hoá</span>}
                 {coop.data.active && canEditHTXProfile(principal, id) ? <Link className="btn btn-p btn-sm" href={`/htx/${encodeURIComponent(id)}/chinh-sua`}>Sửa hồ sơ</Link> : null}
+                <HTXDeleteButton cooperativeRef={id} />
                 {canCopy ? (
                   <button type="button" className="btn btn-o btn-sm" onClick={() => setCopying(true)}>
                     Sao chép hồ sơ

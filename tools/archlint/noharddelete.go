@@ -11,8 +11,9 @@ import (
 )
 
 // NoHardDelete cấm câu SQL xóa cứng trong mã nghiệp vụ (RB-1, ADR-0011): mọi yêu cầu
-// "xóa" hay "ghi đè" trong BRD đổi thành phiên bản mới hoặc bản ghi bù. Ngoại lệ duy nhất
-// là dựng lại bảng chiếu từ sổ (R-22) trong hàm tên bắt đầu bằng Rebuild hoặc Clear.
+// "xóa" hay "ghi đè" trong BRD đổi thành phiên bản mới hoặc bản ghi bù. Ngoại lệ:
+// dựng lại projection (R-22), và đúng câu xóa Nút HTX CHƯA phát sinh dữ liệu
+// của FN-03/DATA-03 (AH-283, comment PO 15/11/2026), có guard DB độc lập.
 var NoHardDelete = &analysis.Analyzer{
 	Name: "agnoharddelete",
 	Doc: "cấm DELETE FROM / TRUNCATE trong internal/platform và internal/mkg (RB-1, ADR-0011) — " +
@@ -54,6 +55,9 @@ func runNoHardDelete(pass *analysis.Pass) (any, error) {
 					s = lit.Value
 				}
 				if hardDeleteSQL.MatchString(s) {
+					if fn != nil && fn.Recv == nil && unusedCooperativeDelete(pass.Pkg.Path(), fn.Name.Name, s) {
+						return true
+					}
 					pass.Reportf(lit.Pos(), "RB-1/ADR-0011: không xóa cứng dữ liệu nghiệp vụ — dùng ngừng dùng, phiên bản mới hoặc bản ghi bù (chỉ Rebuild*/Clear* dựng lại bảng chiếu được xóa)")
 				}
 				return true
@@ -61,4 +65,11 @@ func runNoHardDelete(pass *analysis.Pass) (any, error) {
 		}
 	}
 	return nil, nil
+}
+
+// Không miễn cả function/package hay mọi DELETE của Party. Nếu đổi đích,
+// bỏ predicate kind hoặc thêm câu SQL thứ hai thì vẫn phải báo lỗi.
+func unusedCooperativeDelete(pkg, name, sql string) bool {
+	return strings.HasSuffix(pkg, "/internal/platform/party/store") && name == "RemoveCooperativeProjection" &&
+		strings.ToLower(strings.Join(strings.Fields(sql), " ")) == "delete from pf_party.org where ref=$1 and kind='cooperative'"
 }

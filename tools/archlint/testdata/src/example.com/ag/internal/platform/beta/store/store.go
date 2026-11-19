@@ -2,6 +2,10 @@ package store
 
 type tx interface{ Exec(sql string) error }
 
+func RemoveCooperativeProjection() string {
+	return "DELETE FROM pf_party.org WHERE ref=$1 AND kind='cooperative'" // want "ADR-0011"
+}
+
 func RetirePlot(t tx) error {
 	return t.Exec("DELETE FROM pf_geo.plot WHERE id = $1") // want "ADR-0011"
 }
