@@ -21,6 +21,12 @@ func TestAH283HTXContactIndependentAndScoped(t *testing.T) {
 	admin := htxCaller(tid, uuid.Nil, authz.RolePlatformAdmin)
 	old, next := ids.New(), ids.New()
 	input := client.HTXContact{Phone: "0907248360"}
+	identityCaller := as(tid, true, client.RoleRegistrar)
+	legacyIdentity, err := s.Create(identityCaller, client.PurposeRegistryAdmin, client.Identity{
+		Kind: client.SubjectHousehold, FullName: "Chủ hộ cũ", Phone: input.Phone, AreaCode: "X-AH283"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := s.WriteHTXContact(admin, client.PurposeRegistryAdmin, first, old, input); err != nil {
 		t.Fatal(err)
 	}
@@ -42,6 +48,17 @@ func TestAH283HTXContactIndependentAndScoped(t *testing.T) {
 	current, err = s.ReadHTXContact(admin, client.PurposeRegistryAdmin, other, false)
 	if err != nil || current.FullName != otherContact.FullName {
 		t.Fatalf("trùng SĐT không liên kết hai HTX: %v", err)
+	}
+	legacy, err := s.Resolve(identityCaller, client.PurposeRegistryAdmin, legacyIdentity.Ref)
+	if err != nil || legacy.FullName != "Chủ hộ cũ" || legacy.Phone != "84907248360" {
+		t.Fatalf("liên hệ HTX không sửa định danh hộ cùng SĐT: %v", err)
+	}
+	found, err := s.Lookup(identityCaller, client.PurposeDedup, input.Phone)
+	if err != nil || found != legacyIdentity.Ref {
+		t.Fatalf("liên hệ HTX không thay chỉ mục định danh người/hộ: %v", err)
+	}
+	if _, err := s.Resolve(admin, client.PurposeRegistryAdmin, legacyIdentity.Ref); code(err) != "forbidden" {
+		t.Fatalf("vai HTX không được mở định danh người/hộ: %v", err)
 	}
 	member := htxCaller(tid, first, "htx_member")
 	masked, err := s.ReadHTXContact(member, client.PurposeContact, first, true)

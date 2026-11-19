@@ -27715,6 +27715,8 @@ export interface components {
             /** @description Admin/Đại diện HTX mình: 10 số bắt đầu bằng 0. Thành viên: SĐT đã che. */
             phone: string;
             contact_masked: boolean;
+            /** @description False khi hồ sơ cũ chưa khai liên hệ HTX riêng; không suy SĐT từ định danh người đại diện. */
+            contact_configured: boolean;
             can_edit: boolean;
         };
         HTXProfileUpdate: {

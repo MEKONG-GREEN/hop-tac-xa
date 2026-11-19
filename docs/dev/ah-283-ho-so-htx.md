@@ -68,6 +68,13 @@ MFA của Admin giữ ở API nền tảng theo phiên đăng nhập hiện hàn
 bền vững. Khi Vault chưa xong, hồ sơ chưa được trả như một bản đầy đủ thiếu
 SĐT. Request tạo lặp khác nội dung bị từ chối bằng digest, không ghi PII vào PF.
 
+Hồ sơ cũ chưa có liên hệ riêng trả `contact_configured=false`: giữ tên/mã/địa
+chỉ và liên kết định danh cũ, hiển thị chưa khai báo liên hệ, yêu cầu nhập SĐT
+HTX khi lưu. Không dùng SĐT người đại diện/chủ hộ làm SĐT HTX và không sửa
+chủ thể định danh cũ. Khi khai liên hệ mới, ref người cũ được giữ trong nhật
+ký, không còn dùng làm liên hệ hiện tại. Test HTTP dùng vai Đại diện thuần để giữ đường sửa này
+hoạt động mà không cấp thêm quyền đọc toàn kho.
+
 Máy móc có port riêng cho AH-260, chưa nối nguồn và hiện `—` theo comment
 requirement. Không thay bằng số máy từ nghiệp vụ cơ giới KN.
 

@@ -68,6 +68,7 @@ function ProfileForm({ profile, onReload }: { profile?: HTXProfile; onReload?: (
   return <>
     <PageHead title={profile ? "Sửa hồ sơ HTX" : "Thêm HTX"} subtitle={profile ? profile.code : "Mã HTX do hệ thống tự sinh"} />
     {hasRole(principal, ROLES.platformAdmin) ? <MfaNotice what="Quản lý hồ sơ HTX" /> : null}
+    {profile?.contact_configured === false ? <p className="mute">Hồ sơ cũ chưa có số điện thoại liên hệ HTX riêng. Hãy bổ sung trước khi lưu.</p> : null}
     <form className="card sec stack" onSubmit={(event) => void submit(event)} aria-label={profile ? "Sửa hồ sơ HTX" : "Thêm HTX"}>
       {error ? <ProblemAlert problem={error} /> : null}
       {uncertain ? <p role="status">Lần lưu trước chưa hoàn tất. Bấm “Thử lưu lại” để tiếp tục.</p> : null}

@@ -47,12 +47,13 @@ components:
       allOf:
         - {$ref: "#/components/schemas/Cooperative"}
         - type: object
-          required: [revision, representative_name, phone, contact_masked, can_edit]
+          required: [revision, representative_name, phone, contact_masked, contact_configured, can_edit]
           properties:
             revision: {type: integer, minimum: 1, description: "Phiên bản sổ tổ chức; dùng khi sửa"}
             representative_name: {type: string, description: "Chỉ ở bộ nhớ/Vault; có thể rỗng. Thành viên nhận nhãn che."}
             phone: {type: string, description: "Admin/Đại diện HTX mình: 10 số bắt đầu bằng 0. Thành viên: SĐT đã che."}
             contact_masked: {type: boolean}
+            contact_configured: {type: boolean, description: "False khi hồ sơ cũ chưa khai liên hệ HTX riêng; không suy SĐT từ định danh người đại diện."}
             can_edit: {type: boolean}
 # @ag-order: 283013
     HTXProfileUpdate:

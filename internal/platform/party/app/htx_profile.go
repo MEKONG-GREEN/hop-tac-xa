@@ -26,6 +26,7 @@ type HTXProfile struct {
 	RepresentativeName string `pii:"true"`
 	Phone              string `pii:"true"`
 	ContactMasked      bool
+	ContactConfigured  bool
 	CanEdit            bool
 }
 
@@ -104,33 +105,18 @@ func (r *Registry) HTXProfile(ctx context.Context, ref uuid.UUID) (HTXProfile, e
 		}
 		contact, err := contacts.ReadHTXContact(ctx, purpose, ref, !fullContact)
 		if err == nil {
+			out.ContactConfigured = true
 			out.RepresentativeName, out.Phone = contact.FullName, localHTXPhone(contact.Phone)
 			return out, nil
 		}
 		if !errors.Is(err, client.ErrNotFound) {
 			return HTXProfile{}, vaultError(err)
 		}
-	}
-	if c.RepresentativeRef == uuid.Nil {
+		// Hồ sơ cũ chưa có liên hệ HTX riêng. Không suy SĐT HTX từ định danh
+		// người đại diện/chủ hộ và không cấp quyền Vault rộng để đọc dữ liệu cũ.
 		return out, nil
 	}
-	if r.Vault == nil {
-		return HTXProfile{}, ErrDependency.WithDetail("chưa nối kho định danh")
-	}
-	if !fullContact {
-		contact, err := r.Vault.Display(ctx, client.PurposeContact, c.RepresentativeRef)
-		if err != nil {
-			return HTXProfile{}, vaultError(err)
-		}
-		out.RepresentativeName, out.Phone = contact.Label, contact.MaskedPhone
-		return out, nil
-	}
-	contact, err := r.Vault.Resolve(ctx, client.PurposeRegistryAdmin, c.RepresentativeRef)
-	if err != nil {
-		return HTXProfile{}, vaultError(err)
-	}
-	out.RepresentativeName, out.Phone = contact.FullName, localHTXPhone(contact.Phone)
-	return out, nil
+	return HTXProfile{}, ErrDependency.WithDetail("chưa nối liên hệ độc lập theo HTX")
 }
 
 func localHTXPhone(phone string) string {

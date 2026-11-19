@@ -123,6 +123,35 @@ func TestAH283HTXProfileOwnersAndRecovery(t *testing.T) {
 		}
 		return response.StatusCode, result
 	}
+	// Liên kết định danh người cũ không được dùng làm SĐT liên hệ HTX hoặc
+	// buộc vai nghiệp vụ phải nhận thêm quyền Vault rộng.
+	legacyPerson := ids.New()
+	legacyContext, _ := gin.CreateTestContext(httptest.NewRecorder())
+	legacyContext.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+	legacyContext.Request.Header.Set("Authorization", "Bearer "+adminToken)
+	httpx.Authenticate(issuer.Verifier())(legacyContext)
+	if legacyContext.IsAborted() {
+		t.Fatal("legacy setup authentication failed")
+	}
+	legacyRef, err := pty.CooperativeRegistrar().RegisterCooperative(legacyContext.Request.Context(), pp.CooperativeRegistration{
+		Name: "HTX hồ sơ cũ", CommuneCode: "89011", Address: "Trụ sở hồ sơ cũ", RepresentativeRef: legacyPerson, IdemKey: "ah283-legacy-register"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyPath := "/v1/cooperatives/" + legacyRef.String() + "/profile"
+	legacyRepresentative := issuer.Sign(t, authztest.Token{Subject: ids.New(), TenantID: f.tid, OrgRef: legacyRef, Roles: []string{pp.RoleCoopManager}})
+	legacyStatus, legacyProfile := call(appServer.URL, legacyRepresentative, http.MethodGet, legacyPath, "", nil)
+	if legacyStatus != http.StatusOK || legacyProfile["contact_configured"] != false || legacyProfile["can_edit"] != true || legacyProfile["phone"] != "" || legacyProfile["representative_ref"] != legacyPerson.String() {
+		t.Fatalf("hồ sơ cũ không suy SĐT/không mất liên kết định danh cũ: %d %v", legacyStatus, legacyProfile)
+	}
+	legacyInput := map[string]any{"name": "HTX hồ sơ cũ", "commune_code": "89011", "head_office": "Trụ sở hồ sơ cũ", "phone": "0907248370", "representative_name": "Đại diện liên hệ HTX", "expected_revision": 1}
+	if status, body := call(appServer.URL, legacyRepresentative, http.MethodPost, legacyPath+"/revisions", "ah283-legacy-own-edit", legacyInput); status != http.StatusOK {
+		t.Fatalf("Đại diện bổ sung liên hệ hồ sơ cũ: %d %v", status, body)
+	}
+	legacyStatus, legacyProfile = call(appServer.URL, legacyRepresentative, http.MethodGet, legacyPath, "", nil)
+	if legacyStatus != http.StatusOK || legacyProfile["contact_configured"] != true || legacyProfile["phone"] != legacyInput["phone"] || legacyProfile["representative_ref"] != nil {
+		t.Fatalf("liên hệ mới không còn gắn nhầm định danh người cũ: %d %v", legacyStatus, legacyProfile)
+	}
 	input := map[string]any{"name": "HTX hồ sơ xuyên module", "commune_code": "89011", "head_office": "Trụ sở đầu", "phone": "0907248350", "representative_name": ""}
 	status, result := call(adminServer.URL, adminToken, http.MethodPost, "/v1/cooperative-profiles", "ah283-create-real", input)
 	if status != http.StatusCreated {

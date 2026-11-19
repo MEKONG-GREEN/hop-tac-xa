@@ -22,6 +22,7 @@ type htxProfileDTO struct {
 	RepresentativeName string `json:"representative_name" pii:"true"`
 	Phone              string `json:"phone" pii:"true"`
 	ContactMasked      bool   `json:"contact_masked"`
+	ContactConfigured  bool   `json:"contact_configured"`
 	CanEdit            bool   `json:"can_edit"`
 }
 
@@ -42,7 +43,7 @@ func (h Registry) getHTXProfile(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, htxProfileDTO{coopItemDTO: items[0], Revision: profile.LastSeq,
-		RepresentativeName: profile.RepresentativeName, Phone: profile.Phone, ContactMasked: profile.ContactMasked, CanEdit: profile.CanEdit})
+		RepresentativeName: profile.RepresentativeName, Phone: profile.Phone, ContactMasked: profile.ContactMasked, ContactConfigured: profile.ContactConfigured, CanEdit: profile.CanEdit})
 }
 
 type htxProfileRequest struct {

@@ -144,6 +144,9 @@ func (r *Registry) UpdateHTXProfile(ctx context.Context, in UpdateHTXProfileInpu
 		}
 		org := cur.Org
 		org.Name, org.AdminUnitCode = in.Name, in.CommuneCode
+		// Liên hệ FN-03 thuộc HTX, không còn là liên kết tới một người dùng
+		// chung. Ref cũ được giữ trong snapshot/previous_representative_ref.
+		org.RepresentativeRef = uuid.Nil
 		// HTX là đơn vị ngang hàng. Khi đổi địa bàn của hồ sơ cũ, tách khỏi
 		// cha KN cũ để không giữ một cây có xã thuộc sai tỉnh.
 		if org.AdminUnitCode != cur.AdminUnitCode {

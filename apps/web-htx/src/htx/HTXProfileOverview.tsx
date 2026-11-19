@@ -30,6 +30,7 @@ export function HTXProfileOverview({ cooperativeRef, machinesOnly = false }: { c
     ["Số máy móc hiện có", formatInt(profile.machine_count)],
   ];
   return <section aria-label="Hồ sơ HTX">
+	{profile.contact_configured === false ? <p className="mute">Hồ sơ cũ chưa khai báo liên hệ HTX riêng.</p> : null}
     <dl style={{ display: "grid", gridTemplateColumns: "minmax(140px, 220px) 1fr", gap: "10px 16px" }}>{rows.map(([label, value]) => <div key={label} style={{ display: "contents" }}><dt className="mute">{label}</dt><dd>{value}</dd></div>)}</dl>
     {areas && (areas.missing_cultivated > 0 || areas.missing_livestock > 0) ? <p className="mute small">Một số hộ chưa khai đủ diện tích; tổng tương ứng sẽ hiện khi dữ liệu đầy đủ.</p> : null}
     <p className="mute small">Diện tích cộng từ hồ sơ các hộ hiện thuộc HTX; không nhập tại hồ sơ HTX.</p>

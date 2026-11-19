@@ -15,7 +15,7 @@ const json = (value: unknown, status = 200) => new Response(JSON.stringify(value
 const profile: HTXProfile = { ref: REF, kind: "cooperative", code: "HTX000283", name: "HTX thử nghiệm", active: true, admin_unit_code: "X-OLD", parent_ref: null, representative_ref: null,
   province_code: "P-OLD", province_name: "Tỉnh đang lưu", commune_name: "Xã đang lưu", status_reason: null, tax_code: null, area_ha: "999", established_on: null,
   location: null, location_provisional: true, confirmation_status: "unconfirmed", confirmation_label: "Chưa xác nhận", member_households: 1, digitized_plots: 0, address: "Trụ sở đã lưu",
-  revision: 42, representative_name: "", phone: "0907248360", contact_masked: false, can_edit: true, machine_count: null, machine_groups: null,
+  revision: 42, representative_name: "", phone: "0907248360", contact_masked: false, contact_configured: true, can_edit: true, machine_count: null, machine_groups: null,
   household_areas: { cultivated_ha: "1.5", livestock_ha: "0.5", households: 1, missing_cultivated: 0, missing_livestock: 0 } };
 
 function setup(persona = "setter", options: { edit?: boolean; failure?: boolean; overview?: boolean; machines?: boolean; data?: HTXProfile } = {}) {
@@ -105,5 +105,13 @@ describe("AH-283 hồ sơ HTX", () => {
     expect(region).toHaveTextContent("Tổng số máy: —");
     expect(region).toHaveTextContent("Chưa có dữ liệu");
     expect(screen.queryByRole("table")).toBeNull();
+  });
+
+  it("hồ sơ cũ giữ thông tin tổ chức và yêu cầu bổ sung liên hệ HTX riêng", async () => {
+    setup("setter", { edit: true, data: { ...profile, contact_configured: false, phone: "" } });
+    expect(await screen.findByText("Hồ sơ cũ chưa có số điện thoại liên hệ HTX riêng. Hãy bổ sung trước khi lưu.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Tên HTX")).toHaveValue(profile.name);
+    expect(screen.getByLabelText("Số điện thoại")).toHaveValue("");
+    expect(screen.getByLabelText("Số điện thoại")).toBeRequired();
   });
 });

@@ -66,7 +66,7 @@ export const htxProfileAppRoutes: Route[] = [
     if (persona.me.tenant_id !== TENANT || !coop || (!hasRole(persona, "platform_admin") && (persona.me.org?.ref !== coop.api.ref || !coop.api.active))) return problem(404, "party.org_not_found", "Không tìm thấy HTX");
     const contact = contacts.get(coop.api.ref) ?? { name: "", phone: "", revision: 1 };
     const full = hasRole(persona, "platform_admin", "coop_manager");
-    return json({ ...withHTXSummary(coop), revision: contact.revision, can_edit: full && coop.api.active, contact_masked: !full,
+    return json({ ...withHTXSummary(coop), revision: contact.revision, can_edit: full && coop.api.active, contact_masked: !full, contact_configured: contacts.has(coop.api.ref),
       representative_name: full ? contact.name : contact.name.split(/\s+/).filter(Boolean).map((word) => `${[...word][0]}.`).join(" "),
       phone: full || !contact.phone ? contact.phone : `${contact.phone.slice(0, 4)}•••${contact.phone.slice(-3)}` }, 200, { "Cache-Control": "no-store" });
   } },
