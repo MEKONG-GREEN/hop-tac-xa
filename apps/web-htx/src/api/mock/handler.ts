@@ -4,6 +4,7 @@ import { personaFromAuthHeader, type MockPersona } from "./personas";
 import { contextProblem, personaForContext } from "./kn";
 import { supportGuard, supportRecord } from "./kn-admin";
 import { passwordResetMock } from "./password-reset";
+import { htxProfileWriteProblem } from "./htx-profiles";
 
 // BEGIN GENERATED MOCK ROUTES
 import { orderedRoutes, type RouteRegistration } from "./registry";
@@ -29,46 +30,48 @@ import { htxAdminRoutes as route17 } from "./htx";
 import { htxAnchorRoutes as route18 } from "./htx-anchors";
 import { htxGapAppRoutes as route19 } from "./htx-gaps";
 import { htxGapAdminRoutes as route20 } from "./htx-gaps";
-import { appRoutes41 as route21 } from "./legacy-document";
-import { appRoutes38 as route22 } from "./legacy-geo";
-import { appRoutes39 as route23 } from "./legacy-geo";
-import { appRoutes40 as route24 } from "./legacy-geo";
-import { appRoutes42 as route25 } from "./legacy-geo";
-import { appRoutes30 as route26 } from "./legacy-masterdata";
-import { appRoutes31 as route27 } from "./legacy-masterdata";
-import { appRoutes32 as route28 } from "./legacy-masterdata";
-import { appRoutes33 as route29 } from "./legacy-masterdata";
-import { adminRoutes4 as route30 } from "./legacy-masterdata";
-import { adminRoutes5 as route31 } from "./legacy-masterdata";
-import { adminRoutes6 as route32 } from "./legacy-masterdata";
-import { adminRoutes7 as route33 } from "./legacy-masterdata";
-import { adminRoutes8 as route34 } from "./legacy-masterdata";
-import { adminRoutes9 as route35 } from "./legacy-masterdata";
-import { appRoutes43 as route36 } from "./legacy-mechanization";
-import { appRoutes44 as route37 } from "./legacy-mechanization";
-import { appRoutes45 as route38 } from "./legacy-mechanization";
-import { appRoutes46 as route39 } from "./legacy-mechanization";
-import { appRoutes1 as route40 } from "./legacy-party";
-import { appRoutes34 as route41 } from "./legacy-party";
-import { appRoutes35 as route42 } from "./legacy-party";
-import { appRoutes36 as route43 } from "./legacy-party";
-import { appRoutes37 as route44 } from "./legacy-party";
-import { adminRoutes10 as route45 } from "./legacy-party";
-import { adminRoutes11 as route46 } from "./legacy-party";
-import { adminRoutes12 as route47 } from "./legacy-party";
-import { metricsRoutes as route48 } from "./metrics";
-import { mrvAppRoutes as route49 } from "./mrv";
-import { mrvAdminRoutes as route50 } from "./mrv";
-import { notifyHealthAdminRoutes as route51 } from "./notify-health";
-import { opsRoutes as route52 } from "./ops";
-import { orgCreateRoutes as route53 } from "./orgs-create";
-import { rosterRoutes as route54 } from "./roster";
-import { seasonCalendarRoutes as route55 } from "./season-calendars";
-import { seasonCatalogAdminRoutes as route56 } from "./season-catalog";
-import { simulationRoutes as route57 } from "./simulation";
-import { syncMonitorRoutes as route58 } from "./syncmonitor";
-import { waterwayAppRoutes as route59 } from "./waterway";
-import { waterwayAdminRoutes as route60 } from "./waterway";
+import { htxProfileAppRoutes as route21 } from "./htx-profiles";
+import { htxProfileAdminRoutes as route22 } from "./htx-profiles";
+import { appRoutes41 as route23 } from "./legacy-document";
+import { appRoutes38 as route24 } from "./legacy-geo";
+import { appRoutes39 as route25 } from "./legacy-geo";
+import { appRoutes40 as route26 } from "./legacy-geo";
+import { appRoutes42 as route27 } from "./legacy-geo";
+import { appRoutes30 as route28 } from "./legacy-masterdata";
+import { appRoutes31 as route29 } from "./legacy-masterdata";
+import { appRoutes32 as route30 } from "./legacy-masterdata";
+import { appRoutes33 as route31 } from "./legacy-masterdata";
+import { adminRoutes4 as route32 } from "./legacy-masterdata";
+import { adminRoutes5 as route33 } from "./legacy-masterdata";
+import { adminRoutes6 as route34 } from "./legacy-masterdata";
+import { adminRoutes7 as route35 } from "./legacy-masterdata";
+import { adminRoutes8 as route36 } from "./legacy-masterdata";
+import { adminRoutes9 as route37 } from "./legacy-masterdata";
+import { appRoutes43 as route38 } from "./legacy-mechanization";
+import { appRoutes44 as route39 } from "./legacy-mechanization";
+import { appRoutes45 as route40 } from "./legacy-mechanization";
+import { appRoutes46 as route41 } from "./legacy-mechanization";
+import { appRoutes1 as route42 } from "./legacy-party";
+import { appRoutes34 as route43 } from "./legacy-party";
+import { appRoutes35 as route44 } from "./legacy-party";
+import { appRoutes36 as route45 } from "./legacy-party";
+import { appRoutes37 as route46 } from "./legacy-party";
+import { adminRoutes10 as route47 } from "./legacy-party";
+import { adminRoutes11 as route48 } from "./legacy-party";
+import { adminRoutes12 as route49 } from "./legacy-party";
+import { metricsRoutes as route50 } from "./metrics";
+import { mrvAppRoutes as route51 } from "./mrv";
+import { mrvAdminRoutes as route52 } from "./mrv";
+import { notifyHealthAdminRoutes as route53 } from "./notify-health";
+import { opsRoutes as route54 } from "./ops";
+import { orgCreateRoutes as route55 } from "./orgs-create";
+import { rosterRoutes as route56 } from "./roster";
+import { seasonCalendarRoutes as route57 } from "./season-calendars";
+import { seasonCatalogAdminRoutes as route58 } from "./season-catalog";
+import { simulationRoutes as route59 } from "./simulation";
+import { syncMonitorRoutes as route60 } from "./syncmonitor";
+import { waterwayAppRoutes as route61 } from "./waterway";
+import { waterwayAdminRoutes as route62 } from "./waterway";
 
 export const commonRouteRegistrations: RouteRegistration[] = [
   { surface: "admin", order: 13, routes: route0 },
@@ -92,46 +95,48 @@ export const commonRouteRegistrations: RouteRegistration[] = [
   { surface: "admin", order: 16, routes: route18 },
   { surface: "app", order: 0, routes: route19 },
   { surface: "admin", order: 1, routes: route20 },
-  { surface: "app", order: 41, routes: route21 },
-  { surface: "app", order: 38, routes: route22 },
-  { surface: "app", order: 39, routes: route23 },
-  { surface: "app", order: 40, routes: route24 },
-  { surface: "app", order: 42, routes: route25 },
-  { surface: "app", order: 30, routes: route26 },
-  { surface: "app", order: 31, routes: route27 },
-  { surface: "app", order: 32, routes: route28 },
-  { surface: "app", order: 33, routes: route29 },
-  { surface: "admin", order: 4, routes: route30 },
-  { surface: "admin", order: 5, routes: route31 },
-  { surface: "admin", order: 6, routes: route32 },
-  { surface: "admin", order: 7, routes: route33 },
-  { surface: "admin", order: 8, routes: route34 },
-  { surface: "admin", order: 9, routes: route35 },
-  { surface: "app", order: 43, routes: route36 },
-  { surface: "app", order: 44, routes: route37 },
-  { surface: "app", order: 45, routes: route38 },
-  { surface: "app", order: 46, routes: route39 },
-  { surface: "app", order: 1, routes: route40 },
-  { surface: "app", order: 34, routes: route41 },
-  { surface: "app", order: 35, routes: route42 },
-  { surface: "app", order: 36, routes: route43 },
-  { surface: "app", order: 37, routes: route44 },
-  { surface: "admin", order: 10, routes: route45 },
-  { surface: "admin", order: 11, routes: route46 },
-  { surface: "admin", order: 12, routes: route47 },
-  { surface: "app", order: 55, routes: route48 },
-  { surface: "app", order: 56, routes: route49 },
-  { surface: "admin", order: 21, routes: route50 },
-  { surface: "admin", order: 24, routes: route51 },
-  { surface: "app", order: 48, routes: route52 },
-  { surface: "admin", order: 14, routes: route53 },
-  { surface: "app", order: 49, routes: route54 },
-  { surface: "app", order: 176, routes: route55 },
-  { surface: "admin", order: 121, routes: route56 },
-  { surface: "app", order: 52, routes: route57 },
-  { surface: "admin", order: 15, routes: route58 },
-  { surface: "app", order: 51, routes: route59 },
-  { surface: "admin", order: 18, routes: route60 },
+  { surface: "app", order: 283, routes: route21 },
+  { surface: "admin", order: 283, routes: route22 },
+  { surface: "app", order: 41, routes: route23 },
+  { surface: "app", order: 38, routes: route24 },
+  { surface: "app", order: 39, routes: route25 },
+  { surface: "app", order: 40, routes: route26 },
+  { surface: "app", order: 42, routes: route27 },
+  { surface: "app", order: 30, routes: route28 },
+  { surface: "app", order: 31, routes: route29 },
+  { surface: "app", order: 32, routes: route30 },
+  { surface: "app", order: 33, routes: route31 },
+  { surface: "admin", order: 4, routes: route32 },
+  { surface: "admin", order: 5, routes: route33 },
+  { surface: "admin", order: 6, routes: route34 },
+  { surface: "admin", order: 7, routes: route35 },
+  { surface: "admin", order: 8, routes: route36 },
+  { surface: "admin", order: 9, routes: route37 },
+  { surface: "app", order: 43, routes: route38 },
+  { surface: "app", order: 44, routes: route39 },
+  { surface: "app", order: 45, routes: route40 },
+  { surface: "app", order: 46, routes: route41 },
+  { surface: "app", order: 1, routes: route42 },
+  { surface: "app", order: 34, routes: route43 },
+  { surface: "app", order: 35, routes: route44 },
+  { surface: "app", order: 36, routes: route45 },
+  { surface: "app", order: 37, routes: route46 },
+  { surface: "admin", order: 10, routes: route47 },
+  { surface: "admin", order: 11, routes: route48 },
+  { surface: "admin", order: 12, routes: route49 },
+  { surface: "app", order: 55, routes: route50 },
+  { surface: "app", order: 56, routes: route51 },
+  { surface: "admin", order: 21, routes: route52 },
+  { surface: "admin", order: 24, routes: route53 },
+  { surface: "app", order: 48, routes: route54 },
+  { surface: "admin", order: 14, routes: route55 },
+  { surface: "app", order: 49, routes: route56 },
+  { surface: "app", order: 176, routes: route57 },
+  { surface: "admin", order: 121, routes: route58 },
+  { surface: "app", order: 52, routes: route59 },
+  { surface: "admin", order: 15, routes: route60 },
+  { surface: "app", order: 51, routes: route61 },
+  { surface: "admin", order: 18, routes: route62 },
 ];
 
 const registrations = [...commonRouteRegistrations, ...registeredKnRoutes()];
@@ -179,6 +184,8 @@ function createMockFetch(routes: Route[], opts: { surface: "app" | "admin"; late
     const persona = personaForContext(tokenPersona, request.headers.get("X-AG-Context"));
     // Bề mặt Admin: mọi route bắt buộc token đã qua yếu tố thứ hai (mục 11).
     if (opts.surface === "admin" && !persona.amr.includes("otp")) return problem(403, "mfa_required", "MFA required");
+    const profileDenied = htxProfileWriteProblem(persona, request.method, url.pathname);
+    if (profileDenied) return profileDenied;
 
     let body: unknown = undefined;
     // POST bắt buộc Idempotency-Key; PUT/PATCH (KN v7.7 P1/P7) đọc thân như POST, khóa tùy chọn.

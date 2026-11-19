@@ -23,6 +23,7 @@ provides:
     - CoopMachineCounts
     - CoopMarkers
     - CoopProfiles
+    - CooperativeAreaSource
     - CooperativeRegistrar
     - CooperativeUnitCounts
     - DepartmentAdmin
@@ -31,7 +32,9 @@ provides:
     - FormAvailability
     - FourEyes
     - GrantLookup
+    - HTXProfileEditor
     - Households
+    - InventoryMachineSource
     - ModuleEnablement
     - OrgCodes
     - OrgDirectory

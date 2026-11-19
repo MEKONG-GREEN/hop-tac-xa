@@ -24,6 +24,8 @@ import { Empty, LoadMore, Loading, PageHead } from "@/components/ui";
 import { formatDecimal, formatInt } from "@/lib/decimal";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { useAsync } from "@/lib/useAsync";
+import { HTXProfileOverview } from "@/htx/HTXProfileOverview";
+import { canEditHTXProfile } from "@/htx/profiles";
 
 const PLOT_STATUS: Record<PlotStatus, { cls: string; text: string }> = {
   active: { cls: "c-ok", text: "Đang dùng" },
@@ -337,7 +339,10 @@ export default function CooperativeDetailPage() {
   const [tab, setTab] = useState("overview");
   const [deactivating, setDeactivating] = useState(false);
   const [copying, setCopying] = useState(false);
-  const coop = useAsync(() => getCooperative(api, id), [api, id]);
+  const identity = `${principal?.subject}:${principal?.tenantId}:${principal?.orgRef}:${principal?.roles.join("|")}`;
+  const coop = useAsync(() => getCooperative(api, id), [api, id, identity]);
+  const profileAudience = hasRole(principal, ROLES.platformAdmin, ROLES.coopManager, ROLES.htxMember);
+  const currentTab = !profileAudience && tab === "machines" ? "overview" : tab;
   // FN-06/EX-01, AC-N2: HTX ngoài phạm vi (404) → về trang đầu tiên được xem kèm thông báo.
   const leaving = useExitOnNotFound(coop.error);
   const canDeactivate = hasRole(principal, ROLES.registryAdmin, ROLES.platformAdmin);
@@ -358,6 +363,7 @@ export default function CooperativeDetailPage() {
             actions={
               <>
                 {coop.data.active ? <span className="chip c-ok">Đang hoạt động</span> : <span className="chip c-mute">Đã vô hiệu hoá</span>}
+                {coop.data.active && canEditHTXProfile(principal, id) ? <Link className="btn btn-p btn-sm" href={`/htx/${encodeURIComponent(id)}/chinh-sua`}>Sửa hồ sơ</Link> : null}
                 {canCopy ? (
                   <button type="button" className="btn btn-o btn-sm" onClick={() => setCopying(true)}>
                     Sao chép hồ sơ
@@ -385,17 +391,19 @@ export default function CooperativeDetailPage() {
           <div className="card sec">
             <Tabs
               label="Thông tin HTX"
-              value={tab}
+              value={currentTab}
               onChange={setTab}
               tabs={[
                 { id: "overview", label: "Tổng quan" },
                 { id: "households", label: "Nông hộ" },
                 { id: "plots", label: "Thửa ruộng" },
+                ...(profileAudience ? [{ id: "machines", label: "Máy móc hiện có" }] : []),
               ]}
             >
-              {tab === "overview" ? <Overview c={coop.data} /> : null}
-              {tab === "households" ? <HouseholdsPanel coop={coop.data} /> : null}
-              {tab === "plots" ? <PlotsTab coop={coop.data} /> : null}
+              {currentTab === "overview" ? profileAudience ? <HTXProfileOverview cooperativeRef={id} /> : <Overview c={coop.data} /> : null}
+              {currentTab === "households" ? <HouseholdsPanel coop={coop.data} /> : null}
+              {currentTab === "plots" ? <PlotsTab coop={coop.data} /> : null}
+              {currentTab === "machines" && profileAudience ? <HTXProfileOverview cooperativeRef={id} machinesOnly /> : null}
             </Tabs>
           </div>
         </>

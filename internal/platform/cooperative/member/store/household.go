@@ -12,7 +12,7 @@ import (
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/ids"
 )
 
-const householdCols = `h.household_ref, h.commune_code, h.cultivated_area_ha::text, h.active,
+const householdCols = `h.household_ref, h.commune_code, h.cultivated_area_ha::text, h.livestock_area_ha::text, h.active,
   coalesce(m.org_ref, '00000000-0000-0000-0000-000000000000'::uuid), m.since_date::text, h.created_at, h.tenant_id`
 
 const householdFrom = ` FROM pf_coop.household h
@@ -21,12 +21,15 @@ const householdFrom = ` FROM pf_coop.household h
 
 func scanHousehold(row pgx.Row) (domain.Household, error) {
 	var h domain.Household
-	var area, since *string
-	if err := row.Scan(&h.Ref, &h.CommuneCode, &area, &h.Active, &h.CooperativeRef, &since, &h.CreatedAt, &h.TenantID); err != nil {
+	var area, livestock, since *string
+	if err := row.Scan(&h.Ref, &h.CommuneCode, &area, &livestock, &h.Active, &h.CooperativeRef, &since, &h.CreatedAt, &h.TenantID); err != nil {
 		return h, err
 	}
 	var err error
 	if h.CultivatedAreaHa, err = parseDec(area); err != nil {
+		return h, err
+	}
+	if h.LivestockAreaHa, err = parseDec(livestock); err != nil {
 		return h, err
 	}
 	if since != nil {
@@ -54,9 +57,9 @@ func HouseholdByRef(ctx context.Context, tx pgx.Tx, ref uuid.UUID) (*domain.Hous
 // InsertHousehold ghi nông hộ mới và (nếu có) thành viên HTX mở.
 // ON CONFLICT: hai yêu cầu song song cùng chủ hộ — bên thua nhận inserted = false.
 func InsertHousehold(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, h domain.Household, actor uuid.UUID) (bool, error) {
-	tag, err := tx.Exec(ctx, `INSERT INTO pf_coop.household (tenant_id, household_ref, commune_code, cultivated_area_ha, created_by)
-	  VALUES ($1, $2, $3, $4::numeric, $5) ON CONFLICT DO NOTHING`,
-		tenantID, h.Ref, h.CommuneCode, decPtr(h.CultivatedAreaHa), actor)
+	tag, err := tx.Exec(ctx, `INSERT INTO pf_coop.household (tenant_id, household_ref, commune_code, cultivated_area_ha, livestock_area_ha, created_by)
+	  VALUES ($1, $2, $3, $4::numeric, $5::numeric, $6) ON CONFLICT DO NOTHING`,
+		tenantID, h.Ref, h.CommuneCode, decPtr(h.CultivatedAreaHa), decPtr(h.LivestockAreaHa), actor)
 	if err != nil || tag.RowsAffected() == 0 {
 		return false, err
 	}

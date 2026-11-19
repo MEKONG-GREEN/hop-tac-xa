@@ -228,6 +228,9 @@ func (m *Module) Resolve() port.Resolve { return m.svc }
 // CoopProfiles cho pf/party: hồ sơ HTX (tạo HTX hai bước, màn HTX, danh bạ đối tác).
 func (m *Module) CoopProfiles() partyport.CoopProfiles { return m.member }
 
+// CooperativeAreas trả nguồn tổng diện tích hộ cho hồ sơ HTX (AH-283).
+func (m *Module) CooperativeAreas() partyport.CooperativeAreaSource { return m.member }
+
 // CoopLocations (W5.5) cho party/port/grantlookup: vị trí hồ sơ HTX của bên cấp cho feed cooperative_directory.
 func (m *Module) CoopLocations() grantlookup.CoopLocations { return m.member }
 

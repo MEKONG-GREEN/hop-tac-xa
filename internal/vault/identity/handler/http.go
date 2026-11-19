@@ -32,6 +32,8 @@ type Handler struct {
 
 // Register gắn route vào nhóm /v1 đã có xác thực.
 func (h Handler) Register(rg *gin.RouterGroup) {
+	rg.POST("/htx-contacts/:ref/read", h.readHTXContact)
+	rg.POST("/htx-contacts/:ref/commands/:command", h.Idem, h.writeHTXContact)
 	rg.POST("/subjects", h.Idem, h.create)
 	rg.POST("/subjects/lookup", h.lookup)
 	// W11.23: thẻ danh bạ theo lô (pf/contact) — POST vì thân mang danh sách ref; phản hồi no-store, không qua Idem.

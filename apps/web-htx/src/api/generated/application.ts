@@ -12951,6 +12951,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/cooperatives/{ref}/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FN-03: hồ sơ HTX; Admin mọi HTX, Đại diện/Thành viên chỉ HTX mình */
+        get: operations["htxProfileGet"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperatives/{ref}/profile/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** FN-03: Admin sửa mọi HTX, Đại diện chỉ sửa HTX mình */
+        post: operations["htxProfileUpdate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -13702,6 +13736,17 @@ export interface components {
             tax_code: string | null;
             /** @description Diện tích đăng ký hành chính (ha) */
             area_ha: components["schemas"]["Decimal"] | null;
+            /** @description Tổng diện tích hộ hiện thuộc HTX; null khi chưa nối nguồn, không dùng area_ha đăng ký KN */
+            household_areas?: components["schemas"]["CooperativeHouseholdAreas"] | null;
+            /** @description Tổng cột Số lượng từ AH-260; null khi chưa có nguồn, không dùng dữ liệu máy KN thay thế */
+            machine_count?: number | null;
+            /** @description Nhóm theo danh mục loại máy động; null khi chưa có nguồn */
+            machine_groups?: {
+                /** Format: uuid */
+                type_ref: string;
+                type_name: string;
+                quantity: number;
+            }[] | null;
             /** Format: date */
             established_on: string | null;
             location: components["schemas"]["Point"] | null;
@@ -13729,6 +13774,8 @@ export interface components {
             cooperative_ref: string | null;
             commune_code: string;
             cultivated_area_ha: components["schemas"]["Decimal"] | null;
+            /** @description Diện tích chăn nuôi của hộ; null khi chưa khai báo */
+            livestock_area_ha?: components["schemas"]["Decimal"] | null;
             /** Format: date */
             member_since: string | null;
             active: boolean;
@@ -13800,6 +13847,8 @@ export interface components {
             /** @description Bỏ trống = xã của HTX */
             commune_code?: string;
             cultivated_area_ha?: components["schemas"]["Decimal"];
+            /** @description Tùy chọn; không âm, tối đa 4 số lẻ */
+            livestock_area_ha?: components["schemas"]["Decimal"];
             /** Format: date */
             member_since?: string;
             /** @description Chỉ chuyển vào kho định danh (mục đích registry.admin), không lưu ở pf_party */
@@ -27648,6 +27697,42 @@ export interface components {
             base_version: number;
             checkin: components["schemas"]["CNTSLivestockCheckin"];
             reason?: string;
+        };
+        CooperativeHouseholdAreas: {
+            /** @description null nếu còn hộ chưa khai diện tích trồng trọt */
+            cultivated_ha: components["schemas"]["Decimal"] | null;
+            /** @description null nếu còn hộ chưa khai diện tích chăn nuôi */
+            livestock_ha: components["schemas"]["Decimal"] | null;
+            households: number;
+            missing_cultivated: number;
+            missing_livestock: number;
+        };
+        HTXProfile: components["schemas"]["Cooperative"] & {
+            /** @description Phiên bản sổ tổ chức; dùng khi sửa */
+            revision: number;
+            /** @description Chỉ ở bộ nhớ/Vault; có thể rỗng. Thành viên nhận nhãn che. */
+            representative_name: string;
+            /** @description Admin/Đại diện HTX mình: 10 số bắt đầu bằng 0. Thành viên: SĐT đã che. */
+            phone: string;
+            contact_masked: boolean;
+            /** @description False khi hồ sơ cũ chưa khai liên hệ HTX riêng; không suy SĐT từ định danh người đại diện. */
+            contact_configured: boolean;
+            can_edit: boolean;
+        };
+        HTXProfileUpdate: {
+            name: string;
+            commune_code: string;
+            head_office: string;
+            /** @default  */
+            representative_name: string;
+            phone: string;
+            expected_revision: number;
+        };
+        HTXProfileWritten: {
+            /** Format: uuid */
+            ref: string;
+            code: string;
+            revision: number;
         };
     };
     responses: {
@@ -55364,6 +55449,65 @@ export interface operations {
             /** @description extension.cnts_livestock_household_version_conflict | extension.cnts_livestock_household_duplicate | extension.cnts_livestock_household_deactivated | extension.cnts_livestock_household_phone_taken */
             409: components["responses"]["Problem"];
             /** @description extension.cnts_livestock_household_invalid | extension.cnts_livestock_household_checkin_required */
+            422: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    htxProfileGet: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Không cache. Liên hệ đầy đủ cho Admin/Đại diện của HTX; Thành viên nhận nhãn/SĐT che ngay tại server. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTXProfile"];
+                };
+            };
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    htxProfileUpdate: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HTXProfileUpdate"];
+            };
+        };
+        responses: {
+            /** @description Đã hoàn tất tại các owner; không lưu PII trong receipt PF. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTXProfileWritten"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };

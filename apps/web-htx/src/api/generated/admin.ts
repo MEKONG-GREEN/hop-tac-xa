@@ -4581,6 +4581,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/cooperative-profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** FN-03: Admin tạo hồ sơ HTX, không bắt buộc MST/neo KN */
+        post: operations["htxProfileCreate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -7002,6 +7019,22 @@ export interface components {
             /** @enum {string} */
             outcome: "deleted" | "hidden";
             item: components["schemas"]["CatalogItem"];
+        };
+        HTXProfileInput: {
+            name: string;
+            /** @description Xã còn được sử dụng trong danh mục AH-271 */
+            commune_code: string;
+            head_office: string;
+            /** @default  */
+            representative_name: string;
+            phone: string;
+        };
+        HTXProfileWritten: {
+            /** Format: uuid */
+            ref: string;
+            /** @description Mã HTX hệ thống sinh, không sửa */
+            code: string;
+            revision: number;
         };
         ParamValue: {
             key: string;
@@ -16471,6 +16504,46 @@ export interface operations {
             /** @description masterdata.catalog_delete_unsupported */
             422: components["responses"]["Problem"];
             /** @description masterdata.dependency_unavailable */
+            503: components["responses"]["Problem"];
+        };
+    };
+    htxProfileCreate: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HTXProfileInput"];
+            };
+        };
+        responses: {
+            /** @description Phát lại kết quả đã ghi */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTXProfileWritten"];
+                };
+            };
+            /** @description Đã tạo; client tải GET profile riêng. Receipt ghi không có PII. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTXProfileWritten"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
     };

@@ -376,7 +376,7 @@ func (k *KN) applyOrgSnapshot(ctx context.Context, tid, ref uuid.UUID, after []b
 			if err := store.LockCooperativeName(ctx, tx, snap.Name); err != nil {
 				return err
 			}
-			owner, err := store.CooperativeNameOwner(ctx, tx, snap.Name)
+			owner, err := store.CooperativeNameOwner(ctx, tx, snap.Name, cur.Ref)
 			if err != nil {
 				return err
 			}
@@ -487,7 +487,7 @@ func (k *KN) UpdateKNCooperative(ctx context.Context, in KNUpdateCoopInput) (KNC
 		var owner uuid.UUID
 		if err := tenant.WithTenantTx(ctx, k.DB, c.p.TenantID, func(tx pgx.Tx) error {
 			var e error
-			owner, e = store.CooperativeNameOwner(ctx, tx, nName)
+			owner, e = store.CooperativeNameOwner(ctx, tx, nName, cur.Ref)
 			return e
 		}); err != nil {
 			return KNCooperative{}, err

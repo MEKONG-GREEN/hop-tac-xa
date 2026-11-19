@@ -18078,6 +18078,45 @@ paths:
         "409": {description: "extension.cnts_livestock_household_version_conflict | extension.cnts_livestock_household_duplicate | extension.cnts_livestock_household_deactivated | extension.cnts_livestock_household_phone_taken", $ref: "#/components/responses/Problem"}
         "422": {description: "extension.cnts_livestock_household_invalid | extension.cnts_livestock_household_checkin_required", $ref: "#/components/responses/Problem"}
         "503": {$ref: "#/components/responses/Problem"}
+  /v1/cooperatives/{ref}/profile:
+    get:
+      summary: "FN-03: hồ sơ HTX; Admin mọi HTX, Đại diện/Thành viên chỉ HTX mình"
+      operationId: htxProfileGet
+      parameters:
+        - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: "Không cache. Liên hệ đầy đủ cho Admin/Đại diện của HTX; Thành viên nhận nhãn/SĐT che ngay tại server."
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/HTXProfile"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /v1/cooperatives/{ref}/profile/revisions:
+    post:
+      summary: "FN-03: Admin sửa mọi HTX, Đại diện chỉ sửa HTX mình"
+      operationId: htxProfileUpdate
+      parameters:
+        - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+        - {$ref: "#/components/parameters/IdempotencyKey"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/HTXProfileUpdate"}
+      responses:
+        "200":
+          description: "Đã hoàn tất tại các owner; không lưu PII trong receipt PF."
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/HTXProfileWritten"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
 components:
   securitySchemes:
     oidc:
@@ -18932,6 +18971,18 @@ components:
             confirmation_label: {type: string, enum: ["Đã xác nhận", "Chưa xác nhận"]}
             tax_code: {type: [string, "null"], pattern: "^[0-9]{10}(-[0-9]{3})?$"}
             area_ha: {oneOf: [{$ref: "#/components/schemas/Decimal"}, {type: "null"}], description: "Diện tích đăng ký hành chính (ha)"}
+            household_areas: {oneOf: [{$ref: "#/components/schemas/CooperativeHouseholdAreas"}, {type: "null"}], description: "Tổng diện tích hộ hiện thuộc HTX; null khi chưa nối nguồn, không dùng area_ha đăng ký KN"}
+            machine_count: {type: [integer, "null"], minimum: 0, description: "Tổng cột Số lượng từ AH-260; null khi chưa có nguồn, không dùng dữ liệu máy KN thay thế"}
+            machine_groups:
+              type: [array, "null"]
+              description: "Nhóm theo danh mục loại máy động; null khi chưa có nguồn"
+              items:
+                type: object
+                required: [type_ref, type_name, quantity]
+                properties:
+                  type_ref: {type: string, format: uuid}
+                  type_name: {type: string}
+                  quantity: {type: integer, minimum: 0}
             established_on: {type: [string, "null"], format: date}
             location: {oneOf: [{$ref: "#/components/schemas/Point"}, {type: "null"}]}
             location_provisional: {type: boolean, description: "true = chưa có toạ độ; bản đồ hiển thị tâm xã, nhãn \"vị trí tạm\""}
@@ -18953,6 +19004,7 @@ components:
         cooperative_ref: {type: [string, "null"], format: uuid}
         commune_code: {type: string}
         cultivated_area_ha: {oneOf: [{$ref: "#/components/schemas/Decimal"}, {type: "null"}]}
+        livestock_area_ha: {oneOf: [{$ref: "#/components/schemas/Decimal"}, {type: "null"}], description: "Diện tích chăn nuôi của hộ; null khi chưa khai báo"}
         member_since: {type: [string, "null"], format: date}
         active: {type: boolean}
     BilateralPair:
@@ -19009,6 +19061,7 @@ components:
         cooperative_ref: {type: string, format: uuid}
         commune_code: {type: string, description: "Bỏ trống = xã của HTX"}
         cultivated_area_ha: {$ref: "#/components/schemas/Decimal"}
+        livestock_area_ha: {$ref: "#/components/schemas/Decimal", description: "Tùy chọn; không âm, tối đa 4 số lẻ"}
         member_since: {type: string, format: date}
         identity:
           type: object
@@ -29264,3 +29317,42 @@ components:
     CNTSLivestockCheckin: {"type":"object","properties":{"lat":{"type":"number"},"lon":{"type":"number"},"accuracy_m":{"type":"string","pattern":"^[0-9]{1,8}(\\.[0-9]{1,2})?$"},"mocked":{"type":"boolean"},"captured_at":{"type":"string","format":"date-time"}},"required":["lat","lon","accuracy_m","mocked","captured_at"],"additionalProperties":false}
     CNTSLivestockHouseholdSave: {"type":"object","properties":{"base_version":{"type":"integer"},"owner_name":{"type":"string","maxLength":200},"owner_phone":{"type":["string","null"],"pattern":"^[0-9]{0,15}$"},"commune_code":{"type":"string"},"hamlet":{"type":"string","maxLength":200},"livestock_type":{"type":"string","enum":["nong_ho","trang_trai_nho","trang_trai_vua","trang_trai_cong_nghiep"]},"animals":{"type":"array","minItems":1,"maxItems":30,"items":{"type":"object","properties":{"species_code":{"type":"string"},"head_count":{"type":"integer","minimum":0}},"required":["species_code","head_count"],"additionalProperties":false}},"checkin":{"$ref":"#/components/schemas/CNTSLivestockCheckin"},"confirm_distinct":{"type":"boolean"}},"required":["commune_code","livestock_type","animals"],"additionalProperties":false}
     CNTSLivestockHouseholdCheckinRequest: {"type":"object","properties":{"base_version":{"type":"integer"},"checkin":{"$ref":"#/components/schemas/CNTSLivestockCheckin"},"reason":{"type":"string","maxLength":1000}},"required":["base_version","checkin"],"additionalProperties":false}
+    CooperativeHouseholdAreas:
+      type: object
+      required: [cultivated_ha, livestock_ha, households, missing_cultivated, missing_livestock]
+      properties:
+        cultivated_ha: {oneOf: [{$ref: "#/components/schemas/Decimal"}, {type: "null"}], description: "null nếu còn hộ chưa khai diện tích trồng trọt"}
+        livestock_ha: {oneOf: [{$ref: "#/components/schemas/Decimal"}, {type: "null"}], description: "null nếu còn hộ chưa khai diện tích chăn nuôi"}
+        households: {type: integer, minimum: 0}
+        missing_cultivated: {type: integer, minimum: 0}
+        missing_livestock: {type: integer, minimum: 0}
+    HTXProfile:
+      allOf:
+        - {$ref: "#/components/schemas/Cooperative"}
+        - type: object
+          required: [revision, representative_name, phone, contact_masked, contact_configured, can_edit]
+          properties:
+            revision: {type: integer, minimum: 1, description: "Phiên bản sổ tổ chức; dùng khi sửa"}
+            representative_name: {type: string, description: "Chỉ ở bộ nhớ/Vault; có thể rỗng. Thành viên nhận nhãn che."}
+            phone: {type: string, description: "Admin/Đại diện HTX mình: 10 số bắt đầu bằng 0. Thành viên: SĐT đã che."}
+            contact_masked: {type: boolean}
+            contact_configured: {type: boolean, description: "False khi hồ sơ cũ chưa khai liên hệ HTX riêng; không suy SĐT từ định danh người đại diện."}
+            can_edit: {type: boolean}
+    HTXProfileUpdate:
+      type: object
+      additionalProperties: false
+      required: [name, commune_code, head_office, phone, expected_revision]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 200}
+        commune_code: {type: string, minLength: 1, maxLength: 40}
+        head_office: {type: string, minLength: 1, maxLength: 500}
+        representative_name: {type: string, maxLength: 200, default: ""}
+        phone: {type: string, pattern: "^0[0-9]{9}$"}
+        expected_revision: {type: integer, minimum: 1}
+    HTXProfileWritten:
+      type: object
+      required: [ref, code, revision]
+      properties:
+        ref: {type: string, format: uuid}
+        code: {type: string}
+        revision: {type: integer, minimum: 1}

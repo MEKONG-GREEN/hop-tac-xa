@@ -57,10 +57,12 @@ type blindKey struct {
 
 // Fake là client.Client trong bộ nhớ, an toàn khi dùng song song.
 type Fake struct {
-	mu       sync.Mutex
-	subjects map[uuid.UUID]*subject
-	blind    map[blindKey]uuid.UUID
-	log      []Access
+	htxContacts map[[2]uuid.UUID]client.HTXContact
+	htxCommands map[[2]uuid.UUID]htxContactCommand
+	mu          sync.Mutex
+	subjects    map[uuid.UUID]*subject
+	blind       map[blindKey]uuid.UUID
+	log         []Access
 	// revisions: bản sửa họ tên/SĐT (#251) — giá trị đã chuẩn hóa trước/sau, chỉ trả nhãn che bớt.
 	revisions map[uuid.UUID]revision
 	// Fail, nếu khác nil, được gọi đầu mỗi thao tác; trả lỗi khác nil → thao tác trả lỗi đó.

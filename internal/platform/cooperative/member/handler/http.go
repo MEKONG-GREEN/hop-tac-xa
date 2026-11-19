@@ -178,6 +178,7 @@ type householdDTO struct {
 	CooperativeRef   *string          `json:"cooperative_ref"`
 	CommuneCode      string           `json:"commune_code"`
 	CultivatedAreaHa *decimal.Decimal `json:"cultivated_area_ha"`
+	LivestockAreaHa  *decimal.Decimal `json:"livestock_area_ha"`
 	MemberSince      *string          `json:"member_since"`
 	Active           bool             `json:"active"`
 }
@@ -185,7 +186,7 @@ type householdDTO struct {
 func toHouseholdDTO(hh domain.Household) householdDTO {
 	d := householdDTO{
 		HouseholdRef: hh.Ref.String(), CooperativeRef: refPtr(hh.CooperativeRef), CommuneCode: hh.CommuneCode,
-		CultivatedAreaHa: hh.CultivatedAreaHa, Active: hh.Active,
+		CultivatedAreaHa: hh.CultivatedAreaHa, LivestockAreaHa: hh.LivestockAreaHa, Active: hh.Active,
 	}
 	if hh.MemberSince != nil {
 		s := hh.MemberSince.Format(time.DateOnly)
@@ -276,6 +277,7 @@ type createHouseholdReq struct {
 	CooperativeRef   *string          `json:"cooperative_ref"`
 	CommuneCode      string           `json:"commune_code"`
 	CultivatedAreaHa *decimal.Decimal `json:"cultivated_area_ha"`
+	LivestockAreaHa  *decimal.Decimal `json:"livestock_area_ha"`
 	MemberSince      *string          `json:"member_since"`
 	Identity         identityReq      `json:"identity"`
 }
@@ -290,7 +292,7 @@ func (h Handler) createHousehold(c *gin.Context) {
 		Identity: app.FarmerIdentity{
 			FullName: req.Identity.FullName, Phone: req.Identity.Phone, NationalID: req.Identity.NationalID, Address: req.Identity.Address,
 		},
-		CommuneCode: req.CommuneCode, CultivatedAreaHa: req.CultivatedAreaHa,
+		CommuneCode: req.CommuneCode, CultivatedAreaHa: req.CultivatedAreaHa, LivestockAreaHa: req.LivestockAreaHa,
 	}
 	in.CooperativeRef = fe.optRef("cooperative_ref", req.CooperativeRef)
 	in.MemberSince = fe.date("member_since", req.MemberSince)
