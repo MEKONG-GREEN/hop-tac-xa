@@ -31,6 +31,7 @@ provides:
     - Seasons
   events:
     - pf.cooperative.household_season.opened/v1
+    - pf.cooperative.household_task.completed/v1
     - pf.cropcycle.coop_season_area.changed/v1
     - pf.cropcycle.farm_log.recorded/v1
     - pf.cropcycle.farm_log.reviewed/v1

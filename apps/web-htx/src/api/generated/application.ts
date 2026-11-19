@@ -10171,6 +10171,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/checklist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Checklist và tiến độ theo snapshot của vụ (AH-88)
+         * @description Cùng HTX; Đại diện chỉ đọc. Không cần duyệt nhật ký theo hộ. Phần trăm null khi mọi việc bỏ qua; hiển thị —.
+         */
+        get: operations["getHouseholdChecklist"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/task-completions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Xác nhận tích hoàn thành việc hôm nay (AH-88)
+         * @description Thành viên cùng HTX/Admin. Khóa vụ rồi kiểm snapshot, trạng thái và phiên bản. Sau thu hoạch chỉ việc chưa xong ở giai đoạn cuối; dừng/đóng bị từ chối. Liều khuyến cáo và ngày GMT+7 do server lấy; GPS/thời điểm/actor bất biến. Thiếu GPS vẫn lưu. Cùng thao tác giữ key và GPS khi thử lại. Hộ inactive vẫn tiếp tục vụ được phép ghi. Không ghi vào outbox theo thửa cũ.
+         */
+        post: operations["completeHouseholdTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/extension/khtc/periods/{id}/report": {
         parameters: {
             query?: never;
@@ -23953,6 +24001,73 @@ export interface components {
             status: "upcoming" | "due" | "overdue" | "waiting_anchor";
             /** @description Chỉ true cho Không ngày; luôn due, không overdue */
             undated: boolean;
+        };
+        HouseholdTaskCompleteInput: {
+            step_seq: number;
+            /** Format: uuid */
+            expected_season_event_id: string;
+            gps?: components["schemas"]["CropGPS"];
+            /**
+             * @default app
+             * @enum {string}
+             */
+            channel: "app" | "web";
+        };
+        HouseholdTaskRecord: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            log_ref: string;
+            step_seq: number;
+            /** @enum {string} */
+            state: "done" | "partial" | "skipped";
+            /** Format: date */
+            done_on: string;
+            /** Format: uuid */
+            sop_version_id: string;
+            inputs: {
+                name: string;
+                qty: components["schemas"]["Decimal"];
+                unit: string;
+            }[];
+            gps_missing: boolean;
+            gps: components["schemas"]["CropGPS"];
+            /** Format: uuid */
+            actor_ref: string;
+            /** Format: date-time */
+            event_time: string;
+            /** Format: date-time */
+            recorded_at: string;
+        };
+        HouseholdTaskProgress: components["schemas"]["SeasonScheduleStep"] & {
+            /** @enum {string} */
+            completion_status: "upcoming" | "due" | "overdue" | "waiting_anchor" | "done" | "done_early" | "done_on_time" | "done_late" | "skipped";
+            /** Format: date */
+            done_on: string | null;
+            can_complete: boolean;
+        };
+        HouseholdChecklist: {
+            /** Format: uuid */
+            season_ref: string;
+            /** Format: uuid */
+            current_event_id: string;
+            records: components["schemas"]["HouseholdTaskRecord"][];
+            progress: {
+                /** Format: date */
+                as_of_date: string;
+                done: number;
+                skipped: number;
+                total: number;
+                /** @description Decimal phần trăm; null khi mẫu số bằng 0 */
+                percent: string | null;
+                stages: {
+                    seq: number;
+                    name: string;
+                    /** @enum {string} */
+                    status: "not_started" | "in_progress" | "done";
+                    tasks: components["schemas"]["HouseholdTaskProgress"][];
+                }[];
+            };
         };
         KHTCReportSupplement: {
             /** Format: uuid */
@@ -48506,6 +48621,74 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    getHouseholdChecklist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Checklist và bản ghi hiện hành */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HouseholdChecklist"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    completeHouseholdTask: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HouseholdTaskCompleteInput"];
+            };
+        };
+        responses: {
+            /** @description Bản ghi hoàn thành cùng tiến độ mới; replay không tạo bản ghi khác */
+            201: {
+                headers: {
+                    "Idempotent-Replayed"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        record: components["schemas"]["HouseholdTaskRecord"];
+                        checklist: components["schemas"]["HouseholdChecklist"];
+                    };
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
         };
     };

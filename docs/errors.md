@@ -417,6 +417,10 @@ Cổng `geo.GpsLog.RecordFix` (module khác gọi, không qua HTTP) trả lỗi 
 | 422 | `cropcycle.household_land_unknown` | pf/cooperative AH-63/AH-64 — chưa khai báo diện tích đất của hộ, không suy thành 0 hoặc cho phép mở vụ. |
 | 409 | `cropcycle.household_area_exceeded` | pf/cooperative AH-63/AH-64 — diện tích yêu cầu vượt số còn lại tại thời điểm khóa hộ; trả `remaining_area_ha` và có thể kèm `active_area_ha`, `land_area_ha`. Giữ form và dùng số server để thử lại. |
 | 422 | `cropcycle.no_active_sop_for_crop` | pf/cooperative AH-63/AH-64 — không có SOP đang áp dụng riêng của giống hoặc SOP chung phù hợp loại cây. |
+| 422 | `cropcycle.task_season_state` | AH-88: vụ đã dừng hoặc đóng, không cho thêm việc. |
+| 422 | `cropcycle.task_stage_locked` | AH-88: sau thu hoạch chỉ ghi việc chưa xong của giai đoạn cuối. |
+| 409 | `cropcycle.task_already_resolved` | AH-88: việc đã xong hoặc bỏ qua; tải lại checklist. |
+| 409 | `cropcycle.task_season_changed` | AH-88: expected_season_event_id không còn hiện hành; tải lại trước khi xác nhận. |
 | 409 | `cropcycle.previous_season_not_completed` | pf/cropcycle: sao chép cấu hình vụ trước khi vụ gần nhất chưa hoàn thành (HTX US-SEASON-03 AC-2) |
 | 409 | `cropcycle.no_previous_season` | pf/cropcycle: thửa chưa có vụ để sao chép cấu hình |
 | 422 | `cropcycle.cooperative_inactive` | pf/cropcycle: HTX không tồn tại hoặc đã ngừng hoạt động |
@@ -1144,4 +1148,3 @@ Route `/v1/price/*` (Application API). Lỗi chung: `unauthenticated` (401), `fo
 | 422 | `price.reason_required` | W11.75: thiếu lý do nộp muộn / hiệu chỉnh / sửa ngày / xóa phiếu, nội dung yêu cầu xác minh, giải trình của Xã, ghi chú giữ nguyên / lý do loại |
 | 403 | `price.point_not_handled` | W11.75: cán bộ Cấp Tỉnh thao tác trên xã không được phân công cho mình (xã đã phân công cho cán bộ khác) |
 | 503 | `price.pdf_unavailable` | W11.75: "Tải PDF" phiếu khi gốc lắp ráp chưa nối bộ dựng PDF (pf/reports) — dùng Excel hoặc in từ trình duyệt |
-

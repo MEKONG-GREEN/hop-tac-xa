@@ -7,7 +7,30 @@ import { allocateHouseholdMock, scaledArea } from "./household-season-state";
 import { hasRole, json, nowIso, paginate, problem, validation, type Route } from "./http";
 
 type Season = components["schemas"]["HouseholdSeason"];
+type TaskRecord = components["schemas"]["HouseholdTaskRecord"];
 const seasons: Season[] = [];
+const taskRecords = new Map<string, TaskRecord[]>();
+
+function mockChecklist(s: Season, write: boolean): components["schemas"]["HouseholdChecklist"] {
+  const plan = mockPlan(s.sop_snapshot, s.anchor_date, s.current_event_id);
+  const records = taskRecords.get(s.season_ref) ?? [];
+  let total = 0, done = 0;
+  const last = Math.max(...plan.stages.map((s) => s.seq));
+  const stages = plan.stages.map((stage) => {
+    let resolved = 0;
+    const tasks = stage.steps.map((task) => {
+      total++;
+      const record = records.find((r) => r.step_seq === task.seq && r.state === "done");
+      let status: components["schemas"]["HouseholdTaskProgress"]["completion_status"] = task.status;
+      if (record) { done++; resolved++; status = task.undated ? "done_on_time" : !task.from_date ? "done" : record.done_on < task.from_date ? "done_early" : task.to_date && record.done_on > task.to_date ? "done_late" : "done_on_time"; }
+      return { ...task, completion_status: status, done_on: record?.done_on ?? null, can_complete: write && !record && (s.status === "open" || (s.status === "completed" && stage.seq === last)) };
+    });
+    const status: "done" | "in_progress" | "not_started" = tasks.length && resolved === tasks.length ? "done" : resolved ? "in_progress" : "not_started";
+    return { seq: stage.seq, name: stage.name, status, tasks };
+  });
+  const scaled = total ? (BigInt(done) * 10000n + BigInt(total) / 2n) / BigInt(total) : null;
+  return { season_ref: s.season_ref, current_event_id: s.current_event_id, records, progress: { as_of_date: plan.as_of_date, total, done, skipped: 0, percent: scaled == null ? null : `${scaled / 100n}.${(scaled % 100n).toString().padStart(2, "0")}`, stages } };
+}
 
 function mockPlan(snapshot: Season["sop_snapshot"], anchor: string, event: string | null): components["schemas"]["SeasonSchedule"] {
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(new Date(nowIso()));
@@ -43,6 +66,39 @@ function mockPlan(snapshot: Season["sop_snapshot"], anchor: string, event: strin
 }
 
 export const householdSeasonRoutes: Route[] = [{
+  method: "GET", pattern: /^\/v1\/cooperatives\/([\w-]+)\/households\/([\w-]+)\/seasons\/([\w-]+)\/checklist$/,
+  handler: ({ params, persona }) => {
+    const s = seasons.find((s) => s.cooperative_ref === params[0] && s.household_ref === params[1] && s.season_ref === params[2]);
+    if (!s || (!hasRole(persona, "platform_admin") && persona.me.org?.ref !== s.cooperative_ref)) return problem(404, "cropcycle.season_not_found", "Không tìm thấy vụ");
+    const write = hasRole(persona, "platform_admin") || (hasRole(persona, "htx_member") && !hasRole(persona, "coop_manager"));
+    if (!write && !hasRole(persona, "coop_manager")) return problem(403, "forbidden", "Không có quyền đọc");
+    return json(mockChecklist(s, write));
+  },
+}, {
+  method: "POST", pattern: /^\/v1\/cooperatives\/([\w-]+)\/households\/([\w-]+)\/seasons\/([\w-]+)\/task-completions$/,
+  handler: ({ params, persona, body }) => {
+    if (!hasRole(persona, "platform_admin") && (!hasRole(persona, "htx_member") || hasRole(persona, "coop_manager"))) return problem(403, "cropcycle.read_only", "Vai của bạn chỉ được xem");
+    const s = seasons.find((s) => s.cooperative_ref === params[0] && s.household_ref === params[1] && s.season_ref === params[2]);
+    if (!s || (!hasRole(persona, "platform_admin") && persona.me.org?.ref !== s.cooperative_ref)) return problem(404, "cropcycle.season_not_found", "Không tìm thấy vụ");
+    const b = body as components["schemas"]["HouseholdTaskCompleteInput"];
+    if (b.expected_season_event_id !== s.current_event_id) return problem(409, "cropcycle.task_season_changed", "Vụ đã thay đổi");
+    const plan = mockChecklist(s, true);
+    const task = plan.progress.stages.flatMap((s) => s.tasks).find((t) => t.seq === b.step_seq);
+    if (!task) return validation([{ field: "step_seq", reason: "Việc không thuộc snapshot" }]);
+    if (task.done_on) return problem(409, "cropcycle.task_already_resolved", "Việc đã xong");
+    if (!task.can_complete) return problem(422, "cropcycle.task_season_state", "Vụ hoặc giai đoạn không cho ghi");
+    const step = s.sop_snapshot.steps.find((t) => t.seq === b.step_seq)!;
+    const inputs = (step.materials ?? []).map((m) => {
+      const value = scaledArea(m.dose_per_ha) * scaledArea(s.area_ha);
+      const qty = `${value / 100000000n}.${(value % 100000000n).toString().padStart(8, "0")}`.replace(/\.?0+$/, "");
+      return { name: m.name || m.material_code || "Vật tư", qty, unit: m.unit };
+    });
+    const id = uuidv7(); const record: TaskRecord = { id, log_ref: id, step_seq: b.step_seq, state: "done", done_on: plan.progress.as_of_date,
+      sop_version_id: s.sop_snapshot.version_id, inputs, gps_missing: b.gps?.lon == null || b.gps?.lat == null, gps: b.gps ?? { source: "no_device" }, actor_ref: persona.me.actor_ref, event_time: nowIso(), recorded_at: nowIso() };
+    taskRecords.set(s.season_ref, [...plan.records, record]);
+    return json({ record, checklist: mockChecklist(s, true) }, 201);
+  },
+}, {
   method: "POST", pattern: /^\/v1\/cooperatives\/([\w-]+)\/households\/([\w-]+)\/season-plan-preview$/,
   handler: ({ params, persona, body }) => {
     if (!hasRole(persona, "platform_admin") && (!hasRole(persona, "htx_member") || hasRole(persona, "coop_manager"))) return problem(403, "cropcycle.read_only", "Vai của bạn chỉ được xem");

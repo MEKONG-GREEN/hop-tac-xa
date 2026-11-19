@@ -117,6 +117,18 @@ func RefreshYield(ctx context.Context, tx pgx.Tx, season uuid.UUID) error {
 	    harvest_date = EXCLUDED.harvest_date, sop_steps = EXCLUDED.sop_steps, sop_mandatory_steps = EXCLUDED.sop_mandatory_steps,
 	    sop_steps_done = EXCLUDED.sop_steps_done, sop_mandatory_done = EXCLUDED.sop_mandatory_done,
 	    approved_logs = EXCLUDED.approved_logs, pending_logs = EXCLUDED.pending_logs, updated_at = now()`, season)
+	if err != nil {
+		return err
+	}
+	// Household completions count directly, without fabricating a review. Keep
+	// the old approved/pending counters specific to the legacy review workflow.
+	_, err = tx.Exec(ctx, `UPDATE pf_coop.yield_summary y SET
+ sop_steps=(SELECT count(*) FROM jsonb_array_elements(s.sop_snapshot->'steps')),
+ sop_mandatory_steps=(SELECT count(*) FROM jsonb_array_elements(s.sop_snapshot->'steps') x WHERE (x->>'mandatory')::boolean),
+ sop_steps_done=(SELECT count(*) FROM pf_coop.household_task_current t WHERE t.season_ref=s.season_ref AND t.state='done'),
+ sop_mandatory_done=(SELECT count(*) FROM jsonb_array_elements(s.sop_snapshot->'steps') x WHERE (x->>'mandatory')::boolean AND EXISTS
+   (SELECT 1 FROM pf_coop.household_task_current t WHERE t.season_ref=s.season_ref AND t.state='done' AND t.sop_step_seq=(x->>'seq')::integer))
+ FROM pf_coop.season_current s WHERE s.season_ref=$1 AND y.season_ref=s.season_ref AND y.tenant_id=s.tenant_id AND s.entry_kind='household'`, season)
 	return err
 }
 
@@ -275,7 +287,7 @@ func Dashboard(ctx context.Context, tx pgx.Tx, f DashFilter, group string) ([]Da
 // ClearProjections xóa mọi bảng chiếu của tenant trước khi dựng lại từ sổ (R-22).
 // Bảng chiếu không phải sổ; sổ không bị chạm.
 func ClearProjections(ctx context.Context, tx pgx.Tx) error {
-	for _, t := range []string{"yield_summary", "coop_season_area", "farm_log_current", "season_current"} {
+	for _, t := range []string{"yield_summary", "coop_season_area", "farm_log_current", "household_task_current", "season_current"} {
 		if _, err := tx.Exec(ctx, "DELETE FROM pf_coop."+t); err != nil {
 			return err
 		}

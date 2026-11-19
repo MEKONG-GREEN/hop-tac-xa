@@ -14205,6 +14205,60 @@ paths:
         "403": {$ref: "#/components/responses/Problem"}
         "404": {$ref: "#/components/responses/Problem"}
         "422": {$ref: "#/components/responses/Problem"}
+  /v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/checklist:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: household_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: season_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: getHouseholdChecklist
+      summary: Checklist và tiến độ theo snapshot của vụ (AH-88)
+      description: Cùng HTX; Đại diện chỉ đọc. Không cần duyệt nhật ký theo hộ. Phần trăm null khi mọi việc bỏ qua; hiển thị —.
+      responses:
+        "200":
+          description: Checklist và bản ghi hiện hành
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/HouseholdChecklist"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/task-completions:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: household_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: season_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: completeHouseholdTask
+      summary: Xác nhận tích hoàn thành việc hôm nay (AH-88)
+      description: Thành viên cùng HTX/Admin. Khóa vụ rồi kiểm snapshot, trạng thái và phiên bản. Sau thu hoạch chỉ việc chưa xong ở giai đoạn cuối; dừng/đóng bị từ chối. Liều khuyến cáo và ngày GMT+7 do server lấy; GPS/thời điểm/actor bất biến. Thiếu GPS vẫn lưu. Cùng thao tác giữ key và GPS khi thử lại. Hộ inactive vẫn tiếp tục vụ được phép ghi. Không ghi vào outbox theo thửa cũ.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/HouseholdTaskCompleteInput"}
+      responses:
+        "201":
+          description: Bản ghi hoàn thành cùng tiến độ mới; replay không tạo bản ghi khác
+          headers:
+            Idempotent-Replayed: {schema: {type: string}}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [record, checklist]
+                properties:
+                  record: {$ref: "#/components/schemas/HouseholdTaskRecord"}
+                  checklist: {$ref: "#/components/schemas/HouseholdChecklist"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
   /v1/extension/khtc/periods/{id}/report:
     get:
       summary: "Bản soạn Mẫu 1–5, ô số chỉ đọc và mốc dữ liệu"
@@ -27960,6 +28014,75 @@ components:
         expected_date: {type: [string, "null"], format: date, description: "Ngày Từ; không lấy Đến"}
         status: {type: string, enum: [upcoming, due, overdue, waiting_anchor]}
         undated: {type: boolean, description: "Chỉ true cho Không ngày; luôn due, không overdue"}
+
+    HouseholdTaskCompleteInput:
+      type: object
+      additionalProperties: false
+      required: [step_seq, expected_season_event_id]
+      properties:
+        step_seq: {type: integer, minimum: 1, maximum: 100}
+        expected_season_event_id: {type: string, format: uuid}
+        gps: {$ref: "#/components/schemas/CropGPS"}
+        channel: {type: string, enum: [app, web], default: app}
+    HouseholdTaskRecord:
+      type: object
+      required: [id, log_ref, step_seq, state, done_on, sop_version_id, inputs, gps_missing, gps, actor_ref, event_time, recorded_at]
+      properties:
+        id: {type: string, format: uuid}
+        log_ref: {type: string, format: uuid}
+        step_seq: {type: integer}
+        state: {type: string, enum: [done, partial, skipped]}
+        done_on: {type: string, format: date}
+        sop_version_id: {type: string, format: uuid}
+        inputs:
+          type: array
+          items:
+            type: object
+            required: [name, qty, unit]
+            properties:
+              name: {type: string}
+              qty: {$ref: "#/components/schemas/Decimal"}
+              unit: {type: string}
+        gps_missing: {type: boolean}
+        gps: {$ref: "#/components/schemas/CropGPS"}
+        actor_ref: {type: string, format: uuid}
+        event_time: {type: string, format: date-time}
+        recorded_at: {type: string, format: date-time}
+    HouseholdTaskProgress:
+      allOf:
+        - {$ref: "#/components/schemas/SeasonScheduleStep"}
+        - type: object
+          required: [completion_status, done_on, can_complete]
+          properties:
+            completion_status: {type: string, enum: [upcoming, due, overdue, waiting_anchor, done, done_early, done_on_time, done_late, skipped]}
+            done_on: {type: [string, "null"], format: date}
+            can_complete: {type: boolean}
+    HouseholdChecklist:
+      type: object
+      required: [season_ref, current_event_id, progress, records]
+      properties:
+        season_ref: {type: string, format: uuid}
+        current_event_id: {type: string, format: uuid}
+        records: {type: array, items: {$ref: "#/components/schemas/HouseholdTaskRecord"}}
+        progress:
+          type: object
+          required: [as_of_date, done, skipped, total, percent, stages]
+          properties:
+            as_of_date: {type: string, format: date}
+            done: {type: integer}
+            skipped: {type: integer}
+            total: {type: integer}
+            percent: {type: [string, "null"], description: "Decimal phần trăm; null khi mẫu số bằng 0"}
+            stages:
+              type: array
+              items:
+                type: object
+                required: [seq, name, status, tasks]
+                properties:
+                  seq: {type: integer}
+                  name: {type: string}
+                  status: {type: string, enum: [not_started, in_progress, done]}
+                  tasks: {type: array, items: {$ref: "#/components/schemas/HouseholdTaskProgress"}}
     KHTCReportSupplement:
       type: object
       required: [id, department, instruction, state, due_at, native_submission_ref, return_applied]

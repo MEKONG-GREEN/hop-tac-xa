@@ -28,6 +28,8 @@ type Handler struct{ Svc *app.Service }
 
 // RegisterApp gắn route Application API vào nhóm /v1 (OIDC + Idempotency-Key cho POST).
 func (h Handler) RegisterApp(rg *gin.RouterGroup) {
+	rg.GET("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/checklist", h.householdChecklist)
+	rg.POST("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/task-completions", h.completeHouseholdTask)
 	rg.POST("/cooperatives/:ref/households/:household_ref/season-plan-preview", h.previewHouseholdSchedule)
 	rg.GET("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/plan", h.householdSchedule)
 	rg.POST("/cooperatives/:ref/households/:household_ref/seasons", h.openHouseholdSeason)
