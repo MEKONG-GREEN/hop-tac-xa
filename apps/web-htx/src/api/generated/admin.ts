@@ -4489,6 +4489,78 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/masterdata/admin-unit-profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin quản lý danh mục tỉnh/xã, gồm mục ngừng sử dụng */
+        get: operations["listManagedAdminUnits"];
+        put?: never;
+        /** Admin thêm tỉnh/xã, mã do server sinh và không sửa */
+        post: operations["createManagedAdminUnit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/masterdata/admin-unit-profiles/{code}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin sửa tên/trạng thái; giữ nguyên mã, cấp, cha và lịch sử địa giới */
+        post: operations["updateManagedAdminUnit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/masterdata/admin-unit-imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Admin nhập tỉnh/xã từ mẫu Excel/CSV, bỏ qua dòng lỗi theo thứ tự
+         * @description Tối đa 500 dòng và 2 MB. Tên, Cấp (Tỉnh hoặc Xã), Tỉnh / thành phố trực thuộc. Tỉnh ở dòng trước được xã sau dùng; trùng tên cùng cha bị loại.
+         */
+        post: operations["importManagedAdminUnits"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/masterdata/admin-unit-template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin tải mẫu Excel danh mục tỉnh/xã */
+        get: operations["managedAdminUnitTemplate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/masterdata/catalogs/{catalog}/items/{code}/delete": {
         parameters: {
             query?: never;
@@ -6908,6 +6980,23 @@ export interface components {
             approved_by?: string | null;
             /** Format: date-time */
             approved_at?: string | null;
+        };
+        ManagedAdminUnit: {
+            readonly code: string;
+            name: string;
+            /** @enum {string} */
+            level: "province" | "commune";
+            parent_code: string;
+            /** Format: date */
+            valid_from: string;
+            /** @description Trạng thái sử dụng của đơn vị */
+            active: boolean;
+            /** @description Cả đơn vị và tỉnh cha còn sử dụng */
+            selectable: boolean;
+            revision: number;
+            commune_count: number;
+            /** @description null khi chưa nối nguồn số HTX; không giả là 0 */
+            cooperative_count: number | null;
         };
         CatalogDeleteResult: {
             /** @enum {string} */
@@ -16199,6 +16288,157 @@ export interface operations {
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
+        };
+    };
+    listManagedAdminUnits: {
+        parameters: {
+            query?: {
+                /** @description Bỏ trống để xem tỉnh; mã tỉnh để xem xã */
+                parent?: string;
+                q?: string;
+                state?: "active" | "inactive";
+                after?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Một trang theo mã; kiểm quyền platform_admin */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["ManagedAdminUnit"][];
+                        next_cursor: string | null;
+                    };
+                };
+            };
+        };
+    };
+    createManagedAdminUnit: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name: string;
+                    /** @enum {string} */
+                    level: "province" | "commune";
+                    /** @description Bắt buộc với cấp Xã; tỉnh còn sử dụng */
+                    parent_code?: string;
+                    /** @default true */
+                    active?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Đã tạo */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedAdminUnit"];
+                };
+            };
+            /** @description masterdata.admin_unit_name_taken */
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    updateManagedAdminUnit: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name: string;
+                    active: boolean;
+                    /** @description 0 với mục pháp lý chưa có chỉnh sửa quản trị */
+                    expected_revision: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Đã lưu */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedAdminUnit"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            /** @description masterdata.admin_unit_changed hoặc masterdata.admin_unit_name_taken */
+            409: components["responses"]["Problem"];
+        };
+    };
+    importManagedAdminUnits: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "text/csv": string;
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+            };
+        };
+        responses: {
+            /** @description Kết quả từng dòng; gửi lại cùng key và tệp trả kết quả cũ */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogImportResult"];
+                };
+            };
+            422: components["responses"]["Problem"];
+        };
+    };
+    managedAdminUnitTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description File mẫu ba cột */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                };
+            };
         };
     };
     deleteCatalogItem: {

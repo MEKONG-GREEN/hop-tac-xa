@@ -134,6 +134,10 @@ export const ADMIN_UNITS: AdminUnit[] = [
   })),
 ];
 
+export function adminUnitSelectable(unit: AdminUnit): boolean {
+  return unit.active !== false && (!unit.parent_code || ADMIN_UNITS.find((p) => p.code === unit.parent_code)?.active !== false);
+}
+
 /** GET /v1/geo/admin-boundaries/{code} — null khi "chưa nhập ranh giới" (geo.admin_boundary_not_found). */
 /** Ranh giới kèm `parent_code` (dạng phần tử của GET /v1/geo/admin-boundaries?level=). */
 export type MockBoundary = Omit<AdminBoundaryFeature, "properties"> & { properties: AdminBoundaryFeature["properties"] & { parent_code: string | null } };

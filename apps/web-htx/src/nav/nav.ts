@@ -163,6 +163,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
       // FN-05: hai mục giữ vai "Tài khoản" (FN-07) và "Đơn vị hành chính" (FN-02) của App HTX tới khi có màn riêng.
       { href: "/quan-tri/tai-khoan", label: "Tài khoản cán bộ", icon: "user", roles: [ROLES.platformAdmin, ROLES.accountAdmin, ROLES.accountAdminProvince], fn: "FN-07" },
       { href: "/quan-tri/danh-muc", module: "pf/masterdata", label: "Danh mục dùng chung", icon: "catalog", roles: [ROLES.platformAdmin, ROLES.masterdataAdmin], fn: "FN-02" },
+      { href: "/quan-tri/don-vi-hanh-chinh", module: "pf/masterdata", label: "Đơn vị hành chính", icon: "catalog", roles: [ROLES.platformAdmin], fn: "FN-02" },
       {
         href: "/quan-tri/tham-so", module: "pf/masterdata",
         label: "Tham số & phê duyệt",

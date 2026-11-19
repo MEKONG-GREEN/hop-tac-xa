@@ -488,6 +488,9 @@ export const PROBLEM_MESSAGES: Readonly<Record<string, string>> = {
   "accounts.farmer_not_found": "Không tìm thấy tài khoản nông dân, hoặc ngoài HTX/phạm vi của bạn.",
   "accounts.activation_link_unavailable": "Chưa phát được liên kết kích hoạt (máy chủ đăng nhập chưa sẵn sàng). Tài khoản đã tạo — phát lại QR sau.",
   // pf/masterdata — nhập danh mục
+  "masterdata.admin_unit_name_taken": "Tên đã có trong cùng đơn vị cấp trên.",
+  "masterdata.admin_unit_changed": "Đơn vị hành chính đã thay đổi. Tải lại trước khi sửa tên hoặc trạng thái.",
+  "masterdata.admin_unit_import_invalid": "Tệp đơn vị hành chính phải có Tên, Cấp và Tỉnh / thành phố trực thuộc; tối đa 500 dòng và 2 MB, không có ô công thức.",
   "masterdata.catalog_import_invalid":
     "Tệp nhập danh mục sai mẫu (thiếu cột catalog/code/name, có ô công thức, quá 500 dòng hoặc 2 MB). Cả tệp bị từ chối.",
   "masterdata.catalog_import_not_found": "Không tìm thấy lần nhập danh mục này.",

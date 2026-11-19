@@ -101,7 +101,7 @@ func New(db tenant.Beginner, clk clock.Clock, deps Deps) *Module {
 	m := &Module{svc: &app.Service{}}
 	codes, _ := deps.Orgs.(partyport.OrgCodes)
 	m.member = &memberapp.Service{DB: db, Clock: clk, Orgs: deps.Orgs, Codes: codes, Dir: deps.Dir, Scope: deps.Scope,
-		Consents: deps.Consents, Vault: deps.Households}
+		Consents: deps.Consents, Vault: deps.Households, Units: deps.AdminUnits}
 	m.plot = &plotapp.Service{DB: db, Clock: clk, Scope: deps.Scope, Params: deps.Params, Units: deps.AdminUnits, Orgs: deps.Orgs,
 		Households: memberships{m.member}, Markers: markers{m.member}, AdminGeom: deps.AdminGeom}
 	m.plot.Vault = deps.Farmers

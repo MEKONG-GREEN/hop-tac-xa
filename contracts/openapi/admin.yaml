@@ -6616,6 +6616,114 @@ paths:
         "404": {$ref: "#/components/responses/Problem"}
         "422": {$ref: "#/components/responses/Problem"}
   # --- hết pf/party KN v7.7 gói P2 ---
+  /v1/masterdata/admin-unit-profiles:
+    get:
+      summary: Admin quản lý danh mục tỉnh/xã, gồm mục ngừng sử dụng
+      operationId: listManagedAdminUnits
+      tags: [masterdata]
+      parameters:
+        - {name: parent, in: query, schema: {type: string}, description: Bỏ trống để xem tỉnh; mã tỉnh để xem xã}
+        - {name: q, in: query, schema: {type: string}}
+        - {name: state, in: query, schema: {type: string, enum: [active, inactive]}}
+        - {name: after, in: query, schema: {type: string}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+      responses:
+        "200":
+          description: Một trang theo mã; kiểm quyền platform_admin
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items: {type: array, items: {$ref: "#/components/schemas/ManagedAdminUnit"}}
+                  next_cursor: {type: [string, "null"]}
+    post:
+      summary: Admin thêm tỉnh/xã, mã do server sinh và không sửa
+      operationId: createManagedAdminUnit
+      tags: [masterdata]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name, level]
+              properties:
+                name: {type: string, minLength: 1, maxLength: 200}
+                level: {type: string, enum: [province, commune]}
+                parent_code: {type: string, description: Bắt buộc với cấp Xã; tỉnh còn sử dụng}
+                active: {type: boolean, default: true}
+      responses:
+        "201":
+          description: Đã tạo
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ManagedAdminUnit"}
+        "409": {description: masterdata.admin_unit_name_taken, $ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /v1/masterdata/admin-unit-profiles/{code}/revisions:
+    post:
+      summary: Admin sửa tên/trạng thái; giữ nguyên mã, cấp, cha và lịch sử địa giới
+      operationId: updateManagedAdminUnit
+      tags: [masterdata]
+      parameters:
+        - {name: code, in: path, required: true, schema: {type: string}}
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name, active, expected_revision]
+              properties:
+                name: {type: string, minLength: 1, maxLength: 200}
+                active: {type: boolean}
+                expected_revision: {type: integer, minimum: 0, description: 0 với mục pháp lý chưa có chỉnh sửa quản trị}
+      responses:
+        "200":
+          description: Đã lưu
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ManagedAdminUnit"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {description: masterdata.admin_unit_changed hoặc masterdata.admin_unit_name_taken, $ref: "#/components/responses/Problem"}
+  /v1/masterdata/admin-unit-imports:
+    post:
+      summary: Admin nhập tỉnh/xã từ mẫu Excel/CSV, bỏ qua dòng lỗi theo thứ tự
+      operationId: importManagedAdminUnits
+      tags: [masterdata]
+      description: Tối đa 500 dòng và 2 MB. Tên, Cấp (Tỉnh hoặc Xã), Tỉnh / thành phố trực thuộc. Tỉnh ở dòng trước được xã sau dùng; trùng tên cùng cha bị loại.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          text/csv: {schema: {type: string, format: binary}}
+          application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: {schema: {type: string, format: binary}}
+      responses:
+        "200":
+          description: Kết quả từng dòng; gửi lại cùng key và tệp trả kết quả cũ
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/CatalogImportResult"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /v1/masterdata/admin-unit-template:
+    get:
+      summary: Admin tải mẫu Excel danh mục tỉnh/xã
+      operationId: managedAdminUnitTemplate
+      tags: [masterdata]
+      responses:
+        "200":
+          description: File mẫu ba cột
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: {type: string, format: binary}
   /v1/masterdata/catalogs/{catalog}/items/{code}/delete:
     parameters:
       - $ref: "#/components/parameters/Catalog"
@@ -8787,6 +8895,20 @@ components:
         proposed_at: {type: string, format: date-time}
         approved_by: {type: [string, "null"], format: uuid}
         approved_at: {type: [string, "null"], format: date-time}
+    ManagedAdminUnit:
+      type: object
+      required: [code, name, level, parent_code, valid_from, active, selectable, revision, commune_count, cooperative_count]
+      properties:
+        code: {type: string, readOnly: true}
+        name: {type: string}
+        level: {type: string, enum: [province, commune]}
+        parent_code: {type: string}
+        valid_from: {type: string, format: date}
+        active: {type: boolean, description: Trạng thái sử dụng của đơn vị}
+        selectable: {type: boolean, description: Cả đơn vị và tỉnh cha còn sử dụng}
+        revision: {type: integer, minimum: 0}
+        commune_count: {type: integer, minimum: 0}
+        cooperative_count: {type: [integer, "null"], minimum: 0, description: null khi chưa nối nguồn số HTX; không giả là 0}
     CatalogDeleteResult:
       type: object
       required: [outcome, item]

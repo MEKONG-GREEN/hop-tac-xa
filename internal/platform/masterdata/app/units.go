@@ -169,7 +169,18 @@ func (s *Service) getUnit(ctx context.Context, tid uuid.UUID, code string, at ti
 	err := s.tx(ctx, tid, func(tx pgx.Tx) error {
 		var e error
 		u, e = store.UnitAt(ctx, tx, code, domain.DayOf(at))
-		return e
+		if e != nil || u == nil {
+			return e
+		}
+		managed, e := store.ManagedUnitAt(ctx, tx, domain.DayOf(at), code)
+		if e != nil {
+			return e
+		}
+		if managed != nil {
+			u.Name = managed.Unit.Name
+			u.Disabled = !managed.Selectable
+		}
+		return nil
 	})
 	if err != nil {
 		return domain.Unit{}, err
@@ -197,6 +208,21 @@ func (s *Service) Children(ctx context.Context, parent string, at time.Time, aft
 			}
 		}
 		var e error
+		if !domain.DayOf(at).Before(domain.ReorgDate) {
+			managed, err := store.ManagedUnits(ctx, tx, domain.DayOf(at), &parent)
+			if err != nil {
+				return err
+			}
+			for _, m := range managed {
+				if m.Selectable && m.Unit.Code > after {
+					items = append(items, m.Unit)
+				}
+				if len(items) > limit {
+					break
+				}
+			}
+			return nil
+		}
 		items, e = store.Children(ctx, tx, parent, domain.DayOf(at), after, limit+1)
 		return e
 	})

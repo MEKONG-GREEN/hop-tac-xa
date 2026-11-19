@@ -21,6 +21,7 @@ provides:
     - FormUsage
     - SeasonUsage
     - StaffNames
+    - UnitUsage
   events: [pf.masterdata.admin_unit.changed/v1, pf.masterdata.param.approved/v1]
   internal_events: []
   publications: [pf_masterdata_pub.admin_units/v1]

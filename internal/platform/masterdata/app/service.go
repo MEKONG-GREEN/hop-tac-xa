@@ -71,6 +71,7 @@ var (
 
 // Service là use case của module.
 type Service struct {
+	UnitUsage       port.UnitUsage
 	CatalogRegistry *CatalogRegistry
 	ParamRegistry   *ParamRegistry
 	DB              tenant.Beginner // pool vai masterdata_app

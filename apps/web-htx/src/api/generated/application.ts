@@ -13166,6 +13166,8 @@ export interface components {
         AdminUnit: {
             code: string;
             name: string;
+            /** @description Còn dùng để chọn mới; ngừng sử dụng vẫn đọc được theo mã cũ */
+            active?: boolean;
             /**
              * @description district chỉ có trong dữ liệu trước 01/07/2025
              * @enum {string}

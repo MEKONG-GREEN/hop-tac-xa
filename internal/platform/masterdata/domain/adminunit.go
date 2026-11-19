@@ -42,6 +42,9 @@ var (
 
 // Unit là một phiên bản hiệu lực của một đơn vị hành chính.
 type Unit struct {
+	// Disabled is operational availability, not legal validity. Old references
+	// remain readable even when the option can no longer be selected.
+	Disabled   bool
 	Code       string
 	Name       string
 	Level      partyport.Level

@@ -266,6 +266,9 @@ func (r *Registry) createOrg(ctx context.Context, p authz.Principal, in CreateOr
 	} else if prev != nil {
 		return r.completeCoop(ctx, p.TenantID, *prev)
 	}
+	if unit != nil && unit.Disabled {
+		return OrgResult{}, problem.Validation.WithField("admin_unit_code", "Đơn vị hành chính đã ngừng sử dụng")
+	}
 	if isCoop {
 		if _, err := r.coopProfiles(); err != nil {
 			return OrgResult{}, err
@@ -436,6 +439,9 @@ func (r *Registry) MoveOrg(ctx context.Context, in MoveOrgInput) (OrgResult, err
 	unit, err := r.unitInfo(ctx, before.Kind, newUnit, "new_admin_unit_code")
 	if err != nil {
 		return OrgResult{}, err
+	}
+	if unit != nil && unit.Disabled && newUnit != before.AdminUnitCode {
+		return OrgResult{}, problem.Validation.WithField("new_admin_unit_code", "Đơn vị hành chính đã ngừng sử dụng")
 	}
 	if err := r.requireWriteScope(ctx, p, before.AdminUnitCode, newUnit); err != nil {
 		return OrgResult{}, err

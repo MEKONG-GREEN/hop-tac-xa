@@ -225,7 +225,7 @@ func newFixtureWith(t *testing.T, mw gin.HandlerFunc) *fixture {
 	ops := env.Pool(t, migrations.PF, "platform_api")
 	db := shareddb.ForModule(env.Pool(t, migrations.PF, dbadmin.AppPlatform), shareddb.Module("pf/cooperative"))
 	vault, party := newFakeVault(), newFakeParty()
-	svc := &app.Service{DB: db, Clock: clock.System{}, Orgs: party, Codes: party, Dir: party, Scope: party, Consents: party, Vault: farmerid.Households(vault)}
+	svc := &app.Service{DB: db, Clock: clock.System{}, Orgs: party, Codes: party, Dir: party, Scope: party, Consents: party, Vault: farmerid.Households(vault), Units: fakeUnitCatalog{party}}
 	log := telemetry.NewLogger("test", io.Discard)
 	h := handler.Handler{Svc: svc}
 	appEng := httpx.NewEngine(log, 1<<20)

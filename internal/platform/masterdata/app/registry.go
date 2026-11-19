@@ -24,6 +24,18 @@ var _ partyport.AdminUnitTree = UnitsPort{}
 func (p UnitsPort) Children(ctx context.Context, parent string, at time.Time) ([]partyport.AdminUnit, error) {
 	var out []partyport.AdminUnit
 	err := tenant.FromCtxTx(ctx, p.Svc.DB, func(tx pgx.Tx) error {
+		if !domain.DayOf(at).Before(domain.ReorgDate) {
+			units, err := store.ManagedUnits(ctx, tx, domain.DayOf(at), &parent)
+			if err != nil {
+				return err
+			}
+			for _, u := range units {
+				if u.Selectable {
+					out = append(out, ToPortUnit(u.Unit))
+				}
+			}
+			return nil
+		}
 		after := ""
 		for {
 			us, err := store.Children(ctx, tx, parent, domain.DayOf(at), after, 500)

@@ -189,6 +189,7 @@ components:
       properties:
         code: {type: string}
         name: {type: string}
+        active: {type: boolean, description: Còn dùng để chọn mới; ngừng sử dụng vẫn đọc được theo mã cũ}
         level: {type: string, enum: [province, commune, district], description: "district chỉ có trong dữ liệu trước 01/07/2025"}
         parent_code: {type: [string, "null"]}
         valid_from: {type: string, format: date}

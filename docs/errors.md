@@ -51,6 +51,9 @@ Mã lỗi của module có dạng `<module>.<lỗi>`.
 | 404 | `masterdata.admin_unit_not_found` | pf/masterdata: không có đơn vị hành chính với mã đó tại thời điểm tra (hoặc đã bãi bỏ không có kế thừa) |
 | 409 | `masterdata.admin_unit_conflict` | pf/masterdata: nhập danh mục có phiên bản `(code, valid_from)` đã có với nội dung khác — chỉ được đóng hiệu lực phiên bản đang mở |
 | 409 | `masterdata.admin_unit_overlap` | pf/masterdata: phiên bản mới chồng lấp hiệu lực với phiên bản khác của cùng mã |
+| 409 | `masterdata.admin_unit_name_taken` | AH-271: tên tỉnh hoặc tên xã trong cùng tỉnh đã có, kể cả mục ngừng sử dụng; so tên tiếng Việt không phụ thuộc locale DB |
+| 409 | `masterdata.admin_unit_changed` | AH-271: phiên bản quản trị đã thay đổi; tải lại tên/trạng thái trước khi sửa |
+| 422 | `masterdata.admin_unit_import_invalid` | AH-271: tệp tỉnh/xã sai mẫu Tên/Cấp/Tỉnh trực thuộc, có công thức hoặc vượt 500 dòng/2 MB; từ chối cả tệp |
 | 422 | `masterdata.admin_unit_invalid_reference` | pf/masterdata: đơn vị cha không bao trọn khoảng hiệu lực, hoặc đơn vị kế thừa không có hiệu lực tại `valid_to` |
 | 404 | `masterdata.catalog_not_found` | pf/masterdata: tên danh mục không tồn tại |
 | 404 | `masterdata.catalog_item_not_found` | pf/masterdata: không có mục danh mục |

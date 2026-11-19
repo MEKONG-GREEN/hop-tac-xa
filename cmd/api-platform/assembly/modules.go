@@ -146,6 +146,7 @@ func Build(ctx context.Context, open PoolOpener, clk clock.Clock, ext External) 
 	// cấu hình gốc của chính nó; phần riêng HTX đăng ký thêm ở đây khi dựng theo BRD.
 	md := masterdata.New(unit, clk, masterdata.Deps{})
 	pty := party.New(unit, clk, party.Deps{AdminUnits: md.AdminUnits(), Vault: ext.Vault})
+	md.UseUnitUsage(pty.UnitCounts())
 	wireWorkflow(unit, clk, md, pty) // W6.1: cap/workflow cho duyệt tham số, cấp quyền (r_workflow, W2.6: cùng pool đơn vị)
 
 	g := geo.New(unit, clk, geo.Deps{Scope: pty.ScopeResolver(), Params: md.Params(), AdminUnits: md.AdminUnits()})
