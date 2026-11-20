@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/party/domain"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/party/port"
@@ -14,6 +15,7 @@ import (
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/vault/identity/client"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"net/http"
 	"strconv"
 )
@@ -78,6 +80,23 @@ func (r *Registry) cooperativeIAMUsers(ctx context.Context, ref uuid.UUID) ([]uu
 	return users, nil
 }
 
+func (r *Registry) cooperativePrivateReferences(ctx context.Context, ref uuid.UUID) (bool, error) {
+	if r.PrivateReferences == nil {
+		return false, ErrDependency.WithDetail("Chưa kiểm tra được nguồn nghiệp vụ riêng để xóa HTX")
+	}
+	used, err := r.PrivateReferences.CooperativePrivateReferences(ctx, ref)
+	if err != nil {
+		return false, ErrDependency.WithDetail("Chưa kiểm tra được nguồn nghiệp vụ riêng để xóa HTX").WithCause(err)
+	}
+	return used, nil
+}
+
+func cooperativeInUse(usage store.CooperativeDeletionUsage) error {
+	return ErrCooperativeInUse.WithDetail(fmt.Sprintf("HTX còn %d hộ, %d tài khoản; chỉ xóa HTX chưa phát sinh dữ liệu.", usage.Households, usage.Accounts)).
+		With("households", usage.Households).With("accounts", usage.Accounts).With("pending_accounts", usage.PendingAccounts).
+		With("has_sharing", usage.HasSharing).With("has_business", usage.HasBusiness)
+}
+
 func (r *Registry) CooperativeDeletion(ctx context.Context, ref uuid.UUID) (CooperativeDeletion, error) {
 	p, err := authz.Require(ctx, authz.RolePlatformAdmin)
 	if err != nil {
@@ -91,6 +110,10 @@ func (r *Registry) CooperativeDeletion(ctx context.Context, ref uuid.UUID) (Coop
 	if err != nil {
 		return CooperativeDeletion{}, err
 	}
+	private, err := r.cooperativePrivateReferences(ctx, ref)
+	if err != nil {
+		return CooperativeDeletion{}, err
+	}
 	out := CooperativeDeletion{Ref: ref, Code: org.Code, Name: org.Name, Revision: org.LastSeq}
 	err = tenant.WithTenantTx(ctx, r.DB, p.TenantID, func(tx pgx.Tx) error {
 		var e error
@@ -100,6 +123,7 @@ func (r *Registry) CooperativeDeletion(ctx context.Context, ref uuid.UUID) (Coop
 	if err != nil {
 		return CooperativeDeletion{}, ErrDependency.WithDetail("Chưa kiểm tra đủ dữ liệu để xóa HTX").WithCause(err)
 	}
+	out.HasBusiness = out.HasBusiness || private
 	return out, nil
 }
 
@@ -151,6 +175,11 @@ func (r *Registry) DeleteCooperative(ctx context.Context, in DeleteCooperativeIn
 	if err != nil {
 		return OrgResult{}, err
 	}
+	private, err := r.cooperativePrivateReferences(ctx, in.Ref)
+	if err != nil {
+		return OrgResult{}, err
+	}
+	var checkedUsage store.CooperativeDeletionUsage
 	result, err := r.write(ctx, p.TenantID, key, func(tx pgx.Tx) (OrgResult, error) {
 		if err := store.LockCooperativeDeletion(ctx, tx, in.Ref); err != nil {
 			return OrgResult{}, err
@@ -174,10 +203,10 @@ func (r *Registry) DeleteCooperative(ctx context.Context, in DeleteCooperativeIn
 		if err != nil {
 			return OrgResult{}, ErrDependency.WithDetail("Chưa kiểm tra đủ dữ liệu để xóa HTX").WithCause(err)
 		}
+		usage.HasBusiness = usage.HasBusiness || private
+		checkedUsage = usage
 		if !(CooperativeDeletion{CooperativeDeletionUsage: usage}).CanDelete() {
-			return OrgResult{}, ErrCooperativeInUse.WithDetail(fmt.Sprintf("HTX còn %d hộ, %d tài khoản; chỉ xóa HTX chưa phát sinh dữ liệu.", usage.Households, usage.Accounts)).
-				With("households", usage.Households).With("accounts", usage.Accounts).With("pending_accounts", usage.PendingAccounts).
-				With("has_sharing", usage.HasSharing).With("has_business", usage.HasBusiness)
+			return OrgResult{}, cooperativeInUse(usage)
 		}
 		org := cur.Org
 		org.Active = false
@@ -200,6 +229,11 @@ func (r *Registry) DeleteCooperative(ctx context.Context, in DeleteCooperativeIn
 		return OrgResult{Org: org, Event: event}, nil
 	})
 	if err != nil {
+		var pg *pgconn.PgError
+		if errors.As(err, &pg) && pg.ConstraintName == "cooperative_has_private_references" {
+			checkedUsage.HasBusiness = true
+			return OrgResult{}, cooperativeInUse(checkedUsage)
+		}
 		return OrgResult{}, err
 	}
 	return r.finishCooperativeDeletion(ctx, p.TenantID, result, in.Ref, digest)

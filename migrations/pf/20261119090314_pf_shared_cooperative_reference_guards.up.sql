@@ -9,6 +9,7 @@ RETURNS TABLE(source_schema name,source_table name,source_column name,source_typ
 LANGUAGE sql STABLE SET search_path=pg_catalog,pg_temp AS $$
  SELECT n.nspname,c.relname,a.attname,format_type(a.atttypid,a.atttypmod),
  CASE
+  WHEN n.nspname='pf_coop' AND c.relname LIKE 'bilateral\_%' THEN 'private'
   -- Chỉ projection hồ sơ và audit của chính hồ sơ được loại khỏi dữ liệu phát sinh.
   WHEN (n.nspname,c.relname,a.attname) IN
    (('pf_party','org_event','org_ref'),('pf_party','htx_profile_completion','org_ref'),
@@ -47,7 +48,16 @@ BEGIN
   PERFORM set_config('app.tenant_id',tenant::text,true);
  END IF;
  IF tenant IS NULL OR tenant IS DISTINCT FROM NEW.tenant_id THEN
-  RAISE EXCEPTION 'cooperative reference requires matching tenant context' USING ERRCODE='42501';
+  IF TG_TABLE_SCHEMA='pf_coop' AND TG_TABLE_NAME IN ('bilateral_pair_event','bilateral_record')
+     AND tenant IS NOT NULL AND tenant=(row_data->>'counterparty_tenant_id')::uuid THEN
+   -- Bên MKG ghi hợp lệ theo p_pair; khóa/dấu xóa thuộc tenant chủ HTX.
+   tenant:=NEW.tenant_id;temporary_tenant:=true;
+   PERFORM set_config('app.tenant_id',tenant::text,true);
+  ELSE
+   -- Giữ chính sách RLS làm nguồn từ chối tenant sai; không tiết lộ tombstone
+   -- của tenant khác và không thay lỗi row-level security của đường hiện hữu.
+   RETURN NEW;
+  END IF;
  END IF;
  FOR i IN 0..TG_NARGS-1 LOOP
   -- UPDATE một Nút hiện hữu không phục hồi được Nút đã bị xóa. Caller đã
@@ -160,7 +170,13 @@ LANGUAGE sql STABLE SECURITY INVOKER SET search_path=pg_catalog,pg_temp AS $$
   JOIN pg_depend d ON d.classid='pg_rewrite'::regclass AND d.objid=w.oid
   WHERE p.nspname=CASE WHEN r.source_schema='pf_coop' THEN 'pf_cooperative_pub' ELSE r.source_schema||'_pub' END
    AND v.relname='v1_cooperative_references' AND v.relkind='v'
-   AND d.refclassid='pg_class'::regclass AND d.refobjid=c.oid AND d.refobjsubid=a.attnum)))
+   AND d.refclassid='pg_class'::regclass AND d.refobjid=c.oid AND d.refobjsubid=a.attnum))
+ OR (r.reference_mode='private' AND (r.source_table NOT IN ('bilateral_pair_event','bilateral_record') OR NOT EXISTS(
+  SELECT 1 FROM pg_trigger t JOIN pg_proc f ON f.oid=t.tgfoid
+   JOIN pg_namespace fn ON fn.oid=f.pronamespace
+   WHERE t.tgrelid='pf_party.org'::regclass AND NOT t.tgisinternal
+   AND fn.nspname='pf_coop' AND f.proname='guard_private_cooperative_delete' AND f.pronargs=0
+   AND t.tgenabled IN ('O','A') AND (t.tgtype::integer & 11)=11))))
 $$;
 REVOKE ALL ON FUNCTION shared.unprotected_cooperative_references() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION shared.unprotected_cooperative_references() TO ag_shared_user;

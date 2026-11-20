@@ -89,6 +89,7 @@ type Registry struct {
 	ProfileEditor     port.HTXProfileEditor
 	InventoryMachines port.InventoryMachineSource
 	AccountUsers      port.CooperativeAccountUsers
+	PrivateReferences port.CooperativePrivateReferences
 }
 
 var (

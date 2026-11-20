@@ -18,7 +18,7 @@
     "record_ref",
     "source"
   ],
-  "closed_rule": "All source history and current records, including inactive households, disabled and reassigned accounts, revoked shares. Profile projections and their own audit are explicitly excluded.",
+  "closed_rule": "All public source history and current records, including inactive households. Profile projections and their own audit are explicitly excluded. ADR-0034 bilateral ledgers are never published; their owner checks deletion blockers through a boolean port and a DB integrity trigger, not this view.",
   "personal_data": false,
   "columns": [
     {

@@ -93,6 +93,16 @@ số hộ bao gồm membership lịch sử/ngừng tham gia, số tài khoản l
 IAM và sổ tài khoản, kể cả khóa hoặc đã đổi đơn vị. Thiếu nguồn trả lỗi 503.
 Các yêu cầu và lịch sử chia sẻ cùng mọi dữ liệu nghiệp vụ khác đều chặn xóa.
 
+Riêng sổ song phương theo ADR-0034 không tham gia `_pub`, chỉ số hoặc quyền
+đọc của r_agg. Port của Cooperative chỉ trả boolean chặn xóa cho Admin,
+được gọi ngoài transaction Party. Trigger do chính owner Cooperative giữ
+kiểm lại sổ riêng khi DELETE, dưới lifecycle lock đã lấy, không trả payload
+hoặc cấp quyền bảng cho Party. Ngữ cảnh Nút được giới hạn đúng ref/tenant
+trong phép kiểm tồn tại và khôi phục trước khi kết thúc câu lệnh.
+Migration chuyển ownership của đúng hai sổ sang `own_cooperative` đã có,
+giữ FORCE RLS và quyền SELECT/INSERT hiện hữu của `r_cooperative`; owner chỉ
+được bổ sung các helper đọc GUC cần cho policy, không BYPASSRLS hay membership mới.
+
 Mỗi owner công bố `v1_cooperative_references` qua schema `_pub`, chỉ gồm mã
 tham chiếu và loại nguồn, không có PII. Writer giữ khóa shared theo tenant/HTX;
 xóa giữ khóa exclusive trước khi khóa dòng tổ chức và đếm lại. Catalog guard

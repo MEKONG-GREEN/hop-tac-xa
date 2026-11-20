@@ -188,6 +188,22 @@ func TestLegacyPublishedReaderAccessContract(t *testing.T) {
 	}
 	additions.Access = append(additions.Access, platformKN.Access...)
 	additions.Memberships = append(additions.Memberships, platformKN.Memberships...)
+	// AH-283: reviewed reference/tombstone publications and inherited access
+	// from the existing module publication-role model. No private/bilateral
+	// ledger grants or changes to frozen role flags are permitted.
+	deletionRaw, err := os.ReadFile("../tests/golden/ah283-cooperative-deletion-access-additions.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var deletion snapshot
+	if err := json.Unmarshal(deletionRaw, &deletion); err != nil {
+		t.Fatal(err)
+	}
+	if len(deletion.Roles) != 0 {
+		t.Fatal("cooperative deletion role flag changes are not approved")
+	}
+	additions.Access = append(additions.Access, deletion.Access...)
+	additions.Memberships = append(additions.Memberships, deletion.Memberships...)
 	// #184 adds a new dormant capability role, not a change to any frozen OLD role.
 	// Keep its flags exact and leave Access/Memberships empty: any inherited or
 	// direct published-view grant to r_guestlink must still fail this snapshot.

@@ -36,3 +36,6 @@ GRANT EXECUTE ON FUNCTION pf_party.guard_unused_cooperative_delete() TO r_party;
 CREATE TRIGGER trg_unused_cooperative_delete BEFORE DELETE ON pf_party.org
 FOR EACH ROW EXECUTE FUNCTION pf_party.guard_unused_cooperative_delete();
 GRANT DELETE ON pf_party.org TO r_party;
+-- Hook của bảng nguồn do Party cài; hàm kiểm sổ riêng vẫn thuộc Cooperative.
+CREATE TRIGGER zzzz_private_cooperative_delete BEFORE DELETE ON pf_party.org
+ FOR EACH ROW EXECUTE FUNCTION pf_coop.guard_private_cooperative_delete();

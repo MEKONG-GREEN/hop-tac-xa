@@ -153,6 +153,9 @@ func (m *Module) UseCooperativeAreas(p port.CooperativeAreaSource) { m.reg.Areas
 
 // UseCooperativeAccountUsers nối nguồn IAM thật cho kiểm tra xóa HTX, thiếu thì fail-closed.
 func (m *Module) UseCooperativeAccountUsers(p port.CooperativeAccountUsers) { m.reg.AccountUsers = p }
+func (m *Module) UseCooperativePrivateReferences(p port.CooperativePrivateReferences) {
+	m.reg.PrivateReferences = p
+}
 
 // UseInventoryMachines nối nguồn AH-260 khi có. Không tự dùng máy cơ giới KN
 // thay thế; chưa nối thì API trả null và giao diện hiện "—" theo quyết định PO.

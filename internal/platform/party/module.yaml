@@ -25,6 +25,7 @@ provides:
     - CoopProfiles
     - CooperativeAccountUsers
     - CooperativeAreaSource
+    - CooperativePrivateReferences
     - CooperativeRegistrar
     - CooperativeUnitCounts
     - DepartmentAdmin

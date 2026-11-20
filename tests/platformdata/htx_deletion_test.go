@@ -35,6 +35,7 @@ import (
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/vault/identity/client"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/vault/identity/client/clienttest"
 	"github.com/MEKONG-GREEN/hop-tac-xa/migrations"
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -64,6 +65,12 @@ type deletionResponse struct {
 	body   map[string]any
 }
 
+type privateReferenceSource func(context.Context, uuid.UUID) (bool, error)
+
+func (f privateReferenceSource) CooperativePrivateReferences(ctx context.Context, ref uuid.UUID) (bool, error) {
+	return f(ctx, ref)
+}
+
 type deletionVault struct {
 	client.Client
 	client.HTXContacts
@@ -81,6 +88,7 @@ func (v *deletionVault) EraseHTXContact(ctx context.Context, purpose client.Purp
 type deletionAPI struct {
 	f                  *fixture
 	party              *party.Module
+	cooperative        *cooperative.Module
 	directory          *accounts.MemoryDirectory
 	iam                *heldIAM
 	vault              *deletionVault
@@ -125,14 +133,27 @@ func newDeletionAPI(t *testing.T) *deletionAPI {
 	iam := &heldIAM{Directory: dir, entered: make(chan struct{}), resume: make(chan struct{})}
 	acc := accounts.New(pf, clock.System{}, accounts.Deps{Directory: iam, Orgs: pty.Orgs(), Scope: pty.ScopeResolver(), Roles: ap.NativeRoleCatalog()})
 	pty.UseCooperativeAccountUsers(acc.CooperativeAccountUsers())
+	pty.UseCooperativePrivateReferences(coop.CooperativePrivateReferences())
 	log := telemetry.NewLogger("test", io.Discard)
 	appEngine, adminEngine := httpx.NewEngine(log, 1<<20), httpx.NewEngine(log, 1<<20)
+	for _, engine := range []*gin.Engine{appEngine, adminEngine} {
+		engine.Use(func(c *gin.Context) {
+			c.Next()
+			for _, failure := range c.Errors {
+				var pg *pgconn.PgError
+				if errors.As(failure.Err, &pg) {
+					t.Logf("database failure SQLSTATE %s: %s", pg.Code, pg.Message)
+				}
+			}
+		})
+	}
 	ops := db.ForModule(pf, db.Ops)
 	pty.RegisterApp(appEngine.Group("/v1", httpx.Authenticate(issuer.Verifier()), idempotency.Middleware(ops)))
 	adminGroup := adminEngine.Group("/v1", httpx.Authenticate(issuer.Verifier()), httpx.RequireMFA(), idempotency.Middleware(ops))
 	pty.RegisterAdmin(adminGroup)
 	acc.RegisterAdmin(adminGroup)
 	a := &deletionAPI{f: f, party: pty, directory: dir, iam: iam, vault: vault, issuer: issuer, t: t, admin: httptest.NewServer(adminEngine), application: httptest.NewServer(appEngine)}
+	a.cooperative = coop
 	t.Cleanup(a.admin.Close)
 	t.Cleanup(a.application.Close)
 	a.token = issuer.Sign(t, authztest.Token{Subject: ids.New(), TenantID: f.tid, MFA: true, Roles: []string{authz.RolePlatformAdmin}})
@@ -369,5 +390,100 @@ func TestAH283DeleteDatabaseGuardsCannotBeBypassed(t *testing.T) {
 	var pg *pgconn.PgError
 	if !errors.As(err, &pg) || pg.ConstraintName != "cooperative_permanently_deleted" {
 		t.Fatalf("late producer must reject deleted target: %v", err)
+	}
+}
+
+func TestAH283DeletePrivateOwnerDoesNotPublishBilateralData(t *testing.T) {
+	a := newDeletionAPI(t)
+	org, _ := a.create("HTX có dữ liệu song phương", "ah283-bilateral-used")
+	ctx := authz.WithPrincipal(context.Background(), authz.Principal{TenantID: a.f.tid, ActorRef: ids.New(), Roles: []string{authz.RolePlatformAdmin}, MFA: true})
+	used, err := a.cooperative.CooperativePrivateReferences().CooperativePrivateReferences(ctx, org)
+	if err != nil || used {
+		t.Fatalf("unused private source: used=%v err=%v", used, err)
+	}
+	pair := ids.New()
+	counterparty := ids.New()
+	a.f.exec(`INSERT INTO pf_coop.bilateral_pair_event(id,tenant_id,stream_key,pair_id,htx_node_id,counterparty_tenant_id,author_side,action,event_time,actor_ref,idem_key,rule_version)
+ VALUES($1,$2,'pair:'||$3::text,$3::uuid,$4,$5,'b','established',now(),$6,$7,'bilateral.pair/v1')`, ids.New(), a.f.tid, pair, org, counterparty, ids.New(), ids.New().String())
+	cp := authz.WithPrincipal(context.Background(), authz.Principal{TenantID: counterparty, ActorRef: ids.New()})
+	cooperativeDB := db.ForModule(pgtest.Get(t).Pool(t, migrations.PF, dbadmin.AppPlatform), db.Module("pf/cooperative"))
+	if err := tenant.WithTenantTx(cp, cooperativeDB, counterparty, func(tx pgx.Tx) error {
+		_, err := tx.Exec(cp, `INSERT INTO pf_coop.bilateral_pair_event(id,tenant_id,stream_key,pair_id,htx_node_id,counterparty_tenant_id,author_side,action,reason,event_time,actor_ref,idem_key,rule_version)
+ VALUES($1,$2,'pair:'||$3::text,$3::uuid,$4,$5,'a','terminated','Chấm dứt cặp từ phía đối tác',now(),$6,$7,'bilateral.pair/v1')`, ids.New(), a.f.tid, pair, org, counterparty, ids.New(), ids.New().String())
+		if err != nil {
+			return err
+		}
+		var restored uuid.UUID
+		if err := tx.QueryRow(cp, `SELECT shared.current_tenant()`).Scan(&restored); err != nil {
+			return err
+		}
+		if restored != counterparty {
+			return errors.New("counterparty tenant leaked from lifecycle guard")
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("counterparty writer: %v", err)
+	}
+	used, err = a.cooperative.CooperativePrivateReferences().CooperativePrivateReferences(ctx, org)
+	if err != nil || !used {
+		t.Fatalf("used private source: used=%v err=%v", used, err)
+	}
+	if check := a.preview(org); check.status != http.StatusOK || check.body["has_business"] != true || check.body["can_delete"] != false {
+		t.Fatalf("private preflight: %d %v", check.status, check.body)
+	}
+	if r := a.remove(org, "ah283-private-denied", 1); r.status != http.StatusConflict {
+		t.Fatalf("private delete: %d %v", r.status, r.body)
+	}
+	other := authz.WithPrincipal(context.Background(), authz.Principal{TenantID: ids.New(), ActorRef: ids.New(), Roles: []string{authz.RolePlatformAdmin}, MFA: true})
+	if used, err := a.cooperative.CooperativePrivateReferences().CooperativePrivateReferences(other, org); err != nil || used {
+		t.Fatalf("private source tenant leak: used=%v err=%v", used, err)
+	}
+	var published int
+	if err := a.f.admin.QueryRow(context.Background(), `SELECT count(*) FROM pf_cooperative_pub.v1_cooperative_references WHERE tenant_id=$1 AND cooperative_ref=$2 AND source LIKE '%bilateral%'`, a.f.tid, org).Scan(&published); err != nil || published != 0 {
+		t.Fatalf("bilateral data published: count=%d err=%v", published, err)
+	}
+}
+
+func TestAH283DeleteRechecksBilateralWriteAfterOwnerPreflight(t *testing.T) {
+	a := newDeletionAPI(t)
+	org, _ := a.create("HTX có ghi song phương đến trễ", "ah283-bilateral-race")
+	counterparty, actor, pair := ids.New(), ids.New(), ids.New()
+	pool := pgtest.Get(t).Pool(t, migrations.PF, dbadmin.AppPlatform)
+	cooperativeDB := db.ForModule(pool, db.Module("pf/cooperative"))
+	source := a.cooperative.CooperativePrivateReferences()
+	a.party.UseCooperativePrivateReferences(privateReferenceSource(func(ctx context.Context, ref uuid.UUID) (bool, error) {
+		used, err := source.CooperativePrivateReferences(ctx, ref)
+		if err != nil || used {
+			return used, err
+		}
+		cp := authz.WithPrincipal(context.Background(), authz.Principal{TenantID: a.f.tid, OrgRef: org, ActorRef: actor})
+		err = tenant.WithTenantTx(cp, cooperativeDB, a.f.tid, func(tx pgx.Tx) error {
+			_, err := tx.Exec(cp, `INSERT INTO pf_coop.bilateral_pair_event(id,tenant_id,stream_key,pair_id,htx_node_id,counterparty_tenant_id,author_side,action,event_time,actor_ref,idem_key,rule_version)
+ VALUES($1,$2,'pair:'||$3::text,$3::uuid,$4,$5,'b','established',now(),$6,$7,'bilateral.pair/v1')`, ids.New(), a.f.tid, pair, org, counterparty, actor, ids.New().String())
+			if err != nil {
+				return err
+			}
+			var restored uuid.UUID
+			if err := tx.QueryRow(cp, `SELECT shared.current_tenant()`).Scan(&restored); err != nil {
+				return err
+			}
+			if restored != a.f.tid {
+				return errors.New("bilateral writer did not preserve owner tenant")
+			}
+			return nil
+		})
+		return false, err
+	}))
+	if r := a.remove(org, "ah283-bilateral-race-delete", 1); r.status != http.StatusConflict || r.body["has_business"] != true {
+		t.Fatalf("late private writer: %d %v", r.status, r.body)
+	}
+	var live, deleted int
+	if err := a.f.admin.QueryRow(context.Background(), `SELECT
+ (SELECT count(*) FROM pf_party.org WHERE tenant_id=$1 AND ref=$2),
+ (SELECT count(*) FROM pf_party.org_event WHERE tenant_id=$1 AND org_ref=$2 AND action='deleted')`, a.f.tid, org).Scan(&live, &deleted); err != nil {
+		t.Fatal(err)
+	}
+	if live != 1 || deleted != 0 {
+		t.Fatalf("late writer must roll back whole deletion: live=%d deleted=%d", live, deleted)
 	}
 }
