@@ -151,6 +151,8 @@ func (m *Module) UseCoopProfiles(p port.CoopProfiles) {
 // UseCooperativeAreas nối nguồn diện tích hộ; không dùng diện tích đăng ký KN.
 func (m *Module) UseCooperativeAreas(p port.CooperativeAreaSource) { m.reg.Areas = p }
 
+func (m *Module) UseNativeSharing(p port.NativeCooperativeSharing) { m.reg.NativeSharing = p }
+
 // UseCooperativeAccountUsers nối nguồn IAM thật cho kiểm tra xóa HTX, thiếu thì fail-closed.
 func (m *Module) UseCooperativeAccountUsers(p port.CooperativeAccountUsers) { m.reg.AccountUsers = p }
 func (m *Module) UseCooperativePrivateReferences(p port.CooperativePrivateReferences) {

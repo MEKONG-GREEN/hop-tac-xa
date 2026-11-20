@@ -69,10 +69,11 @@ func requireNodeCreator(p authz.Principal, kind port.OrgKind) error {
 
 // Registry là use case sổ tổ chức và HTX (Nút). Nông hộ/xã viên và hồ sơ HTX ở pf/cooperative (W3.3).
 type Registry struct {
-	DB    tenant.Beginner // pool vai party_app
-	Clock clock.Clock
-	Units port.AdminUnits // có thể nil khi chưa nối — thao tác cần nó trả ErrDependency
-	Vault client.Client   // có thể nil khi chưa nối
+	NativeSharing port.NativeCooperativeSharing
+	DB            tenant.Beginner // pool vai party_app
+	Clock         clock.Clock
+	Units         port.AdminUnits // có thể nil khi chưa nối — thao tác cần nó trả ErrDependency
+	Vault         client.Client   // có thể nil khi chưa nối
 	// Plots (tùy chọn): thống kê thửa đã số hoá của pf/geo cho danh sách HTX (G-03).
 	Plots port.PlotStats
 	// Activity (tùy chọn): vụ chưa xong / nhật ký chờ duyệt (pf/cropcycle) cho màn cảnh báo

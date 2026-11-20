@@ -145,8 +145,8 @@ export function AppShell({ children, SidebarComponent = Sidebar }: {
   const redirecting = kn.status === "legacy" && !allowed && (pathname === "/" || isHtxAppUser(principal));
   // FN-06/EX-01, AC-N2: rời trang chi tiết ngoài phạm vi về trang đầu tiên được xem, kèm câu thông báo ở trang đó.
   const exit = useCallback(
-    (text: string) => {
-      const to = homeFor(principal, disabled);
+    (text: string, dest?: string) => {
+      const to = dest ?? homeFor(principal, disabled);
       writeShellNotice({ from: pathname, to, text });
       router.replace(to);
     },

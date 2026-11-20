@@ -110,6 +110,8 @@ type Service struct {
 	// Sharing (ADR-0020): kiểm cấp quyền chia sẻ + sổ đọc cho bề mặt đối tác /v1/partner/plots
 	// (pf/party). Thiếu → 403 party.share_grant_missing (mặc định từ chối).
 	Sharing partyport.PartnerAccess
+	// SharedReads (FN-06/FN-09): grant đọc chia sẻ giữa HTX đang hiệu lực. Thiếu → chỉ HTX của mình.
+	SharedReads SharedCooperativeReads
 	// Vault (tùy chọn, KN v7.7 FN-XA-03.05): tên nông dân của thửa → chủ thể "người" (farmer_ref); nhãn che khi đọc.
 	// Thiếu → ghi có farmer_name trả 503 geo.dependency_unavailable; đọc trả farmer = null.
 	Vault port.FarmerIdentity

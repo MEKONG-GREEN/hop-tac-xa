@@ -4,7 +4,7 @@
 // tìm theo SĐT (HTX US-HH-01 AC-2), gọi nhanh (US-HH-03), sao chép hàng loạt (US-HH-02 AC-2..4).
 // Danh sách chỉ có nhãn đã che. Chi tiết đọc theo quyền từ server khi mở,
 // no-store; không lưu định danh vào local/session storage.
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { householdsPage } from "@/api/adapters/cooperatives";
 import { unwrap } from "@/api/client";
 import { newIdempotencyKey } from "@/api/idempotency";
@@ -205,7 +205,14 @@ function CopyDialog({ coop, sources, onClose, onDone }: { coop: Cooperative; sou
 }
 
 /** Danh sách nông hộ của một HTX kèm tìm SĐT, gọi nhanh, chọn để sao chép hàng loạt. */
-export function HouseholdsPanel({ coop, readOnly = false, showSeasons = false }: { coop: Cooperative; readOnly?: boolean; showSeasons?: boolean }) {
+/**
+ * shared (FN-06/FN-09, AH-274): HTX khác đã duyệt chia sẻ — chỉ xem, không tra SĐT đầy đủ; onScopeLost nhận lỗi 404/403
+ * của lần tải kế tiếp (đã thu hồi) để trang cha rời màn, không giữ dữ liệu cũ.
+ */
+export function HouseholdsPanel({ coop, readOnly: readOnlyProp = false, showSeasons = false, shared = false, onScopeLost }: {
+  coop: Cooperative; readOnly?: boolean; showSeasons?: boolean; shared?: boolean; onScopeLost?: (problem: ApiProblem) => void;
+}) {
+  const readOnly = readOnlyProp || shared;
   const { api, principal } = useAuth();
   const id = coop.ref;
   const [query, setQuery] = useState("");
@@ -226,6 +233,10 @@ export function HouseholdsPanel({ coop, readOnly = false, showSeasons = false }:
     () => (search ? unwrap(api.GET("/v1/cooperatives/{ref}/households", { params: { path: { ref: id }, query: { phone: search.phone,status:status||undefined } } })) : Promise.resolve(null)),
     [api, id, search, version,status],
   );
+  const lost = list.error ?? found.error;
+  useEffect(() => {
+    if (lost && (lost.status === 404 || lost.status === 403)) onScopeLost?.(lost);
+  }, [lost, onScopeLost]);
   const communeName = (code: string) => (code === coop.admin_unit_code ? (coop.commune_name ?? code) : code);
   const rows = search ? (found.data?.items ?? []) : list.items;
 
@@ -257,19 +268,24 @@ export function HouseholdsPanel({ coop, readOnly = false, showSeasons = false }:
       <div className="alert alert-info" style={{ marginBottom: 12 }}>
         <Icon name="info" />
         <span>
-          Danh sách hiển thị nhãn đã che. Thông tin chi tiết được hiển thị theo quyền của bạn;
-          Thành viên HTX chỉ xem SĐT và CCCD đã che.
+          {shared
+            ? "Dữ liệu được chia sẻ chỉ xem. SĐT và CCCD của hộ được che một phần."
+            : "Danh sách hiển thị nhãn đã che. Thông tin chi tiết được hiển thị theo quyền của bạn; Thành viên HTX chỉ xem SĐT và CCCD đã che."}
         </span>
       </div>
       <form className="row" role="search" onSubmit={submitSearch} style={{ marginBottom: 12, alignItems: "flex-end" }}>
         <div className="field"><label htmlFor={`hh-status-${id}`}>Trạng thái</label><select id={`hh-status-${id}`} className="input" value={status} onChange={(e)=>setStatus(e.target.value as typeof status)}><option value="">Tất cả trạng thái</option><option value="active">Đang tham gia</option><option value="inactive">Ngừng tham gia</option></select></div>
-        <div className="field" style={{ flex: "1 1 260px" }}>
-          <label htmlFor={`hh-q-${id}`}>Tìm nông hộ theo SĐT</label>
-          <input id={`hh-q-${id}`} className="input" type="search" inputMode="tel" placeholder="0xxxxxxxxx" value={query} onChange={(e) => setQuery(e.target.value)} />
-        </div>
-        <button type="submit" className="btn btn-o btn-sm">
-          <Icon name="search" size={15} /> Tìm
-        </button>
+        {!shared ? (
+          <>
+            <div className="field" style={{ flex: "1 1 260px" }}>
+              <label htmlFor={`hh-q-${id}`}>Tìm nông hộ theo SĐT</label>
+              <input id={`hh-q-${id}`} className="input" type="search" inputMode="tel" placeholder="0xxxxxxxxx" value={query} onChange={(e) => setQuery(e.target.value)} />
+            </div>
+            <button type="submit" className="btn btn-o btn-sm">
+              <Icon name="search" size={15} /> Tìm
+            </button>
+          </>
+        ) : null}
         {search ? (
           <button
             type="button"

@@ -157,6 +157,7 @@ func Build(ctx context.Context, open PoolOpener, clk clock.Clock, ext External) 
 		Catalogs: md.Catalogs(), GpsLog: g.GpsLog(), Households: farmerid.Households(ext.Vault), Farmers: farmerid.New(ext.Vault)}) // HTX US-GPS-03: log GPS qua consumer outbox pf.cropcycle.gps_log
 	pty.UseCoopProfiles(coop.CoopProfiles()) // tạo HTX hai bước, màn HTX, danh bạ đối tác
 	pty.UseCooperativeAreas(coop.CooperativeAreas())
+	pty.UseNativeSharing(coop.NativeSharing())
 	pty.UsePlotStats(coop.PlotStats()) // G-03: số thửa đã số hoá trong danh sách HTX
 	g.UsePlots(coop.PlotGeometry())    // HTX US-GPS-01/03: khoảng cách tới lô của log GPS
 	g.UseMapLayers(coop.MapLayers())   // GIS FN-01, US-INT-02: lớp HTX, lớp thửa của bản đồ gộp

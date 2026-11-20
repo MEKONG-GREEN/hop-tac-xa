@@ -617,6 +617,10 @@ func (s *Service) HouseholdPubKeys(ctx context.Context, refs []uuid.UUID) ([]cli
 			if e != nil {
 				return nil, e
 			}
+			// Photo keys serve write paths; shared read-only scope never qualifies.
+			if scope.Shared {
+				return nil, client.ProblemNotFound
+			}
 			scopes[ref] = scope
 		}
 	}
@@ -636,7 +640,7 @@ func (s *Service) HouseholdPubKeys(ctx context.Context, refs []uuid.UUID) ([]cli
 				return nil, e
 			}
 			old := scopes[ref]
-			if latest.CooperativeRef != old.CooperativeRef {
+			if latest.CooperativeRef != old.CooperativeRef || latest.Shared {
 				return nil, client.ProblemHouseholdScopeUnavailable
 			}
 		}

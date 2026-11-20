@@ -6,6 +6,7 @@ import { uuidv7 } from "../idempotency";
 import type { ContentKind, ReportSchedule } from "../types";
 import { COOPERATIVES, findCoop, householdCount, householdRefOf, householdsOf, syntheticPhone, type MockCooperative } from "./data";
 import { headerKey, parseCsv } from "./admin-ops";
+import { nativeSharedRead } from "./native-sharing";
 import { hasRole, inScope, isZip, json, managerOnly, nowIso, opaque, ownCoopOnly, paginate, problem, reasonOf, validation, type Route } from "./http";
 import type { MockPersona } from "./personas";
 import { householdMockArea } from "./household-season-state";
@@ -151,9 +152,12 @@ export const htxGapAppRoutes: Route[] = [
     pattern: /^\/v1\/cooperatives\/([\w-]+)\/households$/,
     handler: ({ params, url, persona }) => {
       const c = findCoop(params[0]);
-      if (!c || !inScope(persona, c.province_code, c.api.admin_unit_code)) return problem(404, "party.org_not_found", "Not found");
-      if (ownCoopOnly(persona) && persona.me.org?.ref !== c.api.ref) return problem(404, "party.org_not_found", "Not found");
-      const all = householdMockRows(c);
+      const shared = !!c && nativeSharedRead(persona, c.api.ref);
+      if (!c || (!shared && !inScope(persona, c.province_code, c.api.admin_unit_code))) return problem(404, "party.org_not_found", "Not found");
+      if (!shared && ownCoopOnly(persona) && persona.me.org?.ref !== c.api.ref) return problem(404, "party.org_not_found", "Not found");
+      // Dữ liệu chia sẻ chỉ xem: không tra theo SĐT đầy đủ, không mở thao tác (khớp member/app.ListHouseholds).
+      if (shared && url.searchParams.get("phone")) return problem(403, "forbidden", "Dữ liệu được chia sẻ chỉ xem");
+      const all = shared ? householdMockRows(c).map((h) => ({ ...h, can_open_season: false, open_season_blocked_reason: "Dữ liệu được chia sẻ chỉ xem" })) : householdMockRows(c);
       const raw = url.searchParams.get("phone");
       if (raw === null || raw.trim() === "") return json(paginate(all, url));
       const phone = normPhone(raw.trim());

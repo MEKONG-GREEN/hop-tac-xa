@@ -12388,6 +12388,186 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/masterdata/shared-catalogs/{catalog}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Xuất Excel chỉ đọc danh mục dùng chung Vật tư/Máy móc (VTKM-Q-07, AH-274)
+         * @description Admin, Đại diện HTX, Thành viên HTX. Chỉ mục đang dùng của danh mục material hoặc machine_type.
+         */
+        get: operations["exportSharedCatalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/htx-sharing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Yêu cầu chia sẻ gửi đến và đã gửi của Đại diện HTX */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Lịch sử yêu cầu theo chiều HTX yêu cầu xem HTX nhận */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: components["schemas"]["NativeSharing"][];
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        /** Gửi yêu cầu xem toàn bộ dữ liệu HTX khác chỉ đọc */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        owner_cooperative_ref: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Yêu cầu đang chờ, chưa cấp quyền đọc */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NativeSharing"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/htx-sharing/candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Danh mục HTX còn được gửi yêu cầu, chỉ mã và tên */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Không bao gồm chính HTX mình hoặc cặp đang chờ/đã duyệt */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: {
+                                /** Format: uuid */
+                                ref: string;
+                                code: string;
+                                name: string;
+                            }[];
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/htx-sharing/{ref}/transitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Duyệt, từ chối, thu hồi theo đúng bên và phiên bản */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    ref: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        action: "approve" | "reject" | "revoke";
+                        expected_revision: number;
+                    };
+                };
+            };
+            responses: {
+                /** @description Đã chuyển trạng thái và ghi lịch sử; quyền đọc đổi ngay */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NativeSharing"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/extension/cnts/weekly-plan/schedule": {
         parameters: {
             query?: never;
@@ -24737,6 +24917,25 @@ export interface components {
             /** Format: date-time */
             submitted_at: string;
         };
+        NativeSharing: {
+            /** Format: uuid */
+            ref: string;
+            /** Format: uuid */
+            requester_cooperative_ref: string;
+            /** Format: uuid */
+            owner_cooperative_ref: string;
+            requester_name?: string;
+            owner_name?: string;
+            /** @enum {string} */
+            state: "requested" | "approved" | "rejected" | "revoked";
+            revision: number;
+            /** Format: date-time */
+            requested_at: string;
+            /** Format: date-time */
+            processed_at: string | null;
+            /** Format: uuid */
+            actor_ref: string;
+        };
         KHTCReportPeriod: {
             /** Format: uuid */
             id: string;
@@ -27960,6 +28159,8 @@ export interface components {
             /** @enum {string} */
             contact_access: "full" | "masked";
             can_write: boolean;
+            /** @description Quyền chia sẻ hiện hành chỉ xem và che định danh */
+            shared?: boolean;
         };
         NativeHouseholdProfile: {
             household: components["schemas"]["Household"];
@@ -54394,6 +54595,32 @@ export interface operations {
             409: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
+        };
+    };
+    exportSharedCatalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                catalog: "material" | "machine_type";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tệp .xlsx */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                };
+            };
+            /** @description forbidden */
+            403: components["responses"]["Problem"];
+            /** @description masterdata.catalog_not_found */
+            404: components["responses"]["Problem"];
         };
     };
     extCntsWeeklyPlanSchedule: {

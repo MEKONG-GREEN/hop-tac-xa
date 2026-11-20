@@ -117,6 +117,22 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/CatalogItem"}
         "404": {description: masterdata.catalog_item_not_found, $ref: "#/components/responses/Problem"}
+# @ag-order: 27402
+  /v1/masterdata/shared-catalogs/{catalog}/export:
+    get:
+      summary: Xuất Excel chỉ đọc danh mục dùng chung Vật tư/Máy móc (VTKM-Q-07, AH-274)
+      description: Admin, Đại diện HTX, Thành viên HTX. Chỉ mục đang dùng của danh mục material hoặc machine_type.
+      operationId: exportSharedCatalog
+      tags: [masterdata]
+      parameters:
+        - {name: catalog, in: path, required: true, schema: {type: string, enum: [material, machine_type]}}
+      responses:
+        "200":
+          description: Tệp .xlsx
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: {schema: {type: string, format: binary}}
+        "403": {description: forbidden, $ref: "#/components/responses/Problem"}
+        "404": {description: masterdata.catalog_not_found, $ref: "#/components/responses/Problem"}
 # @ag-order: 8
   /v1/masterdata/params/value:
     get:

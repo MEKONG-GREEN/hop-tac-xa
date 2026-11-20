@@ -19,6 +19,7 @@ import (
 // HouseholdIdentityScope is owner metadata, never an identity payload. The
 // owner verifies the original user's membership for every request.
 type HouseholdIdentityScope struct {
+	Shared         bool      `json:"shared"`
 	Ref            uuid.UUID `json:"ref"`
 	CooperativeRef uuid.UUID `json:"cooperative_ref"`
 	Active         bool      `json:"active"`
