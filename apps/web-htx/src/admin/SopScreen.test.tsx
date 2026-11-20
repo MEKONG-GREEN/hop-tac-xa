@@ -262,7 +262,8 @@ describe("Màn Quy trình SOP (AH-8)", () => {
     await user.type(within(dlg).getByLabelText("Tên SOP mới"), "Quy trình ST25 cho OM5451");
     await user.click(within(dlg).getByRole("button", { name: "Nhân bản" }));
     expect((await screen.findByRole("status")).textContent).toContain("Đã nhân bản");
-    expect(await screen.findByLabelText(/Giống/)).toHaveProperty("value", "OM5451");
+    // The new editor mounts before its asynchronous catalog options arrive.
+    await waitFor(() => expect(screen.getByLabelText(/Giống/)).toHaveProperty("value", "OM5451"));
     expect(screen.getByLabelText("Tên giai đoạn 3")).toHaveProperty("value", "Thu hoạch");
     expect(screen.getAllByText("Nháp").length).toBeGreaterThan(0);
     const nhanBan = sent.find((s) => s.url.endsWith("/clone"));

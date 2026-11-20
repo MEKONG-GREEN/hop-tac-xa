@@ -25,7 +25,7 @@ func (h Handler) nativeUpdateHousehold(c *gin.Context) {
 }
 func (h Handler) nativeSaveHousehold(c *gin.Context, ref uuid.UUID) {
 	c.Header("Cache-Control", "no-store")
-	var req nativeHouseholdRequest
+	req := nativeHouseholdRequest{NativeHouseholdMetadata: app.NativeHouseholdMetadata{Active: true}}
 	if !bindJSON(c, &req) {
 		return
 	}

@@ -229,6 +229,7 @@ func TestAH285NativeUpdateRecoversWithoutExposingPartialIdentity(t *testing.T) {
 	f.svc.Vault = &identityCommitOutage{HouseholdIdentities: original, writer: original.(port.NativeHouseholdIdentityWriter), fail: true}
 	body["expected_revision"] = 1
 	body["identity"].(map[string]any)["phone"] = "0907285072"
+	delete(body, "active") // omitted status uses the OpenAPI default, true
 	if r := nativePost(rep, path+"/revisions", "update-lost-response", body); r.status != 503 {
 		t.Fatalf("lost response: %d %v", r.status, r.body)
 	}
@@ -240,7 +241,7 @@ func TestAH285NativeUpdateRecoversWithoutExposingPartialIdentity(t *testing.T) {
 	}
 	f.svc.Vault = original
 	current := rep.appDo(http.MethodGet, path, nil)
-	if current.status != 200 || current.body["revision"] != float64(2) || str(current.body, "identity", "phone") != "0907285072" {
+	if current.status != 200 || current.body["revision"] != float64(2) || str(current.body, "identity", "phone") != "0907285072" || current.body["household"].(map[string]any)["active"] != true {
 		t.Fatal("resumed update did not converge")
 	}
 }
