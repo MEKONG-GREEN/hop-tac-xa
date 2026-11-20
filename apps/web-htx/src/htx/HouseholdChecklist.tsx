@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { unwrap } from "@/api/client";
 import type { components } from "@/api/generated/application";
 import { newIdempotencyKey } from "@/api/idempotency";
@@ -11,6 +11,8 @@ import { Loading } from "@/components/ui";
 import { formatDate } from "@/lib/format";
 import { toApiProblem, useAsync } from "@/lib/useAsync";
 import type { ApiProblem } from "@/api/problem";
+import { HouseholdTaskDetail } from "./HouseholdTaskDetail";
+import { cachedTaskRead, queuedTasks, flushTasks } from "./taskJournalQueue";
 
 type S = components["schemas"];
 const LABEL: Record<string, string> = { upcoming: "Chưa đến hạn", due: "Đến hạn", overdue: "Trễ hạn", waiting_anchor: "Chờ mốc", done: "Đã xong", done_early: "Xong sớm", done_on_time: "Xong đúng hạn", done_late: "Xong trễ", skipped: "Bỏ qua", not_started: "Chưa thực hiện", in_progress: "Đang thực hiện" };
@@ -27,15 +29,38 @@ function captureGPS(): Promise<S["CropGPS"]> {
   });
 }
 
-export function HouseholdChecklist({ coopRef, householdRef, seasonRef }: { coopRef: string; householdRef: string; seasonRef: string }) {
+export function HouseholdChecklist({ coopRef, householdRef, seasonRef, season }: { coopRef: string; householdRef: string; seasonRef: string; season?: S["HouseholdSeason"] }) {
   const { api, principal } = useAuth();
   const canWrite = matrixAllows(principal, "KHMV-FN-05", "C");
   const path = { ref: coopRef, household_ref: householdRef, season_ref: seasonRef };
-  const load = useAsync(() => unwrap(api.GET("/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/checklist", { params: { path } })), [api, coopRef, householdRef, seasonRef]);
+  const load = useAsync(() => {
+    const read = () => unwrap(api.GET("/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/checklist", { params: { path } }));
+    if (!canWrite || !principal) return read();
+    return cachedTaskRead(principal, `checklist:${coopRef}:${householdRef}:${seasonRef}`, read).then(async (value) => {
+      try { await cachedTaskRead(principal, `photo-key:${householdRef}`, () => unwrap(api.GET("/v1/households/{ref}/photo-key", { params: { path: { ref: householdRef } } }))); } catch { /* Camera reports a missing key; journals without photos remain usable. */ }
+      return value;
+    });
+  }, [api, principal, canWrite, coopRef, householdRef, seasonRef]);
   const [updated, setUpdated] = useState<S["HouseholdChecklist"] | null>(null);
   const [pending, setPending] = useState<{ seq: number; name: string; event: string; key: string; gps: Promise<S["CropGPS"]> } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiProblem | null>(null);
+  const [detail, setDetail] = useState<S["HouseholdTaskProgress"] | null>(null);
+  const [queueRevision, setQueueRevision] = useState(0);
+  const queue = useAsync(() => canWrite && principal && typeof indexedDB !== "undefined" ? queuedTasks(principal, coopRef, householdRef, seasonRef) : Promise.resolve([]), [principal, canWrite, coopRef, householdRef, seasonRef, queueRevision]);
+  const syncQueued = async () => {
+    if (!principal || !canWrite || busy) return;
+    setBusy(true); setError(null);
+    try { const items = await queuedTasks(principal, coopRef, householdRef, seasonRef); await flushTasks(api, principal, items); load.reload(); }
+    catch (e) { setError(toApiProblem(e)); }
+    finally { setBusy(false); setQueueRevision((r) => r + 1); }
+  };
+  const syncLatest = useRef(syncQueued);
+  useEffect(() => { syncLatest.current = syncQueued; });
+  useEffect(() => {
+    const onOnline = () => { void syncLatest.current(); };
+    window.addEventListener("online", onOnline); return () => window.removeEventListener("online", onOnline);
+  }, []);
   const data = !load.loading && !load.error && load.data ? load.data : updated ?? undefined;
   const refresh = () => { setUpdated(null); load.reload(); };
   const confirm = async () => {
@@ -58,6 +83,8 @@ export function HouseholdChecklist({ coopRef, householdRef, seasonRef }: { coopR
     {load.loading && !updated ? <Loading /> : null}
     {load.error ? <ProblemAlert problem={load.error} onRetry={refresh} /> : null}
     {error ? <ProblemAlert problem={error} /> : null}
+    {!queue.loading && queue.data?.length ? <section aria-label="Nhật ký chờ đồng bộ"><p>{queue.data.length} bản ghi lưu trên máy, chưa đánh dấu xong trên máy chủ.</p><ul>{queue.data.map((r) => <li key={r.id}>Việc {r.input.step_seq} · {r.input.done_on} · {r.input.state === "partial" ? "Làm tiếp" : "Hoàn tất"}{r.error ? ` · ${r.error}` : " · Chờ đồng bộ"}</li>)}</ul><button type="button" disabled={busy} onClick={() => void syncQueued()}>Đồng bộ nhật ký</button></section> : null}
+    {queue.error ? <ProblemAlert problem={queue.error} onRetry={queue.reload} /> : null}
     {data ? <>
       <p>Tiến độ: <strong>{data.progress.percent == null ? "—" : `${data.progress.percent}%`}</strong> · {data.progress.done}/{data.progress.total - data.progress.skipped} việc</p>
       {data.progress.stages.map((stage) => <section key={stage.seq} aria-label={stage.name}>
@@ -67,13 +94,16 @@ export function HouseholdChecklist({ coopRef, householdRef, seasonRef }: { coopR
           return <li key={task.seq}>
             {canWrite && task.can_complete ? <label><input type="checkbox" aria-label={`Hoàn thành ${task.name}`} checked={pending?.seq === task.seq} disabled={busy} onChange={() => { setError(null); setPending(pending?.seq === task.seq ? null : { seq: task.seq, name: task.name, event: data.current_event_id, key: newIdempotencyKey(), gps: captureGPS() }); }} /> {task.name}</label> : <span>{task.name}</span>}
             <span className="chip c-info">{LABEL[task.completion_status] ?? task.completion_status}</span>
+            {canWrite && task.can_complete && season ? <button type="button" disabled={busy} onClick={() => { setPending(null); setDetail(task); }}>Ghi chi tiết {task.name}</button> : null}
             {task.undated ? <span> · Chưa đặt ngày</span> : task.from_date ? <span> · {formatDate(task.from_date)}{task.to_date ? ` – ${formatDate(task.to_date)}` : " trở đi"}</span> : null}
             {record ? <span> · Làm xong {formatDate(record.done_on)}{record.gps_missing ? " · Thiếu GPS" : " · Đã ghi nhận vị trí"}{record.inputs.map((i) => ` · ${i.name}: ${i.qty} ${i.unit}`).join("")}</span> : null}
+            <ul>{data.records.filter((r) => r.step_seq === task.seq && r.details).map((r) => <li key={r.id}>{formatDate(r.done_on)} · {r.state === "partial" ? "Chưa xong, làm tiếp" : "Đã xong"}{r.details?.backfilled ? " · Ghi bù" : ""}{r.details?.actual_materials.map((m) => ` · ${m.name}: ${m.dose_per_ha} ${m.unit}/ha · tổng ${m.quantity} ${m.unit}`).join("")} · {r.note} · {r.file_refs?.length ?? 0} ảnh</li>)}</ul>
           </li>;
         })}</ul>
       </section>)}
       <button type="button" className="btn btn-o btn-sm" disabled={busy} onClick={() => { setPending(null); refresh(); }}>Tải lại checklist</button>
     </> : null}
+    {detail && season && data ? <HouseholdTaskDetail key={detail.seq} path={path} event={data.current_event_id} task={detail} season={season} onClose={() => setDetail(null)} onQueued={() => { setDetail(null); setQueueRevision((r) => r + 1); if (navigator.onLine) void syncQueued(); }} /> : null}
     {pending ? <div role="region" aria-label="Xác nhận hoàn thành" className="row" style={{ position: "sticky", bottom: 0, background: "var(--bg)", padding: 12, borderTop: "1px solid var(--line)", zIndex: 2 }}>
       <span>{pending.name} · Ngày làm xong: Hôm nay (giờ Việt Nam)</span>
       <button type="button" className="btn btn-o" disabled={busy} onClick={() => setPending(null)}>Hủy</button>

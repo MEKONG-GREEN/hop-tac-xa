@@ -28,6 +28,12 @@ type NativeHouseholdIdentityReader interface {
 	NativeHouseholdIdentity(context.Context, uuid.UUID) (HouseholdIdentity, error)
 }
 
+// NativeHouseholdPhotoKeys returns encryption-only public material after owner
+// authorization. It never grants identity resolution or DEK unwrapping.
+type NativeHouseholdPhotoKeys interface {
+	HouseholdPhotoKey(context.Context, uuid.UUID) ([]byte, error)
+}
+
 type NativeHouseholdCommandScope struct {
 	CommandRef       uuid.UUID `json:"command_ref"`
 	HouseholdRef     uuid.UUID `json:"household_ref"`

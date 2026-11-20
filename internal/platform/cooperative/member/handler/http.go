@@ -39,6 +39,7 @@ func (h Handler) RegisterApp(rg *gin.RouterGroup) {
 	rg.GET("/cooperatives/:ref/household-identity-scope", h.nativeHouseholdRegistrationScope)
 	rg.GET("/households/:ref/identity-scope", h.nativeHouseholdIdentityScope)
 	rg.GET("/households/:ref/profile", h.nativeHouseholdProfile)
+	rg.GET("/households/:ref/photo-key", h.householdPhotoKey)
 	rg.POST("/household-profiles", h.nativeCreateHousehold)
 	rg.POST("/households/:ref/profile/revisions", h.nativeUpdateHousehold)
 	rg.POST("/households/:ref/profile/deletions", h.nativeDeleteHousehold)

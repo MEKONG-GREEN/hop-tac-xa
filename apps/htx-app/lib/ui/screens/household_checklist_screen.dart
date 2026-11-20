@@ -3,6 +3,9 @@ import 'package:agrigreen_mobile/data/sync/sync_api.dart';
 import 'package:flutter/material.dart';
 
 import '../../application/household_season_service.dart';
+import 'household_task_detail_screen.dart';
+
+import 'package:agrigreen_mobile/domain/outbox_record.dart';
 
 const _labels = {
   'upcoming': 'Chưa đến hạn',
@@ -54,11 +57,46 @@ class _HouseholdChecklistScreenState extends State<HouseholdChecklistScreen> {
   _PendingTask? _pending;
   bool _busy = false;
   String? _error;
+  List<OutboxRecord> _queued = [];
   String get _season => widget.season['season_ref'] as String;
   @override
   void initState() {
     super.initState();
     _load = widget.service.checklist(widget.coop, widget.household, _season);
+    _loadPending();
+  }
+
+  Future<void> _loadPending() async {
+    final rows = await widget.service.pendingTasks(
+      widget.coop,
+      widget.household,
+      _season,
+    );
+    if (mounted) setState(() => _queued = rows);
+  }
+
+  Future<void> _detail(HouseholdJson task, HouseholdJson data) async {
+    final saved = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => HouseholdTaskDetailScreen(
+          service: widget.service,
+          coop: widget.coop,
+          household: widget.household,
+          season: widget.season,
+          task: task,
+          event: '${data['current_event_id']}',
+        ),
+      ),
+    );
+    if (saved == true && mounted) {
+      await _loadPending();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đã lưu trên máy — chờ đồng bộ.')),
+        );
+      }
+    }
   }
 
   void _reload() {
@@ -183,6 +221,19 @@ class _HouseholdChecklistScreenState extends State<HouseholdChecklistScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _header(),
+                if (data['offline_cache'] == true)
+                  const Text(
+                    'Đang xem bản đã lưu trên máy. Máy chủ sẽ kiểm lại khi đồng bộ.',
+                  ),
+                for (final r in _queued)
+                  ListTile(
+                    title: Text(
+                      'Việc ${r.payload['step_seq']} · ${r.status.label}',
+                    ),
+                    subtitle: Text(
+                      '${r.payload['done_on']} · ${r.payload['state'] == 'partial' ? 'Làm tiếp' : 'Hoàn tất'}${r.errorSummary.isEmpty ? '' : ' · ${r.errorSummary}'}',
+                    ),
+                  ),
                 Text(
                   'Tiến độ: ${progress['percent'] == null ? '—' : '${progress['percent']}%'}',
                 ),
@@ -289,11 +340,19 @@ class _HouseholdChecklistScreenState extends State<HouseholdChecklistScreen> {
       ],
     ];
     if (widget.canWrite && task['can_complete'] == true) {
-      return CheckboxListTile(
-        title: Text('${task['name']}'),
-        subtitle: Text(parts.join(' · ')),
-        value: _pending?.seq == task['seq'],
-        onChanged: _busy ? null : (_) => _select(task, data),
+      return Column(
+        children: [
+          CheckboxListTile(
+            title: Text('${task['name']}'),
+            subtitle: Text(parts.join(' · ')),
+            value: _pending?.seq == task['seq'],
+            onChanged: _busy ? null : (_) => _select(task, data),
+          ),
+          TextButton(
+            onPressed: _busy ? null : () => _detail(task, data),
+            child: Text('Ghi chi tiết ${task['name']}'),
+          ),
+        ],
       );
     }
     return ListTile(

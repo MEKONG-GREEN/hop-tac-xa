@@ -9,13 +9,14 @@ import (
 // State values partial/skipped support subsequent journal workflows; quick tick
 // only writes done. None of these records imply a journal review.
 type TaskRecord struct {
-	StepSeq       int       `json:"step_seq"`
-	StageSeq      int       `json:"stage_seq"`
-	State         string    `json:"state"`
-	DoneOn        string    `json:"done_on"`
-	SOPVersionID  uuid.UUID `json:"sop_version_id"`
-	SeasonEventID uuid.UUID `json:"season_event_id"`
-	Step          Step      `json:"step"`
+	StepSeq       int          `json:"step_seq"`
+	StageSeq      int          `json:"stage_seq"`
+	State         string       `json:"state"`
+	DoneOn        string       `json:"done_on"`
+	SOPVersionID  uuid.UUID    `json:"sop_version_id"`
+	SeasonEventID uuid.UUID    `json:"season_event_id"`
+	Step          Step         `json:"step"`
+	Details       *TaskDetails `json:"details,omitempty"`
 }
 
 type TaskProgress struct {

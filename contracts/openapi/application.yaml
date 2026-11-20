@@ -14260,6 +14260,40 @@ paths:
         "404": {$ref: "#/components/responses/Problem"}
         "409": {$ref: "#/components/responses/Problem"}
         "422": {$ref: "#/components/responses/Problem"}
+  /v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/task-records:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: household_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: season_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: recordHouseholdTask
+      summary: Ghi chi tiết việc và vật tư thực tế (AH-99)
+      description: Thành viên cùng HTX/Admin; Đại diện chỉ đọc. Một ngày làm xong; ghi nhiều lần partial trước khi done. Liều theo ha, tổng bằng liều nhân diện tích vụ; không đổi SOP. Ảnh phải do chính actor tải lên cho hộ, tối đa 5 ảnh, mỗi ảnh bản rõ không quá 1 MiB. Ghi bù quá 3 ngày cần lý do, trừ việc Không ngày. Không có cảnh báo lệch liều.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/HouseholdTaskDetailInput"}
+      responses:
+        "201":
+          description: Bản ghi chi tiết và checklist; replay trả bản ghi cũ
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [record, checklist]
+                properties:
+                  record: {$ref: "#/components/schemas/HouseholdTaskRecord"}
+                  checklist: {$ref: "#/components/schemas/HouseholdChecklist"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
   /v1/cooperatives/{ref}/season-calendars:
     parameters:
       - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
@@ -14322,6 +14356,28 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/SeasonCalendar"}
         default: {$ref: "#/components/responses/Problem"}
+  /v1/households/{ref}/photo-key:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: getHouseholdPhotoKey
+      summary: Khóa công khai để mã hóa ảnh nhật ký cho hộ (AH-99)
+      description: Chỉ người được ghi nhật ký; kiểm phạm vi HTX hiện tại trước và sau khi đọc khóa. Không cấp quyền giải mã hoặc đọc định danh.
+      responses:
+        "200":
+          description: Khóa X25519 32 byte dạng base64
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ref, public_key]
+                properties:
+                  ref: {type: string, format: uuid}
+                  public_key: {type: string, contentEncoding: base64}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
   /v1/cooperatives/{ref}/season-calendars/{calendar_ref}/cancel:
     parameters:
       - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
@@ -19232,7 +19288,7 @@ components:
       required: [device_id, platform, app_version]
       properties:
         device_id: {type: string, format: uuid, description: "UUIDv7 sinh trên máy"}
-        platform: {type: string, enum: [android, ios]}
+        platform: {type: string, enum: [android, ios, web], description: Web chỉ dùng ảnh và nhật ký hộ AH-99; không pull dữ liệu hiện trường}
         app_version: {type: string, pattern: "^[0-9A-Za-z.+_-]{1,40}$"}
     SyncDevice:
       type: object
@@ -19306,7 +19362,7 @@ components:
         event_time: {type: string, format: date-time, description: "Có múi giờ; không vượt quá giờ máy chủ + 5 phút"}
         supersedes_id: {type: [string, "null"], format: uuid, description: "Bắt buộc khi op = correct"}
         correction_reason: {type: [string, "null"], minLength: 10, maxLength: 500, description: "Bắt buộc khi op = correct"}
-        payload: {type: object, description: "Tối đa 256 KiB; máy chủ pf/sync chỉ lưu SHA-256"}
+        payload: {type: object, additionalProperties: true, description: "Tối đa 256 KiB; máy chủ pf/sync chỉ lưu SHA-256. Entity household_task_record dùng hợp đồng AH-99 trong docs/dev/sync-contract.md; máy chủ kiểm actor, tenant, HTX và quyền hiện tại."}
     SyncReportSubmissionPayload:
       type: object
       description: |
@@ -28355,6 +28411,52 @@ components:
         expected_season_event_id: {type: string, format: uuid}
         gps: {$ref: "#/components/schemas/CropGPS"}
         channel: {type: string, enum: [app, web], default: app}
+    HouseholdTaskDetailInput:
+      type: object
+      additionalProperties: false
+      required: [step_seq, expected_season_event_id, state, done_on, materials, file_refs]
+      properties:
+        step_seq: {type: integer, minimum: 1, maximum: 100}
+        expected_season_event_id: {type: string, format: uuid}
+        state: {type: string, enum: [partial, done]}
+        done_on: {type: string, format: date}
+        note: {type: string, maxLength: 2000}
+        backfill_reason: {type: string, maxLength: 500}
+        zero_confirmed: {type: boolean, default: false}
+        gps: {$ref: "#/components/schemas/CropGPS"}
+        channel: {type: string, enum: [app, web], default: app}
+        file_refs: {type: array, maxItems: 5, uniqueItems: true, items: {type: string, format: uuid}}
+        materials:
+          type: array
+          maxItems: 20
+          items:
+            type: object
+            required: [dose_per_ha]
+            properties:
+              material_code: {type: string}
+              name: {type: string, description: Chỉ dùng khi vật tư chưa có trong danh mục}
+              unit: {type: string}
+              dose_per_ha: {type: string, pattern: '^(0|[1-9][0-9]{0,8})(\.[0-9]{1,4})?$'}
+    HouseholdTaskDetails:
+      type: object
+      required: [actual_materials, backfilled, zero_confirmed]
+      properties:
+        backfilled: {type: boolean}
+        backfill_reason: {type: string}
+        zero_confirmed: {type: boolean}
+        actual_materials:
+          type: array
+          items:
+            type: object
+            required: [name, unit, dose_per_ha, quantity]
+            properties:
+              material_code: {type: string}
+              name: {type: string}
+              unit: {type: string}
+              group: {type: string}
+              fertilizer_type: {type: string}
+              dose_per_ha: {$ref: "#/components/schemas/Decimal"}
+              quantity: {type: string, description: Tổng thực tế chính xác bằng liều nhân diện tích một lần; tối đa sáu chữ số lẻ}
     HouseholdTaskRecord:
       type: object
       required: [id, log_ref, step_seq, state, done_on, sop_version_id, inputs, gps_missing, gps, actor_ref, event_time, recorded_at]
@@ -28379,6 +28481,9 @@ components:
         actor_ref: {type: string, format: uuid}
         event_time: {type: string, format: date-time}
         recorded_at: {type: string, format: date-time}
+        details: {$ref: "#/components/schemas/HouseholdTaskDetails"}
+        note: {type: string}
+        file_refs: {type: array, items: {type: string, format: uuid}}
     HouseholdTaskProgress:
       allOf:
         - {$ref: "#/components/schemas/SeasonScheduleStep"}

@@ -15,6 +15,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/MEKONG-GREEN/hop-tac-xa/contracts/htxroles"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
@@ -588,13 +590,35 @@ func (s *Service) PubKeysPage(ctx context.Context, areas []string, after uuid.UU
 // HouseholdPubKeys trả khóa công khai của các nông hộ chưa xóa theo ref (client.Client).
 // Vai farmer chỉ đọc được theo ref, không liệt kê theo địa bàn; ref lạ/đã xóa/người → bỏ qua.
 func (s *Service) HouseholdPubKeys(ctx context.Context, refs []uuid.UUID) ([]client.PubKey, error) {
-	p, err := authz.Require(ctx, append(slices.Clone(pubKeyRoles), client.RoleFarmer)...)
+	p, err := authz.Require(ctx, append(slices.Clone(pubKeyRoles), client.RoleFarmer, htxroles.Member, htxroles.Admin)...)
 	if err != nil {
 		return nil, err
 	}
 	refs = slices.Compact(slices.SortedFunc(slices.Values(refs), func(a, b uuid.UUID) int { return strings.Compare(a.String(), b.String()) }))
 	if len(refs) == 0 || len(refs) > client.MaxPubKeyRefs {
 		return nil, problem.Validation.WithField("ref", fmt.Sprintf("cần 1–%d mã chủ thể", client.MaxPubKeyRefs))
+	}
+	// Native HTX callers do not inherit a Vault role. Every requested reference
+	// needs current owner proof on both sides of the short key-read transaction.
+	native := !slices.ContainsFunc(append(slices.Clone(pubKeyRoles), client.RoleFarmer), p.Has)
+	scopes := map[uuid.UUID]client.HouseholdIdentityScope{}
+	if native {
+		if !htxroles.Allows(p.Has, "KHMV-FN-05", htxroles.Create) {
+			return nil, problem.Forbidden
+		}
+		if p.Has(htxroles.Admin) && !p.MFA {
+			return nil, problem.MFARequired
+		}
+		if !p.Has(htxroles.Admin) && p.OrgRef == uuid.Nil {
+			return nil, problem.NodeScopeRequired
+		}
+		for _, ref := range refs {
+			scope, e := s.householdReadScope(ctx, p, ref)
+			if e != nil {
+				return nil, e
+			}
+			scopes[ref] = scope
+		}
 	}
 	var rows []store.PubKey
 	err = tenant.WithTenantTx(ctx, s.DB, p.TenantID, func(tx pgx.Tx) error {
@@ -604,6 +628,18 @@ func (s *Service) HouseholdPubKeys(ctx context.Context, refs []uuid.UUID) ([]cli
 	})
 	if err != nil {
 		return nil, err
+	}
+	if native {
+		for _, ref := range refs {
+			latest, e := s.householdReadScope(ctx, p, ref)
+			if e != nil {
+				return nil, e
+			}
+			old := scopes[ref]
+			if latest.CooperativeRef != old.CooperativeRef {
+				return nil, client.ProblemHouseholdScopeUnavailable
+			}
+		}
 	}
 	out := make([]client.PubKey, 0, len(rows))
 	for _, r := range rows {

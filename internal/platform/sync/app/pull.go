@@ -62,6 +62,9 @@ func (s *Service) PullEntitiesOnly(ctx context.Context, deviceHeader, cursor str
 	if err != nil {
 		return PullResult{}, err
 	}
+	if dev.Platform == "web" {
+		return PullResult{}, problem.Forbidden.WithDetail("Thiết bị Web không dùng đồng bộ dữ liệu hiện trường")
+	}
 	var filter map[string]bool
 	if len(only) > 0 {
 		known := s.PullEntities()

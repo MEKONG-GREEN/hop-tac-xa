@@ -201,6 +201,7 @@ func Build(ctx context.Context, open PoolOpener, clk clock.Clock, ext External) 
 	// W6.5: cap/evidence sở hữu pf_files — route /v1/files của pf/sync gọi port.Files; chủ thể pf/cooperative.
 	ev := wireEvidence(unit, clk, evidence.Deps{Store: store, Vault: ext.Vault, Scope: pty.ScopeResolver(),
 		Consent: pty.ConsentChecker()}, coop.Resolve())
+	coop.UseTaskImages(ev.OwnedImages())
 	snc := syncmod.New(unit, clk, syncmod.Deps{
 		Scope: pty.ScopeResolver(), Params: md.Params(), Vault: ext.Vault,
 		Files: ev.Files(), CursorKey: cursorKey(ext),

@@ -330,6 +330,45 @@ Chỉ người gọi là CẤP LÁ của một profile (`kn_cnts`: vai `kn_xa` p
 
 `catalog_item` (pf/masterdata) từ W11.42 gồm cả 12 danh mục CNTS `cnts_*` (giá trị hiện hành; `attrs` như `GET /v1/masterdata/catalogs/{catalog}`).
 
+## Nhật ký việc theo hộ — AH-99
+
+`household_task_record`, `op=create`, dùng luồng vụ theo hộ của AH-88. Không mở
+`season_open`, `farm_log` hoặc pull toàn HTX cho Thành viên. Mở/sửa/dừng vụ vẫn
+là API online. Gói AH-99 tạo bản ghi chi tiết; sửa/xóa phiên bản nhật ký thuộc
+luồng tiếp theo, không được biến thành ghi đè hoặc xóa sổ.
+
+Payload có `recorded_by`, `tenant_id` (phải khớp token hiện tại),
+`cooperative_ref`, `household_ref`, `season_ref`, `expected_season_event_id`,
+`step_seq`, `state` (`partial` hoặc `done`), `done_on` (một ngày), `materials`,
+`file_refs`; tùy chọn `note`, `backfill_reason`, `zero_confirmed`, `gps`,
+`channel` (`app`/`web`). Các trường nghiệp vụ theo `HouseholdTaskDetailInput`.
+Máy chủ kiểm lại ma trận KHMV-FN-05 và phạm vi HTX; không tin vai trò trong
+payload. Hai vai Đại diện + Thành viên vẫn chỉ đọc theo ma trận hiện hành.
+
+`event_time` lấy từ giờ thiết bị lúc xếp hàng; `recorded_at` do PostgreSQL ghi
+khi nhận. Ngày làm xong không sau ngày ghi hoặc ngày hiện tại máy chủ. Ghi bù
+quá ba ngày so với ngày ghi cần lý do, trừ việc Không ngày. Vật tư chọn từ danh
+mục; snapshot lưu mã/nhóm/đơn vị, liều/ha và tổng bằng liều nhân diện tích vụ
+đúng một lần (nguồn chính xác tối đa sáu chữ số lẻ). Liều bằng không cần xác
+nhận. Không còn ngưỡng/nhãn lệch liều SOP theo KH-09 ngày 13/11/2026.
+
+Ảnh chụp trực tiếp, tối đa năm ảnh, mỗi bản rõ sau nén và đóng dấu tối đa
+1 MiB; phong bì thêm tag 16 byte. Tải ảnh mã hóa trước push, giữ nguyên
+`file_ref` và ciphertext khi thử lại. Server chỉ nhận ảnh cùng actor, tenant và
+chủ thể hộ, MIME ảnh và có thời điểm chụp. Cổng kiểm biên nhận không mở ảnh hay
+cấp quyền Vault. Lấy khóa mã hóa qua `GET /v1/households/{ref}/photo-key`: owner
+scope được kiểm trước và sau đọc khóa, không mở Resolve/Unwrap hoặc liệt kê
+khóa theo địa bàn. Metadata ảnh có GPS nên không ghi vào log.
+
+Mobile lưu hàng đợi và checklist/danh mục đã tải trong SQLCipher, cache theo
+tenant + actor + HTX hiện tại + đường dẫn. Lỗi quyền không được dùng lại cache cũ. Web lưu
+bản ghi chờ trong IndexedDB với AES-GCM và khóa không xuất được, tách tài khoản;
+chỉ lưu ciphertext ảnh. Thu hồi thiết bị xóa hàng đợi, cache và khóa cục bộ của
+đúng tài khoản/HTX đó. Thiết bị Web chỉ push entity này, không pull dữ liệu
+hiện trường. Nhật ký chờ/bị từ chối hiển thị riêng, không giả là máy chủ đã nhận.
+Web cần tải ứng dụng và mở vụ trước khi mất mạng; gói này không thêm service
+worker để khởi động ứng dụng khi trình duyệt chưa có mạng.
+
 ## Tệp minh chứng
 
 `POST /v1/files` (multipart, Idempotency-Key):

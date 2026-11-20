@@ -1,6 +1,7 @@
 import 'package:agrigreen_mobile/core/clock.dart';
 import 'package:agrigreen_mobile/core/ids.dart';
 import 'package:agrigreen_mobile/data/catalog/catalog_cache.dart';
+import 'package:agrigreen_mobile/data/db/local_db.dart';
 import 'package:agrigreen_mobile/data/files/evidence_repository.dart';
 import 'package:agrigreen_mobile/data/outbox/outbox_repository.dart';
 import 'package:agrigreen_mobile/data/photo/location_source.dart';
@@ -132,7 +133,14 @@ class CropService {
   HouseholdSeasonService get householdSeasons {
     final api = _api;
     if (api == null) throw CropError('Mở vụ theo hộ cần kết nối mạng.');
-    return HouseholdSeasonService(api: api, location: _location);
+    return HouseholdSeasonService(
+      api: api,
+      location: _location,
+      db: _nativeDb,
+      outbox: _outbox,
+      refs: _refs,
+      journalContext: _profile.journalContext,
+    );
   }
 
   CropService({
@@ -145,7 +153,9 @@ class CropService {
     required IdGenerator ids,
     SyncApi? api,
     EvidenceRepository? evidence,
-  }) : _api = api,
+    LocalDb? nativeDb,
+  }) : _nativeDb = nativeDb,
+       _api = api,
        _evidence = evidence,
        _outbox = outbox,
        _refs = refs,
@@ -156,6 +166,7 @@ class CropService {
        _ids = ids;
 
   final OutboxRepository _outbox;
+  final LocalDb? _nativeDb;
   final ReferenceRepository _refs;
   final CatalogCache _catalogs;
   final ProfileService _profile;

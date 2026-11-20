@@ -152,7 +152,7 @@ export function HouseholdSeasonsDialog({ coopRef, household, calendarPrefill, on
       <p>{detail.sop_snapshot.anchor_name}: {detail.anchor_date} · {detail.gps_missing ? "Thiếu GPS" : "Đã ghi nhận vị trí"}</p>
       <p>SOP bản {detail.sop_snapshot.version_no} · Diện tích {formatDecimal(detail.area_ha, 2)} ha</p>
       <ol>{detail.sop_snapshot.steps.map((step, i) => <li key={i}>{step.name}</li>)}</ol>
-      <HouseholdChecklist key={detail.season_ref} coopRef={coopRef} householdRef={household.household_ref} seasonRef={detail.season_ref} />
+      <HouseholdChecklist key={detail.season_ref} coopRef={coopRef} householdRef={household.household_ref} seasonRef={detail.season_ref} season={detail} />
       {detailPlan.loading ? <Loading label="Đang tải kế hoạch…" /> : detailPlan.error ? <ProblemAlert problem={detailPlan.error} onRetry={detailPlan.reload} /> : detailPlan.data ? <SeasonPlan plan={detailPlan.data} /> : null}
     </section> : null}
   </Dialog>;
