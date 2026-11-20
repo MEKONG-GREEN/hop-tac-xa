@@ -247,6 +247,7 @@ class HtxServices {
       watermarker: pf.watermarker,
     );
     final crop = CropService(
+      nativeDb: db,
       outbox: outbox,
       refs: refs,
       catalogs: catalogs,

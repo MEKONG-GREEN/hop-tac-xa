@@ -53,6 +53,17 @@ func Households(c client.Client) port.HouseholdIdentities {
 
 type households struct{ c client.Client }
 
+func (h households) HouseholdPhotoKey(ctx context.Context, ref uuid.UUID) ([]byte, error) {
+	keys, err := h.c.HouseholdPubKeys(ctx, []uuid.UUID{ref})
+	if err != nil {
+		return nil, err
+	}
+	if len(keys) != 1 || keys[0].Ref != ref || len(keys[0].PublicKey) != 32 {
+		return nil, port.ErrIdentityNotFound
+	}
+	return keys[0].PublicKey, nil
+}
+
 func (h households) WriteNativeHouseholdIdentity(ctx context.Context, command uuid.UUID, id port.HouseholdIdentity) error {
 	w, ok := h.c.(client.HouseholdIdentityWriter)
 	if !ok {

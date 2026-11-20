@@ -1,6 +1,13 @@
 import 'package:agrigreen_mobile/data/photo/location_source.dart';
 import 'package:agrigreen_mobile/data/sync/sync_api.dart';
 
+import 'dart:convert';
+
+import 'package:agrigreen_mobile/data/db/local_db.dart';
+import 'package:agrigreen_mobile/data/outbox/outbox_repository.dart';
+import 'package:agrigreen_mobile/data/reference/reference_repository.dart';
+import 'package:agrigreen_mobile/domain/outbox_record.dart';
+
 import '../domain/season_plan.dart';
 
 typedef HouseholdJson = Map<String, Object?>;
@@ -56,11 +63,119 @@ String? householdAreaError(String raw) {
   return null;
 }
 
-/// Online-only household operations. Deliberately has no outbox dependency.
+/// Season commands remain online-only. Detailed journals use the native
+/// outbox capability; cached checklists live in SQLCipher and are actor scoped.
 class HouseholdSeasonService {
-  const HouseholdSeasonService({required this.api, required this.location});
+  const HouseholdSeasonService({
+    required this.api,
+    required this.location,
+    this.db,
+    this.outbox,
+    this.refs,
+    this.journalContext,
+  });
   final SyncApi api;
   final LocationSource location;
+  final LocalDb? db;
+  final OutboxRepository? outbox;
+  final ReferenceRepository? refs;
+  final Future<HouseholdJson> Function()? journalContext;
+
+  Future<String?> _cacheKey(String path) async {
+    HouseholdJson? context;
+    try {
+      context = await journalContext?.call();
+    } on StateError {
+      return null;
+    }
+    return context == null
+        ? null
+        : 'native.journal.${context['tenant_id']}.${context['recorded_by']}.${context['org_ref']}.$path';
+  }
+
+  Future<HouseholdJson> _cachedGet(String path) async {
+    final key = await _cacheKey(path);
+    try {
+      final value = await api.getJson(path);
+      if (key != null) await db?.setMeta(key, jsonEncode(value));
+      return value;
+    } catch (e) {
+      if (e is ApiException && e.status < 500) {
+        if (key != null) await db?.setMeta(key, null);
+        rethrow;
+      }
+      final raw = key == null ? null : await db?.getMeta(key);
+      if (raw == null) rethrow;
+      return {
+        ...(jsonDecode(raw) as Map).cast<String, Object?>(),
+        'offline_cache': true,
+      };
+    }
+  }
+
+  Future<void> preparePhotoKey(String household) async {
+    final repository = refs;
+    if (repository == null) throw StateError('Chưa nối kho khóa ảnh.');
+    final value = await _cachedGet('/v1/households/$household/photo-key');
+    final key = decodePublicKey('${value['public_key']}');
+    if (key == null) throw StateError('Khóa ảnh không hợp lệ.');
+    await repository.cachePhotoKey(household, key);
+  }
+
+  Future<OutboxRecord> recordTask(
+    String coop,
+    String household,
+    String season,
+    HouseholdJson body,
+  ) async {
+    final queue = outbox;
+    final identity = await journalContext?.call();
+    if (queue == null || identity == null) {
+      throw StateError('Chưa nối hàng đợi nhật ký.');
+    }
+    if (identity['org_ref'] != coop) {
+      throw StateError('Nhật ký không thuộc HTX hiện tại.');
+    }
+    return queue.enqueue(
+      entity: PushEntity.householdTaskRecord,
+      payload: {
+        ...body,
+        'recorded_by': identity['recorded_by'],
+        'tenant_id': identity['tenant_id'],
+        'cooperative_ref': coop,
+        'household_ref': household,
+        'season_ref': season,
+      },
+    );
+  }
+
+  Future<List<OutboxRecord>> pendingTasks(
+    String coop,
+    String household,
+    String season,
+  ) async {
+    HouseholdJson? identity;
+    try {
+      identity = await journalContext?.call();
+    } on StateError {
+      return [];
+    }
+    final current = identity;
+    if (current == null || outbox == null) return [];
+    if (current['org_ref'] != coop) return [];
+    return (await outbox!.list(entity: PushEntity.householdTaskRecord))
+        .where(
+          (r) =>
+              r.payload['recorded_by'] == current['recorded_by'] &&
+              r.payload['tenant_id'] == current['tenant_id'] &&
+              r.payload['cooperative_ref'] == coop &&
+              r.payload['household_ref'] == household &&
+              r.payload['season_ref'] == season &&
+              r.status != OutboxStatus.sent &&
+              r.status != OutboxStatus.superseded,
+        )
+        .toList();
+  }
 
   Future<List<HouseholdJson>> calendars(String coop) => _pages(
     '/v1/cooperatives/${Uri.encodeComponent(coop)}/season-calendars',
@@ -74,9 +189,20 @@ class HouseholdSeasonService {
     String coop,
     String household,
     String season,
-  ) => api.getJson(
-    '/v1/cooperatives/$coop/households/$household/seasons/$season/checklist',
-  );
+  ) async {
+    final value = await _cachedGet(
+      '/v1/cooperatives/$coop/households/$household/seasons/$season/checklist',
+    );
+    if (refs != null && value['offline_cache'] != true) {
+      try {
+        await preparePhotoKey(household);
+      } catch (_) {
+        // A missing encryption dependency blocks camera capture, not the
+        // journal itself. PhotoCapture reports it before opening the camera.
+      }
+    }
+    return value;
+  }
 
   Future<HouseholdJson> completeTask(
     String coop,
@@ -140,9 +266,25 @@ class HouseholdSeasonService {
   }
 
   Future<List<HouseholdJson>> catalog(String catalog) =>
-      _pages('/v1/masterdata/catalogs/$catalog');
+      _cachedPages('/v1/masterdata/catalogs/$catalog');
   Future<List<HouseholdJson>> seasons(String coop, String household) =>
-      _pages('/v1/cooperatives/$coop/households/$household/seasons');
+      _cachedPages('/v1/cooperatives/$coop/households/$household/seasons');
+
+  Future<List<HouseholdJson>> _cachedPages(String path) async {
+    final key = await _cacheKey('pages:$path');
+    try {
+      final items = await _pages(path);
+      if (key != null) await db?.setMeta(key, jsonEncode(items));
+      return items;
+    } catch (e) {
+      if (e is! NetworkException) rethrow;
+      final raw = key == null ? null : await db?.getMeta(key);
+      if (raw == null) rethrow;
+      return (jsonDecode(raw) as List)
+          .map((v) => (v as Map).cast<String, Object?>())
+          .toList();
+    }
+  }
 
   Future<List<HouseholdSopChoice>> sops(
     String coop,

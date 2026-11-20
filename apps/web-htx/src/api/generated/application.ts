@@ -10219,6 +10219,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/task-records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ghi chi tiết việc và vật tư thực tế (AH-99)
+         * @description Thành viên cùng HTX/Admin; Đại diện chỉ đọc. Một ngày làm xong; ghi nhiều lần partial trước khi done. Liều theo ha, tổng bằng liều nhân diện tích vụ; không đổi SOP. Ảnh phải do chính actor tải lên cho hộ, tối đa 5 ảnh, mỗi ảnh bản rõ không quá 1 MiB. Ghi bù quá 3 ngày cần lý do, trừ việc Không ngày. Không có cảnh báo lệch liều.
+         */
+        post: operations["recordHouseholdTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/cooperatives/{ref}/season-calendars": {
         parameters: {
             query?: never;
@@ -10253,6 +10277,28 @@ export interface paths {
         put?: never;
         /** Sửa lịch đã phát và xếp thông báo mới */
         post: operations["reviseSeasonCalendar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/households/{ref}/photo-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Khóa công khai để mã hóa ảnh nhật ký cho hộ (AH-99)
+         * @description Chỉ người được ghi nhật ký; kiểm phạm vi HTX hiện tại trước và sau khi đọc khóa. Không cấp quyền giải mã hoặc đọc định danh.
+         */
+        get: operations["getHouseholdPhotoKey"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -13992,8 +14038,11 @@ export interface components {
              * @description UUIDv7 sinh trên máy
              */
             device_id: string;
-            /** @enum {string} */
-            platform: "android" | "ios";
+            /**
+             * @description Web chỉ dùng ảnh và nhật ký hộ AH-99; không pull dữ liệu hiện trường
+             * @enum {string}
+             */
+            platform: "android" | "ios" | "web";
             app_version: string;
         };
         SyncDevice: {
@@ -14109,8 +14158,10 @@ export interface components {
             supersedes_id?: string | null;
             /** @description Bắt buộc khi op = correct */
             correction_reason?: string | null;
-            /** @description Tối đa 256 KiB; máy chủ pf/sync chỉ lưu SHA-256 */
-            payload: Record<string, never>;
+            /** @description Tối đa 256 KiB; máy chủ pf/sync chỉ lưu SHA-256. Entity household_task_record dùng hợp đồng AH-99 trong docs/dev/sync-contract.md; máy chủ kiểm actor, tenant, HTX và quyền hiện tại. */
+            payload: {
+                [key: string]: unknown;
+            };
         };
         /**
          * @description KN v7.7 P7 (N-07): payload của bản ghi push entity = report_submission (Sink của pf/extension, ngữ cảnh Cấp Xã
@@ -24279,6 +24330,48 @@ export interface components {
              */
             channel: "app" | "web";
         };
+        HouseholdTaskDetailInput: {
+            step_seq: number;
+            /** Format: uuid */
+            expected_season_event_id: string;
+            /** @enum {string} */
+            state: "partial" | "done";
+            /** Format: date */
+            done_on: string;
+            note?: string;
+            backfill_reason?: string;
+            /** @default false */
+            zero_confirmed: boolean;
+            gps?: components["schemas"]["CropGPS"];
+            /**
+             * @default app
+             * @enum {string}
+             */
+            channel: "app" | "web";
+            file_refs: string[];
+            materials: {
+                material_code?: string;
+                /** @description Chỉ dùng khi vật tư chưa có trong danh mục */
+                name?: string;
+                unit?: string;
+                dose_per_ha: string;
+            }[];
+        };
+        HouseholdTaskDetails: {
+            backfilled: boolean;
+            backfill_reason?: string;
+            zero_confirmed: boolean;
+            actual_materials: {
+                material_code?: string;
+                name: string;
+                unit: string;
+                group?: string;
+                fertilizer_type?: string;
+                dose_per_ha: components["schemas"]["Decimal"];
+                /** @description Tổng thực tế chính xác bằng liều nhân diện tích một lần; tối đa sáu chữ số lẻ */
+                quantity: string;
+            }[];
+        };
         HouseholdTaskRecord: {
             /** Format: uuid */
             id: string;
@@ -24304,6 +24397,9 @@ export interface components {
             event_time: string;
             /** Format: date-time */
             recorded_at: string;
+            details?: components["schemas"]["HouseholdTaskDetails"];
+            note?: string;
+            file_refs?: string[];
         };
         HouseholdTaskProgress: components["schemas"]["SeasonScheduleStep"] & {
             /** @enum {string} */
@@ -49086,6 +49182,46 @@ export interface operations {
             422: components["responses"]["Problem"];
         };
     };
+    recordHouseholdTask: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HouseholdTaskDetailInput"];
+            };
+        };
+        responses: {
+            /** @description Bản ghi chi tiết và checklist; replay trả bản ghi cũ */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        record: components["schemas"]["HouseholdTaskRecord"];
+                        checklist: components["schemas"]["HouseholdChecklist"];
+                    };
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
     listSeasonCalendars: {
         parameters: {
             query?: {
@@ -49173,6 +49309,36 @@ export interface operations {
                 };
             };
             default: components["responses"]["Problem"];
+        };
+    };
+    getHouseholdPhotoKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Khóa X25519 32 byte dạng base64 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        ref: string;
+                        public_key: string;
+                    };
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
         };
     };
     cancelSeasonCalendar: {

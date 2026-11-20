@@ -3,7 +3,7 @@ import { createApiClient, unwrap } from "@/api/client";
 import { newIdempotencyKey } from "@/api/idempotency";
 import { htxCoop } from "./data";
 import { mockFetchNoDelay } from "./handler";
-import { mockToken } from "./personas";
+import { MOCK_PERSONAS, mockToken } from "./personas";
 import { scaledArea } from "./household-season-state";
 
 describe("AH-61 mock route registration and budget", () => {
@@ -55,4 +55,30 @@ describe("AH-61 mock route registration and budget", () => {
     const deniedTick = await representative.POST("/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/task-completions", { params: { path: taskPath, header: { "Idempotency-Key": newIdempotencyKey() } }, body: tick });
     expect(deniedTick.response.status).toBe(403);
   });
+  it("AH-99 native detail and offline sync preserve actuals, partial work, and replay", async () => {
+    const client = (persona: string) => createApiClient({ baseUrl: "https://api.test", getAccessToken: () => mockToken(persona), fetch: mockFetchNoDelay });
+    const api = client("htx-member"), coop = htxCoop().api.ref;
+    const households = await unwrap(api.GET("/v1/cooperatives/{ref}/households", { params: { path: { ref: coop }, query: { limit: 200 } } }));
+    const household = households.items.find((h) => h.can_open_season && scaledArea(h.remaining_area_ha ?? "0") >= 100n)!;
+    const base = { ref: coop, household_ref: household.household_ref };
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(new Date());
+    const opened = await unwrap(api.POST("/v1/cooperatives/{ref}/households/{household_ref}/seasons", { params: { path: base, header: { "Idempotency-Key": newIdempotencyKey() } }, body: { crop_code: "LUA", season_code: "DX", season_year: 2026, variety_code: "OM5451", area_ha: "0.01", anchor_date: today, channel: "web", gps: { source: "denied" } } }));
+    const path = { ...base, season_ref: opened.season.season_ref };
+    const before = await unwrap(api.GET("/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/checklist", { params: { path } }));
+    const task = before.progress.stages.flatMap((s) => s.tasks).find((t) => t.can_complete)!;
+    const body = { expected_season_event_id: before.current_event_id, step_seq: task.seq, state: "partial" as const, done_on: today, channel: "web" as const, zero_confirmed: false, materials: [{ name: "Vật tư chi tiết thử nghiệm", unit: "kg", dose_per_ha: "1.2345" }], file_refs: [], gps: { source: "denied" as const } };
+    const first = await unwrap(api.POST("/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/task-records", { params: { path, header: { "Idempotency-Key": newIdempotencyKey() } }, body }));
+    expect(first.checklist.progress.done).toBe(0); expect(first.record.details?.actual_materials[0]?.quantity).toBe("0.012345");
+    const persona = MOCK_PERSONAS.find((p) => p.id === "htx-member")!, device = newIdempotencyKey(), id = newIdempotencyKey();
+    await unwrap(api.POST("/v1/devices", { params: { header: { "Idempotency-Key": newIdempotencyKey() } }, body: { device_id: device, platform: "web", app_version: "test-ah99" } }));
+    const batch = { device_id: device, records: [{ id, idem_key: `dev:${device}:1`, entity: "household_task_record", op: "create" as const, event_time: new Date().toISOString(), payload: { ...body, recorded_by: persona.me.actor_ref, tenant_id: persona.me.tenant_id, cooperative_ref: coop, household_ref: path.household_ref, season_ref: path.season_ref } }] };
+    const push = () => unwrap(api.POST("/v1/sync/push", { params: { header: { "Idempotency-Key": newIdempotencyKey(), "X-Device-Id": device } }, body: batch }));
+    expect((await push()).results[0]?.status).toBe("accepted"); expect((await push()).results[0]?.status).toBe("duplicate");
+    const zero = { ...body, state: "done" as const, materials: [{ ...body.materials[0]!, dose_per_ha: "0" }] };
+    const deniedZero = await api.POST("/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/task-records", { params: { path, header: { "Idempotency-Key": newIdempotencyKey() } }, body: zero });
+    expect(deniedZero.response.status).toBe(409);
+    const done = await unwrap(api.POST("/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/task-records", { params: { path, header: { "Idempotency-Key": newIdempotencyKey() } }, body: { ...zero, zero_confirmed: true } }));
+    expect(done.checklist.records).toHaveLength(3); expect(done.checklist.progress.done).toBe(1);
+    const after = await unwrap(api.GET("/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}", { params: { path } })); expect(after.sop_snapshot).toEqual(opened.season.sop_snapshot);
+  }, 15000);
 });

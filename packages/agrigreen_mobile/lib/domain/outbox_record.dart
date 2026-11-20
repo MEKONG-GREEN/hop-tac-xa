@@ -17,6 +17,7 @@ abstract final class PushEntity {
 
   /// G2 pf/cropcycle: nhật ký canh tác (HTX US-LOG-01/02/04).
   static const farmLog = 'farm_log';
+  static const householdTaskRecord = 'household_task_record';
 
   /// G2 pf/cropcycle: nhật ký hàng loạt — một đầu lô (HTX US-LOG-03).
   static const farmLogBatch = 'farm_log_batch';
@@ -50,6 +51,7 @@ abstract final class PushEntity {
   static const g2 = {
     seasonOpen,
     farmLog,
+    householdTaskRecord,
     farmLogBatch,
     harvest,
     supportRequest,

@@ -15,11 +15,17 @@ import (
 )
 
 func taskRecordOut(l store.FarmLog) gin.H {
-	return gin.H{
+	out := gin.H{
 		"id": l.ID, "log_ref": l.LogRef, "step_seq": l.TaskCompletion.StepSeq, "state": l.TaskCompletion.State, "done_on": l.TaskCompletion.DoneOn,
 		"sop_version_id": l.TaskCompletion.SOPVersionID, "inputs": l.Inputs, "gps_missing": !l.GPS.HasPoint(), "gps": gpsOut(l.GPS),
 		"actor_ref": l.ActorRef, "event_time": ts(l.EventTime), "recorded_at": ts(l.RecordedAt),
 	}
+	if d := l.TaskCompletion.Details; d != nil {
+		out["details"] = gin.H{"actual_materials": d.ActualMaterials, "backfilled": d.Backfilled, "backfill_reason": d.BackfillReason, "zero_confirmed": d.ZeroConfirmed}
+		out["note"] = l.Note
+		out["file_refs"] = l.FileRefs
+	}
+	return out
 }
 func checklistOut(c app.HouseholdChecklist) gin.H {
 	records := []gin.H{}

@@ -1,15 +1,56 @@
 import type { components } from "../generated/application";
 import { uuidv7 } from "../idempotency";
-import { findCoop } from "./data";
+import { CATALOGS, findCoop } from "./data";
+import type { MockPersona } from "./personas";
 import { householdMockSOPs } from "./cropcycle";
 import { householdMockRows } from "./htx-gaps";
 import { allocateHouseholdMock, scaledArea } from "./household-season-state";
-import { hasRole, json, nowIso, paginate, problem, validation, type Route } from "./http";
+import { hasRole, json, nowIso, paginate, problem, problemOf, validation, type Route } from "./http";
 
 type Season = components["schemas"]["HouseholdSeason"];
 type TaskRecord = components["schemas"]["HouseholdTaskRecord"];
 const seasons: Season[] = [];
 const taskRecords = new Map<string, TaskRecord[]>();
+const journalDevices = new Map<string, string>();
+const nativeJournalReceipts = new Map<string, string>();
+
+const journalWriter = (p: MockPersona) => hasRole(p, "platform_admin") || (hasRole(p, "htx_member") && !hasRole(p, "coop_manager"));
+
+function mockTaskDetail(p: MockPersona, coop: string, household: string, season: string, b: components["schemas"]["HouseholdTaskDetailInput"], id = uuidv7(), at = nowIso()): Response | { record: TaskRecord; checklist: components["schemas"]["HouseholdChecklist"] } {
+  if (!journalWriter(p)) return problem(403, "cropcycle.read_only", "Vai của bạn chỉ được xem");
+  const s = seasons.find((s) => s.cooperative_ref === coop && s.household_ref === household && s.season_ref === season);
+  if (!s || (!hasRole(p, "platform_admin") && p.me.org?.ref !== coop)) return problem(404, "cropcycle.season_not_found", "Không tìm thấy vụ");
+  const checklist = mockChecklist(s, true);
+  const old = checklist.records.find((r) => r.id === id);
+  const receipt = `${p.me.actor_ref}:${id}`; const fingerprint = JSON.stringify({ coop, household, season, b, at });
+  if (old) return nativeJournalReceipts.get(receipt) === fingerprint ? { record: old, checklist } : problem(409, "idempotency_key_reused", "Nội dung ghi lại đã thay đổi");
+  if (b.expected_season_event_id !== s.current_event_id) return problem(409, "cropcycle.task_season_changed", "Vụ đã thay đổi");
+  const task = checklist.progress.stages.flatMap((s) => s.tasks).find((t) => t.seq === b.step_seq);
+  if (!task) return validation([{ field: "step_seq", reason: "Việc không thuộc snapshot" }]);
+  if (task.done_on) return problem(409, "cropcycle.task_already_resolved", "Việc đã xong");
+  if (!task.can_complete) return problem(422, "cropcycle.task_season_state", "Vụ hoặc giai đoạn không cho ghi");
+  const createdDay = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(new Date(at));
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(b.done_on) || !Number.isFinite(Date.parse(b.done_on)) || b.done_on > checklist.progress.as_of_date || b.done_on > createdDay || !["partial", "done"].includes(b.state)) return validation([{ field: "done_on", reason: "Ngày hoặc kết quả ghi việc không hợp lệ" }]);
+  const backfilled = !task.undated && b.done_on < new Date(Date.parse(`${createdDay}T00:00:00Z`) - 3 * 86400000).toISOString().slice(0, 10);
+  if (backfilled && !b.backfill_reason?.trim()) return validation([{ field: "backfill_reason", reason: "Nhập lý do ghi bù quá 3 ngày" }]);
+  if (b.file_refs?.length) return problem(503, "sync.dependency_unavailable", "Chế độ giả lập chưa nối kho ảnh mã hóa");
+  const step = s.sop_snapshot.steps.find((t) => t.seq === b.step_seq)!;
+  if ((step.materials?.length && !b.materials?.length) && !b.zero_confirmed) return problem(409, "cropcycle.task_zero_confirmation_required", "Xác nhận không dùng vật tư khuyến cáo");
+  const actual: components["schemas"]["HouseholdTaskDetails"]["actual_materials"] = [];
+  for (const m of b.materials ?? []) {
+    if (!/^(0|[1-9][0-9]{0,8})(\.[0-9]{1,4})?$/.test(m.dose_per_ha)) return validation([{ field: "materials", reason: "Liều không âm, tối đa bốn chữ số lẻ" }]);
+    if (scaledArea(m.dose_per_ha) === 0n && !b.zero_confirmed) return problem(409, "cropcycle.task_zero_confirmation_required", "Xác nhận liều bằng 0");
+    const c = CATALOGS.material.find((c) => c.code === m.material_code);
+    if (m.material_code && !c) return validation([{ field: "materials", reason: "Chọn vật tư trong danh mục" }]);
+    if (!c && (!m.name?.trim() || !m.unit?.trim() || CATALOGS.material.some((c) => c.name.toLocaleLowerCase() === m.name?.trim().toLocaleLowerCase()))) return validation([{ field: "materials", reason: "Tên/đơn vị chưa hợp lệ hoặc đã có trong danh mục" }]);
+    const total = scaledArea(m.dose_per_ha) * scaledArea(s.area_ha);
+    const quantity = `${total / 100000000n}.${(total % 100000000n).toString().padStart(8, "0")}`.replace(/\.?0+$/, "");
+    actual.push({ material_code: c?.code, name: c?.name ?? m.name!, unit: c?.attrs.unit ?? m.unit!, group: c?.attrs.group, fertilizer_type: c?.attrs.fertilizer_type, dose_per_ha: m.dose_per_ha, quantity });
+  }
+  const record: TaskRecord = { id, log_ref: id, step_seq: b.step_seq, state: b.state, done_on: b.done_on, sop_version_id: s.sop_snapshot.version_id, inputs: actual.map((m) => ({ name: m.name, unit: m.unit, qty: m.quantity })), gps_missing: b.gps?.lon == null || b.gps?.lat == null, gps: b.gps ?? { source: "no_device" }, actor_ref: p.me.actor_ref, event_time: at, recorded_at: nowIso(), note: b.note, file_refs: [], details: { actual_materials: actual, backfilled, backfill_reason: b.backfill_reason, zero_confirmed: b.zero_confirmed } };
+  taskRecords.set(season, [...checklist.records, record]); nativeJournalReceipts.set(receipt, fingerprint);
+  return { record, checklist: mockChecklist(s, true) };
+}
 
 function mockChecklist(s: Season, write: boolean): components["schemas"]["HouseholdChecklist"] {
   const plan = mockPlan(s.sop_snapshot, s.anchor_date, s.current_event_id);
@@ -25,7 +66,7 @@ function mockChecklist(s: Season, write: boolean): components["schemas"]["Househ
       if (record) { done++; resolved++; status = task.undated ? "done_on_time" : !task.from_date ? "done" : record.done_on < task.from_date ? "done_early" : task.to_date && record.done_on > task.to_date ? "done_late" : "done_on_time"; }
       return { ...task, completion_status: status, done_on: record?.done_on ?? null, can_complete: write && !record && (s.status === "open" || (s.status === "completed" && stage.seq === last)) };
     });
-    const status: "done" | "in_progress" | "not_started" = tasks.length && resolved === tasks.length ? "done" : resolved ? "in_progress" : "not_started";
+    const status: "done" | "in_progress" | "not_started" = tasks.length && resolved === tasks.length ? "done" : resolved || records.some((r) => tasks.some((t) => t.seq === r.step_seq)) ? "in_progress" : "not_started";
     return { seq: stage.seq, name: stage.name, status, tasks };
   });
   const scaled = total ? (BigInt(done) * 10000n + BigInt(total) / 2n) / BigInt(total) : null;
@@ -66,6 +107,42 @@ function mockPlan(snapshot: Season["sop_snapshot"], anchor: string, event: strin
 }
 
 export const householdSeasonRoutes: Route[] = [{
+  method: "POST", pattern: /^\/v1\/devices$/,
+  handler: ({ persona, body }) => {
+    if (!journalWriter(persona)) return problem(403, "forbidden", "Không được đăng ký thiết bị nhật ký Web");
+    const b = body as components["schemas"]["SyncDeviceInput"];
+    if (b.platform !== "web") return validation([{ field: "platform", reason: "Mock này chỉ dành cho nhật ký Web" }]);
+    const previous = journalDevices.get(b.device_id);
+    if (previous && previous !== persona.me.actor_ref) return problem(409, "sync.device_taken", "Thiết bị thuộc tài khoản khác");
+    journalDevices.set(b.device_id, persona.me.actor_ref);
+    return json({ device_id: b.device_id, registered_at: nowIso(), platform: "web", app_version: b.app_version, revoked: false }, previous ? 200 : 201);
+  },
+}, {
+  method: "GET", pattern: /^\/v1\/households\/([\w-]+)\/photo-key$/,
+  handler: ({ persona }) => !journalWriter(persona) ? problem(403, "forbidden", "Vai chỉ đọc") : problem(503, "sync.dependency_unavailable", "Chế độ giả lập chưa nối khóa hộ và kho ảnh mã hóa"),
+}, {
+  method: "POST", pattern: /^\/v1\/sync\/push$/,
+  handler: ({ persona, body, request }) => {
+    if (!journalWriter(persona)) return problem(403, "forbidden", "Vai chỉ đọc");
+    const batch = body as components["schemas"]["SyncPushBatch"];
+    if (request.headers.get("X-Device-Id") !== batch.device_id || journalDevices.get(batch.device_id) !== persona.me.actor_ref) return problem(403, "sync.device_unregistered", "Thiết bị chưa đăng ký cho tài khoản");
+    return json({ results: batch.records.map((r) => {
+      const p = r.payload as components["schemas"]["HouseholdTaskDetailInput"] & { recorded_by: string; tenant_id: string; cooperative_ref: string; household_ref: string; season_ref: string };
+      if (r.entity !== "household_task_record" || r.op !== "create" || p.recorded_by !== persona.me.actor_ref || p.tenant_id !== persona.me.tenant_id) return { id: r.id, status: "rejected", code: "forbidden" };
+      if (!Number.isFinite(Date.parse(r.event_time)) || Date.parse(r.event_time) > Date.now() + 300000) return { id: r.id, status: "rejected", code: "validation_failed" };
+      const existed = taskRecords.get(p.season_ref)?.some((old) => old.id === r.id);
+      const result = mockTaskDetail(persona, p.cooperative_ref, p.household_ref, p.season_ref, p, r.id, r.event_time);
+      if (result instanceof Response) return { id: r.id, status: "rejected", code: problemOf(result)?.code ?? "validation_failed" };
+      return { id: r.id, status: existed ? "duplicate" : "accepted" };
+    }) });
+  },
+}, {
+  method: "POST", pattern: /^\/v1\/cooperatives\/([\w-]+)\/households\/([\w-]+)\/seasons\/([\w-]+)\/task-records$/,
+  handler: ({ persona, params, body }) => {
+    const result = mockTaskDetail(persona, params[0]!, params[1]!, params[2]!, body as components["schemas"]["HouseholdTaskDetailInput"]);
+    return result instanceof Response ? result : json(result, 201);
+  },
+}, {
   method: "GET", pattern: /^\/v1\/cooperatives\/([\w-]+)\/households\/([\w-]+)\/seasons\/([\w-]+)\/checklist$/,
   handler: ({ params, persona }) => {
     const s = seasons.find((s) => s.cooperative_ref === params[0] && s.household_ref === params[1] && s.season_ref === params[2]);

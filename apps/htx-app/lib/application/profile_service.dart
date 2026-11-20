@@ -38,6 +38,31 @@ class ProfileService {
   final Future<String?> Function() _token;
 
   static const _meKey = 'htx.me';
+
+  /// Bind native offline journals to the authenticated token, never a cached
+  /// /me from an earlier account. The server rechecks every field and role.
+  Future<Map<String, Object?>> journalContext() async {
+    final token = await _token();
+    if (token == null) throw StateError('Cần đăng nhập để ghi nhật ký.');
+    try {
+      final claims = (jsonDecode(
+        utf8.decode(base64Url.decode(base64Url.normalize(token.split('.')[1]))),
+      ) as Map).cast<String, Object?>();
+      final actor = claims['sub'];
+      final tenant = claims['tenant_id'];
+      final coop = claims['org_ref'];
+      if (actor is! String ||
+          tenant is! String ||
+          coop is! String ||
+          coop.isEmpty) {
+        throw const FormatException();
+      }
+      return {'recorded_by': actor, 'tenant_id': tenant, 'org_ref': coop};
+    } catch (_) {
+      throw StateError('Không xác định được tài khoản ghi nhật ký.');
+    }
+  }
+
   static const _householdsKey = 'htx.farmer_households';
   static const _bindingsKey = 'htx.variety_bindings';
   static const _deviationKey = 'htx.param.geo.area_deviation_max_pct';
