@@ -103,6 +103,20 @@ class ReferenceRepository {
 
   Future<String?> cursor() => _db.getMeta(cursorKey);
 
+  /// A scoped HTTP key read must not alter the global pull cursor or round.
+  Future<void> cachePhotoKey(String subject, Uint8List key) async {
+    if (key.length != 32) {
+      throw const FormatException('Khóa ảnh phải có 32 byte.');
+    }
+    await _db.db.insert('household_pubkey', {
+      'subject_ref': subject,
+      'public_key': key,
+      'key_id': null,
+      'deleted': 0,
+      'version': _clock.now().millisecondsSinceEpoch,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
   /// Áp một trang pull **và** con trỏ mới trong cùng một giao dịch: app chết
   /// giữa chừng thì lần sau pull lại từ con trỏ cũ (áp lặp là vô hại vì so
   /// version).

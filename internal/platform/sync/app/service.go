@@ -156,6 +156,11 @@ func (s *Service) checkDevice(ctx context.Context, p authz.Principal, header str
 	case d.Revoked():
 		return domain.Device{}, ErrDeviceRevoked
 	}
+	if d.Platform == "web" {
+		if err := nativeWebJournalCaller(p); err != nil {
+			return domain.Device{}, err
+		}
+	}
 	return *d, nil
 }
 

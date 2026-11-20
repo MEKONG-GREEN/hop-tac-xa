@@ -6,8 +6,9 @@ import { MOCK_PERSONAS } from "@/api/mock/personas";
 import { AuthContextForTests, type AuthContextValue } from "@/auth/AuthProvider";
 import { buildPrincipal } from "@/auth/principal";
 import { HouseholdSeasonsDialog, householdAreaError } from "./HouseholdSeasonsDialog";
+import type { CalendarPrefill } from "./seasonCalendarModel";
 
-function setup(persona: string) {
+function setup(persona: string, calendarPrefill?: CalendarPrefill) {
   const calls: { key: string | null; body: Record<string, unknown> }[] = [];
   const plans: { key: string | null; body: Record<string, unknown> }[] = [];
   const onSaved = vi.fn();
@@ -17,6 +18,7 @@ function setup(persona: string) {
   const api = createApiClient({ baseUrl: "https://api.test", getAccessToken: () => "test", fetch: async (input) => {
     const req = input as Request;
     const path = new URL(req.url).pathname;
+    if (path.endsWith("/checklist")) return Response.json({ season_ref: "new-season", current_event_id: "event", progress: { as_of_date: "2026-11-18", stages: [], done: 0, skipped: 0, total: 0, percent: null }, records: [] });
     if (path.endsWith("/plan")) return Response.json({ as_of_date: "2026-11-18", stages: [] });
     if (req.method === "POST") {
       const body = await req.json() as Record<string, unknown>;
@@ -39,12 +41,27 @@ function setup(persona: string) {
     return Response.json({ items: [], next_cursor: null });
   } });
   render(<AuthContextForTests.Provider value={{ status: "authenticated", api, principal } as AuthContextValue}>
-    <HouseholdSeasonsDialog coopRef="coop" household={household} onClose={() => {}} onSaved={onSaved} />
+    <HouseholdSeasonsDialog coopRef="coop" household={household} calendarPrefill={calendarPrefill} onClose={() => {}} onSaved={onSaved} />
   </AuthContextForTests.Provider>);
   return { calls, onSaved, plans };
 }
 
 describe("AH-61 mở vụ theo hộ trên web", () => {
+  it("AH-59: điền ngày đầu khung và vẫn lưu được ngày ngoài khung",async()=>{
+    Object.defineProperty(navigator,"geolocation",{configurable:true,value:undefined});
+    const{calls}=setup("htx-member",{crop_code:"LUA",season_code:"DX",season_year:2026,sow_from:"2026-12-25"});
+    await screen.findByRole("option",{name:"Lúa"});
+    expect(screen.getByLabelText("Loại cây")).toHaveValue("LUA");expect(screen.getByLabelText("Mùa vụ")).toHaveValue("DX");
+    expect(screen.getByLabelText("Mốc gốc")).toHaveValue("2026-12-25");
+    fireEvent.change(screen.getByLabelText("Giống"),{target:{value:"OM5451"}});
+    fireEvent.change(screen.getByLabelText("Diện tích vụ (ha)"),{target:{value:"0.20"}});
+    await screen.findByRole("option",{name:/Quy trình lúa/});
+    const anchor=screen.getByLabelText("Ngày xuống giống");
+    fireEvent.change(anchor,{target:{value:"2027-02-01"}});
+    await waitFor(()=>expect(screen.getByRole("button",{name:"Lưu vụ"})).not.toBeDisabled());
+    fireEvent.click(screen.getByRole("button",{name:"Lưu vụ"}));
+    await waitFor(()=>expect(calls).toHaveLength(1));expect(calls[0]!.body.anchor_date).toBe("2027-02-01");expect(calls[0]!.body).not.toHaveProperty("calendar_ref");
+  });
   it("từ chối số không, âm, số mũ và hơn hai chữ số mà không làm tròn", () => {
     for (const raw of ["0", "-1", "0.001", "0.25001", "1e-2", "1,5", "NaN"]) expect(householdAreaError(raw)).not.toBeNull();
     for (const raw of ["0.01", "1", "1.50"]) expect(householdAreaError(raw)).toBeNull();

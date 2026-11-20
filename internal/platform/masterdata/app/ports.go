@@ -37,7 +37,8 @@ var (
 // ToPortUnit chuyển phiên bản đơn vị sang DTO công khai (ngày → 00:00 giờ Việt Nam).
 func ToPortUnit(u domain.Unit) partyport.AdminUnit {
 	out := partyport.AdminUnit{
-		Code: u.Code, Name: u.Name, Level: u.Level, ParentCode: u.ParentCode,
+		Disabled: u.Disabled,
+		Code:     u.Code, Name: u.Name, Level: u.Level, ParentCode: u.ParentCode,
 		ValidFrom: domain.DayStart(u.ValidFrom), SuccessorCodes: append([]string{}, u.Successors...),
 	}
 	if u.ValidTo != nil {

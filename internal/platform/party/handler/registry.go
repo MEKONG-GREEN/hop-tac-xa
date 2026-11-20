@@ -33,11 +33,16 @@ func (h Registry) RegisterApp(rg *gin.RouterGroup) {
 	rg.GET("/orgs", h.listOrgs)
 	rg.GET("/cooperatives", h.listCooperatives)
 	rg.GET("/cooperatives/:ref", h.getCooperative)
+	rg.GET("/cooperatives/:ref/profile", httpx.RequireMFAForRoles(authz.RolePlatformAdmin), h.getHTXProfile)
+	rg.POST("/cooperatives/:ref/profile/revisions", httpx.RequireMFAForRoles(authz.RolePlatformAdmin), h.updateHTXProfile)
 	// Nông hộ (/v1/cooperatives/{ref}/households, /v1/households*) do pf/cooperative phục vụ (W3.3).
 }
 
 // RegisterAdmin gắn route Admin API (MFA bắt buộc ở router).
 func (h Registry) RegisterAdmin(rg *gin.RouterGroup) {
+	rg.POST("/cooperative-profiles", h.createHTXProfile)
+	rg.GET("/cooperatives/:ref/deletion", h.cooperativeDeletion)
+	rg.POST("/cooperatives/:ref/deletions", h.deleteCooperative)
 	rg.GET("/orgs", h.adminListOrgs)
 	rg.POST("/orgs", h.createOrg)
 	rg.GET("/orgs/export.xlsx", h.exportOrgTree)
@@ -102,17 +107,34 @@ type pointDTO struct {
 
 type coopDTO struct {
 	orgDTO
-	StatusReason  *string          `json:"status_reason"`
-	TaxCode       *string          `json:"tax_code"`
-	AreaHa        *decimal.Decimal `json:"area_ha"`
-	EstablishedOn *string          `json:"established_on"`
-	Location      *pointDTO        `json:"location"`
-	Address       *string          `json:"address"`
+	HouseholdAreas *cooperativeAreasDTO       `json:"household_areas"`
+	MachineCount   *int64                     `json:"machine_count"`
+	MachineGroups  []inventoryMachineGroupDTO `json:"machine_groups"`
+	StatusReason   *string                    `json:"status_reason"`
+	TaxCode        *string                    `json:"tax_code"`
+	AreaHa         *decimal.Decimal           `json:"area_ha"`
+	EstablishedOn  *string                    `json:"established_on"`
+	Location       *pointDTO                  `json:"location"`
+	Address        *string                    `json:"address"`
 	// LocationProvisional: chưa có toạ độ — bản đồ hiển thị tâm xã kèm nhãn "vị trí tạm" (CGH FN-03 AC-03).
 	LocationProvisional bool `json:"location_provisional"`
 	// D2 (ADR-0052): HTX tạm do KN/MKG lập → unconfirmed / "Chưa xác nhận" tới khi HTX thật nhận quyền theo MST.
 	ConfirmationStatus string `json:"confirmation_status"`
 	ConfirmationLabel  string `json:"confirmation_label"`
+}
+
+type cooperativeAreasDTO struct {
+	CultivatedHa      *decimal.Decimal `json:"cultivated_ha"`
+	LivestockHa       *decimal.Decimal `json:"livestock_ha"`
+	Households        int64            `json:"households"`
+	MissingCultivated int64            `json:"missing_cultivated"`
+	MissingLivestock  int64            `json:"missing_livestock"`
+}
+
+type inventoryMachineGroupDTO struct {
+	TypeRef  string `json:"type_ref"`
+	TypeName string `json:"type_name"`
+	Quantity int64  `json:"quantity"`
 }
 
 // confirmation đổi cờ đã xác nhận của hồ sơ HTX thành (mã, nhãn) hiển thị.
@@ -129,6 +151,17 @@ func toCoopDTO(c app.Cooperative) coopDTO {
 		AreaHa: c.Profile.AreaHa, LocationProvisional: c.Profile.Location == nil, Address: strPtr(c.Profile.Address),
 	}
 	d.ConfirmationStatus, d.ConfirmationLabel = confirmation(c.Profile.Confirmed)
+	if c.Inventory != nil {
+		d.MachineCount = &c.Inventory.Quantity
+		d.MachineGroups = make([]inventoryMachineGroupDTO, 0, len(c.Inventory.Groups))
+		for _, group := range c.Inventory.Groups {
+			d.MachineGroups = append(d.MachineGroups, inventoryMachineGroupDTO{TypeRef: group.TypeRef.String(), TypeName: group.TypeName, Quantity: group.Quantity})
+		}
+	}
+	if c.Areas != nil {
+		d.HouseholdAreas = &cooperativeAreasDTO{CultivatedHa: c.Areas.CultivatedHa, LivestockHa: c.Areas.LivestockHa,
+			Households: c.Areas.Households, MissingCultivated: c.Areas.MissingCultivated, MissingLivestock: c.Areas.MissingLivestock}
+	}
 	if c.Profile.EstablishedOn != nil {
 		s := c.Profile.EstablishedOn.Format(time.DateOnly)
 		d.EstablishedOn = &s

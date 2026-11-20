@@ -13,6 +13,7 @@ import 'screens/notifications_screen.dart';
 import 'screens/plots_screen.dart';
 import 'screens/review_screen.dart';
 import 'screens/sync_queue_screen.dart';
+import 'screens/season_calendars_screen.dart';
 
 /// Câu khi liên kết dẫn tới màn vai không được xem — cùng câu với
 /// `OUT_OF_SCOPE_NOTICE` của web (FN-05/AC-03, EX-01).
@@ -24,6 +25,7 @@ HtxScreen screenOfLink(HtxMode mode, DeepLink link) => switch (link) {
   FarmLogLink() =>
     mode.canView(HtxScreen.review) ? HtxScreen.review : HtxScreen.farmLogDetail,
   SeasonLink() => HtxScreen.plotDetail,
+  CalendarLink() => HtxScreen.seasonCalendars,
   DocumentLink() => HtxScreen.news,
   ConflictLink() => HtxScreen.syncQueue,
   CollectionLink() => HtxScreen.collection,
@@ -46,6 +48,8 @@ Future<Widget> screenForDeepLink(
   DeepLink link,
 ) async {
   switch (link) {
+    case CalendarLink(:final ref):
+      return SeasonCalendarsScreen(calendarRef: ref);
     case FarmLogLink(:final id):
       return screenOfLink(mode, link) == HtxScreen.review
           ? ReviewScreen(highlightLogId: id)

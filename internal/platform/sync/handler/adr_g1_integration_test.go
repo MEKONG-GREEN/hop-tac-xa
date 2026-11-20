@@ -58,12 +58,12 @@ func TestCursorKeyRequiredInProduction_ADR0006(t *testing.T) {
 	}
 }
 
-// ADR-0010: Zalo Mini App chỉ online — không đăng ký được làm thiết bị đồng bộ ngoại tuyến
-// (chỉ android/ios của app Flutter), nên không pull/push/tải tệp được.
+// ADR-0010: Zalo remains online-only. AH-99 separately permits native Web
+// journals, with current Member/Admin rights and no field-data pull.
 func TestOnlyFlutterPlatformsRegisterForOfflineSync_ADR0010(t *testing.T) {
 	f := newFixture(t)
 	c := f.officer()
-	for _, p := range []string{"zalo", "zalo_mini_app", "web"} {
+	for _, p := range []string{"zalo", "zalo_mini_app"} {
 		r := c.post("/v1/devices", map[string]any{"device_id": ids.New().String(), "platform": p, "app_version": "1.0.0"})
 		if r.status != http.StatusUnprocessableEntity {
 			t.Errorf("nền tảng %q phải bị từ chối: %d %s", p, r.status, r.raw)
@@ -73,5 +73,26 @@ func TestOnlyFlutterPlatformsRegisterForOfflineSync_ADR0010(t *testing.T) {
 		if r := c.post("/v1/devices", map[string]any{"device_id": ids.New().String(), "platform": p, "app_version": "1.0.0"}); r.status != http.StatusCreated {
 			t.Errorf("app Flutter %s: %d %s", p, r.status, r.raw)
 		}
+	}
+}
+
+func TestAH99WebDeviceIsLimitedToNativeJournals(t *testing.T) {
+	f := newFixture(t)
+	for _, roles := range [][]string{{"kn_officer"}, {"coop_manager"}, {"htx_member", "coop_manager"}} {
+		c := f.officer(roles...)
+		r := c.post("/v1/devices", map[string]any{"device_id": ids.New(), "platform": "web", "app_version": "htx-task-1"})
+		if r.status != 403 {
+			t.Fatalf("web role %v: %d %s", roles, r.status, r.raw)
+		}
+	}
+	c := f.officer("htx_member")
+	device := ids.New()
+	r := c.post("/v1/devices", map[string]any{"device_id": device, "platform": "web", "app_version": "htx-task-1"})
+	if r.status != 201 {
+		t.Fatalf("native web registration: %d %s", r.status, r.raw)
+	}
+	r = c.get("/v1/sync/pull", map[string]string{"X-Device-Id": device.String()})
+	if r.status != 403 {
+		t.Fatalf("web field pull: %d %s", r.status, r.raw)
 	}
 }

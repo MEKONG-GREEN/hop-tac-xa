@@ -1,5 +1,5 @@
 // pf/masterdata — tra đơn vị hành chính để hiện TÊN cho các mã mà route khác trả về
-// (HTX, nhiệm vụ, dashboard chỉ có mã). Kết quả được nhớ theo client, không gọi lặp.
+// (HTX, nhiệm vụ, dashboard chỉ có mã). Nhớ tạm theo client, xóa khi danh mục/phiên đổi.
 import type { ApiClient } from "../client";
 import { unwrap } from "../client";
 import { collectPages } from "../pagination";
@@ -13,23 +13,30 @@ export interface UnitResolver {
   many(codes: readonly string[], withParents?: boolean): Promise<Map<string, AdminUnit>>;
 }
 
-const resolvers = new WeakMap<ApiClient, UnitResolver>();
+const resolvers = new WeakMap<ApiClient, UnitResolver & { clear: () => void }>();
+
+/** Catalog names/status are mutable; clear held resolvers as well as future ones. */
+export function invalidateUnitResolver(api: ApiClient): void { resolvers.get(api)?.clear(); }
 
 export function unitResolver(api: ApiClient): UnitResolver {
   const existing = resolvers.get(api);
   if (existing) return existing;
-  const cache = new Map<string, Promise<AdminUnit | null>>();
+  const cache = new Map<string, { promise: Promise<AdminUnit | null>; until: number }>();
+  let generation = 0;
 
   const get = (code: string): Promise<AdminUnit | null> => {
-    let p = cache.get(code);
-    if (!p) {
-      p = unwrap(api.GET("/v1/masterdata/admin-units/{code}", { params: { path: { code } } })).catch((e: unknown) => {
+    const cached = cache.get(code);
+    if (cached && cached.until > Date.now()) return cached.promise;
+    const started = generation;
+    const p: Promise<AdminUnit | null> = unwrap(api.GET("/v1/masterdata/admin-units/{code}", { params: { path: { code } } })).then((unit) => {
+      return started === generation ? unit : get(code);
+    }).catch((e: unknown) => {
+        if (started !== generation) return get(code);
         if (e instanceof ApiProblem && e.status === 404) return null;
-        cache.delete(code); // lỗi tạm thời: lần sau thử lại
+        if (cache.get(code)?.promise === p) cache.delete(code); // lỗi tạm thời: lần sau thử lại
         throw e;
       });
-      cache.set(code, p);
-    }
+    cache.set(code, { promise: p, until: Date.now() + 60_000 });
     return p;
   };
 
@@ -49,7 +56,7 @@ export function unitResolver(api: ApiClient): UnitResolver {
     return out;
   };
 
-  const r: UnitResolver = { get, many };
+  const r = { get, many, clear: () => { generation++; cache.clear(); } };
   resolvers.set(api, r);
   return r;
 }

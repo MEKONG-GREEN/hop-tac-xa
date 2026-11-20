@@ -111,7 +111,7 @@ func (s *Service) CopyHouseholds(ctx context.Context, in CopyHouseholdsInput) (C
 				}
 				out, err := s.createHousehold(ctx, p, sc, CreateHouseholdInput{
 					Identity: it.Identity, CooperativeRef: target, CommuneCode: commune,
-					CultivatedAreaHa: src.CultivatedAreaHa, RejectDuplicate: true,
+					CultivatedAreaHa: src.CultivatedAreaHa, LivestockAreaHa: src.LivestockAreaHa, RejectDuplicate: true,
 				})
 				if err != nil {
 					var pr *problem.Problem

@@ -71,6 +71,7 @@ type Config struct {
 	Quota *Quota
 	// RequireMFASensitive: bắt buộc MFA cho Resolve/Unwrap (như Erase).
 	RequireMFASensitive bool
+	HouseholdScopes     client.HouseholdScopeVerifier
 }
 
 // Quota là hạn mức theo người yêu cầu của kho (app/quota.go).
@@ -91,7 +92,7 @@ type Module struct {
 func New(cfg Config) (*Module, error) {
 	cfg.DB = forModule(cfg.DB)
 	svc := &app.Service{DB: cfg.DB, Clock: cfg.Clock, KMS: cfg.KMS, BlindKey: cfg.BlindKey, Quota: cfg.Quota,
-		RequireMFASensitive: cfg.RequireMFASensitive}
+		RequireMFASensitive: cfg.RequireMFASensitive, HouseholdScopes: cfg.HouseholdScopes}
 	if err := svc.Validate(); err != nil {
 		return nil, err
 	}

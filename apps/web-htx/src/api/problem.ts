@@ -71,6 +71,8 @@ export const PROBLEM_MESSAGES: Readonly<Record<string, string>> = {
     "Tệp nhập sai mẫu (thiếu cột bắt buộc, không phải CSV UTF-8/.xlsx, tệp .xls cũ, có ô công thức hoặc quá số dòng). Cả tệp bị từ chối.",
   "party.dependency_unavailable": "Dịch vụ danh bạ tổ chức/kho định danh tạm thời chưa sẵn sàng. Vui lòng thử lại sau.",
   "party.cooperative_name_taken": "Tên HTX này đã tồn tại, vui lòng chọn tên khác.",
+  "party.cooperative_profile_pending": "Lần lưu hồ sơ trước chưa hoàn tất. Vui lòng thử lại.",
+  "party.cooperative_profile_changed": "Hồ sơ đã được cập nhật. Tải lại trước khi lưu.",
   "party.household_phone_taken": "SĐT đã được sử dụng bởi nông hộ khác",
   "party.household_contact_unavailable": "Nông hộ chưa có số điện thoại liên hệ trong kho định danh — không gọi nhanh được.",
   "party.household_not_found": "Không tìm thấy nông hộ, hoặc nông hộ nằm ngoài phạm vi được phân quyền.",
@@ -488,6 +490,9 @@ export const PROBLEM_MESSAGES: Readonly<Record<string, string>> = {
   "accounts.farmer_not_found": "Không tìm thấy tài khoản nông dân, hoặc ngoài HTX/phạm vi của bạn.",
   "accounts.activation_link_unavailable": "Chưa phát được liên kết kích hoạt (máy chủ đăng nhập chưa sẵn sàng). Tài khoản đã tạo — phát lại QR sau.",
   // pf/masterdata — nhập danh mục
+  "masterdata.admin_unit_name_taken": "Tên đã có trong cùng đơn vị cấp trên.",
+  "masterdata.admin_unit_changed": "Đơn vị hành chính đã thay đổi. Tải lại trước khi sửa tên hoặc trạng thái.",
+  "masterdata.admin_unit_import_invalid": "Tệp đơn vị hành chính phải có Tên, Cấp và Tỉnh / thành phố trực thuộc; tối đa 500 dòng và 2 MB, không có ô công thức.",
   "masterdata.catalog_import_invalid":
     "Tệp nhập danh mục sai mẫu (thiếu cột catalog/code/name, có ô công thức, quá 500 dòng hoặc 2 MB). Cả tệp bị từ chối.",
   "masterdata.catalog_import_not_found": "Không tìm thấy lần nhập danh mục này.",
@@ -588,7 +593,7 @@ export function parseRetryAfter(value: string | null | undefined, now: number = 
 }
 
 /** Thông báo cho người dùng: ưu tiên bảng mã; mã lạ thì dùng detail/title của server. */
-const PREFER_DETAIL: ReadonlySet<string> = new Set(["party.out_of_scope", "party.import_invalid", "hrm.report_blocked", "hrm.promotion_export_blocked", "hrm.nlth_quota_exceeded", "hrm.decision_warnings", "hrm.decision_stale", "hrm.decision_cancel_order", "hrm.promotion_conflict", "masterdata.crop_type_has_visible_varieties", "cropcycle.sop_import_invalid"]);
+const PREFER_DETAIL: ReadonlySet<string> = new Set(["party.cooperative_in_use", "party.cooperative_name_taken", "party.out_of_scope", "party.import_invalid", "hrm.report_blocked", "hrm.promotion_export_blocked", "hrm.nlth_quota_exceeded", "hrm.decision_warnings", "hrm.decision_stale", "hrm.decision_cancel_order", "hrm.promotion_conflict", "masterdata.crop_type_has_visible_varieties", "cropcycle.sop_import_invalid"]);
 
 export function problemMessage(p: Pick<ProblemDetails, "code" | "status" | "detail" | "title">): string {
   // Thông báo nghiệp vụ của 422 (vd "Vui lòng nhập đầy đủ Tên tuyến và Phân loại." — docs/errors.md) nằm ở `detail`.

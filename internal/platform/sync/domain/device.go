@@ -18,7 +18,7 @@ import (
 const RuleVersion = "sync-v1"
 
 // Nền tảng thiết bị được hỗ trợ.
-var platforms = map[string]bool{"android": true, "ios": true}
+var platforms = map[string]bool{"android": true, "ios": true, "web": true}
 
 var appVersionRe = regexp.MustCompile(`^[0-9A-Za-z.+_-]{1,40}$`)
 
@@ -54,7 +54,7 @@ func ParseRegistration(r Registration) (id uuid.UUID, errs []problem.FieldError)
 		errs = append(errs, problem.FieldError{Field: "device_id", Reason: "phải là UUIDv7 sinh trên máy"})
 	}
 	if !platforms[r.Platform] {
-		errs = append(errs, problem.FieldError{Field: "platform", Reason: "phải là android hoặc ios"})
+		errs = append(errs, problem.FieldError{Field: "platform", Reason: "phải là android, ios hoặc web"})
 	}
 	if !appVersionRe.MatchString(r.AppVersion) {
 		errs = append(errs, problem.FieldError{Field: "app_version", Reason: "1–40 ký tự [0-9A-Za-z.+_-]"})

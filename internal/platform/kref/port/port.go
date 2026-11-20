@@ -22,6 +22,7 @@ const (
 	EventOrgCreated        = "pf.party.org.created"
 	EventOrgMoved          = "pf.party.org.moved"
 	EventOrgDeactivated    = "pf.party.org.deactivated"
+	EventOrgDeleted        = "pf.party.org.deleted"
 	EventOrgReactivated    = "pf.party.org.reactivated"
 	EventAdminUnitChanged  = "pf.masterdata.admin_unit.changed"
 	EventShareGrantApprove = "pf.party.share_grant.approved"
@@ -30,7 +31,7 @@ const (
 
 // Events là danh sách sự kiện của consumer pf.kref.
 var Events = []string{
-	EventOrgCreated, EventOrgMoved, EventOrgDeactivated, EventOrgReactivated,
+	EventOrgCreated, EventOrgMoved, EventOrgDeactivated, EventOrgReactivated, EventOrgDeleted,
 	EventAdminUnitChanged, EventShareGrantApprove, EventShareGrantRevoke,
 }
 

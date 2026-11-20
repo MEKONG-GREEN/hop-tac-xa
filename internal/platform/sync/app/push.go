@@ -92,6 +92,9 @@ func (s *Service) Push(ctx context.Context, in PushInput) ([]ResultItem, error) 
 		switch {
 		case len(errs) > 0:
 			res.Status, res.Code, res.Errors = port.StatusRejected, problem.Validation.Code, errs
+		case dev.Platform == "web" && rec.Entity != "household_task_record":
+			res.Status, res.Code = port.StatusRejected, problem.Forbidden.Code
+			res.Errors = []problem.FieldError{{Field: "entity", Reason: "Thiết bị Web chỉ đồng bộ nhật ký hộ"}}
 		case s.sinks[rec.Entity] == nil:
 			res.Status, res.Code = port.StatusRejected, port.CodeUnknownEntity
 			res.Errors = []problem.FieldError{{Field: "entity", Reason: "không có module nhận entity này"}}

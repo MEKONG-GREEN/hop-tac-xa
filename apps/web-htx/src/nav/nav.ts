@@ -126,6 +126,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
       { href: "/htx/lo-ruong", module: "pf/geo", label: "Lô ruộng & ranh giới", icon: "plot", roles: HTX_READ },
       // AH-39: gắn dòng ma trận KHMV — Thành viên HTX thấy (và thao tác) vụ, nhật ký, sản lượng của HTX mình.
       { href: "/htx/mua-vu", module: "pf/cropcycle", label: "Vụ canh tác", icon: "season", roles: HTX_READ, fn: "KHMV-FN-03-XEM" },
+      { href: "/htx/lich-thoi-vu", module: "pf/cooperative", label: "Lịch thời vụ", icon: "season", roles: HTX_WRITE, fn: "KHMV-FN-03-LICH" },
       { href: "/htx/nhat-ky", module: "pf/cropcycle", label: "Nhật ký canh tác", icon: "journal", roles: HTX_READ, fn: "KHMV-FN-05" },
       { href: "/htx/phe-duyet", module: "pf/cropcycle", label: "Phê duyệt nhật ký", icon: "approve", roles: HTX_WRITE },
       { href: "/htx/san-luong", module: "pf/cropcycle", label: "Sản lượng thu hoạch", icon: "harvest", roles: HTX_READ, fn: "KHMV-FN-06" },
@@ -162,6 +163,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
       // FN-05: hai mục giữ vai "Tài khoản" (FN-07) và "Đơn vị hành chính" (FN-02) của App HTX tới khi có màn riêng.
       { href: "/quan-tri/tai-khoan", label: "Tài khoản cán bộ", icon: "user", roles: [ROLES.platformAdmin, ROLES.accountAdmin, ROLES.accountAdminProvince], fn: "FN-07" },
       { href: "/quan-tri/danh-muc", module: "pf/masterdata", label: "Danh mục dùng chung", icon: "catalog", roles: [ROLES.platformAdmin, ROLES.masterdataAdmin], fn: "FN-02" },
+      { href: "/quan-tri/don-vi-hanh-chinh", module: "pf/masterdata", label: "Đơn vị hành chính", icon: "catalog", roles: [ROLES.platformAdmin], fn: "FN-02" },
       {
         href: "/quan-tri/tham-so", module: "pf/masterdata",
         label: "Tham số & phê duyệt",
@@ -212,6 +214,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     // AH-2, AH-7, AH-8: loại cây, giống, mùa vụ và quy trình SOP dùng chung cho mọi HTX (Admin quản lý; vai khác chỉ xem ở nơi chọn khi mở vụ).
     label: "7. Dữ liệu nền",
     items: [
+      { href: "/quan-tri/he-so-rom", module: "pf/cooperative", label: "Hệ số rơm", icon: "param", fn: "FN-11", roles: [ROLES.platformAdmin] },
       { href: "/du-lieu-nen/danh-muc-giong", module: "pf/masterdata", label: "Danh mục giống", icon: "sprout", roles: [ROLES.platformAdmin, ROLES.masterdataAdmin] },
       { href: "/du-lieu-nen/danh-muc-mua-vu", module: "pf/masterdata", label: "Danh mục mùa vụ", icon: "season", roles: [ROLES.platformAdmin, ROLES.masterdataAdmin] },
       // AH-8: soạn và phát hành SOP dạng checklist (Admin); vai param_approver chỉ xem.

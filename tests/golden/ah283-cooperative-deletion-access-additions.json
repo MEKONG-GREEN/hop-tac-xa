@@ -1,0 +1,311 @@
+{
+  "Roles": [],
+  "Access": [
+    {
+      "Reader": "r_agg",
+      "View": "pf_accounts_pub.v1_cooperative_references"
+    },
+    {
+      "Reader": "r_agg",
+      "View": "pf_contact_pub.v1_cooperative_references"
+    },
+    {
+      "Reader": "r_agg",
+      "View": "pf_cooperative_pub.v1_cooperative_references"
+    },
+    {
+      "Reader": "r_agg",
+      "View": "pf_cropcycle_pub.v1_cooperative_references"
+    },
+    {
+      "Reader": "r_agg",
+      "View": "pf_extension_pub.v1_cooperative_references"
+    },
+    {
+      "Reader": "r_agg",
+      "View": "pf_geo_pub.v1_cooperative_references"
+    },
+    {
+      "Reader": "r_agg",
+      "View": "pf_hrm_pub.v1_cooperative_references"
+    },
+    {
+      "Reader": "r_agg",
+      "View": "pf_mechanization_pub.v1_cooperative_references"
+    },
+    {
+      "Reader": "r_agg",
+      "View": "pf_notify_pub.v1_cooperative_references"
+    },
+    {
+      "Reader": "r_agg",
+      "View": "pf_party_pub.v1_cooperative_references"
+    },
+    {
+      "Reader": "r_agg",
+      "View": "pf_sync_pub.v1_cooperative_references"
+    },
+    {
+      "Reader": "r_extension",
+      "View": "pf_cooperative_pub.v1_cooperative_references"
+    },
+    {
+      "Reader": "r_extension",
+      "View": "pf_extension_pub.v1_cooperative_references"
+    },
+    {
+      "Reader": "r_extension",
+      "View": "pf_party_pub.v1_cooperative_references"
+    },
+    {
+      "Reader": "r_metrics",
+      "View": "pf_accounts_pub.v1_cooperative_references"
+    },
+    {
+      "Reader": "r_metrics",
+      "View": "pf_contact_pub.v1_cooperative_references"
+    },
+    {
+      "Reader": "r_metrics",
+      "View": "pf_cooperative_pub.v1_cooperative_references"
+    },
+    {
+      "Reader": "r_metrics",
+      "View": "pf_cropcycle_pub.v1_cooperative_references"
+    },
+    {
+      "Reader": "r_metrics",
+      "View": "pf_extension_pub.v1_cooperative_references"
+    },
+    {
+      "Reader": "r_metrics",
+      "View": "pf_geo_pub.v1_cooperative_references"
+    },
+    {
+      "Reader": "r_metrics",
+      "View": "pf_hrm_pub.v1_cooperative_references"
+    },
+    {
+      "Reader": "r_metrics",
+      "View": "pf_mechanization_pub.v1_cooperative_references"
+    },
+    {
+      "Reader": "r_metrics",
+      "View": "pf_notify_pub.v1_cooperative_references"
+    },
+    {
+      "Reader": "r_metrics",
+      "View": "pf_party_pub.v1_cooperative_references"
+    },
+    {
+      "Reader": "r_metrics",
+      "View": "pf_sync_pub.v1_cooperative_references"
+    },
+    {
+      "Reader": "r_party",
+      "View": "pf_accounts_pub.v1_cooperative_references"
+    },
+    {
+      "Reader": "r_party",
+      "View": "pf_contact_pub.v1_cooperative_references"
+    },
+    {
+      "Reader": "r_party",
+      "View": "pf_cooperative_pub.v1_confirmations"
+    },
+    {
+      "Reader": "r_party",
+      "View": "pf_cooperative_pub.v1_cooperative_references"
+    },
+    {
+      "Reader": "r_party",
+      "View": "pf_cooperative_pub.v1_cooperatives"
+    },
+    {
+      "Reader": "r_party",
+      "View": "pf_cooperative_pub.v1_plot_export"
+    },
+    {
+      "Reader": "r_party",
+      "View": "pf_cooperative_pub.v1_plots"
+    },
+    {
+      "Reader": "r_party",
+      "View": "pf_cooperative_pub.v1_seasons"
+    },
+    {
+      "Reader": "r_party",
+      "View": "pf_cropcycle_pub.v1_cooperative_references"
+    },
+    {
+      "Reader": "r_party",
+      "View": "pf_cropcycle_pub.v1_harvest_declaration"
+    },
+    {
+      "Reader": "r_party",
+      "View": "pf_cropcycle_pub.v1_season_event"
+    },
+    {
+      "Reader": "r_party",
+      "View": "pf_extension_pub.v1_closed_figures"
+    },
+    {
+      "Reader": "r_party",
+      "View": "pf_extension_pub.v1_consolidation_closed"
+    },
+    {
+      "Reader": "r_party",
+      "View": "pf_extension_pub.v1_cooperative_references"
+    },
+    {
+      "Reader": "r_party",
+      "View": "pf_extension_pub.v1_directive_target_ack"
+    },
+    {
+      "Reader": "r_party",
+      "View": "pf_extension_pub.v1_field_report"
+    },
+    {
+      "Reader": "r_party",
+      "View": "pf_extension_pub.v1_task"
+    },
+    {
+      "Reader": "r_party",
+      "View": "pf_extension_pub.v1_task_event"
+    },
+    {
+      "Reader": "r_party",
+      "View": "pf_geo_pub.v1_cooperative_references"
+    },
+    {
+      "Reader": "r_party",
+      "View": "pf_geo_pub.v1_layer_geometry"
+    },
+    {
+      "Reader": "r_party",
+      "View": "pf_geo_pub.v1_plot_boundary"
+    },
+    {
+      "Reader": "r_party",
+      "View": "pf_geo_pub.v1_plot_event"
+    },
+    {
+      "Reader": "r_party",
+      "View": "pf_hrm_pub.v1_cooperative_references"
+    },
+    {
+      "Reader": "r_party",
+      "View": "pf_mechanization_pub.v1_balance_run"
+    },
+    {
+      "Reader": "r_party",
+      "View": "pf_mechanization_pub.v1_coop_coverage"
+    },
+    {
+      "Reader": "r_party",
+      "View": "pf_mechanization_pub.v1_cooperative_references"
+    },
+    {
+      "Reader": "r_party",
+      "View": "pf_notify_pub.v1_cooperative_references"
+    },
+    {
+      "Reader": "r_party",
+      "View": "pf_party_pub.v1_cooperative_references"
+    },
+    {
+      "Reader": "r_party",
+      "View": "pf_party_pub.v1_org_tree"
+    },
+    {
+      "Reader": "r_party",
+      "View": "pf_sync_pub.v1_cooperative_references"
+    }
+  ],
+  "Memberships": [
+    {
+      "Reader": "r_agg",
+      "Granted": "r_accounts_pub"
+    },
+    {
+      "Reader": "r_agg",
+      "Granted": "r_contact_pub"
+    },
+    {
+      "Reader": "r_agg",
+      "Granted": "r_hrm_pub"
+    },
+    {
+      "Reader": "r_agg",
+      "Granted": "r_notify_pub"
+    },
+    {
+      "Reader": "r_agg",
+      "Granted": "r_sync_pub"
+    },
+    {
+      "Reader": "r_metrics",
+      "Granted": "r_accounts_pub"
+    },
+    {
+      "Reader": "r_metrics",
+      "Granted": "r_contact_pub"
+    },
+    {
+      "Reader": "r_metrics",
+      "Granted": "r_hrm_pub"
+    },
+    {
+      "Reader": "r_metrics",
+      "Granted": "r_notify_pub"
+    },
+    {
+      "Reader": "r_metrics",
+      "Granted": "r_sync_pub"
+    },
+    {
+      "Reader": "r_party",
+      "Granted": "r_accounts_pub"
+    },
+    {
+      "Reader": "r_party",
+      "Granted": "r_contact_pub"
+    },
+    {
+      "Reader": "r_party",
+      "Granted": "r_cooperative_pub"
+    },
+    {
+      "Reader": "r_party",
+      "Granted": "r_cropcycle_pub"
+    },
+    {
+      "Reader": "r_party",
+      "Granted": "r_extension_pub"
+    },
+    {
+      "Reader": "r_party",
+      "Granted": "r_geo_pub"
+    },
+    {
+      "Reader": "r_party",
+      "Granted": "r_hrm_pub"
+    },
+    {
+      "Reader": "r_party",
+      "Granted": "r_mechanization_pub"
+    },
+    {
+      "Reader": "r_party",
+      "Granted": "r_notify_pub"
+    },
+    {
+      "Reader": "r_party",
+      "Granted": "r_party_pub"
+    },
+    {
+      "Reader": "r_party",
+      "Granted": "r_sync_pub"
+    }
+  ]
+}

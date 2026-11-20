@@ -36,6 +36,7 @@ type CreateHouseholdInput struct {
 	CooperativeRef   uuid.UUID
 	CommuneCode      string // rỗng = xã của HTX
 	CultivatedAreaHa *decimal.Decimal
+	LivestockAreaHa  *decimal.Decimal
 	MemberSince      *time.Time
 	// Source: nguồn đăng ký ghi vào pf.party.household.registered; rỗng → suy từ vai
 	// (quản lý HTX → htx_app, còn lại → kn_app).
@@ -85,6 +86,9 @@ func (s *Service) createHousehold(ctx context.Context, p authz.Principal, sc aut
 	if err := domain.ValidateHousehold(in.CultivatedAreaHa, in.MemberSince, now); err != nil {
 		return HouseholdResult{}, fieldProblem(err)
 	}
+	if in.LivestockAreaHa != nil && !domain.ValidArea(*in.LivestockAreaHa) {
+		return HouseholdResult{}, problem.Validation.WithField("livestock_area_ha", domain.ErrArea.Error())
+	}
 	if s.Vault == nil {
 		return HouseholdResult{}, ErrDependency.WithDetail("chưa nối kho định danh")
 	}
@@ -115,6 +119,19 @@ func (s *Service) createHousehold(ctx context.Context, p authz.Principal, sc aut
 	if !sc.Allows(commune) {
 		return HouseholdResult{}, ErrOutOfScope.WithDetail("xã của nông hộ ngoài phạm vi phụ trách")
 	}
+	if s.Units == nil {
+		return HouseholdResult{}, ErrDependency.WithDetail("chưa nối danh mục đơn vị hành chính")
+	}
+	unit, err := s.Units.Get(ctx, commune, now)
+	if errors.Is(err, partyport.ErrUnitNotFound) {
+		return HouseholdResult{}, problem.Validation.WithField("commune_code", "Chọn xã / phường đang sử dụng")
+	}
+	if err != nil {
+		return HouseholdResult{}, err
+	}
+	if unit.Level != partyport.LevelCommune || unit.Disabled {
+		return HouseholdResult{}, problem.Validation.WithField("commune_code", "Chọn xã / phường đang sử dụng")
+	}
 
 	createdRef, err := s.Vault.RegisterHousehold(ctx, port.HouseholdIdentity{
 		FullName: strings.TrimSpace(in.Identity.FullName), Phone: strings.TrimSpace(in.Identity.Phone),
@@ -132,7 +149,8 @@ func (s *Service) createHousehold(ctx context.Context, p authz.Principal, sc aut
 
 	h := domain.Household{
 		Ref: createdRef, CommuneCode: commune, CultivatedAreaHa: in.CultivatedAreaHa, Active: true,
-		CooperativeRef: coop.Ref, MemberSince: in.MemberSince, CreatedAt: now,
+		LivestockAreaHa: in.LivestockAreaHa,
+		CooperativeRef:  coop.Ref, MemberSince: in.MemberSince, CreatedAt: now,
 	}
 	res := HouseholdResult{Duplicate: dup}
 	err = tenant.WithTenantTx(ctx, s.DB, p.TenantID, func(tx pgx.Tx) error {
@@ -152,6 +170,8 @@ func (s *Service) createHousehold(ctx context.Context, p authz.Principal, sc aut
 		}
 		if cur != nil {
 			res.Household = *cur
+		} else {
+			return ErrHouseholdNotFound
 		}
 		return nil
 	})
@@ -209,10 +229,25 @@ type HouseholdPage struct {
 //
 // phone khác rỗng: tìm đúng SĐT qua chỉ mục mù của kho định danh (HTX US-HH-01 AC-2) —
 // trả tối đa một hộ của HTX này. Họ tên chỉ nằm ở kho (R-04) nên không tìm theo tên.
-func (s *Service) ListHouseholds(ctx context.Context, coopRef, after uuid.UUID, limit int, phone string) (HouseholdPage, error) {
+func (s *Service) ListHouseholds(ctx context.Context, coopRef, after uuid.UUID, limit int, phone string, states ...string) (HouseholdPage, error) {
 	p, err := authz.Require(ctx, householdReaderRoles...)
 	if err != nil {
 		return HouseholdPage{}, err
+	}
+	state := ""
+	if len(states) > 0 {
+		state = states[0]
+	}
+	if state != "" && state != "active" && state != "inactive" {
+		return HouseholdPage{}, problem.Validation.WithField("status", "Chọn Đang tham gia hoặc Ngừng tham gia")
+	}
+	if p.KN == nil && isOwnCoopOnly(p) {
+		if p.OrgRef == uuid.Nil {
+			return HouseholdPage{}, problem.NodeScopeRequired
+		}
+		if coopRef != p.OrgRef {
+			return HouseholdPage{}, ErrOrgNotFound
+		}
 	}
 	if limit <= 0 || limit > 200 {
 		limit = 50
@@ -245,14 +280,14 @@ func (s *Service) ListHouseholds(ctx context.Context, coopRef, after uuid.UUID, 
 				return nil
 			}
 			h, e := store.HouseholdByRef(ctx, tx, byPhone)
-			if e == nil && h != nil && h.CooperativeRef == coopRef {
+			if e == nil && h != nil && h.CooperativeRef == coopRef && (state == "" || h.Active == (state == "active")) {
 				items = []domain.Household{*h}
 			}
 			if e != nil {
 				return e
 			}
 		} else {
-			items, e = store.ListHouseholdsByCooperative(ctx, tx, coopRef, after, limit+1)
+			items, e = store.ListHouseholdsByCooperative(ctx, tx, coopRef, after, limit+1, state)
 			if e != nil {
 				return e
 			}
@@ -283,6 +318,10 @@ func (s *Service) ListHouseholds(ctx context.Context, coopRef, after uuid.UUID, 
 	for _, h := range items {
 		v := HouseholdView{Household: h, ActiveAreaHa: activeAreas[h.Ref]}
 		v.Availability = domain.HouseholdAreaAvailability(h.CultivatedAreaHa, v.ActiveAreaHa, h.Active)
+		if h.Pending {
+			v.Availability.CanOpen = false
+			v.Availability.Reason = "Hộ đang được cập nhật; thử lại thao tác đang chờ."
+		}
 		if s.Vault == nil {
 			v.LabelUnavailable = true
 		} else if d, err := s.Vault.Label(ctx, port.IdentityFieldSupport, h.Ref); err != nil {

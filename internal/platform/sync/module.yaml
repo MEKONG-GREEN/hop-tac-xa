@@ -19,11 +19,11 @@ provides:
     - pf.sync.device.revoked/v1
     - pf.sync.integration.dead_lettered/v1
   internal_events: []
-  publications: []
+  publications: [pf_sync_pub.cooperative_references/v1]
   data_products: []
 consumes:
   events: []
 permissions: [device_admin, sync_conflict_resolver]
 shares: []
-owns_schema: [pf_sync]
+owns_schema: [pf_sync, pf_sync_pub]
 enable: per_tenant

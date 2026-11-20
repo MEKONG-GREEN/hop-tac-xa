@@ -33,6 +33,7 @@ import (
 	seasonapp "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/season/app"
 	seasonhttp "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/season/handler"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/store"
+	evport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/evidence/port"
 	geoport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/geo/port"
 	mdport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/masterdata/port"
 	partyport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/party/port"
@@ -101,12 +102,13 @@ func New(db tenant.Beginner, clk clock.Clock, deps Deps) *Module {
 	m := &Module{svc: &app.Service{}}
 	codes, _ := deps.Orgs.(partyport.OrgCodes)
 	m.member = &memberapp.Service{DB: db, Clock: clk, Orgs: deps.Orgs, Codes: codes, Dir: deps.Dir, Scope: deps.Scope,
-		Consents: deps.Consents, Vault: deps.Households}
+		Consents: deps.Consents, Vault: deps.Households, Units: deps.AdminUnits}
 	m.plot = &plotapp.Service{DB: db, Clock: clk, Scope: deps.Scope, Params: deps.Params, Units: deps.AdminUnits, Orgs: deps.Orgs,
 		Households: memberships{m.member}, Markers: markers{m.member}, AdminGeom: deps.AdminGeom}
 	m.plot.Vault = deps.Farmers
 	m.season = &seasonapp.Service{DB: db, Clock: clk, Scope: deps.Scope, Orgs: deps.Orgs, Plots: m.plot, Params: deps.Params,
 		Catalogs: deps.Catalogs, GpsLog: deps.GpsLog}
+	m.member.ProductionHistory = seasonapp.HouseholdHistory{DB: db}
 	m.bilateral = &bilateralapp.Service{DB: db, Clock: clk}
 	m.ledger = bilateralapp.Ledger{DB: db, Clock: clk}
 	m.anchor = &anchorapp.Service{DB: db, Clock: clk, Creator: deps.CooperativeRegistrar}
@@ -127,6 +129,12 @@ func NewFacade(src Sources) *Module { return &Module{svc: &app.Service{Store: sr
 
 // UseFarmerHouseholds nối liên kết tài khoản nông dân ↔ nông hộ (pf/accounts) sau khi module đó được dựng.
 func (m *Module) UseFarmerHouseholds(f port.FarmerHouseholds) { m.season.Farmers = f }
+
+// UseTaskImages connects the narrow image-receipt verifier for journal writes.
+func (m *Module) UseTaskImages(p evport.OwnedImages) { m.season.TaskImages = p }
+
+// StrawFactors supplies the time-effective FN-11 coefficient to statistics.
+func (m *Module) StrawFactors() port.StrawFactors { return m.season }
 
 // UseSharing nối cổng cấp quyền chia sẻ của pf/party (ADR-0020): bề mặt đối tác /v1/partner/plots*,
 // /v1/partner/season-harvest-dates.
@@ -228,6 +236,12 @@ func (m *Module) Resolve() port.Resolve { return m.svc }
 // CoopProfiles cho pf/party: hồ sơ HTX (tạo HTX hai bước, màn HTX, danh bạ đối tác).
 func (m *Module) CoopProfiles() partyport.CoopProfiles { return m.member }
 
+// CooperativeAreas trả nguồn tổng diện tích hộ cho hồ sơ HTX (AH-283).
+func (m *Module) CooperativeAreas() partyport.CooperativeAreaSource { return m.member }
+func (m *Module) CooperativePrivateReferences() partyport.CooperativePrivateReferences {
+	return m.member
+}
+
 // CoopLocations (W5.5) cho party/port/grantlookup: vị trí hồ sơ HTX của bên cấp cho feed cooperative_directory.
 func (m *Module) CoopLocations() grantlookup.CoopLocations { return m.member }
 
@@ -263,6 +277,19 @@ func (m *Module) SyncSinks() []syncport.Sink {
 
 // GpsLogHandler là inbox.Handler của consumer port.GpsLogConsumer (tên consumer giữ "pf.cropcycle.gps_log").
 func (m *Module) GpsLogHandler() inbox.Handler { return m.season.HandleGpsLog }
+
+func (m *Module) UseCalendars(members port.CalendarMembers, notifier port.CalendarNotifier) {
+	m.season.CalendarMembers, m.season.CalendarNotifier = members, notifier
+}
+
+func (m *Module) CalendarNoticeHandler() inbox.Handler { return m.season.HandleCalendarNotice }
+
+func (m *Module) CalendarNoticeReady() error {
+	if m.season.CalendarMembers == nil || m.season.CalendarNotifier == nil {
+		return errors.New("calendar: configure accounts directory before starting calendar notice consumer")
+	}
+	return nil
+}
 
 // ---- bộ ghép nội bộ ----
 

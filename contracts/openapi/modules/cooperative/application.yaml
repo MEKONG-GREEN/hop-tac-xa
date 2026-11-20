@@ -1,4 +1,254 @@
 paths:
+# @ag-order: 10007
+  /v1/households/{ref}/photo-key:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: getHouseholdPhotoKey
+      summary: Khóa công khai để mã hóa ảnh nhật ký cho hộ (AH-99)
+      description: Chỉ người được ghi nhật ký; kiểm phạm vi HTX hiện tại trước và sau khi đọc khóa. Không cấp quyền giải mã hoặc đọc định danh.
+      responses:
+        "200":
+          description: Khóa X25519 32 byte dạng base64
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ref, public_key]
+                properties:
+                  ref: {type: string, format: uuid}
+                  public_key: {type: string, contentEncoding: base64}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+# @ag-order: 10006
+  /v1/cooperatives/{ref}/season-calendars:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      tags: [CropCycle]
+      operationId: listSeasonCalendars
+      summary: Lịch của HTX; Thành viên chỉ nhận lịch mình được chọn, chưa hủy
+      parameters:
+        - {name: after, in: query, schema: {type: string, format: uuid}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100}}
+      responses:
+        "200":
+          description: Danh sách trong phạm vi
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items: {type: array, items: {$ref: "#/components/schemas/SeasonCalendar"}}
+                  next_cursor: {type: [string, "null"], format: uuid}
+        default: {$ref: "#/components/responses/Problem"}
+    post:
+      tags: [CropCycle]
+      operationId: publishSeasonCalendar
+      summary: Admin hoặc Đại diện phát lịch và xếp thông báo sau commit
+      parameters:
+        - {$ref: "#/components/parameters/IdempotencyKey"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/SeasonCalendarInput"}
+      responses:
+        "201":
+          description: Lịch đã phát; không khẳng định push đã gửi
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SeasonCalendar"}
+        default: {$ref: "#/components/responses/Problem"}
+# @ag-order: 10007
+  /v1/cooperatives/{ref}/season-calendars/{calendar_ref}/revisions:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: calendar_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      tags: [CropCycle]
+      operationId: reviseSeasonCalendar
+      summary: Sửa lịch đã phát và xếp thông báo mới
+      parameters:
+        - {$ref: "#/components/parameters/IdempotencyKey"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/SeasonCalendarRevisionInput"}
+      responses:
+        "201":
+          description: Phiên bản mới, hoặc replay cùng key và nội dung
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SeasonCalendar"}
+        default: {$ref: "#/components/responses/Problem"}
+# @ag-order: 10008
+  /v1/cooperatives/{ref}/season-calendars/{calendar_ref}/cancel:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: calendar_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      tags: [CropCycle]
+      operationId: cancelSeasonCalendar
+      summary: Hủy, không gửi thông báo và không sửa vụ đã mở
+      parameters:
+        - {$ref: "#/components/parameters/IdempotencyKey"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_event_id]
+              properties:
+                expected_event_id: {type: string, format: uuid}
+      responses:
+        "201":
+          description: Lịch đã hủy
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SeasonCalendar"}
+        default: {$ref: "#/components/responses/Problem"}
+# @ag-order: 10009
+  /v1/cropcycle/calendars/{calendar_ref}:
+    get:
+      tags: [CropCycle]
+      operationId: getSeasonCalendar
+      summary: Đích deep link thông báo; kiểm phiên bản và quyền hiện tại
+      parameters:
+        - {name: calendar_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: Lịch; không lộ người nhận khác cho Thành viên
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SeasonCalendar"}
+        default: {$ref: "#/components/responses/Problem"}
+# @ag-order: 10010
+  /v1/cooperatives/{ref}/season-calendar-recipients:
+    get:
+      tags: [CropCycle]
+      operationId: listSeasonCalendarRecipients
+      summary: Danh bạ Thành viên hoạt động, chỉ Admin và Đại diện đúng HTX
+      parameters:
+        - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: offset, in: query, schema: {type: integer, minimum: 0, maximum: 1000000}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100}}
+      responses:
+        "200":
+          description: Cache-Control no-store; trang có thể rỗng nhưng còn next_offset khi lọc vai
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_offset]
+                properties:
+                  next_offset: {type: integer, minimum: 0}
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [actor_ref, label]
+                      properties:
+                        actor_ref: {type: string, format: uuid}
+                        label: {type: string, description: "Tên hiển thị nếu có, không thay bằng SĐT/tên đăng nhập"}
+        default: {$ref: "#/components/responses/Problem"}
+# @ag-order: 10004
+  /v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/checklist:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: household_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: season_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: getHouseholdChecklist
+      summary: Checklist và tiến độ theo snapshot của vụ (AH-88)
+      description: Cùng HTX; Đại diện chỉ đọc. Không cần duyệt nhật ký theo hộ. Phần trăm null khi mọi việc bỏ qua; hiển thị —.
+      responses:
+        "200":
+          description: Checklist và bản ghi hiện hành
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/HouseholdChecklist"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+# @ag-order: 10005
+  /v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/task-completions:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: household_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: season_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: completeHouseholdTask
+      summary: Xác nhận tích hoàn thành việc hôm nay (AH-88)
+      description: Thành viên cùng HTX/Admin. Khóa vụ rồi kiểm snapshot, trạng thái và phiên bản. Sau thu hoạch chỉ việc chưa xong ở giai đoạn cuối; dừng/đóng bị từ chối. Liều khuyến cáo và ngày GMT+7 do server lấy; GPS/thời điểm/actor bất biến. Thiếu GPS vẫn lưu. Cùng thao tác giữ key và GPS khi thử lại. Hộ inactive vẫn tiếp tục vụ được phép ghi. Không ghi vào outbox theo thửa cũ.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/HouseholdTaskCompleteInput"}
+      responses:
+        "201":
+          description: Bản ghi hoàn thành cùng tiến độ mới; replay không tạo bản ghi khác
+          headers:
+            Idempotent-Replayed: {schema: {type: string}}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [record, checklist]
+                properties:
+                  record: {$ref: "#/components/schemas/HouseholdTaskRecord"}
+                  checklist: {$ref: "#/components/schemas/HouseholdChecklist"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+# @ag-order: 10006
+  /v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/task-records:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: household_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: season_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: recordHouseholdTask
+      summary: Ghi chi tiết việc và vật tư thực tế (AH-99)
+      description: Thành viên cùng HTX/Admin; Đại diện chỉ đọc. Một ngày làm xong; ghi nhiều lần partial trước khi done. Liều theo ha, tổng bằng liều nhân diện tích vụ; không đổi SOP. Ảnh phải do chính actor tải lên cho hộ, tối đa 5 ảnh, mỗi ảnh bản rõ không quá 1 MiB. Ghi bù quá 3 ngày cần lý do, trừ việc Không ngày. Không có cảnh báo lệch liều.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/HouseholdTaskDetailInput"}
+      responses:
+        "201":
+          description: Bản ghi chi tiết và checklist; replay trả bản ghi cũ
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [record, checklist]
+                properties:
+                  record: {$ref: "#/components/schemas/HouseholdTaskRecord"}
+                  checklist: {$ref: "#/components/schemas/HouseholdChecklist"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
 # @ag-order: 10002
   /v1/cooperatives/{ref}/households/{household_ref}/season-plan-preview:
     parameters:
@@ -140,6 +390,49 @@ paths:
         "404": {$ref: "#/components/responses/Problem"}
 components:
   schemas:
+# @ag-order: 10012
+    SeasonCalendarInput:
+      type: object
+      additionalProperties: false
+      required: [crop_code, season_code, season_year, sow_from, sow_to, recipients]
+      properties:
+        crop_code: {type: string, pattern: '^[A-Za-z0-9_.-]{1,40}$'}
+        season_code: {type: string, pattern: '^[A-Za-z0-9_.-]{1,40}$'}
+        season_year: {type: integer, minimum: 2000, maximum: 2100}
+        sow_from: {type: string, format: date}
+        sow_to: {type: string, format: date}
+        recipients: {type: array, minItems: 1, maxItems: 500, items: {type: string, format: uuid}}
+# @ag-order: 10013
+    SeasonCalendarRevisionInput:
+      type: object
+      additionalProperties: false
+      required: [expected_event_id, crop_code, season_code, season_year, sow_from, sow_to, recipients]
+      properties:
+        expected_event_id: {type: string, format: uuid}
+        crop_code: {type: string, pattern: '^[A-Za-z0-9_.-]{1,40}$'}
+        season_code: {type: string, pattern: '^[A-Za-z0-9_.-]{1,40}$'}
+        season_year: {type: integer, minimum: 2000, maximum: 2100}
+        sow_from: {type: string, format: date}
+        sow_to: {type: string, format: date}
+        recipients: {type: array, minItems: 1, maxItems: 500, items: {type: string, format: uuid}}
+# @ag-order: 10014
+    SeasonCalendar:
+      type: object
+      required: [calendar_ref, cooperative_ref, current_event_id, version, status, crop_code, season_code, season_year, sow_from, sow_to, can_manage, updated_at]
+      properties:
+        calendar_ref: {type: string, format: uuid}
+        cooperative_ref: {type: string, format: uuid}
+        current_event_id: {type: string, format: uuid}
+        version: {type: integer, minimum: 1}
+        status: {type: string, enum: [published, cancelled]}
+        crop_code: {type: string}
+        season_code: {type: string}
+        season_year: {type: integer}
+        sow_from: {type: string, format: date}
+        sow_to: {type: string, format: date}
+        can_manage: {type: boolean}
+        recipients: {type: array, description: "Chỉ có khi can_manage=true", items: {type: string, format: uuid}}
+        updated_at: {type: string, format: date-time}
 # @ag-order: 10000
     HouseholdSeasonAreaInput:
       type: string
@@ -266,3 +559,125 @@ components:
         expected_date: {type: [string, "null"], format: date, description: "Ngày Từ; không lấy Đến"}
         status: {type: string, enum: [upcoming, due, overdue, waiting_anchor]}
         undated: {type: boolean, description: "Chỉ true cho Không ngày; luôn due, không overdue"}
+
+# @ag-order: 10008
+    HouseholdTaskCompleteInput:
+      type: object
+      additionalProperties: false
+      required: [step_seq, expected_season_event_id]
+      properties:
+        step_seq: {type: integer, minimum: 1, maximum: 100}
+        expected_season_event_id: {type: string, format: uuid}
+        gps: {$ref: "#/components/schemas/CropGPS"}
+        channel: {type: string, enum: [app, web], default: app}
+# @ag-order: 10009
+    HouseholdTaskDetailInput:
+      type: object
+      additionalProperties: false
+      required: [step_seq, expected_season_event_id, state, done_on, materials, file_refs]
+      properties:
+        step_seq: {type: integer, minimum: 1, maximum: 100}
+        expected_season_event_id: {type: string, format: uuid}
+        state: {type: string, enum: [partial, done]}
+        done_on: {type: string, format: date}
+        note: {type: string, maxLength: 2000}
+        backfill_reason: {type: string, maxLength: 500}
+        zero_confirmed: {type: boolean, default: false}
+        gps: {$ref: "#/components/schemas/CropGPS"}
+        channel: {type: string, enum: [app, web], default: app}
+        file_refs: {type: array, maxItems: 5, uniqueItems: true, items: {type: string, format: uuid}}
+        materials:
+          type: array
+          maxItems: 20
+          items:
+            type: object
+            required: [dose_per_ha]
+            properties:
+              material_code: {type: string}
+              name: {type: string, description: Chỉ dùng khi vật tư chưa có trong danh mục}
+              unit: {type: string}
+              dose_per_ha: {type: string, pattern: '^(0|[1-9][0-9]{0,8})(\.[0-9]{1,4})?$'}
+    HouseholdTaskDetails:
+      type: object
+      required: [actual_materials, backfilled, zero_confirmed]
+      properties:
+        backfilled: {type: boolean}
+        backfill_reason: {type: string}
+        zero_confirmed: {type: boolean}
+        actual_materials:
+          type: array
+          items:
+            type: object
+            required: [name, unit, dose_per_ha, quantity]
+            properties:
+              material_code: {type: string}
+              name: {type: string}
+              unit: {type: string}
+              group: {type: string}
+              fertilizer_type: {type: string}
+              dose_per_ha: {$ref: "#/components/schemas/Decimal"}
+              quantity: {type: string, description: Tổng thực tế chính xác bằng liều nhân diện tích một lần; tối đa sáu chữ số lẻ}
+    HouseholdTaskRecord:
+      type: object
+      required: [id, log_ref, step_seq, state, done_on, sop_version_id, inputs, gps_missing, gps, actor_ref, event_time, recorded_at]
+      properties:
+        id: {type: string, format: uuid}
+        log_ref: {type: string, format: uuid}
+        step_seq: {type: integer}
+        state: {type: string, enum: [done, partial, skipped]}
+        done_on: {type: string, format: date}
+        sop_version_id: {type: string, format: uuid}
+        inputs:
+          type: array
+          items:
+            type: object
+            required: [name, qty, unit]
+            properties:
+              name: {type: string}
+              qty: {$ref: "#/components/schemas/Decimal"}
+              unit: {type: string}
+        gps_missing: {type: boolean}
+        gps: {$ref: "#/components/schemas/CropGPS"}
+        actor_ref: {type: string, format: uuid}
+        event_time: {type: string, format: date-time}
+        recorded_at: {type: string, format: date-time}
+        details: {$ref: "#/components/schemas/HouseholdTaskDetails"}
+        note: {type: string}
+        file_refs: {type: array, items: {type: string, format: uuid}}
+# @ag-order: 10010
+    HouseholdTaskProgress:
+      allOf:
+        - {$ref: "#/components/schemas/SeasonScheduleStep"}
+        - type: object
+          required: [completion_status, done_on, can_complete]
+          properties:
+            completion_status: {type: string, enum: [upcoming, due, overdue, waiting_anchor, done, done_early, done_on_time, done_late, skipped]}
+            done_on: {type: [string, "null"], format: date}
+            can_complete: {type: boolean}
+# @ag-order: 10011
+    HouseholdChecklist:
+      type: object
+      required: [season_ref, current_event_id, progress, records]
+      properties:
+        season_ref: {type: string, format: uuid}
+        current_event_id: {type: string, format: uuid}
+        records: {type: array, items: {$ref: "#/components/schemas/HouseholdTaskRecord"}}
+        progress:
+          type: object
+          required: [as_of_date, done, skipped, total, percent, stages]
+          properties:
+            as_of_date: {type: string, format: date}
+            done: {type: integer}
+            skipped: {type: integer}
+            total: {type: integer}
+            percent: {type: [string, "null"], description: "Decimal phần trăm; null khi mẫu số bằng 0"}
+            stages:
+              type: array
+              items:
+                type: object
+                required: [seq, name, status, tasks]
+                properties:
+                  seq: {type: integer}
+                  name: {type: string}
+                  status: {type: string, enum: [not_started, in_progress, done]}
+                  tasks: {type: array, items: {$ref: "#/components/schemas/HouseholdTaskProgress"}}

@@ -11,11 +11,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/MEKONG-GREEN/hop-tac-xa/cmd/api-platform/assembly"
+	coopport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/port"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/clock"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/db"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/dbadmin"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/meter"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/outbox"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/txdeps"
 	"github.com/MEKONG-GREEN/hop-tac-xa/migrations"
 )
 
@@ -58,8 +60,19 @@ func wiredConsumers(log *slog.Logger) []consumer {
 		spec := c
 		out = append(out, consumer{
 			name: spec.Name, cluster: migrations.PF, module: spec.Module, events: spec.Events,
-			handler: func(ctx context.Context, tx pgx.Tx, env outbox.Envelope) error {
+			prepare: func(ctx context.Context) error {
+				if spec.Name != coopport.CalendarNoticeConsumer {
+					return nil
+				}
 				m, err := lazy.get(ctx)
+				if err != nil {
+					return err
+				}
+				return m.Cooperative.CalendarNoticeReady()
+			},
+			handler: func(ctx context.Context, tx pgx.Tx, env outbox.Envelope) error {
+				// Build opens dependencies too, so do it outside the inbox tx.
+				m, err := txdeps.Get(ctx, "worker.platform.modules", lazy.get)
 				if err != nil {
 					log.Error("chưa dựng được module pf ở worker", "event", env.EventType, "event_id", env.EventID, "consumer", spec.Name,
 						"outcome", "error", "error", err.Error())

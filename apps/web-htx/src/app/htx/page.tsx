@@ -32,6 +32,7 @@ export default function CooperativesPage() {
   const [importing, setImporting] = useState(false);
   const [version, setVersion] = useState(0);
   const canImport = hasRole(principal, ROLES.registryAdmin, ROLES.platformAdmin, ROLES.knProvinceAdmin);
+  const profileAudience = hasRole(principal, ROLES.platformAdmin, ROLES.coopManager, ROLES.htxMember);
   const dq = useDebounced(q);
 
   // Bộ lọc địa bàn: TW chọn tỉnh; tỉnh chọn xã trực thuộc; xã không cần lọc.
@@ -51,12 +52,15 @@ export default function CooperativesPage() {
         title="Quản lý HTX & nông hộ"
         subtitle="Danh sách HTX, tổ hợp tác trong phạm vi được phân quyền"
         actions={
-          canImport ? (
+          <>
+          {hasRole(principal, ROLES.platformAdmin) ? <Link className="btn btn-p btn-sm" href="/htx/them-moi">Thêm HTX</Link> : null}
+          {canImport ? (
             <button type="button" className="btn btn-o btn-sm" onClick={() => setImporting((v) => !v)} aria-expanded={importing}>
               <Icon name="upload" size={15} />
               Nhập HTX từ Excel
             </button>
-          ) : null
+          ) : null}
+          </>
         }
       />
       {importing ? <CoopImportPanel onDone={() => setVersion((v) => v + 1)} /> : null}
@@ -95,7 +99,7 @@ export default function CooperativesPage() {
                 <th scope="col">Địa bàn</th>
                 <th scope="col" className="num">Hộ thành viên</th>
                 <th scope="col" className="num">Thửa số hoá</th>
-                <th scope="col" className="num">Diện tích đăng ký (ha)</th>
+                {profileAudience ? <><th scope="col" className="num">Trồng trọt (ha)</th><th scope="col" className="num">Chăn nuôi (ha)</th><th scope="col" className="num">Máy móc</th></> : <th scope="col" className="num">Diện tích đăng ký (ha)</th>}
                 <th scope="col">Trạng thái</th>
               </tr>
             </thead>
@@ -112,11 +116,11 @@ export default function CooperativesPage() {
                     </div>
                   </td>
                   <td>{coopPlace(c)}</td>
-                  <td className="num">{c.member_households === undefined ? "—" : formatInt(c.member_households)}</td>
+                  <td className="num">{profileAudience ? formatInt(c.household_areas?.households) : formatInt(c.member_households)}</td>
                   <td className="num" title={c.digitized_plots === null ? "Chưa nối số liệu thửa (pf/geo)" : undefined}>
                     {c.digitized_plots === null || c.digitized_plots === undefined ? "—" : formatInt(c.digitized_plots)}
                   </td>
-                  <td className="num">{formatDecimal(c.area_ha, 1)}</td>
+                  {profileAudience ? <><td className="num">{formatDecimal(c.household_areas?.cultivated_ha, 4)}</td><td className="num">{formatDecimal(c.household_areas?.livestock_ha, 4)}</td><td className="num">{formatInt(c.machine_count)}</td></> : <td className="num">{formatDecimal(c.area_ha, 1)}</td>}
                   <td>
                     {c.active ? (
                       <span className="chip c-ok">Đang hoạt động</span>

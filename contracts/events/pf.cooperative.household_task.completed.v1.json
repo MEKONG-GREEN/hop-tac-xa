@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.agrigreen.vn/events/pf.cooperative.household_task.completed/v1",
+  "title": "pf.cooperative.household_task.completed — payload",
+  "x-event-type": "pf.cooperative.household_task.completed",
+  "x-schema-version": 1,
+  "x-producer": "pf/cooperative",
+  "type": "object",
+  "required": [
+    "log_id",
+    "season_ref",
+    "household_ref",
+    "cooperative_ref",
+    "sop_version_id",
+    "actor_ref",
+    "step_seq",
+    "done_on",
+    "gps_missing",
+    "event_time"
+  ],
+  "properties": {
+    "log_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "season_ref": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "household_ref": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "cooperative_ref": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "sop_version_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "actor_ref": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "step_seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "done_on": {
+      "type": "string",
+      "format": "date"
+    },
+    "gps_missing": {
+      "type": "boolean"
+    },
+    "event_time": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false
+}

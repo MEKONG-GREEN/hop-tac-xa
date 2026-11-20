@@ -36,6 +36,7 @@ const (
 	EventOrgCreated        = port.EventOrgCreated
 	EventOrgMoved          = port.EventOrgMoved
 	EventOrgDeactivated    = port.EventOrgDeactivated
+	EventOrgDeleted        = port.EventOrgDeleted
 	EventOrgReactivated    = port.EventOrgReactivated
 	EventAdminUnitChanged  = port.EventAdminUnitChanged
 	EventShareGrantApprove = port.EventShareGrantApprove
@@ -133,7 +134,7 @@ func badPayload(env outbox.Envelope, err error) error {
 func (m *Module) apply(ctx context.Context, tx pgx.Tx, env outbox.Envelope) (string, error) {
 	tid := env.TenantID
 	switch env.EventType {
-	case EventOrgCreated, EventOrgMoved, EventOrgDeactivated, EventOrgReactivated:
+	case EventOrgCreated, EventOrgMoved, EventOrgDeactivated, EventOrgReactivated, EventOrgDeleted:
 		var p orgSnapshotV1
 		if err := json.Unmarshal(env.Payload, &p); err != nil {
 			return "", badPayload(env, err)
@@ -145,9 +146,12 @@ func (m *Module) apply(ctx context.Context, tx pgx.Tx, env outbox.Envelope) (str
 			return "", err
 		}
 		switch env.EventType {
-		case EventOrgCreated, EventOrgMoved:
+		case EventOrgCreated, EventOrgMoved, EventOrgDeleted:
 			if p.Kind == "" || p.Code == "" || p.Active == nil {
 				return "", badPayload(env, errors.New("thiếu kind/code/active"))
+			}
+			if env.EventType == EventOrgDeleted && (p.Kind != "cooperative" || *p.Active) {
+				return "", badPayload(env, errors.New("deleted chỉ dành cho HTX không hoạt động"))
 			}
 			o := port.Org{Ref: p.OrgRef, Kind: p.Kind, Code: p.Code, AdminUnitCode: p.AdminUnitCode, Active: *p.Active, Seq: p.Seq}
 			if p.ParentRef != nil {

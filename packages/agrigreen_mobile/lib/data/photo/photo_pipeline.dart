@@ -108,11 +108,26 @@ Future<void> overwriteWithZeros(File f) async {
 
 /// Đóng dấu GPS/thời gian lên ảnh (HTX US-LOG-01 AC-4).
 abstract class Watermarker {
+  const Watermarker();
   Future<Uint8List> apply(Uint8List jpeg, String capturedAt, GpsFix? gps);
+
+  Future<Uint8List> applyBounded(
+    Uint8List jpeg,
+    String capturedAt,
+    GpsFix? gps,
+    int maxBytes,
+  ) async {
+    final result = await apply(jpeg, capturedAt, gps);
+    if (result.length > maxBytes) {
+      if (!identical(result, jpeg)) result.fillRange(0, result.length, 0);
+      throw PhotoPipelineException('Không nén được ảnh trong giới hạn 1 MB.');
+    }
+    return result;
+  }
 }
 
 /// Không đóng dấu (kiểm thử pipeline với dữ liệu không phải JPEG thật).
-class NoopWatermarker implements Watermarker {
+class NoopWatermarker extends Watermarker {
   const NoopWatermarker();
   @override
   Future<Uint8List> apply(
@@ -168,8 +183,27 @@ Uint8List? burnWatermark(Uint8List bytes, String text, {int quality = 85}) {
 /// Đóng dấu bằng package `image` (MIT), chạy trong isolate riêng để không giật
 /// giao diện. Ảnh đã đóng dấu là ảnh được mã hóa (bản chưa đóng dấu không lưu).
 /// Ảnh không giải mã được → giữ nguyên (metadata phong bì vẫn có GPS/thời gian).
-class ImageWatermarker implements Watermarker {
+class ImageWatermarker extends Watermarker {
   const ImageWatermarker();
+
+  @override
+  Future<Uint8List> applyBounded(
+    Uint8List jpeg,
+    String capturedAt,
+    GpsFix? gps,
+    int maxBytes,
+  ) async {
+    final text = watermarkText(capturedAt, gps);
+    final result = await Isolate.run(
+      () => compressWatermarkedImage(jpeg, text, maxBytes),
+    );
+    if (result == null) {
+      throw PhotoPipelineException(
+        'Không nén được ảnh có dấu thời gian và GPS trong giới hạn 1 MB.',
+      );
+    }
+    return result;
+  }
 
   @override
   Future<Uint8List> apply(
@@ -180,6 +214,47 @@ class ImageWatermarker implements Watermarker {
     final text = watermarkText(capturedAt, gps);
     final out = await Isolate.run(() => burnWatermark(jpeg, text));
     return out ?? jpeg;
+  }
+}
+
+/// Rebuild the watermark at each resolution so its text stays readable. No
+/// plaintext files or unmarked fallback are produced by the bounded path.
+Uint8List? compressWatermarkedImage(
+  Uint8List bytes,
+  String text,
+  int maxBytes,
+) {
+  img.Image? source;
+  try {
+    source = img.decodeImage(bytes);
+  } catch (_) {
+    return null;
+  }
+  if (source == null || maxBytes < 1) return null;
+  try {
+    while (source != null) {
+      final raw = img.encodeJpg(source, quality: 95);
+      try {
+        for (final quality in [85, 70, 55]) {
+          final marked = burnWatermark(raw, text, quality: quality);
+          if (marked == null) return null;
+          if (marked.length <= maxBytes) return marked;
+          marked.fillRange(0, marked.length, 0);
+        }
+      } finally {
+        raw.fillRange(0, raw.length, 0);
+      }
+      if (source.width <= 480 || source.height <= 240) return null;
+      final smaller = img.copyResize(
+        source,
+        width: (source.width * .8).floor(),
+      );
+      source.clear(img.ColorRgb8(0, 0, 0));
+      source = smaller;
+    }
+    return null;
+  } finally {
+    source?.clear(img.ColorRgb8(0, 0, 0));
   }
 }
 
@@ -249,6 +324,7 @@ class PhotoPipeline {
     required String subjectRef,
     String? parentEntity,
     String? parentId,
+    int? maxPlainBytes,
   }) async {
     final c = consent;
     if (c != null && !await c.isGranted(subjectRef, mrvEvidencePurpose)) {
@@ -262,7 +338,14 @@ class PhotoPipeline {
     try {
       final loc = await _location.current();
       final capturedAt = formatRfc3339(_clock.now());
-      final marked = await watermarker.apply(plain, capturedAt, loc.fix);
+      final marked = maxPlainBytes == null
+          ? await watermarker.apply(plain, capturedAt, loc.fix)
+          : await watermarker.applyBounded(
+              plain,
+              capturedAt,
+              loc.fix,
+              maxPlainBytes,
+            );
       if (!identical(marked, plain)) plain.fillRange(0, plain.length, 0);
       plain = marked;
       final env = await _cipher.seal(

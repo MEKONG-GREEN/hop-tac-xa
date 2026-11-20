@@ -85,6 +85,21 @@ func ProfilesByRefs(ctx context.Context, tx pgx.Tx, refs []uuid.UUID) (map[uuid.
 	return out, rows.Err()
 }
 
+func ProfileForUpdate(ctx context.Context, tx pgx.Tx, ref uuid.UUID) (*Profile, error) {
+	p, err := scanProfile(tx.QueryRow(ctx, "SELECT "+profileCols+" FROM pf_coop.cooperative c WHERE c.org_ref=$1 FOR UPDATE OF c", ref))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	return &p, err
+}
+
+// UpdateProfileAddress không ghi lại area_ha/tax_code, nên không làm mất lần
+// sửa trường khác của owner. Ghi cùng transaction với sự kiện hồ sơ bù.
+func UpdateProfileAddress(ctx context.Context, tx pgx.Tx, ref uuid.UUID, address string) error {
+	_, err := tx.Exec(ctx, `UPDATE pf_coop.cooperative SET head_office=$2, updated_at=now() WHERE org_ref=$1`, ref, address)
+	return err
+}
+
 // InsertProfile ghi hồ sơ HTX; đã có hồ sơ của Nút → inserted = false, không đổi gì (bước 2 lũy đẳng của
 // tạo HTX hai bước).
 func InsertProfile(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, p Profile) (bool, error) {

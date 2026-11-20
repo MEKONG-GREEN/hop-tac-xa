@@ -11,6 +11,7 @@ import '../season_plan_view.dart';
 import '../providers.dart';
 import 'households_screen.dart';
 import 'open_season_screen.dart' show parseDisplayDay;
+import 'household_checklist_screen.dart';
 
 class _HouseholdSeasonsData {
   const _HouseholdSeasonsData(this.coop, this.household, this.seasons);
@@ -58,56 +59,15 @@ class _HouseholdSeasonsScreenState
     _data = _load();
   });
   void _show(String coop, HouseholdJson season) {
-    final snapshot = (season['sop_snapshot'] as Map).cast<String, Object?>();
-    final plan = ref.services.crop.householdSeasons.plan(
-      coop,
-      widget.household.ref,
-      season['season_ref'] as String,
-    );
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('${season['season_code']} ${season['season_year']}'),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '${season['area_ha']} ha · ${season['status'] == 'open' ? 'Đang canh tác' : season['status']}',
-              ),
-              Text('${snapshot['anchor_name']}: ${season['anchor_date']}'),
-              Text(
-                season['gps_missing'] == true
-                    ? 'Thiếu GPS'
-                    : 'Đã ghi nhận vị trí',
-              ),
-              Text('${snapshot['name']} · SOP bản ${snapshot['version_no']}'),
-              for (final step in snapshot['steps'] as List? ?? const [])
-                if (step is Map) Text('• ${step['name']}'),
-              FutureBuilder<SeasonPlan>(
-                future: plan,
-                builder: (context, state) {
-                  if (state.connectionState != ConnectionState.done) {
-                    return const CircularProgressIndicator();
-                  }
-                  if (state.hasError) {
-                    return const Text(
-                      'Không tải được kế hoạch. Vui lòng đóng và mở lại để thử lại.',
-                    );
-                  }
-                  return SeasonPlanView(plan: state.data!);
-                },
-              ),
-            ],
-          ),
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => HouseholdChecklistScreen(
+          service: ref.services.crop.householdSeasons,
+          coop: coop,
+          household: widget.household.ref,
+          season: season,
+          canWrite: ref.read(appControllerProvider).mode == HtxMode.member,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Đóng'),
-          ),
-        ],
       ),
     );
   }
@@ -214,9 +174,11 @@ class HouseholdSeasonOpenScreen extends ConsumerStatefulWidget {
     super.key,
     required this.coop,
     required this.household,
+    this.calendarPrefill,
   });
   final String coop;
   final HouseholdItem household;
+  final SeasonCalendarPrefill? calendarPrefill;
   @override
   ConsumerState<HouseholdSeasonOpenScreen> createState() =>
       _HouseholdSeasonOpenScreenState();
@@ -246,9 +208,29 @@ class _HouseholdSeasonOpenScreenState
     _key = _ids.newId();
     _previewKey = _ids.newId();
     _remaining = widget.household.remainingAreaHa;
-    _catalogs = Future.wait(
-      ['crop', 'rice_variety', 'season'].map(_service.catalog),
-    );
+    final prefill = widget.calendarPrefill;
+    if (prefill != null) {
+      _crop = prefill.cropCode;
+      _season = prefill.seasonCode;
+      _year.text = '${prefill.year}';
+      _anchor.text = prefill.displayAnchor;
+    }
+    _catalogs =
+        Future.wait(['crop', 'rice_variety', 'season'].map(_service.catalog))
+            .then((rows) {
+              if (!rows[0].any(
+                (c) =>
+                    c['code'] == _crop &&
+                    ((c['attrs'] as Map?)?['parent_code'] == null ||
+                        (c['attrs'] as Map?)?['parent_code'] == ''),
+              )) {
+                _crop = null;
+              }
+              if (!rows[2].any((s) => s['code'] == _season)) {
+                _season = null;
+              }
+              return rows;
+            });
   }
 
   @override

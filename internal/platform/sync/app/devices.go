@@ -5,6 +5,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/MEKONG-GREEN/hop-tac-xa/contracts/htxroles"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
@@ -32,6 +34,11 @@ func (s *Service) RegisterDevice(ctx context.Context, in domain.Registration) (d
 	if len(errs) > 0 {
 		return d, false, validation(errs)
 	}
+	if in.Platform == "web" {
+		if err := nativeWebJournalCaller(p); err != nil {
+			return d, false, err
+		}
+	}
 	now := s.Clock.Now()
 	err = tenant.WithTenantTx(ctx, s.DB, p.TenantID, func(tx pgx.Tx) error {
 		prev, err := store.DeviceByID(ctx, tx, id, true)
@@ -54,6 +61,20 @@ func (s *Service) RegisterDevice(ctx context.Context, in domain.Registration) (d
 		return store.RefreshDevice(ctx, tx, id, in.Platform, in.AppVersion, now)
 	})
 	return d, created, err
+}
+
+func nativeWebJournalCaller(p authz.Principal) error {
+	if !htxroles.Allows(p.Has, "KHMV-FN-05", htxroles.Create) {
+		return problem.Forbidden
+	}
+	if p.Has(htxroles.Admin) {
+		if !p.MFA {
+			return problem.MFARequired
+		}
+	} else if p.OrgRef == uuid.Nil {
+		return problem.NodeScopeRequired
+	}
+	return nil
 }
 
 // RevokeDevice thu hồi thiết bị (Admin API, vai device_admin). Từ lời gọi kế tiếp,

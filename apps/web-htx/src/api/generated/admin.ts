@@ -4489,6 +4489,78 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/masterdata/admin-unit-profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin quản lý danh mục tỉnh/xã, gồm mục ngừng sử dụng */
+        get: operations["listManagedAdminUnits"];
+        put?: never;
+        /** Admin thêm tỉnh/xã, mã do server sinh và không sửa */
+        post: operations["createManagedAdminUnit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/masterdata/admin-unit-profiles/{code}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin sửa tên/trạng thái; giữ nguyên mã, cấp, cha và lịch sử địa giới */
+        post: operations["updateManagedAdminUnit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/masterdata/admin-unit-imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Admin nhập tỉnh/xã từ mẫu Excel/CSV, bỏ qua dòng lỗi theo thứ tự
+         * @description Tối đa 500 dòng và 2 MB. Tên, Cấp (Tỉnh hoặc Xã), Tỉnh / thành phố trực thuộc. Tỉnh ở dòng trước được xã sau dùng; trùng tên cùng cha bị loại.
+         */
+        post: operations["importManagedAdminUnits"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/masterdata/admin-unit-template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin tải mẫu Excel danh mục tỉnh/xã */
+        get: operations["managedAdminUnitTemplate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/masterdata/catalogs/{catalog}/items/{code}/delete": {
         parameters: {
             query?: never;
@@ -4503,6 +4575,109 @@ export interface paths {
         put?: never;
         /** Xóa loại cây, giống (AH-2) hoặc mùa vụ (AH-7) — chưa được dùng ở đâu thì đã xóa, đang được dùng thì chỉ ẩn */
         post: operations["deleteCatalogItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cropcycle/straw-factors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FN-11: hệ số theo giống lúa, Admin/MFA; chưa cấu hình dùng 35% */
+        get: operations["listStrawFactors"];
+        put?: never;
+        /** FN-11: thêm hệ số, không xóa */
+        post: operations["createStrawFactor"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cropcycle/straw-factors/{variety_code}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** FN-11: sửa hệ số và ghi lịch sử trước/sau, chỉ hiệu lực từ thời điểm lưu */
+        post: operations["reviseStrawFactor"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cropcycle/straw-factors/{variety_code}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FN-11: lịch sử theo giống, mới nhất trước; không sửa/xóa lịch sử */
+        get: operations["strawFactorHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperative-profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** FN-03: Admin tạo hồ sơ HTX, không bắt buộc MST/neo KN */
+        post: operations["htxProfileCreate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperatives/{ref}/deletion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FN-03: Admin kiểm tra toàn bộ dữ liệu trước khi xóa HTX */
+        get: operations["htxDeletionCheck"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperatives/{ref}/deletions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** FN-03: Admin xóa HTX tạo nhầm chưa phát sinh dữ liệu; giữ sổ kiểm toán */
+        post: operations["htxDelete"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6909,10 +7084,80 @@ export interface components {
             /** Format: date-time */
             approved_at?: string | null;
         };
+        ManagedAdminUnit: {
+            readonly code: string;
+            name: string;
+            /** @enum {string} */
+            level: "province" | "commune";
+            parent_code: string;
+            /** Format: date */
+            valid_from: string;
+            /** @description Trạng thái sử dụng của đơn vị */
+            active: boolean;
+            /** @description Cả đơn vị và tỉnh cha còn sử dụng */
+            selectable: boolean;
+            revision: number;
+            commune_count: number;
+            /** @description null khi chưa nối nguồn số HTX; không giả là 0 */
+            cooperative_count: number | null;
+        };
         CatalogDeleteResult: {
             /** @enum {string} */
             outcome: "deleted" | "hidden";
             item: components["schemas"]["CatalogItem"];
+        };
+        StrawFactorRow: {
+            variety_code: string;
+            variety_name: string;
+            active: boolean;
+            configured: boolean;
+            percentage: string;
+            revision: number;
+            /** Format: date-time */
+            effective_at: string | null;
+        };
+        StrawFactorEvent: {
+            /** Format: uuid */
+            id: string;
+            variety_code: string;
+            percentage: string;
+            previous_percentage: string | null;
+            revision: number;
+            /** Format: date-time */
+            effective_at: string;
+            /** Format: date-time */
+            recorded_at: string;
+            /** Format: uuid */
+            actor_ref: string;
+        };
+        HTXProfileInput: {
+            name: string;
+            /** @description Xã còn được sử dụng trong danh mục AH-271 */
+            commune_code: string;
+            head_office: string;
+            /** @default  */
+            representative_name: string;
+            phone: string;
+        };
+        HTXProfileWritten: {
+            /** Format: uuid */
+            ref: string;
+            /** @description Mã HTX hệ thống sinh, không sửa */
+            code: string;
+            revision: number;
+        };
+        HTXDeletionCheck: {
+            /** Format: uuid */
+            ref: string;
+            code: string;
+            name: string;
+            revision: number;
+            households: number;
+            accounts: number;
+            pending_accounts: number;
+            has_sharing: boolean;
+            has_business: boolean;
+            can_delete: boolean;
         };
         ParamValue: {
             key: string;
@@ -16201,6 +16446,157 @@ export interface operations {
             422: components["responses"]["Problem"];
         };
     };
+    listManagedAdminUnits: {
+        parameters: {
+            query?: {
+                /** @description Bỏ trống để xem tỉnh; mã tỉnh để xem xã */
+                parent?: string;
+                q?: string;
+                state?: "active" | "inactive";
+                after?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Một trang theo mã; kiểm quyền platform_admin */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["ManagedAdminUnit"][];
+                        next_cursor: string | null;
+                    };
+                };
+            };
+        };
+    };
+    createManagedAdminUnit: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name: string;
+                    /** @enum {string} */
+                    level: "province" | "commune";
+                    /** @description Bắt buộc với cấp Xã; tỉnh còn sử dụng */
+                    parent_code?: string;
+                    /** @default true */
+                    active?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Đã tạo */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedAdminUnit"];
+                };
+            };
+            /** @description masterdata.admin_unit_name_taken */
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    updateManagedAdminUnit: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name: string;
+                    active: boolean;
+                    /** @description 0 với mục pháp lý chưa có chỉnh sửa quản trị */
+                    expected_revision: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Đã lưu */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedAdminUnit"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            /** @description masterdata.admin_unit_changed hoặc masterdata.admin_unit_name_taken */
+            409: components["responses"]["Problem"];
+        };
+    };
+    importManagedAdminUnits: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "text/csv": string;
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+            };
+        };
+        responses: {
+            /** @description Kết quả từng dòng; gửi lại cùng key và tệp trả kết quả cũ */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogImportResult"];
+                };
+            };
+            422: components["responses"]["Problem"];
+        };
+    };
+    managedAdminUnitTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description File mẫu ba cột */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                };
+            };
+        };
+    };
     deleteCatalogItem: {
         parameters: {
             query?: never;
@@ -16231,6 +16627,232 @@ export interface operations {
             /** @description masterdata.catalog_delete_unsupported */
             422: components["responses"]["Problem"];
             /** @description masterdata.dependency_unavailable */
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStrawFactors: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Giữ cả dòng đã cấu hình cho giống bị ẩn */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["StrawFactorRow"][];
+                    };
+                };
+            };
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createStrawFactor: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    variety_code: string;
+                    /** @description 0–100%, tối đa 4 chữ số thập phân */
+                    percentage: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Đã thêm hoặc replay cùng thao tác */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrawFactorEvent"];
+                };
+            };
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    reviseStrawFactor: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                variety_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    percentage: string;
+                    expected_revision: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Đã lưu một revision hoặc replay */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrawFactorEvent"];
+                };
+            };
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    strawFactorHistory: {
+        parameters: {
+            query?: {
+                before_revision?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                variety_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Lịch sử và con trỏ tải tiếp */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["StrawFactorEvent"][];
+                        next_before_revision: number | null;
+                    };
+                };
+            };
+            403: components["responses"]["Problem"];
+        };
+    };
+    htxProfileCreate: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HTXProfileInput"];
+            };
+        };
+        responses: {
+            /** @description Phát lại kết quả đã ghi */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTXProfileWritten"];
+                };
+            };
+            /** @description Đã tạo; client tải GET profile riêng. Receipt ghi không có PII. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTXProfileWritten"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    htxDeletionCheck: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Không cache; hộ gồm ngừng hoạt động, tài khoản gồm lịch sử và khóa. Thiếu nguồn kiểm tra trả 503. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTXDeletionCheck"];
+                };
+            };
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    htxDelete: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    expected_revision: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Đã xóa hồ sơ và liên hệ riêng HTX; cùng khóa tiếp tục thao tác khi Vault gián đoạn. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTXProfileWritten"] & {
+                        /** @constant */
+                        deleted: true;
+                    };
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
     };

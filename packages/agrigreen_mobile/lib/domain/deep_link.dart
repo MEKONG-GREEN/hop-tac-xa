@@ -6,7 +6,7 @@
 /// `season_opened`, `season_log_missing`, `season_process_changed`),
 /// `/cropcycle/seasons/{ref}/tasks/{ref}` (kind `season_task_due`), `/htx/thu-gom`
 /// (lịch thu gom rơm và bảng kê, pf/notify `collection.go`). Lịch thời vụ
-/// `/cropcycle/calendars/{ref}` chưa có màn đích nên ở lại hộp thư.
+/// `/cropcycle/calendars/{ref}` mở lịch hiện hành (ứng dụng kiểm quyền vai).
 /// Cảnh báo khẩn cấp (`alert`) dùng `/documents/{ref}`.
 sealed class DeepLink {
   const DeepLink();
@@ -33,6 +33,14 @@ sealed class DeepLink {
       return ConflictLink(seg[2]);
     }
     if (seg.length == 3 && seg[0] == 'cropcycle' && isId(seg[2])) {
+      if (seg[1] == 'calendars' &&
+          uri.scheme.isEmpty &&
+          !uri.hasAuthority &&
+          RegExp(
+            r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+          ).hasMatch(seg[2])) {
+        return CalendarLink(seg[2].toLowerCase());
+      }
       if (seg[1] == 'farm-logs') return FarmLogLink(seg[2]);
       if (seg[1] == 'seasons') return SeasonLink(seg[2]);
     }
@@ -59,6 +67,15 @@ class InboxLink extends DeepLink {
   bool operator ==(Object other) => other is InboxLink;
   @override
   int get hashCode => 0;
+}
+
+class CalendarLink extends DeepLink {
+  const CalendarLink(this.ref);
+  final String ref;
+  @override
+  bool operator ==(Object other) => other is CalendarLink && other.ref == ref;
+  @override
+  int get hashCode => Object.hash('calendar', ref);
 }
 
 /// Thu gom rơm MKG (lịch thu gom, bảng kê) — G2 App HTX.

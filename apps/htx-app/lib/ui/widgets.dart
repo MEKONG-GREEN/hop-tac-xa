@@ -262,12 +262,16 @@ class PhotoCapture extends ConsumerStatefulWidget {
     required this.onChanged,
     this.max = 20,
     this.parentEntity,
+    this.maxPlainBytes,
+    this.beforeCapture,
   });
   final String? householdRef;
   final List<String> photoIds;
   final ValueChanged<List<String>> onChanged;
   final int max;
   final String? parentEntity;
+  final int? maxPlainBytes;
+  final Future<void> Function()? beforeCapture;
 
   @override
   ConsumerState<PhotoCapture> createState() => _PhotoCaptureState();
@@ -291,7 +295,19 @@ class _PhotoCaptureState extends ConsumerState<PhotoCapture> {
       );
       return;
     }
+    try {
+      await widget.beforeCapture?.call();
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _block = 'Chưa tải được khóa ảnh cho hộ. Kết nối mạng một lần để chuẩn bị.',
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
     final reason = await s.photos.blockReason(hh);
+    if (!mounted) return;
     if (reason != null) {
       setState(() => _block = reason);
       return;
@@ -301,7 +317,9 @@ class _PhotoCaptureState extends ConsumerState<PhotoCapture> {
       final out = await s.photos.capture(
         subjectRef: hh,
         parentEntity: widget.parentEntity,
+        maxPlainBytes: widget.maxPlainBytes,
       );
+      if (!mounted) return;
       if (out != null) {
         widget.onChanged([...widget.photoIds, out.file.id]);
         setState(() => _block = null);

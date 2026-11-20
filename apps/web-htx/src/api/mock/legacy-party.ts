@@ -3,6 +3,7 @@ import { COOPERATIVES, findCoop, householdsOf, orgEvents, ORG_EVENTS, ORGS } fro
 import { headerKey, parseCsv } from "./admin-ops";
 import { hasRole, inScope, isZip, json, norm, ownCoopOnly, paginate, problem, scopeUnits, type Route } from "./http";
 import type { MockPersona } from "./personas";
+import { withHTXSummary } from "./htx-profiles";
 
 const importedPhones = new Set<string>();
 
@@ -11,7 +12,7 @@ function outsideOwnCoop(persona: MockPersona, coopRef: string): boolean {
   return ownCoopOnly(persona) && persona.me.org?.ref !== coopRef;
 }
 
-export const appRoutes1: Route[] = [{ method: "GET", pattern: /^\/v1\/me$/, handler: ({ persona }) => json(persona.me) }];
+export const appRoutes1: Route[] = [{ method: "GET", pattern: /^\/v1\/me$/, handler: ({ persona }) => json({ ...persona.me, org: persona.me.org ? { ...persona.me.org, name: findCoop(persona.me.org.ref)?.api.name ?? persona.me.org.name } : null }) }];
 
 export const appRoutes34: Route[] = [{
     method: "GET",
@@ -46,7 +47,7 @@ export const appRoutes35: Route[] = [{
           (!unit || c.province_code === unit || c.api.admin_unit_code === unit) &&
           (inactive || c.api.active) &&
           (!q || norm(`${c.api.name} ${c.api.code} ${c.api.tax_code ?? ""}`).includes(q)),
-      ).map((c) => c.api);
+      ).map(withHTXSummary);
       return json(paginate(list, url));
     },
   }];
@@ -59,7 +60,7 @@ export const appRoutes36: Route[] = [{
       // Ngoài phạm vi trả 404 như backend (không lộ sự tồn tại).
       if (!c || !inScope(persona, c.province_code, c.api.admin_unit_code)) return problem(404, "party.org_not_found", "Not found");
       if (outsideOwnCoop(persona, c.api.ref)) return problem(404, "party.org_not_found", "Not found");
-      return json(c.api);
+      return json(withHTXSummary(c));
     },
   }];
 

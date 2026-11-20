@@ -15,6 +15,7 @@ import (
 // RebuildResult đếm số dòng đã dựng lại.
 type RebuildResult struct {
 	Seasons, Logs, CoopAreas int
+	Calendars                int
 }
 
 // RebuildProjections dựng lại toàn bộ bảng chiếu của tenant từ các sổ (R-22):
@@ -37,6 +38,11 @@ func (s *Service) RebuildProjections(ctx context.Context) (RebuildResult, error)
 
 func rebuild(ctx context.Context, tx pgx.Tx, tid uuid.UUID) (RebuildResult, error) {
 	var res RebuildResult
+	calendars, err := store.RebuildCalendars(ctx, tx)
+	if err != nil {
+		return res, err
+	}
+	res.Calendars = calendars
 	if err := store.ClearProjections(ctx, tx); err != nil {
 		return res, err
 	}
@@ -85,6 +91,13 @@ func rebuild(ctx context.Context, tx pgx.Tx, tid uuid.UUID) (RebuildResult, erro
 	}
 	steps := make([]step, 0, len(logs)+len(reviews))
 	for i := range logs {
+		if logs[i].EntryKind == "household" {
+			if err := store.SaveHouseholdTask(ctx, tx, logs[i]); err != nil {
+				return res, err
+			}
+			res.Logs++
+			continue
+		}
 		steps = append(steps, step{log: &logs[i], at: logs[i].RecordedAt.UnixNano()})
 	}
 	for i := range reviews {
@@ -116,7 +129,7 @@ func rebuild(ctx context.Context, tx pgx.Tx, tid uuid.UUID) (RebuildResult, erro
 			return res, err
 		}
 	}
-	res.Logs = len(logOrder)
+	res.Logs += len(logOrder)
 
 	keys, err := store.CoopSeasonKeys(ctx, tx)
 	if err != nil {

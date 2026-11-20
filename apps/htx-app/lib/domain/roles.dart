@@ -61,6 +61,7 @@ enum HtxScreen {
   support,
   staff,
   households,
+  seasonCalendars,
   plotMap,
   bulkOpen,
   householdLogs,
@@ -107,6 +108,8 @@ extension HtxModeAccess on HtxMode {
       HtxScreen.support ||
       HtxScreen.staff => farmer,
       HtxScreen.households => _matrix(HtxFn.households, HtxAction.read),
+      HtxScreen.seasonCalendars =>
+        this == HtxMode.member && _matrix(HtxFn.calendar, HtxAction.read),
       HtxScreen.plotMap => _matrix(HtxFn.plotsAndArea, HtxAction.read),
       HtxScreen.bulkOpen => _matrix(HtxFn.season, HtxAction.create),
       HtxScreen.householdLogs => _matrix(HtxFn.seasonView, HtxAction.read),

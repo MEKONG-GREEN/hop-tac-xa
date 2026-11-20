@@ -5,6 +5,7 @@
 import { uuidv7 } from "../idempotency";
 import type { CatalogItem } from "../types";
 import { varietyReferenced } from "./cropcycle";
+import { strawFactorReferenced } from "./straw-factors";
 import { CATALOGS } from "./data";
 import { hasRole, json, nowIso, problem, validation, type Ctx, type Route } from "./http";
 
@@ -146,7 +147,7 @@ function setActive(catalog: Catalog, code: string, active: boolean, body: unknow
 
 /** Mục đang được dùng ở đâu đó (vụ, SOP; loại cây: có giống hoặc sâu bệnh trỏ tới) thì "xóa" chỉ ẩn. */
 function inUse(catalog: Catalog, item: CatalogItem): boolean {
-  if (catalog === "rice_variety") return varietyReferenced(item.code);
+  if (catalog === "rice_variety") return varietyReferenced(item.code) || strawFactorReferenced(item.code);
   const asPest = CATALOGS.pest.some((p) => (p.attrs.affected_crops ?? "").split(",").includes(item.code));
   return asPest || list("rice_variety").some((v) => v.attrs.crop_code === item.code);
 }

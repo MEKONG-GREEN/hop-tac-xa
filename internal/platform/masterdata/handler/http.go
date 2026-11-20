@@ -32,6 +32,7 @@ func (h Handler) RegisterApp(rg *gin.RouterGroup) {
 
 // RegisterAdmin gắn route quản trị vào nhóm /v1 của Admin API (MFA bắt buộc).
 func (h Handler) RegisterAdmin(rg *gin.RouterGroup) {
+	h.registerUnitManagement(rg)
 	rg.POST("/masterdata/seed", h.seed)
 	rg.POST("/masterdata/admin-units/import", h.importUnits)
 	rg.GET("/masterdata/catalogs/:catalog/items", h.listItems(true))

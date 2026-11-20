@@ -154,6 +154,7 @@ paths:
       parameters:
         - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
         - {name: phone, in: query, description: "SĐT chủ hộ cần tìm (khớp chính xác sau chuẩn hóa)", schema: {type: string, maxLength: 20}}
+        - {name: status, in: query, schema: {type: string, enum: [active, inactive]}}
         - {name: cursor, in: query, schema: {type: string}}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
       responses:
@@ -5278,6 +5279,18 @@ components:
             confirmation_label: {type: string, enum: ["Đã xác nhận", "Chưa xác nhận"]}
             tax_code: {type: [string, "null"], pattern: "^[0-9]{10}(-[0-9]{3})?$"}
             area_ha: {oneOf: [{$ref: "#/components/schemas/Decimal"}, {type: "null"}], description: "Diện tích đăng ký hành chính (ha)"}
+            household_areas: {oneOf: [{$ref: "#/components/schemas/CooperativeHouseholdAreas"}, {type: "null"}], description: "Tổng diện tích hộ hiện thuộc HTX; null khi chưa nối nguồn, không dùng area_ha đăng ký KN"}
+            machine_count: {type: [integer, "null"], minimum: 0, description: "Tổng cột Số lượng từ AH-260; null khi chưa có nguồn, không dùng dữ liệu máy KN thay thế"}
+            machine_groups:
+              type: [array, "null"]
+              description: "Nhóm theo danh mục loại máy động; null khi chưa có nguồn"
+              items:
+                type: object
+                required: [type_ref, type_name, quantity]
+                properties:
+                  type_ref: {type: string, format: uuid}
+                  type_name: {type: string}
+                  quantity: {type: integer, minimum: 0}
             established_on: {type: [string, "null"], format: date}
             location: {oneOf: [{$ref: "#/components/schemas/Point"}, {type: "null"}]}
             location_provisional: {type: boolean, description: "true = chưa có toạ độ; bản đồ hiển thị tâm xã, nhãn \"vị trí tạm\""}
@@ -5296,10 +5309,13 @@ components:
       type: object
       required: [household_ref, cooperative_ref, commune_code, cultivated_area_ha, member_since, active]
       properties:
+        code: {type: string, readOnly: true}
+        revision: {type: integer, minimum: 1, readOnly: true}
         household_ref: {type: string, format: uuid, description: "Mã tham chiếu trong kho định danh (R-41)"}
         cooperative_ref: {type: [string, "null"], format: uuid}
         commune_code: {type: string}
         cultivated_area_ha: {oneOf: [{$ref: "#/components/schemas/Decimal"}, {type: "null"}]}
+        livestock_area_ha: {oneOf: [{$ref: "#/components/schemas/Decimal"}, {type: "null"}], description: "Diện tích chăn nuôi của hộ; null khi chưa khai báo"}
         member_since: {type: [string, "null"], format: date}
         active: {type: boolean}
 # @ag-order: 564
@@ -5360,6 +5376,7 @@ components:
         cooperative_ref: {type: string, format: uuid}
         commune_code: {type: string, description: "Bỏ trống = xã của HTX"}
         cultivated_area_ha: {$ref: "#/components/schemas/Decimal"}
+        livestock_area_ha: {$ref: "#/components/schemas/Decimal", description: "Tùy chọn; không âm, tối đa 4 số lẻ"}
         member_since: {type: string, format: date}
         identity:
           type: object
@@ -5386,7 +5403,7 @@ components:
       required: [device_id, platform, app_version]
       properties:
         device_id: {type: string, format: uuid, description: "UUIDv7 sinh trên máy"}
-        platform: {type: string, enum: [android, ios]}
+        platform: {type: string, enum: [android, ios, web], description: Web chỉ dùng ảnh và nhật ký hộ AH-99; không pull dữ liệu hiện trường}
         app_version: {type: string, pattern: "^[0-9A-Za-z.+_-]{1,40}$"}
 # @ag-order: 570
     SyncDevice:
@@ -5466,7 +5483,7 @@ components:
         event_time: {type: string, format: date-time, description: "Có múi giờ; không vượt quá giờ máy chủ + 5 phút"}
         supersedes_id: {type: [string, "null"], format: uuid, description: "Bắt buộc khi op = correct"}
         correction_reason: {type: [string, "null"], minLength: 10, maxLength: 500, description: "Bắt buộc khi op = correct"}
-        payload: {type: object, description: "Tối đa 256 KiB; máy chủ pf/sync chỉ lưu SHA-256"}
+        payload: {type: object, additionalProperties: true, description: "Tối đa 256 KiB; máy chủ pf/sync chỉ lưu SHA-256. Entity household_task_record dùng hợp đồng AH-99 trong docs/dev/sync-contract.md; máy chủ kiểm actor, tenant, HTX và quyền hiện tại."}
 # @ag-order: 576
     SyncReportSubmissionPayload:
       type: object

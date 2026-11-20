@@ -12,6 +12,7 @@ const SEASONS = "/htx/mua-vu";
 type Rule = { re: RegExp; to: (id: string, kind: string | undefined) => string };
 
 const RULES: readonly Rule[] = [
+  { re: /^\/cropcycle\/calendars\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i, to: (id) => `/htx/lich-thoi-vu?calendar=${id.toLowerCase()}` },
   { re: new RegExp(`^/extension/directives/(${UUID})$`), to: (id) => `/chi-dao?id=${id}` },
   { re: new RegExp(`^/documents/(${UUID})$`), to: (id) => `/thu-vien?doc=${id}` },
   // task_escalated, task_assigned (KN US-TASK-01): trang nhiệm vụ mở sẵn nhiệm vụ.
@@ -39,10 +40,11 @@ const RULES: readonly Rule[] = [
 
 /** Trang đích theo loại thông báo khi `deep_link` trống hoặc không nhận dạng được. */
 const KIND_FALLBACK: Readonly<Record<string, string>> = {
+  season_calendar_published: "/htx/lich-thoi-vu",
   farm_log_pending: "/htx/phe-duyet",
   farm_log_reviewed: "/htx/nhat-ky",
   season_opened: SEASONS,
-  // AH-22: thông báo gắn với vụ; thông báo lịch (season_calendar_published) chưa có màn đích nên ở lại hộp thư.
+  // AH-22: thông báo gắn với vụ; lịch thời vụ có đích riêng từ AH-59.
   season_task_due: SEASONS,
   season_log_missing: SEASONS,
   season_process_changed: SEASONS,

@@ -17,6 +17,8 @@ import { usePagedList } from "@/api/pagination";
 import { formatDecimal } from "@/lib/decimal";
 import { toApiProblem, useAsync } from "@/lib/useAsync";
 import { SeasonPlan } from "./SeasonPlan";
+import { HouseholdChecklist } from "./HouseholdChecklist";
+import type { CalendarPrefill } from "./seasonCalendarModel";
 
 type S = components["schemas"];
 type GPS = S["CropGPS"];
@@ -35,18 +37,18 @@ async function requestGPS(): Promise<GPS> {
   ); } catch { resolve({ source: "denied" }); } });
 }
 
-export function HouseholdSeasonsDialog({ coopRef, household, onClose, onSaved }: {
-  coopRef: string; household: HouseholdListItem; onClose: () => void; onSaved: () => void;
+export function HouseholdSeasonsDialog({ coopRef, household, calendarPrefill, onClose, onSaved }: {
+  coopRef: string; household: HouseholdListItem; calendarPrefill?: CalendarPrefill; onClose: () => void; onSaved: () => void;
 }) {
   const { api, principal } = useAuth();
   const canCreate = hasRole(principal, ROLES.platformAdmin, ROLES.htxMember) && matrixAllows(principal, "KHMV-FN-03", "C");
-  const [opening, setOpening] = useState(false);
-  const [crop, setCrop] = useState("");
+  const [opening, setOpening] = useState(!!calendarPrefill);
+  const [crop, setCrop] = useState(calendarPrefill?.crop_code ?? "");
   const [variety, setVariety] = useState("");
-  const [seasonCode, setSeasonCode] = useState("");
-  const [year, setYear] = useState(String(new Date().getFullYear()));
+  const [seasonCode, setSeasonCode] = useState(calendarPrefill?.season_code ?? "");
+  const [year, setYear] = useState(String(calendarPrefill?.season_year ?? new Date().getFullYear()));
   const [area, setArea] = useState("");
-  const [anchor, setAnchor] = useState("");
+  const [anchor, setAnchor] = useState(calendarPrefill?.sow_from ?? "");
   const [version, setVersion] = useState("");
   const [key, setKey] = useState(newIdempotencyKey);
   const [gps, setGPS] = useState<GPS | null>(null);
@@ -150,6 +152,7 @@ export function HouseholdSeasonsDialog({ coopRef, household, onClose, onSaved }:
       <p>{detail.sop_snapshot.anchor_name}: {detail.anchor_date} · {detail.gps_missing ? "Thiếu GPS" : "Đã ghi nhận vị trí"}</p>
       <p>SOP bản {detail.sop_snapshot.version_no} · Diện tích {formatDecimal(detail.area_ha, 2)} ha</p>
       <ol>{detail.sop_snapshot.steps.map((step, i) => <li key={i}>{step.name}</li>)}</ol>
+      <HouseholdChecklist key={detail.season_ref} coopRef={coopRef} householdRef={household.household_ref} seasonRef={detail.season_ref} season={detail} />
       {detailPlan.loading ? <Loading label="Đang tải kế hoạch…" /> : detailPlan.error ? <ProblemAlert problem={detailPlan.error} onRetry={detailPlan.reload} /> : detailPlan.data ? <SeasonPlan plan={detailPlan.data} /> : null}
     </section> : null}
   </Dialog>;

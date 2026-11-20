@@ -229,6 +229,21 @@ class ManagerService {
   bool get householdCallAvailable => _callAvailable;
   bool _callAvailable = true;
 
+  /// FN-04 detail is online-only and stays in memory. Never cache identity
+  /// fields in LocalDb, action queues or sync metadata.
+  Future<Map<String, Object?>> householdProfile(String householdRef) async {
+    final own = await _profile.cooperativeRef();
+    if (own == null) throw ManagerException('Tài khoản chưa gắn HTX.');
+    final data = await _api.getJson('/v1/households/$householdRef/profile');
+    final household = data['household'];
+    if (household is! Map ||
+        household['cooperative_ref'] != own ||
+        household['household_ref'] != householdRef) {
+      throw ManagerException('Bạn không có quyền truy cập hộ này.');
+    }
+    return data;
+  }
+
   /// SĐT của nông hộ, đọc từ vault qua API **lúc bấm gọi** (`Cache-Control:
   /// no-store`), không lưu trên máy, không ghi log (R-04, R-14).
   Future<String> householdPhone(String householdRef) async {

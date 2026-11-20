@@ -27,6 +27,7 @@ import (
 	port "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/port"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/season/domain"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/season/store"
+	evport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/evidence/port"
 	geoport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/geo/port"
 	mdport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/masterdata/port"
 	partyport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/party/port"
@@ -96,19 +97,22 @@ var managerRoles = []string{port.RoleCoopManager, authz.RolePlatformAdmin}
 
 // Service là use case vụ mùa của pf/cooperative (W3.3, chuyển từ pf/cropcycle).
 type Service struct {
-	DB       tenant.Beginner // pool; giao dịch chạy dưới r_cooperative (db.ForModule)
-	Clock    clock.Clock
-	Scope    partyport.ScopeResolver // phạm vi cán bộ KN; thiếu → vai KN nhận 503
-	Orgs     partyport.Orgs          // tùy chọn: kiểm HTX đang hoạt động
-	Plots    port.Plots              // bắt buộc cho ghi: thửa, diện tích, khoảng cách GPS (pf/cooperative, W3.2)
-	Params   params.Params           // tùy chọn: ngưỡng GPS, ngưỡng năng suất bất thường
-	Catalogs mdport.Catalogs         // tùy chọn: giống lúa, vụ, máy (thiếu → chỉ kiểm dạng mã)
-	Farmers  port.FarmerHouseholds   // liên kết tài khoản ↔ nông hộ; thiếu → vai farmer nhận 503
-	GpsLog   geoport.GpsLog          // log GPS của pf/geo (consumer port.GpsLogConsumer); thiếu → consumer lỗi, giao lại
+	TaskImages evport.OwnedImages // upload receipt checks only; never opens image/GPS
+	DB         tenant.Beginner    // pool; giao dịch chạy dưới r_cooperative (db.ForModule)
+	Clock      clock.Clock
+	Scope      partyport.ScopeResolver // phạm vi cán bộ KN; thiếu → vai KN nhận 503
+	Orgs       partyport.Orgs          // tùy chọn: kiểm HTX đang hoạt động
+	Plots      port.Plots              // bắt buộc cho ghi: thửa, diện tích, khoảng cách GPS (pf/cooperative, W3.2)
+	Params     params.Params           // tùy chọn: ngưỡng GPS, ngưỡng năng suất bất thường
+	Catalogs   mdport.Catalogs         // tùy chọn: giống lúa, vụ, máy (thiếu → chỉ kiểm dạng mã)
+	Farmers    port.FarmerHouseholds   // liên kết tài khoản ↔ nông hộ; thiếu → vai farmer nhận 503
+	GpsLog     geoport.GpsLog          // log GPS của pf/geo (consumer port.GpsLogConsumer); thiếu → consumer lỗi, giao lại
 	// Sharing (ADR-0020): cấp quyền chia sẻ + sổ đọc của bề mặt đối tác (pf/party); thiếu → 403.
-	Sharing partyport.PartnerAccess
-	Names   partyport.ActorNames // tùy chọn: tên người phát hành SOP
-	Log     *slog.Logger
+	Sharing          partyport.PartnerAccess
+	Names            partyport.ActorNames // tùy chọn: tên người phát hành SOP
+	Log              *slog.Logger
+	CalendarMembers  port.CalendarMembers
+	CalendarNotifier port.CalendarNotifier
 }
 
 func (s *Service) now() time.Time { return s.Clock.Now().UTC() }

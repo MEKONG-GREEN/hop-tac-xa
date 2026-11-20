@@ -134,13 +134,32 @@ func (m *Module) Orgs() port.Orgs { return m.reg }
 // OrgDirectory cho pf/cooperative đọc Nút theo lô (danh sách, thống kê, marker HTX — W3.3).
 func (m *Module) OrgDirectory() port.OrgDirectory { return m.reg }
 
+// UnitCounts exposes tenant-scoped HTX counts to the administration catalog.
+func (m *Module) UnitCounts() port.CooperativeUnitCounts { return m.reg }
+
 // ConsentStates cho pf/cooperative đọc trạng thái đồng ý của nông hộ trong danh sách (G-04, W3.3).
 func (m *Module) ConsentStates() port.ConsentStates { return m.reg }
 
 // UseCoopProfiles (W3.3) nối hồ sơ HTX và số nông hộ thành viên của pf/cooperative cho các màn HTX của sổ tổ
 // chức (G1, HTX US-HTX-*, KN FN-XA-03.03, danh bạ đối tác) và bước 2 của tạo HTX. Thiếu → thao tác cần hồ sơ
 // HTX trả 503 party.dependency_unavailable.
-func (m *Module) UseCoopProfiles(p port.CoopProfiles) { m.reg.Profiles, m.share.Profiles = p, p }
+func (m *Module) UseCoopProfiles(p port.CoopProfiles) {
+	m.reg.Profiles, m.share.Profiles = p, p
+	m.reg.ProfileEditor, _ = p.(port.HTXProfileEditor)
+}
+
+// UseCooperativeAreas nối nguồn diện tích hộ; không dùng diện tích đăng ký KN.
+func (m *Module) UseCooperativeAreas(p port.CooperativeAreaSource) { m.reg.Areas = p }
+
+// UseCooperativeAccountUsers nối nguồn IAM thật cho kiểm tra xóa HTX, thiếu thì fail-closed.
+func (m *Module) UseCooperativeAccountUsers(p port.CooperativeAccountUsers) { m.reg.AccountUsers = p }
+func (m *Module) UseCooperativePrivateReferences(p port.CooperativePrivateReferences) {
+	m.reg.PrivateReferences = p
+}
+
+// UseInventoryMachines nối nguồn AH-260 khi có. Không tự dùng máy cơ giới KN
+// thay thế; chưa nối thì API trả null và giao diện hiện "—" theo quyết định PO.
+func (m *Module) UseInventoryMachines(p port.InventoryMachineSource) { m.reg.InventoryMachines = p }
 
 // ScopeResolver cho module khác tính phạm vi theo cây phân cấp (qua port, ADR-0009).
 func (m *Module) ScopeResolver() port.ScopeResolver { return m.reg }

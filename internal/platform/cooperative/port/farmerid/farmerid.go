@@ -6,7 +6,11 @@ package farmerid
 import (
 	"context"
 	"errors"
+	"strings"
+	"unicode/utf8"
 
+	"github.com/MEKONG-GREEN/hop-tac-xa/contracts/htxroles"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/authz"
 	"github.com/google/uuid"
 
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/port"
@@ -49,6 +53,37 @@ func Households(c client.Client) port.HouseholdIdentities {
 
 type households struct{ c client.Client }
 
+func (h households) HouseholdPhotoKey(ctx context.Context, ref uuid.UUID) ([]byte, error) {
+	keys, err := h.c.HouseholdPubKeys(ctx, []uuid.UUID{ref})
+	if err != nil {
+		return nil, err
+	}
+	if len(keys) != 1 || keys[0].Ref != ref || len(keys[0].PublicKey) != 32 {
+		return nil, port.ErrIdentityNotFound
+	}
+	return keys[0].PublicKey, nil
+}
+
+func (h households) WriteNativeHouseholdIdentity(ctx context.Context, command uuid.UUID, id port.HouseholdIdentity) error {
+	w, ok := h.c.(client.HouseholdIdentityWriter)
+	if !ok {
+		return client.ProblemHouseholdScopeUnavailable
+	}
+	return w.WriteHouseholdIdentity(ctx, client.PurposeContact, command, client.Identity{FullName: id.FullName, Phone: id.Phone, NationalID: id.NationalID, Address: id.Address})
+}
+
+func (h households) NativeHouseholdIdentity(ctx context.Context, ref uuid.UUID) (port.HouseholdIdentity, error) {
+	r, ok := client.AsHouseholdIdentityReader(h.c)
+	if !ok {
+		return port.HouseholdIdentity{}, client.ProblemHouseholdScopeUnavailable
+	}
+	id, err := r.ReadHouseholdIdentity(ctx, client.PurposeContact, ref)
+	if err != nil {
+		return port.HouseholdIdentity{}, err
+	}
+	return port.HouseholdIdentity{FullName: id.FullName, Phone: id.Phone, NationalID: id.NationalID, Address: id.Address, AreaCode: id.AreaCode}, nil
+}
+
 func (h households) RegisterHousehold(ctx context.Context, id port.HouseholdIdentity) (uuid.UUID, error) {
 	cr, err := h.c.Create(ctx, client.PurposeRegistryAdmin, client.Identity{Kind: client.SubjectHousehold, FullName: id.FullName,
 		Phone: id.Phone, NationalID: id.NationalID, Address: id.Address, AreaCode: id.AreaCode})
@@ -59,6 +94,28 @@ func (h households) RegisterHousehold(ctx context.Context, id port.HouseholdIden
 }
 
 func (h households) Label(ctx context.Context, purpose port.IdentityPurpose, ref uuid.UUID) (port.IdentityLabel, error) {
+	_, nativeAvailable := client.AsHouseholdIdentityReader(h.c)
+	if p, ok := authz.FromContext(ctx); nativeAvailable && ok && p.KN == nil && (p.Has(htxroles.Admin) || p.Has(htxroles.Representative) || p.Has(htxroles.Member)) {
+		id, err := h.NativeHouseholdIdentity(ctx, ref)
+		phone := id.Phone
+		if len(phone) > 7 {
+			phone = phone[:4] + "***" + phone[len(phone)-3:]
+		}
+		words := strings.Fields(id.FullName)
+		label := ""
+		for i, word := range words {
+			if i > 0 {
+				label += " "
+			}
+			if i == 0 && len(words) > 1 {
+				label += word
+			} else {
+				r, _ := utf8.DecodeRuneInString(word)
+				label += string(r) + "."
+			}
+		}
+		return port.IdentityLabel{Label: label, MaskedPhone: phone}, err
+	}
 	p := client.PurposeContact
 	if purpose == port.IdentityFieldSupport {
 		p = client.PurposeFieldSupport
@@ -68,6 +125,15 @@ func (h households) Label(ctx context.Context, purpose port.IdentityPurpose, ref
 }
 
 func (h households) Phone(ctx context.Context, ref uuid.UUID) (string, error) {
+	if p, ok := authz.FromContext(ctx); ok && p.KN == nil && (p.Has(htxroles.Admin) || p.Has(htxroles.Representative) || p.Has(htxroles.Member)) {
+		if _, ok := client.AsHouseholdIdentityReader(h.c); ok {
+			id, err := h.NativeHouseholdIdentity(ctx, ref)
+			if errors.Is(err, client.ErrNotFound) || errors.Is(err, client.ErrErased) {
+				return "", port.ErrIdentityNotFound
+			}
+			return id.Phone, err
+		}
+	}
 	id, err := h.c.Resolve(ctx, client.PurposeContact, ref)
 	if errors.Is(err, client.ErrNotFound) || errors.Is(err, client.ErrErased) {
 		return "", port.ErrIdentityNotFound
@@ -76,6 +142,15 @@ func (h households) Phone(ctx context.Context, ref uuid.UUID) (string, error) {
 }
 
 func (h households) LookupPhone(ctx context.Context, phone string) (uuid.UUID, error) {
+	if p, ok := authz.FromContext(ctx); ok && p.KN == nil && (p.Has(htxroles.Admin) || p.Has(htxroles.Representative) || p.Has(htxroles.Member)) {
+		if q, ok := h.c.(client.HouseholdPhoneLookup); ok {
+			ref, err := q.LookupHouseholdPhone(ctx, client.PurposeContact, phone)
+			if errors.Is(err, client.ErrNotFound) {
+				return uuid.Nil, port.ErrIdentityNotFound
+			}
+			return ref, err
+		}
+	}
 	ref, err := h.c.Lookup(ctx, client.PurposeRegistryAdmin, phone)
 	if errors.Is(err, client.ErrNotFound) {
 		return uuid.Nil, port.ErrIdentityNotFound

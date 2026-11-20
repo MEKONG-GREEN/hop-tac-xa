@@ -86,12 +86,11 @@ describe("AH-22 AC1/AC2: trang trung tâm thông báo", () => {
     expect(calls.some((c) => c.method === "POST" && c.path === "/v1/notifications/n1/read")).toBe(true);
   });
 
-  it("AH22_AC2: thông báo lịch chưa có màn đích → ở lại trung tâm, ghi 'Chưa có màn hình liên kết.'", async () => {
+  it("AH22_AC2 + AH-59: thông báo lịch mở đúng trang lịch hiện hành", async () => {
     render(<InboxPage />);
     const yesterday = (await screen.findByRole("heading", { name: "Hôm qua" })).closest("section")!;
-    expect(within(yesterday).getByText("Chưa có màn hình liên kết.")).toBeTruthy();
+    expect(within(yesterday).queryByText("Chưa có màn hình liên kết.")).toBeNull();
     fireEvent.click(within(yesterday).getByRole("button", { name: /Lịch thời vụ mới: Lúa/ }));
-    await waitFor(() => expect(calls.filter((c) => c.method === "GET").length).toBeGreaterThan(1)); // tải lại danh sách
-    expect(push).not.toHaveBeenCalled();
+    await waitFor(() => expect(push).toHaveBeenCalledWith(`/htx/lich-thoi-vu?calendar=${CAL}`));
   });
 });

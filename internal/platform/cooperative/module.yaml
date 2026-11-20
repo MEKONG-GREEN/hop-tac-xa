@@ -9,6 +9,7 @@ zones: [pf]
 version: 1.0.0
 depends:
   pf/apiclient: ">=1.0 <2"
+  pf/evidence: ">=1.0 <2"
   pf/geo: ">=2.0 <3"
   pf/masterdata: ">=1.0 <2"
   pf/metrics: ">=1.0 <2"
@@ -18,19 +19,27 @@ depends:
   vault/identity: ">=1.0 <2"
 provides:
   ports:
+    - CalendarMembers
+    - CalendarNotifier
     - Cooperatives
     - Diary
     - FarmerHouseholds
     - FarmerIdentity
     - HTXConfirmations
     - HouseholdIdentities
+    - HouseholdProductionHistory
     - Households
     - MachineCounts
+    - NativeHouseholdIdentityReader
+    - NativeHouseholdIdentityWriter
+    - NativeHouseholdPhotoKeys
     - Plots
     - Resolve
     - Seasons
+    - StrawFactors
   events:
     - pf.cooperative.household_season.opened/v1
+    - pf.cooperative.household_task.completed/v1
     - pf.cropcycle.coop_season_area.changed/v1
     - pf.cropcycle.farm_log.recorded/v1
     - pf.cropcycle.farm_log.reviewed/v1
@@ -49,6 +58,7 @@ provides:
   internal_events: []
   publications:
     - pf_cooperative_pub.confirmations/v1
+    - pf_cooperative_pub.cooperative_references/v1
     - pf_cooperative_pub.cooperatives/v1
     - pf_cooperative_pub.plot_export/v1
     - pf_cooperative_pub.plots/v1

@@ -51,6 +51,9 @@ Mã lỗi của module có dạng `<module>.<lỗi>`.
 | 404 | `masterdata.admin_unit_not_found` | pf/masterdata: không có đơn vị hành chính với mã đó tại thời điểm tra (hoặc đã bãi bỏ không có kế thừa) |
 | 409 | `masterdata.admin_unit_conflict` | pf/masterdata: nhập danh mục có phiên bản `(code, valid_from)` đã có với nội dung khác — chỉ được đóng hiệu lực phiên bản đang mở |
 | 409 | `masterdata.admin_unit_overlap` | pf/masterdata: phiên bản mới chồng lấp hiệu lực với phiên bản khác của cùng mã |
+| 409 | `masterdata.admin_unit_name_taken` | AH-271: tên tỉnh hoặc tên xã trong cùng tỉnh đã có, kể cả mục ngừng sử dụng; so tên tiếng Việt không phụ thuộc locale DB |
+| 409 | `masterdata.admin_unit_changed` | AH-271: phiên bản quản trị đã thay đổi; tải lại tên/trạng thái trước khi sửa |
+| 422 | `masterdata.admin_unit_import_invalid` | AH-271: tệp tỉnh/xã sai mẫu Tên/Cấp/Tỉnh trực thuộc, có công thức hoặc vượt 500 dòng/2 MB; từ chối cả tệp |
 | 422 | `masterdata.admin_unit_invalid_reference` | pf/masterdata: đơn vị cha không bao trọn khoảng hiệu lực, hoặc đơn vị kế thừa không có hiệu lực tại `valid_to` |
 | 404 | `masterdata.catalog_not_found` | pf/masterdata: tên danh mục không tồn tại |
 | 404 | `masterdata.catalog_item_not_found` | pf/masterdata: không có mục danh mục |
@@ -88,7 +91,14 @@ Tự phê duyệt hoặc tự từ chối phiên bản tham số của chính m�
 | 503 | `party.dependency_unavailable` | pf/party: chưa nối hoặc không gọi được masterdata / kho định danh (kể cả `GET /v1/me` của cán bộ TTKN tỉnh khi chưa nối danh mục đơn vị hành chính); `GET /v1/cooperatives/{ref}/deactivation-preview` không đọc được vụ/nhật ký của pf/cropcycle (HTX US-HTXSTATUS-01 AC-1) |
 | 422 | `party.import_invalid` | pf/party: tệp nhập (nông hộ, cây tổ chức; CSV UTF-8 hoặc .xlsx) sai mẫu — thiếu cột bắt buộc, sai định dạng, không phải UTF-8, tệp .xls cũ, ô công thức (không tính công thức; `detail` nêu ô), quá số dòng/dung lượng — từ chối cả tệp |
 | 409 | `party.cooperative_name_taken` | pf/party: "Tên HTX này đã tồn tại, vui lòng chọn tên khác." — sao chép hồ sơ HTX (`POST /v1/cooperatives/{ref}/copy`, HTX US-HTX-03 AC-3) hoặc dòng nhập HTX (`POST /v1/cooperatives/import`, lý do theo dòng) trùng tên HTX đã có (không phân biệt hoa thường); `existing_ref` là HTX đang giữ tên |
+| 409 | `party.cooperative_profile_pending` | pf/party, AH-283: ý định sửa hồ sơ chưa hoàn tất ở các owner. Giữ nguyên dữ liệu và Idempotency-Key để thử lại thao tác trước; không mở thao tác mới trên cùng HTX. |
+| 503 | `vault.household_scope_unavailable` | vault/identity, AH-285: không xác minh được phạm vi định danh hộ từ owner; không trả PII hoặc suy thiếu nguồn thành quyền xem toàn bộ. |
+| 409 | `vault.household_national_id_taken` | AH-285: CCCD đã tồn tại trong tenant; không tạo/sửa hộ, không trả tham chiếu của hộ đang giữ CCCD. |
+| 409 | `vault.household_phone_taken` | AH-285: SĐT đã được sử dụng; phân biệt với CCCD trùng. |
+| 409 | `party.cooperative_in_use` | pf/party, AH-283: không xóa HTX đã phát sinh dữ liệu. `detail` nêu chính xác số hộ và tài khoản, kể cả hộ ngừng hoạt động và tài khoản lịch sử; các trường `pending_accounts`, `has_sharing`, `has_business` giải thích nguồn chặn khác. |
+| 409 | `party.cooperative_profile_changed` | pf/party, AH-283: `expected_revision` không còn là phiên bản hiện tại; tải lại hồ sơ trước khi sửa. |
 | 409 | `party.household_phone_taken` | pf/party: sao chép nông hộ với SĐT/CCCD đã có trong kho định danh — trong `POST /v1/households/copy` thành lý do dòng "SĐT đã tồn tại" (HTX US-HH-02 AC-4) |
+| 409 | `party.household_has_production` | AH-285: hộ có bất kỳ lịch sử vụ hoặc phiếu thu gom do owner công bố; chặn xóa, gợi ý Ngừng tham gia. |
 | 404 | `party.household_contact_unavailable` | pf/party: `GET /v1/households/{ref}/contact` — chủ hộ chưa có SĐT hợp lệ hoặc đã xóa định danh (HTX US-HH-03) |
 | 404 | `party.household_not_found` | pf/party: `POST /v1/households/{ref}/membership` — nông hộ không có hoặc ngoài phạm vi (không lộ sự tồn tại); KN v7.7: cả `PUT /v1/kn/households/{ref}`, `GET …/log` ngoài phạm vi ngữ cảnh phiên |
 | 403 | `party.read_only` | pf/party (KN v7.7 FN-XA-03.03): ngữ cảnh phiên Cấp Tỉnh (`kn_tinh`) hoặc Cấp Quốc gia (`kn_tw`) ghi vào `/v1/kn/cooperatives*`, `/v1/kn/households*` — chỉ xem (BRD §5.1) |
@@ -405,6 +415,9 @@ Cổng `geo.GpsLog.RecordFix` (module khác gọi, không qua HTTP) trả lỗi 
 | 422 | `cropcycle.sop_not_published` | pf/cropcycle: ghim vào vụ một phiên bản chưa phát hành hoặc của mẫu đã ngừng dùng |
 | 422 | `cropcycle.no_sop_for_variety` | pf/cropcycle: giống chưa gắn mẫu SOP đã ban hành — chọn `sop_version_id` khi mở vụ (HTX US-SEASON-01 AC-1) |
 | 422 | `cropcycle.binding_invalid` | pf/cropcycle: chỉ gắn giống với mẫu SOP **hệ thống** đã ban hành |
+| 409 | `cropcycle.straw_factor_taken` | FN-11: Giống này đã có hệ số |
+| 404 | `cropcycle.straw_factor_not_found` | FN-11: Giống chưa có hệ số được cấu hình |
+| 409 | `cropcycle.straw_factor_concurrent` | FN-11: Hệ số đã thay đổi; tải lại trước khi sửa |
 | 404 | `cropcycle.season_not_found` | pf/cropcycle: không có vụ trong phạm vi đọc |
 | 404 | `cropcycle.plot_not_found` | pf/cropcycle: pf/geo không có thửa |
 | 422 | `cropcycle.plot_invalid` | pf/cropcycle: thửa chưa gán HTX (nháp), đã ngừng dùng hoặc không có diện tích |
@@ -417,6 +430,14 @@ Cổng `geo.GpsLog.RecordFix` (module khác gọi, không qua HTTP) trả lỗi 
 | 422 | `cropcycle.household_land_unknown` | pf/cooperative AH-63/AH-64 — chưa khai báo diện tích đất của hộ, không suy thành 0 hoặc cho phép mở vụ. |
 | 409 | `cropcycle.household_area_exceeded` | pf/cooperative AH-63/AH-64 — diện tích yêu cầu vượt số còn lại tại thời điểm khóa hộ; trả `remaining_area_ha` và có thể kèm `active_area_ha`, `land_area_ha`. Giữ form và dùng số server để thử lại. |
 | 422 | `cropcycle.no_active_sop_for_crop` | pf/cooperative AH-63/AH-64 — không có SOP đang áp dụng riêng của giống hoặc SOP chung phù hợp loại cây. |
+| 422 | `cropcycle.task_season_state` | AH-88: vụ đã dừng hoặc đóng, không cho thêm việc. |
+| 422 | `cropcycle.task_stage_locked` | AH-88: sau thu hoạch chỉ ghi việc chưa xong của giai đoạn cuối. |
+| 409 | `cropcycle.task_already_resolved` | AH-88: việc đã xong hoặc bỏ qua; tải lại checklist. |
+| 409 | `cropcycle.task_season_changed` | AH-88: expected_season_event_id không còn hiện hành; tải lại trước khi xác nhận. |
+| 409 | `cropcycle.task_zero_confirmation_required` | AH-99: xác nhận liều bằng 0 hoặc không sử dụng vật tư khuyến cáo trước khi lưu. |
+| 404 | `cropcycle.calendar_not_found` | AH-58: không có lịch trong tenant/HTX/phạm vi người nhận hiện tại; Member không đọc lịch đã hủy. |
+| 409 | `cropcycle.calendar_changed` | AH-58: expected_event_id khác phiên bản hiện hành, tải lại trước khi sửa/hủy. |
+| 409 | `cropcycle.calendar_cancelled` | AH-58: không sửa/phát lại lịch đã hủy; giữ lịch sử. |
 | 409 | `cropcycle.previous_season_not_completed` | pf/cropcycle: sao chép cấu hình vụ trước khi vụ gần nhất chưa hoàn thành (HTX US-SEASON-03 AC-2) |
 | 409 | `cropcycle.no_previous_season` | pf/cropcycle: thửa chưa có vụ để sao chép cấu hình |
 | 422 | `cropcycle.cooperative_inactive` | pf/cropcycle: HTX không tồn tại hoặc đã ngừng hoạt động |
@@ -1144,4 +1165,3 @@ Route `/v1/price/*` (Application API). Lỗi chung: `unauthenticated` (401), `fo
 | 422 | `price.reason_required` | W11.75: thiếu lý do nộp muộn / hiệu chỉnh / sửa ngày / xóa phiếu, nội dung yêu cầu xác minh, giải trình của Xã, ghi chú giữ nguyên / lý do loại |
 | 403 | `price.point_not_handled` | W11.75: cán bộ Cấp Tỉnh thao tác trên xã không được phân công cho mình (xã đã phân công cho cán bộ khác) |
 | 503 | `price.pdf_unavailable` | W11.75: "Tải PDF" phiếu khi gốc lắp ráp chưa nối bộ dựng PDF (pf/reports) — dùng Excel hoặc in từ trình duyệt |
-

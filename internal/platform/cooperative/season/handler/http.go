@@ -28,6 +28,15 @@ type Handler struct{ Svc *app.Service }
 
 // RegisterApp gắn route Application API vào nhóm /v1 (OIDC + Idempotency-Key cho POST).
 func (h Handler) RegisterApp(rg *gin.RouterGroup) {
+	rg.GET("/cropcycle/calendars/:calendar_ref", h.calendar)
+	rg.GET("/cooperatives/:ref/season-calendars", h.calendars)
+	rg.GET("/cooperatives/:ref/season-calendar-recipients", h.calendarRecipients)
+	rg.POST("/cooperatives/:ref/season-calendars", h.writeCalendar("published"))
+	rg.POST("/cooperatives/:ref/season-calendars/:calendar_ref/revisions", h.writeCalendar("edited"))
+	rg.POST("/cooperatives/:ref/season-calendars/:calendar_ref/cancel", h.writeCalendar("cancelled"))
+	rg.GET("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/checklist", h.householdChecklist)
+	rg.POST("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/task-completions", h.completeHouseholdTask)
+	rg.POST("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/task-records", h.recordHouseholdTask)
 	rg.POST("/cooperatives/:ref/households/:household_ref/season-plan-preview", h.previewHouseholdSchedule)
 	rg.GET("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/plan", h.householdSchedule)
 	rg.POST("/cooperatives/:ref/households/:household_ref/seasons", h.openHouseholdSeason)
@@ -68,6 +77,10 @@ func (h Handler) RegisterApp(rg *gin.RouterGroup) {
 
 // RegisterAdmin gắn route Admin API (MFA bắt buộc): soạn, phát hành SOP; dựng lại bảng chiếu.
 func (h Handler) RegisterAdmin(rg *gin.RouterGroup) {
+	rg.GET("/cropcycle/straw-factors", h.listStrawFactors)
+	rg.POST("/cropcycle/straw-factors", h.writeStrawFactor(true))
+	rg.POST("/cropcycle/straw-factors/:variety_code/revisions", h.writeStrawFactor(false))
+	rg.GET("/cropcycle/straw-factors/:variety_code/history", h.strawFactorHistory)
 	rg.GET("/cropcycle/sops", h.listSOPs(true))
 	rg.POST("/cropcycle/sops", h.createSOP)
 	rg.GET("/cropcycle/sops/:ref", h.getSOP(true))

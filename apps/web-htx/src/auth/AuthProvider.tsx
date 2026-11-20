@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import type { User } from "oidc-client-ts";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { withAccountLockWatch, type FetchFn } from "@/api/accountLock";
+import { invalidateUnitResolver } from "@/api/adapters/units";
 import { createAdminApiClient, createApiClient, unwrap, type AdminApiClient, type ApiClient } from "@/api/client";
 import { newIdempotencyKey } from "@/api/idempotency";
 import { mockAdminFetch, mockFetch } from "@/api/mock/handler";
@@ -93,6 +94,8 @@ export interface AuthContextValue {
   acceptDataConsent: (version: string) => Promise<void>;
   /** Hỏi lại trạng thái đồng ý (nút Thử lại; máy chủ trả 403 accounts.data_consent_required). */
   refreshDataConsent: () => Promise<void>;
+  /** Làm mới tên/đơn vị của phiên sau khi sửa hồ sơ HTX mình. */
+  refreshPrincipal?: () => Promise<void>;
   /** FN-AD-04.07: vào menu vai trò khác với ngữ cảnh hỗ trợ (POST /v1/accounts/support-sessions). */
   enterSupport: (ctx: SessionContext, target: string, reason: string) => Promise<void>;
   /** Thoát chế độ hỗ trợ → về ngữ cảnh Admin. */
@@ -212,6 +215,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   /** GET /v1/me → Principal (gọi lại sau khi đổi ngữ cảnh: vai và phạm vi theo lần gán đã chọn). */
   const loadPrincipal = useCallback(async () => {
+    invalidateUnitResolver(clients.api);
     let me: Me | null = null;
     try {
       me = await unwrap(clients.api.GET("/v1/me"));
@@ -511,6 +515,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       dataConsent,
       acceptDataConsent,
       refreshDataConsent,
+      refreshPrincipal: async () => { await loadPrincipal(); },
       enterSupport,
       exitSupport,
       setSupportReason,
@@ -521,7 +526,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       changePassword,
       logout,
     }),
-    [status, sessionEnd, principal, scopeWarning, clients, kn, dataConsent, acceptDataConsent, refreshDataConsent, enterSupport, exitSupport, setSupportReason, selectContext, login, signIn, loginAsPersona, changePassword, logout],
+    [status, sessionEnd, principal, scopeWarning, clients, kn, dataConsent, acceptDataConsent, refreshDataConsent, loadPrincipal, enterSupport, exitSupport, setSupportReason, selectContext, login, signIn, loginAsPersona, changePassword, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

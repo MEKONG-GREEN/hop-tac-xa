@@ -1,0 +1,6 @@
+{
+  "id": "admin-units",
+  "source": "./admin-units",
+  "app": [],
+  "admin": [{ "export": "adminUnitRoutes", "order": 271 }]
+}

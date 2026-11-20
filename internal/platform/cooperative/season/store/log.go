@@ -16,6 +16,8 @@ import (
 
 // FarmLog là một phiên bản nhật ký (một dòng sổ farm_log).
 type FarmLog struct {
+	EntryKind        string
+	TaskCompletion   *domain.TaskRecord
 	ID               uuid.UUID
 	TenantID         uuid.UUID
 	Version          int64 // = seq trong chuỗi của nhật ký
@@ -64,41 +66,60 @@ func InsertFarmLog(ctx context.Context, tx pgx.Tx, l *FarmLog) error {
 	if err != nil {
 		return err
 	}
+	var task any
+	var plot any = l.PlotRef
+	if l.EntryKind == "household" {
+		plot = nil
+	}
+	if l.TaskCompletion != nil {
+		raw, err := json.Marshal(l.TaskCompletion)
+		if err != nil {
+			return err
+		}
+		task = string(raw)
+	}
 	return tx.QueryRow(ctx, `INSERT INTO pf_coop.farm_log
 	    (id, tenant_id, stream_key, log_ref, season_ref, plot_ref, household_ref, cooperative_ref, commune_code, activity_code,
 	     sop_step_seq, gps, gps_accuracy_m, gps_source, location_status, distance_m, machine_codes, inputs, note, file_refs,
 	     batch_ref, became_current, on_behalf, channel, event_time, supersedes_id, correction_reason, actor_ref, device_id,
-	     idem_key, rule_version)
+	     idem_key, rule_version, entry_kind, task_completion)
 	  VALUES ($1::uuid, $2::uuid, $3::text, $4::uuid, $5::uuid, $6::uuid, $7::uuid, $8::uuid, $9::text, $10::text,
 	     $11::int, `+gpsInsertSQL("$12", "$13")+`, $14::numeric, $15::text, $16::text, $17::numeric, $18::text[], $19::jsonb, $20::text, $21::uuid[],
 	     $22::uuid, $23::boolean, $24::boolean, $25::text, $26::timestamptz, $27::uuid, $28::text, $29::uuid, $30::text,
-	     $31::text, $32::text)
+	     $31::text, $32::text, $33::text, $34::jsonb)
 	  RETURNING seq, recorded_at`,
-		l.ID, l.TenantID, StreamLog(l.LogRef), l.LogRef, l.SeasonRef, l.PlotRef, nilIfZero(l.HouseholdRef), l.CooperativeRef, l.CommuneCode, l.ActivityCode,
+		l.ID, l.TenantID, StreamLog(l.LogRef), l.LogRef, l.SeasonRef, plot, nilIfZero(l.HouseholdRef), l.CooperativeRef, l.CommuneCode, l.ActivityCode,
 		l.SOPStepSeq, decPtr(l.GPS.Lon), decPtr(l.GPS.Lat), decPtr(l.GPS.AccuracyM), l.GPS.Source, l.LocationStatus, decPtr(l.DistanceM),
 		strs(l.MachineCodes), inputs, nilIfEmpty(l.Note), uuids(l.FileRefs),
 		nilIfZero(l.BatchRef), l.BecameCurrent, l.OnBehalf, l.Channel, l.EventTime.UTC(), l.SupersedesID, l.CorrectionReason, l.ActorRef, l.DeviceID,
-		l.IdemKey, domain.RuleVersion).Scan(&l.Version, &l.RecordedAt)
+		l.IdemKey, domain.RuleVersion, nilIfEmpty(l.EntryKind), task).Scan(&l.Version, &l.RecordedAt)
 }
 
 const farmLogCols = `id, tenant_id, seq, log_ref, season_ref, plot_ref, household_ref, cooperative_ref, commune_code, activity_code,
   sop_step_seq, ` + gpsSelect + `, gps_accuracy_m::text, gps_source, location_status, distance_m::text, machine_codes, inputs,
   coalesce(note, ''), file_refs, batch_ref, became_current, on_behalf, channel, event_time, recorded_at, supersedes_id,
-  correction_reason, actor_ref, device_id, idem_key`
+  correction_reason, actor_ref, device_id, idem_key, coalesce(entry_kind,''), task_completion`
 
 func scanFarmLog(row pgx.Row) (FarmLog, error) {
 	var l FarmLog
-	var hh, batch *uuid.UUID
+	var hh, batch, plot *uuid.UUID
+	var task []byte
 	var lon, lat, acc, dist *string
 	var inputs []byte
 	var files []string
-	if err := row.Scan(&l.ID, &l.TenantID, &l.Version, &l.LogRef, &l.SeasonRef, &l.PlotRef, &hh, &l.CooperativeRef, &l.CommuneCode, &l.ActivityCode,
+	if err := row.Scan(&l.ID, &l.TenantID, &l.Version, &l.LogRef, &l.SeasonRef, &plot, &hh, &l.CooperativeRef, &l.CommuneCode, &l.ActivityCode,
 		&l.SOPStepSeq, &lon, &lat, &acc, &l.GPS.Source, &l.LocationStatus, &dist, &l.MachineCodes, &inputs,
 		&l.Note, &files, &batch, &l.BecameCurrent, &l.OnBehalf, &l.Channel, &l.EventTime, &l.RecordedAt, &l.SupersedesID,
-		&l.CorrectionReason, &l.ActorRef, &l.DeviceID, &l.IdemKey); err != nil {
+		&l.CorrectionReason, &l.ActorRef, &l.DeviceID, &l.IdemKey, &l.EntryKind, &task); err != nil {
 		return l, err
 	}
 	l.HouseholdRef, l.BatchRef = deref(hh), deref(batch)
+	l.PlotRef = deref(plot)
+	if task != nil {
+		if err := json.Unmarshal(task, &l.TaskCompletion); err != nil {
+			return l, err
+		}
+	}
 	var err error
 	if l.FileRefs, err = parseUUIDs(files); err != nil {
 		return l, err

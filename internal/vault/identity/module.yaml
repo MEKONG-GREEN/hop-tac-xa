@@ -8,7 +8,19 @@ zones: [vault]
 version: 1.0.0
 depends: {}
 provides:
-  ports: [Client, Directory, ProfileBatch, Profiles, Revisions]
+  ports:
+    - Client
+    - Directory
+    - HTXContactEraser
+    - HTXContacts
+    - HouseholdCommandVerifier
+    - HouseholdIdentityReader
+    - HouseholdIdentityWriter
+    - HouseholdPhoneLookup
+    - HouseholdScopeVerifier
+    - ProfileBatch
+    - Profiles
+    - Revisions
   events: []
   internal_events: []
   publications: []

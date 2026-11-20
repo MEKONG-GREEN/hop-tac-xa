@@ -1,0 +1,12 @@
+components:
+  schemas:
+# @ag-order: 283000
+    CooperativeHouseholdAreas:
+      type: object
+      required: [cultivated_ha, livestock_ha, households, missing_cultivated, missing_livestock]
+      properties:
+        cultivated_ha: {oneOf: [{$ref: "#/components/schemas/Decimal"}, {type: "null"}], description: "null nếu còn hộ chưa khai diện tích trồng trọt"}
+        livestock_ha: {oneOf: [{$ref: "#/components/schemas/Decimal"}, {type: "null"}], description: "null nếu còn hộ chưa khai diện tích chăn nuôi"}
+        households: {type: integer, minimum: 0}
+        missing_cultivated: {type: integer, minimum: 0}
+        missing_livestock: {type: integer, minimum: 0}

@@ -10171,6 +10171,194 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/checklist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Checklist và tiến độ theo snapshot của vụ (AH-88)
+         * @description Cùng HTX; Đại diện chỉ đọc. Không cần duyệt nhật ký theo hộ. Phần trăm null khi mọi việc bỏ qua; hiển thị —.
+         */
+        get: operations["getHouseholdChecklist"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/task-completions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Xác nhận tích hoàn thành việc hôm nay (AH-88)
+         * @description Thành viên cùng HTX/Admin. Khóa vụ rồi kiểm snapshot, trạng thái và phiên bản. Sau thu hoạch chỉ việc chưa xong ở giai đoạn cuối; dừng/đóng bị từ chối. Liều khuyến cáo và ngày GMT+7 do server lấy; GPS/thời điểm/actor bất biến. Thiếu GPS vẫn lưu. Cùng thao tác giữ key và GPS khi thử lại. Hộ inactive vẫn tiếp tục vụ được phép ghi. Không ghi vào outbox theo thửa cũ.
+         */
+        post: operations["completeHouseholdTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/task-records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ghi chi tiết việc và vật tư thực tế (AH-99)
+         * @description Thành viên cùng HTX/Admin; Đại diện chỉ đọc. Một ngày làm xong; ghi nhiều lần partial trước khi done. Liều theo ha, tổng bằng liều nhân diện tích vụ; không đổi SOP. Ảnh phải do chính actor tải lên cho hộ, tối đa 5 ảnh, mỗi ảnh bản rõ không quá 1 MiB. Ghi bù quá 3 ngày cần lý do, trừ việc Không ngày. Không có cảnh báo lệch liều.
+         */
+        post: operations["recordHouseholdTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperatives/{ref}/season-calendars": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        /** Lịch của HTX; Thành viên chỉ nhận lịch mình được chọn, chưa hủy */
+        get: operations["listSeasonCalendars"];
+        put?: never;
+        /** Admin hoặc Đại diện phát lịch và xếp thông báo sau commit */
+        post: operations["publishSeasonCalendar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperatives/{ref}/season-calendars/{calendar_ref}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                calendar_ref: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sửa lịch đã phát và xếp thông báo mới */
+        post: operations["reviseSeasonCalendar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/households/{ref}/photo-key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Khóa công khai để mã hóa ảnh nhật ký cho hộ (AH-99)
+         * @description Chỉ người được ghi nhật ký; kiểm phạm vi HTX hiện tại trước và sau khi đọc khóa. Không cấp quyền giải mã hoặc đọc định danh.
+         */
+        get: operations["getHouseholdPhotoKey"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperatives/{ref}/season-calendars/{calendar_ref}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                calendar_ref: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Hủy, không gửi thông báo và không sửa vụ đã mở */
+        post: operations["cancelSeasonCalendar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cropcycle/calendars/{calendar_ref}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Đích deep link thông báo; kiểm phiên bản và quyền hiện tại */
+        get: operations["getSeasonCalendar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperatives/{ref}/season-calendar-recipients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Danh bạ Thành viên hoạt động, chỉ Admin và Đại diện đúng HTX */
+        get: operations["listSeasonCalendarRecipients"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/extension/khtc/periods/{id}/report": {
         parameters: {
             query?: never;
@@ -12809,6 +12997,159 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/cooperatives/{ref}/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FN-03: hồ sơ HTX; Admin mọi HTX, Đại diện/Thành viên chỉ HTX mình */
+        get: operations["htxProfileGet"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperatives/{ref}/profile/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** FN-03: Admin sửa mọi HTX, Đại diện chỉ sửa HTX mình */
+        post: operations["htxProfileUpdate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperatives/{ref}/household-identity-scope": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FN-04: owner xác minh phạm vi đăng ký định danh hộ, chỉ metadata */
+        get: operations["householdRegistrationScope"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/households/{ref}/identity-scope": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FN-04: owner xác minh phạm vi đọc/sửa định danh hộ, chỉ metadata */
+        get: operations["householdIdentityScope"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/households/{ref}/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FN-04: chi tiết hộ theo vai HTX; định danh đã che tại server cho Member */
+        get: operations["nativeHouseholdProfile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/household-profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** FN-04: tạo hộ theo ma trận HTX, command bền vững */
+        post: operations["createNativeHousehold"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/households/{ref}/profile/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** FN-04: sửa hộ theo revision, giữ nguyên mã và HTX */
+        post: operations["updateNativeHousehold"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/households/{ref}/profile/deletions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** FN-04: xóa hộ chưa có sản xuất; giữ metadata và audit */
+        post: operations["deleteNativeHousehold"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/household-commands/{command}/identity-scope": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Owner xác minh actor/tenant/HTX của command, không gọi Vault */
+        get: operations["householdCommandScope"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -13024,6 +13365,8 @@ export interface components {
         AdminUnit: {
             code: string;
             name: string;
+            /** @description Còn dùng để chọn mới; ngừng sử dụng vẫn đọc được theo mã cũ */
+            active?: boolean;
             /**
              * @description district chỉ có trong dữ liệu trước 01/07/2025
              * @enum {string}
@@ -13558,6 +13901,17 @@ export interface components {
             tax_code: string | null;
             /** @description Diện tích đăng ký hành chính (ha) */
             area_ha: components["schemas"]["Decimal"] | null;
+            /** @description Tổng diện tích hộ hiện thuộc HTX; null khi chưa nối nguồn, không dùng area_ha đăng ký KN */
+            household_areas?: components["schemas"]["CooperativeHouseholdAreas"] | null;
+            /** @description Tổng cột Số lượng từ AH-260; null khi chưa có nguồn, không dùng dữ liệu máy KN thay thế */
+            machine_count?: number | null;
+            /** @description Nhóm theo danh mục loại máy động; null khi chưa có nguồn */
+            machine_groups?: {
+                /** Format: uuid */
+                type_ref: string;
+                type_name: string;
+                quantity: number;
+            }[] | null;
             /** Format: date */
             established_on: string | null;
             location: components["schemas"]["Point"] | null;
@@ -13576,6 +13930,8 @@ export interface components {
             digitized_plots: number | null;
         };
         Household: {
+            readonly code?: string;
+            readonly revision?: number;
             /**
              * Format: uuid
              * @description Mã tham chiếu trong kho định danh (R-41)
@@ -13585,6 +13941,8 @@ export interface components {
             cooperative_ref: string | null;
             commune_code: string;
             cultivated_area_ha: components["schemas"]["Decimal"] | null;
+            /** @description Diện tích chăn nuôi của hộ; null khi chưa khai báo */
+            livestock_area_ha?: components["schemas"]["Decimal"] | null;
             /** Format: date */
             member_since: string | null;
             active: boolean;
@@ -13656,6 +14014,8 @@ export interface components {
             /** @description Bỏ trống = xã của HTX */
             commune_code?: string;
             cultivated_area_ha?: components["schemas"]["Decimal"];
+            /** @description Tùy chọn; không âm, tối đa 4 số lẻ */
+            livestock_area_ha?: components["schemas"]["Decimal"];
             /** Format: date */
             member_since?: string;
             /** @description Chỉ chuyển vào kho định danh (mục đích registry.admin), không lưu ở pf_party */
@@ -13678,8 +14038,11 @@ export interface components {
              * @description UUIDv7 sinh trên máy
              */
             device_id: string;
-            /** @enum {string} */
-            platform: "android" | "ios";
+            /**
+             * @description Web chỉ dùng ảnh và nhật ký hộ AH-99; không pull dữ liệu hiện trường
+             * @enum {string}
+             */
+            platform: "android" | "ios" | "web";
             app_version: string;
         };
         SyncDevice: {
@@ -13795,8 +14158,10 @@ export interface components {
             supersedes_id?: string | null;
             /** @description Bắt buộc khi op = correct */
             correction_reason?: string | null;
-            /** @description Tối đa 256 KiB; máy chủ pf/sync chỉ lưu SHA-256 */
-            payload: Record<string, never>;
+            /** @description Tối đa 256 KiB; máy chủ pf/sync chỉ lưu SHA-256. Entity household_task_record dùng hợp đồng AH-99 trong docs/dev/sync-contract.md; máy chủ kiểm actor, tenant, HTX và quyền hiện tại. */
+            payload: {
+                [key: string]: unknown;
+            };
         };
         /**
          * @description KN v7.7 P7 (N-07): payload của bản ghi push entity = report_submission (Sink của pf/extension, ngữ cảnh Cấp Xã
@@ -23954,6 +24319,163 @@ export interface components {
             /** @description Chỉ true cho Không ngày; luôn due, không overdue */
             undated: boolean;
         };
+        HouseholdTaskCompleteInput: {
+            step_seq: number;
+            /** Format: uuid */
+            expected_season_event_id: string;
+            gps?: components["schemas"]["CropGPS"];
+            /**
+             * @default app
+             * @enum {string}
+             */
+            channel: "app" | "web";
+        };
+        HouseholdTaskDetailInput: {
+            step_seq: number;
+            /** Format: uuid */
+            expected_season_event_id: string;
+            /** @enum {string} */
+            state: "partial" | "done";
+            /** Format: date */
+            done_on: string;
+            note?: string;
+            backfill_reason?: string;
+            /** @default false */
+            zero_confirmed: boolean;
+            gps?: components["schemas"]["CropGPS"];
+            /**
+             * @default app
+             * @enum {string}
+             */
+            channel: "app" | "web";
+            file_refs: string[];
+            materials: {
+                material_code?: string;
+                /** @description Chỉ dùng khi vật tư chưa có trong danh mục */
+                name?: string;
+                unit?: string;
+                dose_per_ha: string;
+            }[];
+        };
+        HouseholdTaskDetails: {
+            backfilled: boolean;
+            backfill_reason?: string;
+            zero_confirmed: boolean;
+            actual_materials: {
+                material_code?: string;
+                name: string;
+                unit: string;
+                group?: string;
+                fertilizer_type?: string;
+                dose_per_ha: components["schemas"]["Decimal"];
+                /** @description Tổng thực tế chính xác bằng liều nhân diện tích một lần; tối đa sáu chữ số lẻ */
+                quantity: string;
+            }[];
+        };
+        HouseholdTaskRecord: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            log_ref: string;
+            step_seq: number;
+            /** @enum {string} */
+            state: "done" | "partial" | "skipped";
+            /** Format: date */
+            done_on: string;
+            /** Format: uuid */
+            sop_version_id: string;
+            inputs: {
+                name: string;
+                qty: components["schemas"]["Decimal"];
+                unit: string;
+            }[];
+            gps_missing: boolean;
+            gps: components["schemas"]["CropGPS"];
+            /** Format: uuid */
+            actor_ref: string;
+            /** Format: date-time */
+            event_time: string;
+            /** Format: date-time */
+            recorded_at: string;
+            details?: components["schemas"]["HouseholdTaskDetails"];
+            note?: string;
+            file_refs?: string[];
+        };
+        HouseholdTaskProgress: components["schemas"]["SeasonScheduleStep"] & {
+            /** @enum {string} */
+            completion_status: "upcoming" | "due" | "overdue" | "waiting_anchor" | "done" | "done_early" | "done_on_time" | "done_late" | "skipped";
+            /** Format: date */
+            done_on: string | null;
+            can_complete: boolean;
+        };
+        HouseholdChecklist: {
+            /** Format: uuid */
+            season_ref: string;
+            /** Format: uuid */
+            current_event_id: string;
+            records: components["schemas"]["HouseholdTaskRecord"][];
+            progress: {
+                /** Format: date */
+                as_of_date: string;
+                done: number;
+                skipped: number;
+                total: number;
+                /** @description Decimal phần trăm; null khi mẫu số bằng 0 */
+                percent: string | null;
+                stages: {
+                    seq: number;
+                    name: string;
+                    /** @enum {string} */
+                    status: "not_started" | "in_progress" | "done";
+                    tasks: components["schemas"]["HouseholdTaskProgress"][];
+                }[];
+            };
+        };
+        SeasonCalendarInput: {
+            crop_code: string;
+            season_code: string;
+            season_year: number;
+            /** Format: date */
+            sow_from: string;
+            /** Format: date */
+            sow_to: string;
+            recipients: string[];
+        };
+        SeasonCalendarRevisionInput: {
+            /** Format: uuid */
+            expected_event_id: string;
+            crop_code: string;
+            season_code: string;
+            season_year: number;
+            /** Format: date */
+            sow_from: string;
+            /** Format: date */
+            sow_to: string;
+            recipients: string[];
+        };
+        SeasonCalendar: {
+            /** Format: uuid */
+            calendar_ref: string;
+            /** Format: uuid */
+            cooperative_ref: string;
+            /** Format: uuid */
+            current_event_id: string;
+            version: number;
+            /** @enum {string} */
+            status: "published" | "cancelled";
+            crop_code: string;
+            season_code: string;
+            season_year: number;
+            /** Format: date */
+            sow_from: string;
+            /** Format: date */
+            sow_to: string;
+            can_manage: boolean;
+            /** @description Chỉ có khi can_manage=true */
+            recipients?: string[];
+            /** Format: date-time */
+            updated_at: string;
+        };
         KHTCReportSupplement: {
             /** Format: uuid */
             id: string;
@@ -27393,6 +27915,88 @@ export interface components {
             checkin: components["schemas"]["CNTSLivestockCheckin"];
             reason?: string;
         };
+        CooperativeHouseholdAreas: {
+            /** @description null nếu còn hộ chưa khai diện tích trồng trọt */
+            cultivated_ha: components["schemas"]["Decimal"] | null;
+            /** @description null nếu còn hộ chưa khai diện tích chăn nuôi */
+            livestock_ha: components["schemas"]["Decimal"] | null;
+            households: number;
+            missing_cultivated: number;
+            missing_livestock: number;
+        };
+        HTXProfile: components["schemas"]["Cooperative"] & {
+            /** @description Phiên bản sổ tổ chức; dùng khi sửa */
+            revision: number;
+            /** @description Chỉ ở bộ nhớ/Vault; có thể rỗng. Thành viên nhận nhãn che. */
+            representative_name: string;
+            /** @description Admin/Đại diện HTX mình: 10 số bắt đầu bằng 0. Thành viên: SĐT đã che. */
+            phone: string;
+            contact_masked: boolean;
+            /** @description False khi hồ sơ cũ chưa khai liên hệ HTX riêng; không suy SĐT từ định danh người đại diện. */
+            contact_configured: boolean;
+            can_edit: boolean;
+        };
+        HTXProfileUpdate: {
+            name: string;
+            commune_code: string;
+            head_office: string;
+            /** @default  */
+            representative_name: string;
+            phone: string;
+            expected_revision: number;
+        };
+        HTXProfileWritten: {
+            /** Format: uuid */
+            ref: string;
+            code: string;
+            revision: number;
+        };
+        HouseholdIdentityScope: {
+            /** Format: uuid */
+            ref: string;
+            /** Format: uuid */
+            cooperative_ref: string | null;
+            active: boolean;
+            /** @enum {string} */
+            contact_access: "full" | "masked";
+            can_write: boolean;
+        };
+        NativeHouseholdProfile: {
+            household: components["schemas"]["Household"];
+            readonly code: string;
+            revision: number;
+            /** @enum {string} */
+            contact_access: "full" | "masked";
+            identity: {
+                full_name: string;
+                phone: string;
+                national_id: string;
+                address: string;
+            };
+        };
+        NativeHouseholdSave: {
+            /** Format: uuid */
+            cooperative_ref: string;
+            commune_code?: string;
+            cultivated_area_ha: components["schemas"]["Decimal"];
+            livestock_area_ha?: components["schemas"]["Decimal"] | null;
+            /** @default true */
+            active: boolean;
+            expected_revision?: number;
+            identity: {
+                full_name: string;
+                phone: string;
+                national_id: string;
+                address: string;
+            };
+        };
+        NativeHouseholdMutation: {
+            /** Format: uuid */
+            household_ref: string;
+            /** Format: uuid */
+            command_ref: string;
+            revision: number;
+        };
     };
     responses: {
         /** @description Đã ghi dòng quá trình */
@@ -28450,6 +29054,7 @@ export interface operations {
             query?: {
                 /** @description SĐT chủ hộ cần tìm (khớp chính xác sau chuẩn hóa) */
                 phone?: string;
+                status?: "active" | "inactive";
                 cursor?: string;
                 limit?: number;
             };
@@ -48509,6 +49114,323 @@ export interface operations {
             422: components["responses"]["Problem"];
         };
     };
+    getHouseholdChecklist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Checklist và bản ghi hiện hành */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HouseholdChecklist"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    completeHouseholdTask: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HouseholdTaskCompleteInput"];
+            };
+        };
+        responses: {
+            /** @description Bản ghi hoàn thành cùng tiến độ mới; replay không tạo bản ghi khác */
+            201: {
+                headers: {
+                    "Idempotent-Replayed"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        record: components["schemas"]["HouseholdTaskRecord"];
+                        checklist: components["schemas"]["HouseholdChecklist"];
+                    };
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    recordHouseholdTask: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HouseholdTaskDetailInput"];
+            };
+        };
+        responses: {
+            /** @description Bản ghi chi tiết và checklist; replay trả bản ghi cũ */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        record: components["schemas"]["HouseholdTaskRecord"];
+                        checklist: components["schemas"]["HouseholdChecklist"];
+                    };
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listSeasonCalendars: {
+        parameters: {
+            query?: {
+                after?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Danh sách trong phạm vi */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["SeasonCalendar"][];
+                        /** Format: uuid */
+                        next_cursor: string | null;
+                    };
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    publishSeasonCalendar: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SeasonCalendarInput"];
+            };
+        };
+        responses: {
+            /** @description Lịch đã phát; không khẳng định push đã gửi */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeasonCalendar"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    reviseSeasonCalendar: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                ref: string;
+                calendar_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SeasonCalendarRevisionInput"];
+            };
+        };
+        responses: {
+            /** @description Phiên bản mới, hoặc replay cùng key và nội dung */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeasonCalendar"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getHouseholdPhotoKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Khóa X25519 32 byte dạng base64 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        ref: string;
+                        public_key: string;
+                    };
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    cancelSeasonCalendar: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                ref: string;
+                calendar_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    expected_event_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Lịch đã hủy */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeasonCalendar"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getSeasonCalendar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                calendar_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Lịch; không lộ người nhận khác cho Thành viên */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeasonCalendar"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listSeasonCalendarRecipients: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cache-Control no-store; trang có thể rỗng nhưng còn next_offset khi lọc vai */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        next_offset: number;
+                        items: {
+                            /** Format: uuid */
+                            actor_ref: string;
+                            /** @description Tên hiển thị nếu có, không thay bằng SĐT/tên đăng nhập */
+                            label: string;
+                        }[];
+                    };
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     extensionKhtcReportGet: {
         parameters: {
             query?: never;
@@ -54863,6 +55785,275 @@ export interface operations {
             /** @description extension.cnts_livestock_household_invalid | extension.cnts_livestock_household_checkin_required */
             422: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
+        };
+    };
+    htxProfileGet: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Không cache. Liên hệ đầy đủ cho Admin/Đại diện của HTX; Thành viên nhận nhãn/SĐT che ngay tại server. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTXProfile"];
+                };
+            };
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    htxProfileUpdate: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HTXProfileUpdate"];
+            };
+        };
+        responses: {
+            /** @description Đã hoàn tất tại các owner; không lưu PII trong receipt PF. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTXProfileWritten"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    householdRegistrationScope: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Không cache, không PII. Admin mọi HTX trong tenant; Đại diện đúng HTX mình. Thành viên không được đăng ký hộ. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HouseholdIdentityScope"];
+                };
+            };
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    householdIdentityScope: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Không cache, không gọi Vault. Vai KN đi kèm không mở rộng phạm vi native; Thành viên chỉ được liên hệ đã che. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HouseholdIdentityScope"];
+                };
+            };
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    nativeHouseholdProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Chỉ dữ liệu thuộc quyền hiện tại, no-store; không giữ transaction khi gọi Vault */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NativeHouseholdProfile"];
+                };
+            };
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createNativeHousehold: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NativeHouseholdSave"];
+            };
+        };
+        responses: {
+            /** @description Đã ghi ở PF và Vault; không chứa PII */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NativeHouseholdMutation"];
+                };
+            };
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateNativeHousehold: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NativeHouseholdSave"];
+            };
+        };
+        responses: {
+            /** @description Đã sửa, retry cũ không ghi đè thay đổi mới */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NativeHouseholdMutation"];
+                };
+            };
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    deleteNativeHousehold: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    expected_revision: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Đã xóa khỏi danh sách, không xóa cứng audit */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NativeHouseholdMutation"];
+                };
+            };
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    householdCommandScope: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                command: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Metadata no-store, không PII */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        command_ref: string;
+                        /** Format: uuid */
+                        household_ref: string;
+                        /** Format: uuid */
+                        cooperative_ref: string;
+                        /** @enum {string} */
+                        operation: "create" | "update";
+                        expected_revision: number;
+                        commune_code: string;
+                        completed: boolean;
+                    };
+                };
+            };
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
         };
     };
 }

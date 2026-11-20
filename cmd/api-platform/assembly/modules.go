@@ -146,6 +146,7 @@ func Build(ctx context.Context, open PoolOpener, clk clock.Clock, ext External) 
 	// cấu hình gốc của chính nó; phần riêng HTX đăng ký thêm ở đây khi dựng theo BRD.
 	md := masterdata.New(unit, clk, masterdata.Deps{})
 	pty := party.New(unit, clk, party.Deps{AdminUnits: md.AdminUnits(), Vault: ext.Vault})
+	md.UseUnitUsage(pty.UnitCounts())
 	wireWorkflow(unit, clk, md, pty) // W6.1: cap/workflow cho duyệt tham số, cấp quyền (r_workflow, W2.6: cùng pool đơn vị)
 
 	g := geo.New(unit, clk, geo.Deps{Scope: pty.ScopeResolver(), Params: md.Params(), AdminUnits: md.AdminUnits()})
@@ -155,9 +156,10 @@ func Build(ctx context.Context, open PoolOpener, clk clock.Clock, ext External) 
 		Consents: pty.ConsentStates(), AdminUnits: md.AdminUnits(), AdminGeom: g.AdminGeometry(), Params: md.Params(),
 		Catalogs: md.Catalogs(), GpsLog: g.GpsLog(), Households: farmerid.Households(ext.Vault), Farmers: farmerid.New(ext.Vault)}) // HTX US-GPS-03: log GPS qua consumer outbox pf.cropcycle.gps_log
 	pty.UseCoopProfiles(coop.CoopProfiles()) // tạo HTX hai bước, màn HTX, danh bạ đối tác
-	pty.UsePlotStats(coop.PlotStats())       // G-03: số thửa đã số hoá trong danh sách HTX
-	g.UsePlots(coop.PlotGeometry())          // HTX US-GPS-01/03: khoảng cách tới lô của log GPS
-	g.UseMapLayers(coop.MapLayers())         // GIS FN-01, US-INT-02: lớp HTX, lớp thửa của bản đồ gộp
+	pty.UseCooperativeAreas(coop.CooperativeAreas())
+	pty.UsePlotStats(coop.PlotStats()) // G-03: số thửa đã số hoá trong danh sách HTX
+	g.UsePlots(coop.PlotGeometry())    // HTX US-GPS-01/03: khoảng cách tới lô của log GPS
+	g.UseMapLayers(coop.MapLayers())   // GIS FN-01, US-INT-02: lớp HTX, lớp thửa của bản đồ gộp
 	// W5.6 (ADR-0034, C-12): phía HTX của luồng song phương (/v1/bilateral/*) — hợp đồng còn proposed: chỉ bật ngoài
 	// production với AG_BILATERAL_ALLOW_PROPOSED=1; production từ chối khởi động nếu đặt.
 	if os.Getenv(cooperative.EnvBilateralAllowProposed) == "1" {
@@ -199,6 +201,7 @@ func Build(ctx context.Context, open PoolOpener, clk clock.Clock, ext External) 
 	// W6.5: cap/evidence sở hữu pf_files — route /v1/files của pf/sync gọi port.Files; chủ thể pf/cooperative.
 	ev := wireEvidence(unit, clk, evidence.Deps{Store: store, Vault: ext.Vault, Scope: pty.ScopeResolver(),
 		Consent: pty.ConsentChecker()}, coop.Resolve())
+	coop.UseTaskImages(ev.OwnedImages())
 	snc := syncmod.New(unit, clk, syncmod.Deps{
 		Scope: pty.ScopeResolver(), Params: md.Params(), Vault: ext.Vault,
 		Files: ev.Files(), CursorKey: cursorKey(ext),
@@ -216,6 +219,7 @@ func Build(ctx context.Context, open PoolOpener, clk clock.Clock, ext External) 
 	}
 	if dir != nil {
 		nt.UseMembers(NotifyMembers{Dir: dir}) // AH-22: cổng thông báo Thành viên HTX kiểm người nhận
+		coop.UseCalendars(CalendarMembers{Dir: dir}, CalendarNotifier{Notifier: nt.MemberNotifier()})
 	}
 	// Không có hồ sơ phiên ứng dụng nào đăng ký: quyền lấy từ vai realm (coop_manager, farmer, …) và sổ gán của pf/accounts.
 	sessionRegistry, err := authz.NewSessionRegistry()
@@ -250,6 +254,8 @@ func Build(ctx context.Context, open PoolOpener, clk clock.Clock, ext External) 
 	// dòng tài khoản của bảng Ảnh hưởng, tên người thao tác trong Log (Keycloak, dự phòng danh bạ cán bộ).
 	pty.UseSessionContext(acc.SessionContext())
 	pty.UseDepartmentUsage(acc.DepartmentUsage())
+	pty.UseCooperativeAccountUsers(acc.CooperativeAccountUsers())
+	pty.UseCooperativePrivateReferences(coop.CooperativePrivateReferences())
 	pty.UseOrgImpact(acc.OrgImpact())
 	pty.UseActorNames(acc.ActorNames())
 	pty.UseMachineCounts(mech.MachineCounts())                                                    // KN v7.7 FN-XA-03.03/03.04: cảnh báo số máy khi vô hiệu hóa HTX

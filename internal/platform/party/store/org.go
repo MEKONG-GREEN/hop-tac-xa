@@ -210,9 +210,9 @@ func InsertOrg(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, o port.Org, e
 // UpdateOrg ghi trạng thái sau một biến động (R-21: cùng giao dịch với sổ).
 func UpdateOrg(ctx context.Context, tx pgx.Tx, o port.Org, statusReason string, e domain.OrgEvent) error {
 	_, err := tx.Exec(ctx, `UPDATE pf_party.org SET name = $2, admin_unit_code = $3, parent_ref = $4, active = $5,
-	    status_reason = $6, last_event_id = $7, last_seq = $8, updated_at = now()
+	    status_reason = $6, last_event_id = $7, last_seq = $8, representative_ref=$9, updated_at = now()
 	  WHERE ref = $1`,
-		o.Ref, o.Name, nilIfEmpty(o.AdminUnitCode), nilIfZero(o.ParentRef), o.Active, nilIfEmpty(statusReason), e.ID, e.Seq)
+		o.Ref, o.Name, nilIfEmpty(o.AdminUnitCode), nilIfZero(o.ParentRef), o.Active, nilIfEmpty(statusReason), e.ID, e.Seq, nilIfZero(o.RepresentativeRef))
 	return err
 }
 
@@ -277,20 +277,34 @@ func LockOrgIdempotency(ctx context.Context, tx pgx.Tx, key string) error {
 // LockCooperativeName tuần tự hóa việc tạo HTX cùng tên (không phân biệt hoa thường)
 // trong giao dịch hiện tại — khóa tư vấn tự nhả khi giao dịch kết thúc.
 func LockCooperativeName(ctx context.Context, tx pgx.Tx, name string) error {
-	_, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended('pf_party.cooperative_name:' || lower($1), 0))", strings.TrimSpace(name))
+	_, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended('pf_party.cooperative_name:' || shared.current_tenant()::text || ':' || $1, 0))", domain.CooperativeNameKey(name))
 	return err
 }
 
 // CooperativeNameOwner trả HTX đang mang tên này (không phân biệt hoa thường, bỏ
-// khoảng trắng hai đầu), Nil nếu chưa có — US-HTX-03 AC-3.
-func CooperativeNameOwner(ctx context.Context, tx pgx.Tx, name string) (uuid.UUID, error) {
-	var ref uuid.UUID
-	err := tx.QueryRow(ctx, `SELECT ref FROM pf_party.org WHERE kind = 'cooperative' AND lower(name) = lower($1) LIMIT 1`,
-		strings.TrimSpace(name)).Scan(&ref)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return uuid.Nil, nil
+// khoảng trắng thừa), Nil nếu chưa có — US-HTX-03 AC-3, AH-283.
+// exceptRef cho phép giữ tên của chính HTX khi sửa hồ sơ.
+func CooperativeNameOwner(ctx context.Context, tx pgx.Tx, name string, exceptRef ...uuid.UUID) (uuid.UUID, error) {
+	rows, err := tx.Query(ctx, `SELECT ref, name FROM pf_party.org WHERE kind = 'cooperative' ORDER BY ref`)
+	if err != nil {
+		return uuid.Nil, err
 	}
-	return ref, err
+	defer rows.Close()
+	key := domain.CooperativeNameKey(name)
+	for rows.Next() {
+		var ref uuid.UUID
+		var existing string
+		if err := rows.Scan(&ref, &existing); err != nil {
+			return uuid.Nil, err
+		}
+		if len(exceptRef) > 0 && ref == exceptRef[0] {
+			continue
+		}
+		if domain.CooperativeNameKey(existing) == key {
+			return ref, nil
+		}
+	}
+	return uuid.Nil, rows.Err()
 }
 
 // CoopOrgFilter là điều kiện liệt kê Nút HTX (kind = cooperative) của màn HTX. Hồ sơ HTX ở pf/cooperative (W3.3):

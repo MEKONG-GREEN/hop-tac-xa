@@ -42,6 +42,8 @@ type Representative struct {
 
 // CreateOrgInput là dữ liệu vào của CreateOrg.
 type CreateOrgInput struct {
+	// HTXProfileHash chỉ dùng bởi flow FN-03 đã kiểm dữ liệu; không nhận từ HTTP tổ chức.
+	HTXProfileHash    string
 	Kind              port.OrgKind
 	Code              string // bỏ trống với HTX: hệ thống tự sinh (CGH BR-01)
 	Name              string
@@ -51,8 +53,8 @@ type CreateOrgInput struct {
 	Representative    *Representative
 	Cooperative       *domain.CooperativeProfile
 	IdemKey           string
-	// UniqueName: chặn tạo HTX trùng tên (không phân biệt hoa thường) — nhập hàng loạt
-	// và sao chép hồ sơ HTX (HTX US-HTX-02/03). Tạo đơn lẻ G1 giữ hành vi cũ.
+	// UniqueName giữ tương thích với caller nhập/sao chép cũ; mọi cách tạo
+	// HTX đều chặn trùng tên theo AH-283.
 	UniqueName bool
 }
 
@@ -266,6 +268,9 @@ func (r *Registry) createOrg(ctx context.Context, p authz.Principal, in CreateOr
 	} else if prev != nil {
 		return r.completeCoop(ctx, p.TenantID, *prev)
 	}
+	if unit != nil && unit.Disabled {
+		return OrgResult{}, problem.Validation.WithField("admin_unit_code", "Đơn vị hành chính đã ngừng sử dụng")
+	}
 	if isCoop {
 		if _, err := r.coopProfiles(); err != nil {
 			return OrgResult{}, err
@@ -310,7 +315,7 @@ func (r *Registry) createOrg(ctx context.Context, p authz.Principal, in CreateOr
 			return OrgResult{}, ErrInvalidHierarchy.WithDetail("đơn vị hành chính không thuộc địa bàn của tổ chức cấp trên")
 		}
 		code := in.Code
-		if isCoop && in.UniqueName {
+		if isCoop {
 			if err := store.LockCooperativeName(ctx, tx, in.Name); err != nil {
 				return OrgResult{}, err
 			}
@@ -339,6 +344,10 @@ func (r *Registry) createOrg(ctx context.Context, p authz.Principal, in CreateOr
 		ev := newEvent(p, o, domain.ActionCreated, now, in.IdemKey)
 		if isCoop {
 			ev.Details = profileDetails(profile)
+			if in.HTXProfileHash != "" {
+				ev.Details["htx_contact"] = true
+				ev.Details["request_sha256"] = in.HTXProfileHash
+			}
 		}
 		if err := store.InsertOrgEvent(ctx, tx, &ev); err != nil {
 			return OrgResult{}, err
@@ -436,6 +445,9 @@ func (r *Registry) MoveOrg(ctx context.Context, in MoveOrgInput) (OrgResult, err
 	unit, err := r.unitInfo(ctx, before.Kind, newUnit, "new_admin_unit_code")
 	if err != nil {
 		return OrgResult{}, err
+	}
+	if unit != nil && unit.Disabled && newUnit != before.AdminUnitCode {
+		return OrgResult{}, problem.Validation.WithField("new_admin_unit_code", "Đơn vị hành chính đã ngừng sử dụng")
 	}
 	if err := r.requireWriteScope(ctx, p, before.AdminUnitCode, newUnit); err != nil {
 		return OrgResult{}, err
@@ -598,6 +610,18 @@ func (r *Registry) changeStatusIn(ctx context.Context, p authz.Principal, sc aut
 		}
 		switch action {
 		case domain.ActionRenamed:
+			if cur.Kind == port.OrgCooperative {
+				if err := store.LockCooperativeName(ctx, tx, in.Name); err != nil {
+					return OrgResult{}, err
+				}
+				owner, err := store.CooperativeNameOwner(ctx, tx, in.Name, cur.Ref)
+				if err != nil {
+					return OrgResult{}, err
+				}
+				if owner != uuid.Nil {
+					return OrgResult{}, ErrCoopNameTaken.With("existing_ref", owner.String())
+				}
+			}
 			o.Name = strings.TrimSpace(in.Name)
 		case domain.ActionDeactivated:
 			n, err := store.CountActiveChildren(ctx, tx, cur.Ref)
@@ -641,6 +665,10 @@ func enqueueStatusEvent(ctx context.Context, tx pgx.Tx, ev domain.OrgEvent, hous
 		TraceID: telemetry.TraceID(ctx), Producer: "pf/party",
 	}
 	switch ev.Action {
+	case domain.ActionDeleted:
+		base.Type = port.EventOrgDeleted
+		base.Payload = port.OrgDeletedV1{OrgRef: ev.Org.Ref, Kind: string(ev.Org.Kind), Code: ev.Org.Code, AdminUnitCode: ev.Org.AdminUnitCode,
+			ParentRef: refPtr(ev.Org.ParentRef), Active: false, Reason: ev.Reason, ActorRef: ev.ActorRef, EventTime: ev.EventTime.Format(time.RFC3339), Seq: ev.Seq}
 	case domain.ActionCreated:
 		base.Type = port.EventOrgCreated
 		base.Payload = port.OrgCreatedV1{
@@ -822,18 +850,30 @@ func (r *Registry) GetCooperative(ctx context.Context, ref uuid.UUID) (Cooperati
 	if err != nil {
 		return Cooperative{}, err
 	}
-	c, err := r.cooperativeByRef(ctx, p.TenantID, ref, false)
+	// Kiểm quyền trên Nút của module này trước khi đọc số liệu hồ sơ/hộ
+	// từ module khác; không gọi port với ref HTX do client tự chọn ngoài quyền.
+	if ownCoopOnly(p) && p.OrgRef == uuid.Nil {
+		return Cooperative{}, problem.NodeScopeRequired
+	}
+	if ownCoopOnly(p) && ref != p.OrgRef {
+		return Cooperative{}, ErrOrgNotFound
+	}
+	var org *store.CoopOrg
+	if err := tenant.WithTenantTx(ctx, r.DB, p.TenantID, func(tx pgx.Tx) error {
+		var err error
+		org, err = store.CoopOrgByRef(ctx, tx, ref)
+		return err
+	}); err != nil {
+		return Cooperative{}, err
+	}
+	if org == nil || !visible(sc, org.AdminUnitCode) {
+		return Cooperative{}, ErrOrgNotFound
+	}
+	cs, err := r.cooperatives(ctx, p.TenantID, []store.CoopOrg{*org}, false)
 	if err != nil {
 		return Cooperative{}, err
 	}
-	if c == nil || !visible(sc, c.AdminUnitCode) {
-		return Cooperative{}, ErrOrgNotFound
-	}
-	// Đại diện HTX, Thành viên HTX chỉ xem HTX gắn với tài khoản (FN-06/BR-02, BR-03), chặt hơn phạm vi theo xã.
-	if ownCoopOnly(p) && c.Ref != p.OrgRef {
-		return Cooperative{}, ErrOrgNotFound
-	}
-	return *c, nil
+	return cs[0], nil
 }
 
 // OrgHistory trả nhật ký biến động chỉ đọc của một tổ chức (US-HTXSTATUS-03).
