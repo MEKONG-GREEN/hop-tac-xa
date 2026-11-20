@@ -11,6 +11,12 @@ CREATE VIEW pf_party_pub.v1_cooperative_tombstones WITH(security_barrier=true) A
  WHERE kind='cooperative' AND action='deleted';
 REVOKE ALL ON pf_party_pub.v1_cooperative_tombstones FROM PUBLIC;
 GRANT SELECT ON pf_party_pub.v1_cooperative_tombstones TO r_party_pub;
+-- capture_plot_scope_loss chạy dưới own_cooperative và ghi metadata mất
+-- phạm vi của thửa. Guard tham chiếu mới cũng phải kiểm được dấu xóa ở đây,
+-- không cấp cả r_party_pub hay quyền bảng riêng cho vai owner.
+GRANT USAGE ON SCHEMA pf_party_pub TO own_cooperative;
+GRANT SELECT ON pf_party_pub.v1_cooperative_tombstones TO own_cooperative;
+GRANT EXECUTE ON FUNCTION shared.guard_deleted_cooperative() TO own_cooperative;
 
 ALTER TABLE pf_party.htx_profile_completion DROP CONSTRAINT htx_profile_completion_tenant_id_org_ref_fkey;
 ALTER TABLE pf_party.htx_profile_completion ADD CONSTRAINT htx_profile_completion_tenant_id_org_ref_fkey
