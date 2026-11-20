@@ -1,0 +1,43 @@
+Tiếp tục triển khai AH-278 và AH-274 từ bộ bàn giao tại:
+
+D:\DV_Work\MKG\Src\4.HTX\Agent-Handoff\claude-code-agent
+
+Đọc README.md, AGENT.md, HANDOFF.md và wip/manifest.json trong bộ bàn giao; sau đó đọc AGENTS.md, CLAUDE.md và hướng dẫn cấp thư mục của repo.
+
+Đây là chỉ đạo mới để tiếp tục công việc sau yêu cầu dừng trước đó. Tôi cho phép bạn chạy lệnh, sửa code, chạy kiểm thử, tạo PR và merge vào dev-agent theo quy trình dưới đây, không cần hỏi lại approval nghiệp vụ cho các thao tác đã được chỉ định. Tuân thủ permissions thực tế của Claude Code và tổ chức.
+
+Kết nối:
+- Dùng MCP Jira/GitHub đã cấu hình sẵn. Tự khám phá tool/schema, không yêu cầu thêm token hoặc tạo lại MCP config.
+- Jira: https://mkg-apphtx.atlassian.net, project AH.
+- GitHub: MEKONG-GREEN/hop-tac-xa.
+- Nhánh tích hợp và đích PR duy nhất: dev-agent. Không merge dev/main, không deploy.
+
+Tiếp nhận code:
+1. Kiểm tra repo, origin, branch, working tree và PR liên quan.
+2. Nếu worktree AH-278 đã có code dở, review và tiếp tục tại đó; không import patch lần hai.
+3. Nếu chưa có code dở, làm theo Import-Wip.ps1 trong bộ bàn giao: kiểm checksum/base, nhận patch vào nhánh riêng trên checkout sạch.
+4. Giữ nguyên thay đổi của người khác; không reset, clean hoặc ghi đè để làm sạch checkout.
+5. Fetch và đối chiếu dev-agent mới nhất trước khi triển khai tiếp.
+
+Requirement:
+- Đọc lại đầy đủ AH-278/AH-274, comment mới nhất và dependency qua MCP. Xác minh AH-275 đã tích hợp qua PR #41.
+- Áp dụng các quyết định nghiệp vụ đã chốt trong HANDOFF.md, không hỏi lại.
+- AH-278/AH-274 có acceptance phụ thuộc nhau; có thể xử lý chung một gói PR để kiểm chứng việc cấp và thu hồi quyền đọc.
+- Chỉ Đại diện quyết định chia sẻ. Admin không can thiệp; Thành viên không hưởng quyền chia sẻ.
+- Chiều A → B nghĩa là A yêu cầu xem B. Chỉ approved mới cấp quyền; revoke phải mất quyền ở request tiếp theo với cùng token.
+- Shared chỉ đọc; server che SĐT 4 đầu/3 cuối, CCCD 3 đầu/3 cuối. Giữ nguyên actor, tenant, HTX và vai đã xác thực.
+- Danh mục dùng chung Vật tư/Kho/Máy móc cho Đại diện/Thành viên có danh sách và xuất Excel chỉ đọc theo quyết định đã chốt.
+
+Thực hiện:
+1. Review toàn bộ patch và đối chiếu AC với code hiện tại; đưa ra plan cụ thể rồi tự triển khai.
+2. Xử lý các finding và validation còn mở trong HANDOFF.md, gồm lỗi UI test “Found multiple elements with the text: Thu hồi”, scope/RLS, replay, cạnh tranh dữ liệu, revoke, Vault và mock.
+3. Hoàn thiện các phần cần thiết để đáp ứng đầy đủ AC của AH-278/AH-274; không coi các test nhỏ đã qua là hai ticket đã xong.
+4. Khi requirement đủ rõ, chuyển Jira theo trạng thái đích thực tế: To Do rồi In Progress nếu phù hợp. Không hardcode transition ID và không gửi Jira comment.
+5. Tự review diff, chạy đầy đủ cổng bắt buộc của repo. Test DB phải chạy trên PostgreSQL thật; không báo PASS khi SKIP.
+6. Tạo PR vào dev-agent, theo dõi toàn bộ CI ở đúng HEAD mới nhất. Sửa mọi lỗi và chạy lại khi có commit mới.
+7. Chỉ merge khi mọi job bắt buộc xanh; kiểm lại repo/base/head và dùng điều kiện expected SHA khi merge.
+8. Xác minh code đã tích hợp vào dev-agent rồi mới chuyển Jira Done theo statusCategory thực tế.
+
+Phạm vi phiên này chỉ AH-278/AH-274 và các thay đổi trực tiếp cần để đạt AC của hai ticket. Không tự bắt đầu AH-284, AH-286, AH-266 hoặc đánh Done toàn bộ AH-270.
+
+Cập nhật tiến độ ngắn bằng tiếng Việt. Ghi checkpoint không chứa secret để có thể tiếp tục khi hết context. Sau khi hoàn tất hai ticket, báo PR, merge commit, kết quả CI và dừng chờ chỉ đạo tiếp.
