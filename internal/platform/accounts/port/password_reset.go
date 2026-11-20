@@ -34,3 +34,9 @@ var ErrPasswordPolicy = errors.New("accounts: mật khẩu không đạt chính 
 type PasswordSetter interface {
 	SetPassword(ctx context.Context, id uuid.UUID, password string) error
 }
+
+// TemporaryPasswordSetter is the FN-07 creation-only credential operation.
+// IAM must require a password change before issuing a normal session.
+type TemporaryPasswordSetter interface {
+	SetTemporaryPassword(ctx context.Context, id uuid.UUID, password string) error
+}

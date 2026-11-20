@@ -226,7 +226,15 @@ func Build(ctx context.Context, open PoolOpener, clk clock.Clock, ext External) 
 	if err != nil {
 		return Modules{}, pools, err
 	}
-	acc := accounts.New(unit, clk, accounts.Deps{Roles: accport.NativeRoleCatalog(), Sessions: sessionRegistry, Navigation: pty.ContextNavigation(), Directory: dir, Scope: pty.ScopeResolver(), Orgs: pty.Orgs(),
+	nativeHTXKey, err := accounts.NativeHTXKeyFromEnv(os.Getenv)
+	if err != nil {
+		return Modules{}, pools, err
+	}
+	accountRoles := accport.NativeRoleCatalog()
+	if len(nativeHTXKey) > 0 {
+		accountRoles = accport.HTXRoleCatalog()
+	}
+	acc := accounts.New(unit, clk, accounts.Deps{NativeHTXKey: nativeHTXKey, Roles: accountRoles, Sessions: sessionRegistry, Navigation: pty.ContextNavigation(), Directory: dir, Scope: pty.ScopeResolver(), Orgs: pty.Orgs(),
 		Households: coop.PartyHouseholds(), Vault: ext.Vault, Params: md.Params(),
 		Departments: pty.Departments(), Units: md.AdminUnits(),
 		Modules: pty.ModuleEnablement()}) // W1.4: vai của module đã tắt không cấp được

@@ -62,17 +62,18 @@ import { adminRoutes12 as route49 } from "./legacy-party";
 import { metricsRoutes as route50 } from "./metrics";
 import { mrvAppRoutes as route51 } from "./mrv";
 import { mrvAdminRoutes as route52 } from "./mrv";
-import { notifyHealthAdminRoutes as route53 } from "./notify-health";
-import { opsRoutes as route54 } from "./ops";
-import { orgCreateRoutes as route55 } from "./orgs-create";
-import { rosterRoutes as route56 } from "./roster";
-import { seasonCalendarRoutes as route57 } from "./season-calendars";
-import { seasonCatalogAdminRoutes as route58 } from "./season-catalog";
-import { simulationRoutes as route59 } from "./simulation";
-import { strawFactorRoutes as route60 } from "./straw-factors";
-import { syncMonitorRoutes as route61 } from "./syncmonitor";
-import { waterwayAppRoutes as route62 } from "./waterway";
-import { waterwayAdminRoutes as route63 } from "./waterway";
+import { nativeAccountRoutes as route53 } from "./native-accounts";
+import { notifyHealthAdminRoutes as route54 } from "./notify-health";
+import { opsRoutes as route55 } from "./ops";
+import { orgCreateRoutes as route56 } from "./orgs-create";
+import { rosterRoutes as route57 } from "./roster";
+import { seasonCalendarRoutes as route58 } from "./season-calendars";
+import { seasonCatalogAdminRoutes as route59 } from "./season-catalog";
+import { simulationRoutes as route60 } from "./simulation";
+import { strawFactorRoutes as route61 } from "./straw-factors";
+import { syncMonitorRoutes as route62 } from "./syncmonitor";
+import { waterwayAppRoutes as route63 } from "./waterway";
+import { waterwayAdminRoutes as route64 } from "./waterway";
 
 export const commonRouteRegistrations: RouteRegistration[] = [
   { surface: "admin", order: 13, routes: route0 },
@@ -128,17 +129,18 @@ export const commonRouteRegistrations: RouteRegistration[] = [
   { surface: "app", order: 55, routes: route50 },
   { surface: "app", order: 56, routes: route51 },
   { surface: "admin", order: 21, routes: route52 },
-  { surface: "admin", order: 24, routes: route53 },
-  { surface: "app", order: 48, routes: route54 },
-  { surface: "admin", order: 14, routes: route55 },
-  { surface: "app", order: 49, routes: route56 },
-  { surface: "app", order: 176, routes: route57 },
-  { surface: "admin", order: 121, routes: route58 },
-  { surface: "app", order: 52, routes: route59 },
-  { surface: "admin", order: 282100, routes: route60 },
-  { surface: "admin", order: 15, routes: route61 },
-  { surface: "app", order: 51, routes: route62 },
-  { surface: "admin", order: 18, routes: route63 },
+  { surface: "admin", order: 275, routes: route53 },
+  { surface: "admin", order: 24, routes: route54 },
+  { surface: "app", order: 48, routes: route55 },
+  { surface: "admin", order: 14, routes: route56 },
+  { surface: "app", order: 49, routes: route57 },
+  { surface: "app", order: 176, routes: route58 },
+  { surface: "admin", order: 121, routes: route59 },
+  { surface: "app", order: 52, routes: route60 },
+  { surface: "admin", order: 282100, routes: route61 },
+  { surface: "admin", order: 15, routes: route62 },
+  { surface: "app", order: 51, routes: route63 },
+  { surface: "admin", order: 18, routes: route64 },
 ];
 
 const registrations = [...commonRouteRegistrations, ...registeredKnRoutes()];

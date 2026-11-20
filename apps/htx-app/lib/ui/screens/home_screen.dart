@@ -210,6 +210,44 @@ class HomeScreen extends ConsumerWidget {
           _ => 'AgriGreen HTX',
         }),
         actions: [
+          if ((ref
+                          .read(appControllerProvider)
+                          .services
+                          ?.workingRole
+                          .available
+                          .length ??
+                      0) >
+                  1 &&
+              ref.read(appControllerProvider).services!.workingRole.enabled)
+            IconButton(
+              tooltip: 'Đổi vai trò',
+              icon: const Icon(Icons.switch_account),
+              onPressed: () async {
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    content: const Text(
+                      'Dữ liệu chưa lưu sẽ mất. Tiếp tục đổi vai trò?',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Hủy'),
+                      ),
+                      FilledButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('Tiếp tục'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirmed == true && context.mounted) {
+                  ref
+                      .read(appControllerProvider.notifier)
+                      .chooseWorkingRoleAgain();
+                }
+              },
+            ),
           IconButton(
             tooltip: 'Thông báo',
             iconSize: 28,

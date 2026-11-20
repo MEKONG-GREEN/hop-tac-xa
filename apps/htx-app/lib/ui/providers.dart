@@ -191,11 +191,14 @@ class AppController extends Notifier<AppState> {
 
   /// Vào ứng dụng sau khi mở khóa và (nếu cần) đã đồng ý thu thập dữ liệu.
   Future<void> _enter(HtxServices services, AuthView v) async {
+    final role = services.workingRole.selected;
+    if (role != null) await services.bindWorkingRole(role);
     state = AppState(
       v,
       services: services,
       mode: await services.profile.mode(),
     );
+    if (services.workingRole.needsSelection) return;
     _startAutoSync(services);
     await _push.attach(services.pushHost);
     unawaited(services.sync.syncOnce(force: true));
@@ -292,6 +295,23 @@ class AppController extends Notifier<AppState> {
     _push.detach();
     await state.services?.close();
     state = const AppState(AuthView(AuthStage.locked));
+  }
+
+  /// Đọc lại vai sau lượt đồng bộ (`/v1/me` đã về).
+  Future<void> selectWorkingRole(String role) async {
+    final services = state.services;
+    if (services == null) return;
+    await services.bindWorkingRole(role);
+    await _enter(services, state.view);
+  }
+
+  void chooseWorkingRoleAgain() {
+    final services = state.services;
+    if (services == null) return;
+    _stopAutoSync();
+    _push.detach();
+    services.workingRole.chooseAgain();
+    state = state.copyWith();
   }
 
   /// Đọc lại vai sau lượt đồng bộ (`/v1/me` đã về).

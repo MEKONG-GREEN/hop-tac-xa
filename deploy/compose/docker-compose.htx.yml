@@ -1,0 +1,44 @@
+# Dedicated HTX deployment: combine with docker-compose.yml in a separate project.
+# This selects one issuer; it does not add KN as a second trusted issuer.
+services:
+  keycloak:
+    environment:
+      AG_HTX_KC_CLIENT_SECRET: ${AG_HTX_KC_CLIENT_SECRET:?set a separate HTX accounts client secret}
+      AG_HTX_KC_LOGIN_CLIENT_SECRET: ${AG_HTX_KC_LOGIN_CLIENT_SECRET:?set a separate HTX login client secret}
+    volumes:
+      - ./keycloak-htx/agrigreen-htx-realm.json:/opt/keycloak/data/import/agrigreen-htx-realm.json:ro
+
+  identity-vault:
+    environment:
+      AG_OIDC_ISSUER: http://localhost:8180/realms/agrigreen-htx
+      AG_OIDC_AUDIENCE: agrigreen-htx-api
+      AG_OIDC_JWKS_URL: http://keycloak:8080/realms/agrigreen-htx/protocol/openid-connect/certs
+
+  api-platform:
+    environment:
+      AG_HTX_ACCOUNTS_OPERATION_KEY: ${AG_HTX_ACCOUNTS_OPERATION_KEY:?set a stable base64 32-byte HTX operation key}
+      AG_OIDC_ISSUER: http://localhost:8180/realms/agrigreen-htx
+      AG_OIDC_AUDIENCE: agrigreen-htx-api
+      AG_OIDC_JWKS_URL: http://keycloak:8080/realms/agrigreen-htx/protocol/openid-connect/certs
+      AG_KC_REALM: agrigreen-htx
+      AG_KC_CLIENT_ID: agrigreen-htx-accounts
+      AG_KC_CLIENT_SECRET: ${AG_HTX_KC_CLIENT_SECRET:?set a separate HTX accounts client secret}
+      AG_KC_ACTIONS_CLIENT_ID: agrigreen-htx-web
+      AG_KC_LOGIN_CLIENT_ID: agrigreen-htx-login
+      AG_KC_LOGIN_CLIENT_SECRET: ${AG_HTX_KC_LOGIN_CLIENT_SECRET:?set a separate HTX login client secret}
+
+  worker:
+    environment:
+      AG_KC_REALM: agrigreen-htx
+      AG_KC_CLIENT_ID: agrigreen-htx-accounts
+      AG_KC_CLIENT_SECRET: ${AG_HTX_KC_CLIENT_SECRET:?set a separate HTX accounts client secret}
+      AG_KC_ACTIONS_CLIENT_ID: agrigreen-htx-web
+
+  web-htx:
+    build:
+      args:
+        NEXT_PUBLIC_OIDC_ISSUER: http://localhost:8180/realms/agrigreen-htx
+        NEXT_PUBLIC_OIDC_CLIENT_ID: agrigreen-htx-web
+    environment:
+      NEXT_PUBLIC_OIDC_ISSUER: http://localhost:8180/realms/agrigreen-htx
+      NEXT_PUBLIC_OIDC_CLIENT_ID: agrigreen-htx-web

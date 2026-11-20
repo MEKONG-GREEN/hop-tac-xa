@@ -53,7 +53,7 @@ func (r *Registry) Me(ctx context.Context) (Me, error) {
 	if !ok {
 		return Me{}, problem.Unauthenticated
 	}
-	roles := p.Roles
+	roles := p.EffectiveRoles()
 	if roles == nil {
 		roles = []string{}
 	}

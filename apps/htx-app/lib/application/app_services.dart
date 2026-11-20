@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:agrigreen_mobile/application/boundary_service.dart';
@@ -38,6 +39,8 @@ import 'news_service.dart';
 import 'profile_service.dart';
 import 'staff_service.dart';
 import 'support_service.dart';
+import 'working_role.dart';
+import '../domain/roles.dart';
 
 /// Client OIDC công khai của App HTX (deploy/compose/keycloak/agrigreen-realm.json).
 const htxOidcClientId = 'agrigreen-htx-app';
@@ -132,6 +135,7 @@ class HtxServices {
     required this.boundaries,
     required this.tiles,
     required this.dataConsent,
+    required this.workingRole,
   });
 
   final HtxPlatform platform;
@@ -149,6 +153,31 @@ class HtxServices {
   final PushTokenRegistrar pushTokens;
   final CatalogCache catalogs;
   final ProfileService profile;
+  final HtxWorkingRole workingRole;
+
+  /// Pending operations retain the role and identity that created them. A new
+  /// selection cannot replay the same immutable keys under another permission scope.
+  Future<void> bindWorkingRole(String role) async {
+    if (!workingRole.enabled) return;
+    final identity = await profile.journalContext();
+    final checkpoint = await db.getMetaJson('htx.working_role');
+    final pending =
+        (await outbox.counts()).pending + await actions.pendingCount();
+    if (pending > 0 &&
+        (checkpoint == null ||
+            checkpoint['role'] != role ||
+            identity.entries.any((e) => checkpoint[e.key] != e.value))) {
+      throw StateError(
+        'Còn dữ liệu chờ đồng bộ. Hãy chọn vai đã dùng để tạo dữ liệu trước khi đổi vai.',
+      );
+    }
+    workingRole.select(role);
+    await db.setMeta(
+      'htx.working_role',
+      jsonEncode({...identity, 'role': role}),
+    );
+  }
+
   final CropService crop;
   final SupportService support;
 
@@ -203,12 +232,20 @@ class HtxServices {
       store: pf.store,
       onWiped: onWiped,
     );
+    final workingRole = HtxWorkingRole(
+      enabled: pf.config.oidcIssuer
+          .replaceFirst(RegExp(r'/$'), '')
+          .endsWith('/realms/agrigreen-htx'),
+      roles: rolesFromJwt(await pf.store.read(SecureKeys.accessToken)),
+    );
     final profile = ProfileService(
       db: db,
       catalogs: catalogs,
       accessToken: () => pf.store.read(SecureKeys.accessToken),
+      workingRole: () => workingRole.selected,
     );
     final api = pf.apiFactory(accessToken, deviceId);
+    if (api is HttpSyncApi) api.workingRole = () => workingRole.selected;
     final sync = SyncService(
       db: db,
       api: api,
@@ -259,6 +296,7 @@ class HtxServices {
       evidence: evidence,
     );
     return HtxServices._(
+      workingRole: workingRole,
       platform: pf,
       db: db,
       deviceId: deviceId,

@@ -20,6 +20,7 @@ import { contextStore, readSelection, writeSelection } from "@/kn/contextStore";
 import { autoSelection, isValidSelection } from "@/kn/session";
 import { forgetIdentifier } from "@/lib/rememberLogin";
 import { buildPrincipal, decodeAccessToken, type AccessTokenClaims, type Principal } from "./principal";
+import { htxWorkingRole, withHtxWorkingRole, type HtxWorkingRole } from "./htxWorkingRole";
 import { getUserManager, safeReturnTo } from "./oidc";
 import { passwordLogin, type LoginOutcome } from "./passwordLogin";
 import { passwordSession } from "./passwordSession";
@@ -88,6 +89,7 @@ export interface AuthContextValue {
   /** Thu thập dữ liệu Cấp Xã KN v7.7 (P7 /v1/kn/*). */
   collectApi: CollectApi;
   kn: KnSessionState;
+  htxRoles?: { roles: HtxWorkingRole[]; selected: HtxWorkingRole | null; select: (role: HtxWorkingRole) => Promise<void>; chooseAgain: () => void };
   /** Trạng thái đồng ý thu thập dữ liệu của phiên (GET /v1/me/data-consent). */
   dataConsent: DataConsentState;
   /** Ghi đồng ý phiên bản `version` (POST /v1/me/data-consent); gọi trong `useIdempotentAction().run`. */
@@ -150,6 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [principal, setPrincipal] = useState<Principal | null>(null);
   const [scopeWarning, setScopeWarning] = useState<string | null>(null);
   const [kn, setKn] = useState<KnSessionState>(KN_LEGACY);
+  const [htxRoles,setHtxRoles] = useState<{roles:HtxWorkingRole[];selected:HtxWorkingRole|null}>({roles:[],selected:null});
   const [dataConsent, setDataConsent] = useState<DataConsentState>(CONSENT_UNKNOWN);
   const claimsRef = useRef<AccessTokenClaims>({});
   // Máy chủ chặn route ảnh/GPS bằng 403 accounts.data_consent_required → tăng số này để hỏi lại trạng thái (client dựng
@@ -157,6 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [consentPing, setConsentPing] = useState(0);
 
   const onUnauthenticated = useCallback(() => {
+    htxWorkingRole.clear();setHtxRoles({roles:[],selected:null});
     passwordSession.stop();
     tokenStore.set(null);
     contextStore.set(null);
@@ -187,7 +191,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const getAccessToken = tokenStore.get;
     const getContextId = contextStore.get;
     // Một lớp bọc cho cả 6 client: client KN dùng fetch thuần, không qua middleware của openapi-fetch.
-    const watch = (base: FetchFn): FetchFn => withAccountLockWatch(base, getAccessToken, onAccountLocked);
+    const watch = (base: FetchFn): FetchFn => withAccountLockWatch((request) => {
+      const role=htxWorkingRole.get();
+      if (!role) return base(request);
+      const scoped=new Request(request);scoped.headers.set("X-HTX-Role",role);return base(scoped);
+    }, getAccessToken, onAccountLocked);
     const appFetch = watch(config.mock ? mockFetch : (r) => fetch(r));
     const adminFetch = watch(config.mock ? mockAdminFetch : (r) => fetch(r));
     return {
@@ -226,7 +234,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         `Chưa lấy được phạm vi dữ liệu (GET /v1/me${p ? `: ${p.message}${p.traceId ? ` — mã tra cứu ${p.traceId}` : ""}` : ""}). Menu chỉ hiển thị theo vai; dữ liệu vẫn được máy chủ lọc theo phạm vi.`,
       );
     }
-    const p = buildPrincipal(claimsRef.current, me);
+    const p = withHtxWorkingRole(buildPrincipal(claimsRef.current, me));
     setPrincipal(p);
     return p;
   }, [clients]);
@@ -337,6 +345,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       claimsRef.current = mock
         ? { sub: mock.me.actor_ref, name: mock.displayName, amr: mock.amr, realm_access: { roles: mock.me.roles } }
         : decodeAccessToken(accessToken);
+      if (config.oidc.issuer.replace(/\/$/, "").endsWith("/realms/agrigreen-htx")) {
+        const c=claimsRef.current;
+        setHtxRoles(htxWorkingRole.bind(`${c.tenant_id ?? ""}:${c.sub ?? ""}:${c.org_ref ?? ""}`,c.realm_access?.roles ?? []));
+      } else { htxWorkingRole.clear();setHtxRoles({roles:[],selected:null}); }
       await loadPrincipal();
       await loadDataConsent();
       await resolveKn();
@@ -424,6 +436,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       const outcome = await passwordLogin.login(identifier, password, otp, challengeId);
       if (outcome.kind !== "authenticated") return outcome;
+      htxWorkingRole.clear(); // A fresh login asks dual-role users again; token refresh preserves a choice.
       // Token (kể cả refresh token) chỉ ở bộ nhớ của tab; làm mới trước hạn, thất bại thì về màn đăng nhập.
       passwordSession.start(outcome.tokens, { onAccessToken: tokenStore.set, onExpired: onUnauthenticated });
       await establish(outcome.tokens.accessToken);
@@ -479,6 +492,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     tokenStore.set(null);
     contextStore.set(null);
     writeSelection(null);
+    htxWorkingRole.clear();setHtxRoles({roles:[],selected:null});
     forgetIdentifier(); // M19: email "Ghi nhớ đăng nhập" không ở lại sau khi đăng xuất
     setPrincipal(null);
     setKn(KN_LEGACY);
@@ -499,6 +513,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await um.signoutRedirect(user?.id_token ? { id_token_hint: user.id_token } : undefined);
   }, [router]);
 
+  const selectHtxRole=useCallback(async (role:HtxWorkingRole)=>{
+    htxWorkingRole.select(role);
+    await loadPrincipal();
+    setHtxRoles((previous)=>({...previous,selected:role}));
+  },[loadPrincipal]);
+  const chooseHtxRoleAgain=useCallback(()=>{htxWorkingRole.chooseAgain();setHtxRoles((previous)=>({...previous,selected:null}));},[]);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       status,
@@ -512,6 +533,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       knAdminApi: clients.knAdminApi,
       collectApi: clients.collectApi,
       kn,
+      htxRoles:{...htxRoles,select:selectHtxRole,chooseAgain:chooseHtxRoleAgain},
       dataConsent,
       acceptDataConsent,
       refreshDataConsent,
@@ -526,7 +548,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       changePassword,
       logout,
     }),
-    [status, sessionEnd, principal, scopeWarning, clients, kn, dataConsent, acceptDataConsent, refreshDataConsent, loadPrincipal, enterSupport, exitSupport, setSupportReason, selectContext, login, signIn, loginAsPersona, changePassword, logout],
+    [status, sessionEnd, principal, scopeWarning, clients, kn, htxRoles,selectHtxRole,chooseHtxRoleAgain,dataConsent, acceptDataConsent, refreshDataConsent, loadPrincipal, enterSupport, exitSupport, setSupportReason, selectContext, login, signIn, loginAsPersona, changePassword, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

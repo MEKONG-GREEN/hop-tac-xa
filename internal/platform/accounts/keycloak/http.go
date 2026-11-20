@@ -312,6 +312,7 @@ func (r userRep) toUser() (port.User, error) {
 	}
 	u.TenantID, _ = uuid.Parse(first(r.Attributes, port.AttrTenantID))
 	u.OrgRef, _ = uuid.Parse(first(r.Attributes, port.AttrOrgRef))
+	u.CreationRef, _ = uuid.Parse(first(r.Attributes, port.AttrCreationRef))
 	if r.CreatedTimestamp > 0 {
 		u.CreatedAt = time.UnixMilli(r.CreatedTimestamp).UTC()
 	}
@@ -323,6 +324,9 @@ func userPath(id uuid.UUID) string { return "/users/" + id.String() }
 // CreateUser tạo người dùng đã bật, kèm thuộc tính tenant_id/org_ref và required actions.
 func (c *Client) CreateUser(ctx context.Context, nu port.NewUser) (uuid.UUID, error) {
 	attrs := map[string][]string{port.AttrTenantID: {nu.TenantID.String()}}
+	if nu.CreationRef != uuid.Nil {
+		attrs[port.AttrCreationRef] = []string{nu.CreationRef.String()}
+	}
 	if nu.OrgRef != uuid.Nil { // tài khoản nông dân không có đơn vị công tác
 		attrs[port.AttrOrgRef] = []string{nu.OrgRef.String()}
 	}
@@ -335,6 +339,13 @@ func (c *Client) CreateUser(ctx context.Context, nu port.NewUser) (uuid.UUID, er
 	}
 	hdr, err := c.do(ctx, "tạo người dùng", http.MethodPost, "/users", nil, rep, nil)
 	if err != nil {
+		var rejected *statusError
+		if errors.As(err, &rejected) && rejected.status >= 400 && rejected.status < 500 && rejected.status != http.StatusRequestTimeout {
+			if rejected.status == http.StatusBadRequest {
+				err = errors.Join(port.ErrInvalidProfile, err)
+			}
+			return uuid.Nil, errors.Join(port.ErrCreationRejected, err)
+		}
 		return uuid.Nil, err
 	}
 	loc := hdr.Get("Location")
@@ -664,7 +675,16 @@ func (c *Client) ActionLink(ctx context.Context, id, grantID uuid.UUID, actions 
 // SetPassword đặt mật khẩu cố định (PUT /users/{id}/reset-password, temporary=false — #255 ADR-0057). Keycloak kiểm
 // chính sách mật khẩu của realm: 400 → port.ErrPasswordPolicy. Mật khẩu chỉ nằm trong thân request, không vào lỗi/log.
 func (c *Client) SetPassword(ctx context.Context, id uuid.UUID, password string) error {
-	cred := map[string]any{"type": "password", "value": password, "temporary": false}
+	return c.setPassword(ctx, id, password, false)
+}
+
+// SetTemporaryPassword preserves UPDATE_PASSWORD at IAM, including after reset-password.
+func (c *Client) SetTemporaryPassword(ctx context.Context, id uuid.UUID, password string) error {
+	return c.setPassword(ctx, id, password, true)
+}
+
+func (c *Client) setPassword(ctx context.Context, id uuid.UUID, password string, temporary bool) error {
+	cred := map[string]any{"type": "password", "value": password, "temporary": temporary}
 	_, err := c.do(ctx, "đặt mật khẩu", http.MethodPut, userPath(id)+"/reset-password", nil, cred, nil)
 	var se *statusError
 	if err != nil && errors.As(err, &se) && se.status == http.StatusBadRequest {

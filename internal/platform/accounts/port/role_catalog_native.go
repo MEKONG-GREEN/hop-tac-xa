@@ -2,6 +2,12 @@ package port
 
 import "slices"
 
+// HTXRoleCatalog is dedicated-realm FN-07 policy, including Admin-to-Admin management.
+func HTXRoleCatalog() *RoleCatalog {
+	roles := []string{"platform_admin", "coop_manager", "htx_member"}
+	return &RoleCatalog{valid: true, managed: roles, mfa: []string{"platform_admin"}, orgKinds: map[string][]string{"coop_manager": {"cooperative"}, "htx_member": {"cooperative"}}, grants: map[string][]string{"platform_admin": slices.Clone(roles)}, adminRoles: []string{"platform_admin"}}
+}
+
 // NativeRoleCatalog snapshots account policy without application-owned roles.
 // Applications may explicitly extend it with their trusted registrations. It is
 // an opt-in base; omitted module configuration still uses LegacyRoleCatalog.

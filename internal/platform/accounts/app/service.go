@@ -62,6 +62,7 @@ const DefaultActionsLifespan = 72 * time.Hour
 
 // Service là use case của module.
 type Service struct {
+	NativeHTXKey  []byte `json:"-"` // stable HMAC operation key, dedicated HTX realm only
 	AuditRegistry *port.AuditRegistry
 	AuditAccess   port.AuditAccess
 	// Attributes is trusted immutable application-owned catalog data. Nil is the

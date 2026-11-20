@@ -1,0 +1,5 @@
+{
+  "id": "native-accounts",
+  "source": "./native-accounts",
+  "admin": [{ "export": "nativeAccountRoutes", "order": 275 }]
+}

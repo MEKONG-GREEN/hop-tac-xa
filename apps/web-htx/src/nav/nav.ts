@@ -1,6 +1,9 @@
 import type { ScopeLevel } from "@/auth/principal";
+import { config } from "@/config";
 import { matrixAllows, rolesWith, type HtxFunction } from "@/auth/permissions";
 import { API_CLIENT_ROLES, hasRole, KN_ROLES, METERING_READ_ROLES, MRV_ROLES, ROLES, type Principal } from "@/auth/principal";
+
+const nativeHTXRealm = config.oidc.issuer.replace(/\/$/, "").endsWith("/realms/agrigreen-htx");
 
 export type NavIcon =
   | "dashboard"
@@ -161,7 +164,8 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     label: "6. Quản trị",
     items: [
       // FN-05: hai mục giữ vai "Tài khoản" (FN-07) và "Đơn vị hành chính" (FN-02) của App HTX tới khi có màn riêng.
-      { href: "/quan-tri/tai-khoan", label: "Tài khoản cán bộ", icon: "user", roles: [ROLES.platformAdmin, ROLES.accountAdmin, ROLES.accountAdminProvince], fn: "FN-07" },
+      { href: "/quan-tri/tai-khoan", label: "Tài khoản cán bộ", icon: "user", roles: [ROLES.platformAdmin, ROLES.accountAdmin, ROLES.accountAdminProvince], fn: "FN-07",hidden:nativeHTXRealm },
+      { href: "/quan-tri/tai-khoan-htx", label: "Tài khoản HTX", icon: "user", roles: [ROLES.platformAdmin], fn: "FN-07",hidden:!nativeHTXRealm && !config.mock },
       { href: "/quan-tri/danh-muc", module: "pf/masterdata", label: "Danh mục dùng chung", icon: "catalog", roles: [ROLES.platformAdmin, ROLES.masterdataAdmin], fn: "FN-02" },
       { href: "/quan-tri/don-vi-hanh-chinh", module: "pf/masterdata", label: "Đơn vị hành chính", icon: "catalog", roles: [ROLES.platformAdmin], fn: "FN-02" },
       {

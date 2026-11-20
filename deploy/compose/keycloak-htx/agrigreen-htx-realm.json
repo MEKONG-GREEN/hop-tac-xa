@@ -1,0 +1,738 @@
+{
+  "realm": "agrigreen-htx",
+  "enabled": true,
+  "displayName": "AgriGreen HTX",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": true,
+  "resetCredentialsFlow": "agrigreen password recovery",
+  "smtpServer": {
+    "host": "${AG_SMTP_HOST:}",
+    "port": "${AG_SMTP_PORT:587}",
+    "from": "${AG_SMTP_FROM:}",
+    "user": "${AG_SMTP_USERNAME:}",
+    "password": "${AG_SMTP_PASSWORD:}",
+    "auth": "${AG_KC_SMTP_AUTH:true}",
+    "starttls": "${AG_KC_SMTP_STARTTLS:true}",
+    "ssl": "${AG_KC_SMTP_SSL:false}"
+  },
+  "loginWithEmailAllowed": false,
+  "loginTheme": "agrigreen",
+  "eventsEnabled": true,
+  "eventsExpiration": 31536000,
+  "enabledEventTypes": [
+    "LOGIN",
+    "LOGIN_ERROR",
+    "LOGOUT",
+    "CODE_TO_TOKEN_ERROR"
+  ],
+  "duplicateEmailsAllowed": false,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "bruteForceStrategy": "MULTIPLE",
+  "failureFactor": 5,
+  "maxDeltaTimeSeconds": 86400,
+  "waitIncrementSeconds": 900,
+  "maxFailureWaitSeconds": 900,
+  "minimumQuickLoginWaitSeconds": 60,
+  "quickLoginCheckMilliSeconds": 1000,
+  "permanentLockout": false,
+  "maxTemporaryLockouts": 0,
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 14400,
+  "ssoSessionMaxLifespan": 86400,
+  "offlineSessionIdleTimeout": 259200,
+  "offlineSessionMaxLifespanEnabled": true,
+  "offlineSessionMaxLifespan": 259200,
+  "passwordPolicy": "length(8) and notUsername and passwordHistory(5)",
+  "otpPolicyType": "totp",
+  "otpPolicyAlgorithm": "HmacSHA1",
+  "otpPolicyDigits": 6,
+  "otpPolicyPeriod": 30,
+  "browserFlow": "agrigreen browser",
+  "directGrantFlow": "agrigreen direct grant",
+  "internationalizationEnabled": true,
+  "supportedLocales": [
+    "vi",
+    "en"
+  ],
+  "defaultLocale": "vi",
+  "localizationTexts": {
+    "vi": {
+      "accountPermanentlyDisabledMessage": "Tài khoản đã bị khóa, vui lòng liên hệ Admin để mở khóa.",
+      "accountTemporarilyDisabledMessage": "Sai thông tin đăng nhập 5 lần — tài khoản tạm khóa 15 phút. Thử lại sau hoặc liên hệ Admin.",
+      "accountDisabledMessage": "Tài khoản đã bị khóa, vui lòng liên hệ Admin để mở khóa.",
+      "invalidUserMessage": "Sai tài khoản hoặc mật khẩu. Sau 5 lần sai, tài khoản tạm khóa 15 phút rồi tự mở. Có thể dùng Quên mật khẩu hoặc liên hệ Admin.",
+      "usernameOrEmail": "Email hoặc số điện thoại",
+      "updatePasswordTitle": "Đặt mật khẩu cho lần đăng nhập đầu tiên"
+    },
+    "en": {
+      "accountPermanentlyDisabledMessage": "Tài khoản đã bị khóa, vui lòng liên hệ Admin để mở khóa.",
+      "accountTemporarilyDisabledMessage": "Sai thông tin đăng nhập 5 lần — tài khoản tạm khóa 15 phút. Thử lại sau hoặc liên hệ Admin.",
+      "accountDisabledMessage": "Tài khoản đã bị khóa, vui lòng liên hệ Admin để mở khóa.",
+      "invalidUserMessage": "Sai tài khoản hoặc mật khẩu. Sau 5 lần sai, tài khoản tạm khóa 15 phút rồi tự mở. Có thể dùng Quên mật khẩu hoặc liên hệ Admin.",
+      "usernameOrEmail": "Email hoặc số điện thoại",
+      "updatePasswordTitle": "Đặt mật khẩu cho lần đăng nhập đầu tiên"
+    }
+  },
+  "attributes": {
+    "purpose": "App HTX FN-07; realm distinct from KN. Temporary password 8 alphanumeric characters; UPDATE_PASSWORD required. AH-275, decision 2026-11-20."
+  },
+  "roles": {
+    "realm": [
+      {
+        "name": "platform_admin",
+        "description": "[MFA] Quản trị nền tảng — phạm vi toàn quốc (mục 11). Yếu tố thứ hai là mã OTP gửi qua email ở màn đăng nhập của App HTX (ADR-0061), không TOTP"
+      },
+      {
+        "name": "coop_manager",
+        "description": "Quản lý HTX/THT — nông hộ, thửa của chính HTX mình"
+      },
+      {
+        "name": "htx_member",
+        "description": "Thành viên HTX (App HTX) — người của HTX được cấp tài khoản; phạm vi HTX của org_ref; mở vụ, ghi nhật ký, khai sản lượng theo ma trận KHMV; dữ liệu khác chỉ xem (FN-05, AH-39)"
+      },
+      {
+        "name": "login_totp_required",
+        "description": "D24 (CEO 13/10/2026): vai ĐÁNH DẤU, không cấp trực tiếp — vai cán bộ KN và vai quản trị bắt MFA là vai tổng hợp chứa vai này; luồng \"agrigreen browser\" bắt TOTP, tự mở đăng ký ở lần đầu (accounts/port.LoginTOTPRoles)"
+      }
+    ]
+  },
+  "users": [
+    {
+      "username": "service-account-agrigreen-htx-accounts",
+      "enabled": true,
+      "serviceAccountClientId": "agrigreen-htx-accounts",
+      "clientRoles": {
+        "realm-management": [
+          "manage-users",
+          "view-users",
+          "query-users",
+          "view-events",
+          "view-realm"
+        ]
+      }
+    }
+  ],
+  "defaultRole": {
+    "name": "default-roles-agrigreen",
+    "composite": true
+  },
+  "defaultDefaultClientScopes": [
+    "basic",
+    "roles",
+    "web-origins",
+    "profile",
+    "agrigreen-claims"
+  ],
+  "defaultOptionalClientScopes": [
+    "offline_access"
+  ],
+  "groups": [
+    {
+      "name": "admins",
+      "realmRoles": [
+        "platform_admin"
+      ],
+      "attributes": {
+        "note": [
+          "Thành viên nhóm này đăng nhập bằng mật khẩu + mã OTP gửi qua email (ADR-0061): tài khoản phải có email đã xác minh"
+        ]
+      }
+    }
+  ],
+  "components": {
+    "org.keycloak.userprofile.UserProfileProvider": [
+      {
+        "providerId": "declarative-user-profile",
+        "subComponents": {},
+        "config": {
+          "kc.user.profile.config": [
+            "{\"attributes\":[{\"name\":\"username\",\"displayName\":\"${username}\",\"validations\":{\"length\":{\"min\":3,\"max\":255},\"username-prohibited-characters\":{},\"up-username-not-idn-homograph\":{}},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"email\",\"displayName\":\"${email}\",\"validations\":{\"email\":{},\"length\":{\"max\":255}},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\"]},\"multivalued\":false},{\"name\":\"firstName\",\"displayName\":\"${firstName}\",\"validations\":{\"length\":{\"max\":255},\"person-name-prohibited-characters\":{}},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"lastName\",\"displayName\":\"${lastName}\",\"validations\":{\"length\":{\"max\":255},\"person-name-prohibited-characters\":{}},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"tenant_id\",\"displayName\":\"Tenant (UUID)\",\"validations\":{\"pattern\":{\"pattern\":\"^[0-9a-fA-F-]{36}$\",\"error-message\":\"tenant_id phải là UUID\"}},\"permissions\":{\"view\":[\"admin\"],\"edit\":[\"admin\"]},\"multivalued\":false},{\"name\":\"phone_number\",\"displayName\":\"Số điện thoại\",\"validations\":{\"pattern\":{\"pattern\":\"^0[0-9]{9}$\",\"error-message\":\"phone_number phải gồm 10 chữ số, bắt đầu bằng 0\"}},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\"]},\"multivalued\":false},{\"name\":\"org_ref\",\"displayName\":\"Đơn vị công tác (org_ref, UUID)\",\"validations\":{\"pattern\":{\"pattern\":\"^[0-9a-fA-F-]{36}$\",\"error-message\":\"org_ref phải là UUID\"}},\"permissions\":{\"view\":[\"admin\"],\"edit\":[\"admin\"]},\"multivalued\":false},{\"displayName\":\"Mã thao tác cấp tài khoản HTX\",\"multivalued\":false,\"name\":\"htx_creation_ref\",\"permissions\":{\"view\":[\"admin\"],\"edit\":[\"admin\"]},\"validations\":{\"pattern\":{\"pattern\":\"^[0-9a-fA-F-]{36}$\"}}}],\"groups\":[{\"name\":\"user-metadata\",\"displayHeader\":\"User metadata\",\"displayDescription\":\"Attributes, which refer to user metadata\"}]}"
+          ]
+        }
+      }
+    ]
+  },
+  "authenticatorConfig": [
+    {
+      "alias": "agrigreen-amr-pwd",
+      "config": {
+        "default.reference.value": "pwd",
+        "default.reference.maxAge": "86400"
+      }
+    },
+    {
+      "alias": "agrigreen-amr-otp",
+      "config": {
+        "default.reference.value": "otp",
+        "default.reference.maxAge": "86400"
+      }
+    },
+    {
+      "alias": "agrigreen-login-totp-role",
+      "config": {
+        "condUserRole": "login_totp_required",
+        "negate": "false"
+      }
+    },
+    {
+      "alias": "agrigreen-not-login-totp-role",
+      "config": {
+        "condUserRole": "login_totp_required",
+        "negate": "true"
+      }
+    }
+  ],
+  "authenticationFlows": [
+    {
+      "alias": "agrigreen password recovery",
+      "description": "Quên mật khẩu qua email; GIỮ nguyên credential TOTP, không tự reset OTP",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "reset-credentials-choose-user",
+          "authenticatorFlow": false,
+          "requirement": "REQUIRED",
+          "priority": 10
+        },
+        {
+          "authenticator": "reset-credential-email",
+          "authenticatorFlow": false,
+          "requirement": "REQUIRED",
+          "priority": 20
+        },
+        {
+          "flowAlias": "agrigreen recovery role otp",
+          "authenticatorFlow": true,
+          "requirement": "CONDITIONAL",
+          "priority": 30
+        },
+        {
+          "flowAlias": "agrigreen recovery configured otp",
+          "authenticatorFlow": true,
+          "requirement": "CONDITIONAL",
+          "priority": 40
+        },
+        {
+          "authenticator": "reset-password",
+          "authenticatorFlow": false,
+          "requirement": "REQUIRED",
+          "priority": 50
+        }
+      ]
+    },
+    {
+      "alias": "agrigreen recovery role otp",
+      "description": "D24: vai bắt MFA phải xác thực OTP trước reset; chưa có OTP thì CONFIGURE_TOTP bắt buộc trước khi hoàn tất phiên",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "conditional-user-role",
+          "authenticatorConfig": "agrigreen-login-totp-role",
+          "authenticatorFlow": false,
+          "requirement": "REQUIRED",
+          "priority": 10
+        },
+        {
+          "authenticator": "auth-otp-form",
+          "authenticatorConfig": "agrigreen-amr-otp",
+          "authenticatorFlow": false,
+          "requirement": "REQUIRED",
+          "priority": 20
+        }
+      ]
+    },
+    {
+      "alias": "agrigreen recovery configured otp",
+      "description": "Không thuộc vai bắt MFA nhưng đã có OTP: vẫn phải xác thực OTP khi reset, không hỏi hai lần",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "conditional-user-role",
+          "authenticatorConfig": "agrigreen-not-login-totp-role",
+          "authenticatorFlow": false,
+          "requirement": "REQUIRED",
+          "priority": 10
+        },
+        {
+          "authenticator": "conditional-user-configured",
+          "authenticatorFlow": false,
+          "requirement": "REQUIRED",
+          "priority": 20
+        },
+        {
+          "authenticator": "auth-otp-form",
+          "authenticatorConfig": "agrigreen-amr-otp",
+          "authenticatorFlow": false,
+          "requirement": "REQUIRED",
+          "priority": 30
+        }
+      ]
+    },
+    {
+      "alias": "agrigreen direct grant",
+      "description": "Direct grant có OTP: mật khẩu, rồi OTP khi người dùng đã cấu hình; AMR chỉ từ execution thành công. Dùng cho agrigreen-htx-login (FN-01) và agrigreen-seed (chỉ dev)",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "direct-grant-validate-username",
+          "authenticatorFlow": false,
+          "requirement": "REQUIRED",
+          "priority": 10
+        },
+        {
+          "authenticator": "direct-grant-validate-password",
+          "authenticatorConfig": "agrigreen-amr-pwd",
+          "authenticatorFlow": false,
+          "requirement": "REQUIRED",
+          "priority": 20
+        },
+        {
+          "flowAlias": "agrigreen direct grant otp",
+          "authenticatorFlow": true,
+          "requirement": "CONDITIONAL",
+          "priority": 30
+        }
+      ]
+    },
+    {
+      "alias": "agrigreen direct grant otp",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "conditional-user-configured",
+          "authenticatorFlow": false,
+          "requirement": "REQUIRED",
+          "priority": 10
+        },
+        {
+          "authenticator": "direct-grant-validate-otp",
+          "authenticatorConfig": "agrigreen-amr-otp",
+          "authenticatorFlow": false,
+          "requirement": "REQUIRED",
+          "priority": 20
+        }
+      ]
+    },
+    {
+      "alias": "agrigreen browser",
+      "description": "D24: browser flow — cookie hoặc mật khẩu + TOTP có điều kiện theo vai đánh dấu login_totp_required",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "auth-cookie",
+          "authenticatorFlow": false,
+          "autheticatorFlow": false,
+          "requirement": "ALTERNATIVE",
+          "priority": 10,
+          "userSetupAllowed": false
+        },
+        {
+          "authenticator": "identity-provider-redirector",
+          "authenticatorFlow": false,
+          "autheticatorFlow": false,
+          "requirement": "ALTERNATIVE",
+          "priority": 25,
+          "userSetupAllowed": false
+        },
+        {
+          "flowAlias": "agrigreen browser forms",
+          "authenticatorFlow": true,
+          "autheticatorFlow": true,
+          "requirement": "ALTERNATIVE",
+          "priority": 30,
+          "userSetupAllowed": false
+        }
+      ]
+    },
+    {
+      "alias": "agrigreen browser forms",
+      "description": "Tên đăng nhập/mật khẩu, rồi TOTP theo vai (bắt buộc, tự mở đăng ký) hoặc theo cấu hình của người dùng",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "auth-username-password-form",
+          "authenticatorConfig": "agrigreen-amr-pwd",
+          "authenticatorFlow": false,
+          "autheticatorFlow": false,
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "userSetupAllowed": false
+        },
+        {
+          "flowAlias": "agrigreen browser - TOTP theo vai",
+          "authenticatorFlow": true,
+          "autheticatorFlow": true,
+          "requirement": "CONDITIONAL",
+          "priority": 20,
+          "userSetupAllowed": false
+        },
+        {
+          "flowAlias": "agrigreen browser - TOTP da cau hinh",
+          "authenticatorFlow": true,
+          "autheticatorFlow": true,
+          "requirement": "CONDITIONAL",
+          "priority": 30,
+          "userSetupAllowed": false
+        }
+      ]
+    },
+    {
+      "alias": "agrigreen browser - TOTP theo vai",
+      "description": "D24: người có vai login_totp_required (qua vai tổng hợp) PHẢI nhập TOTP; chưa có thì Keycloak thêm CONFIGURE_TOTP (đăng ký ở lần đăng nhập đầu)",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "conditional-user-role",
+          "authenticatorConfig": "agrigreen-login-totp-role",
+          "authenticatorFlow": false,
+          "autheticatorFlow": false,
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "userSetupAllowed": false
+        },
+        {
+          "authenticator": "auth-otp-form",
+          "authenticatorConfig": "agrigreen-amr-otp",
+          "authenticatorFlow": false,
+          "autheticatorFlow": false,
+          "requirement": "REQUIRED",
+          "priority": 20,
+          "userSetupAllowed": false
+        }
+      ]
+    },
+    {
+      "alias": "agrigreen browser - TOTP da cau hinh",
+      "description": "Người KHÔNG có vai đánh dấu nhưng đã tự cấu hình TOTP vẫn bị hỏi OTP (giữ hành vi luồng browser mặc định); loại trừ nhau với nhánh theo vai để không hỏi OTP hai lần",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "conditional-user-role",
+          "authenticatorConfig": "agrigreen-not-login-totp-role",
+          "authenticatorFlow": false,
+          "autheticatorFlow": false,
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "userSetupAllowed": false
+        },
+        {
+          "authenticator": "conditional-user-configured",
+          "authenticatorFlow": false,
+          "autheticatorFlow": false,
+          "requirement": "REQUIRED",
+          "priority": 20,
+          "userSetupAllowed": false
+        },
+        {
+          "authenticator": "auth-otp-form",
+          "authenticatorConfig": "agrigreen-amr-otp",
+          "authenticatorFlow": false,
+          "autheticatorFlow": false,
+          "requirement": "REQUIRED",
+          "priority": 30,
+          "userSetupAllowed": false
+        }
+      ]
+    }
+  ],
+  "clientScopes": [
+    {
+      "name": "profile",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "username",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "config": {
+            "user.attribute": "username",
+            "claim.name": "preferred_username",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "basic",
+      "description": "sub và auth_time (Keycloak 25+ tách khỏi scope openid)",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "sub",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-sub-mapper",
+          "config": {
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "auth_time",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usersessionmodel-note-mapper",
+          "config": {
+            "user.session.note": "AUTH_TIME",
+            "claim.name": "auth_time",
+            "jsonType.label": "long",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "roles",
+      "description": "Vai realm vào realm_access.roles — backend đọc claim này (authz.Verify)",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "realm roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "config": {
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "userinfo.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "audience resolve",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-resolve-mapper",
+          "config": {
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "web-origins",
+      "description": "allowed-origins trong token",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "allowed web origins",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-allowed-origins-mapper",
+          "config": {
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "offline_access",
+      "description": "OpenID Connect built-in scope: offline_access",
+      "protocol": "openid-connect",
+      "attributes": {
+        "consent.screen.text": "${offlineAccessScopeConsentText}",
+        "display.on.consent.screen": "true"
+      }
+    },
+    {
+      "name": "agrigreen-claims",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "tenant_id",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "tenant_id",
+            "claim.name": "tenant_id",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "userinfo.token.claim": "false"
+          }
+        },
+        {
+          "name": "org_ref",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "org_ref",
+            "claim.name": "org_ref",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "userinfo.token.claim": "false"
+          }
+        },
+        {
+          "name": "audience agrigreen-htx-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "agrigreen-htx-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        },
+        {
+          "name": "amr",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-amr-mapper",
+          "config": {
+            "access.token.claim": "true",
+            "id.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "agrigreen-htx-accounts",
+      "name": "Tài khoản dịch vụ HTX — quản lý người dùng và đọc danh mục vai realm",
+      "description": "Bí mật lấy từ biến môi trường AG_HTX_KC_CLIENT_SECRET lúc nhập realm (scripts/gen-dev-secrets). Không đăng nhập người dùng.",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${AG_HTX_KC_CLIENT_SECRET}",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "defaultClientScopes": [
+        "basic",
+        "roles"
+      ]
+    },
+    {
+      "clientId": "agrigreen-htx-api",
+      "name": "AgriGreen Application API + Admin API (audience)",
+      "enabled": true,
+      "bearerOnly": true,
+      "publicClient": false,
+      "standardFlowEnabled": false
+    },
+    {
+      "clientId": "agrigreen-htx-web",
+      "name": "Web vận hành (Next.js)",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "http://localhost:3000/*",
+        "http://127.0.0.1:3000/*"
+      ],
+      "webOrigins": [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:8082"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:3000/*##http://127.0.0.1:3000/*",
+        "client.session.idle.timeout": "14400",
+        "client.session.max.lifespan": "36000"
+      },
+      "defaultClientScopes": [
+        "basic",
+        "roles",
+        "web-origins",
+        "profile",
+        "agrigreen-claims"
+      ]
+    },
+    {
+      "clientId": "agrigreen-htx-app",
+      "name": "App Hợp tác xã (Flutter) — nông dân, quản lý HTX; tên đăng nhập là SĐT",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "vn.agrigreen.htx:/oauth2redirect"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "client.session.idle.timeout": "3600"
+      },
+      "defaultClientScopes": [
+        "basic",
+        "roles",
+        "web-origins",
+        "profile",
+        "agrigreen-claims"
+      ],
+      "optionalClientScopes": [
+        "offline_access"
+      ]
+    },
+    {
+      "clientId": "agrigreen-htx-login",
+      "name": "Màn đăng nhập App HTX (FN-01) — máy chủ pf/accounts đổi mật khẩu lấy token",
+      "description": "Client bí mật, chỉ máy chủ pf/accounts gọi (direct grant, luồng có OTP). Bí mật lấy từ AG_HTX_KC_LOGIN_CLIENT_SECRET lúc nhập realm. Không có luồng trình duyệt.",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${AG_HTX_KC_LOGIN_CLIENT_SECRET}",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "attributes": {
+        "client.session.idle.timeout": "14400",
+        "client.session.max.lifespan": "36000"
+      },
+      "defaultClientScopes": [
+        "basic",
+        "roles",
+        "web-origins",
+        "profile",
+        "agrigreen-claims"
+      ]
+    }
+  ]
+}

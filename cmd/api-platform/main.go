@@ -43,6 +43,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/MEKONG-GREEN/hop-tac-xa/cmd/api-platform/assembly"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/clock"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/db"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/dbadmin"
@@ -85,6 +86,9 @@ func run(log *slog.Logger) error {
 	issuer, audience := os.Getenv("AG_OIDC_ISSUER"), os.Getenv("AG_OIDC_AUDIENCE")
 	if base == "" || issuer == "" || audience == "" {
 		return errors.New("thiếu AG_PF_DB_URL, AG_OIDC_ISSUER hoặc AG_OIDC_AUDIENCE")
+	}
+	if err := accounts.ValidateHTXRealmBinding(os.Getenv); err != nil {
+		return err
 	}
 	shutdownOTel, err := telemetry.Setup(ctx, "api-platform")
 	if err != nil {

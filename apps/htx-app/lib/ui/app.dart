@@ -10,6 +10,7 @@ import 'screens/data_consent_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/pin_screen.dart';
+import 'screens/working_role_screen.dart';
 
 class HtxApp extends StatelessWidget {
   const HtxApp({super.key});
@@ -57,6 +58,8 @@ class _AuthGate extends ConsumerWidget {
             ? const LoginScreen()
             : st.consent != null
             ? const DataConsentScreen()
+            : st.services!.workingRole.needsSelection
+            ? const WorkingRoleScreen()
             : st.mode.blocked
             ? const AccessBlockedScreen()
             : const HomeScreen(),

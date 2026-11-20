@@ -83,6 +83,7 @@ func (c *httpClient) do(ctx context.Context, k call) error {
 		return err
 	}
 	req.Header.Set("Authorization", "Bearer "+raw)
+	forwardWorkingRole(ctx, req)
 	req.Header.Set("Accept", "application/json")
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
