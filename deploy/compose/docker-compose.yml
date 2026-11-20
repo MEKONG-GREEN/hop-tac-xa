@@ -291,6 +291,8 @@ services:
       AG_VAULT_KEK: ${AG_VAULT_KEK:?chạy scripts/gen-dev-secrets}
       AG_VAULT_KEK_ID: local-1
       AG_VAULT_BLIND_KEY: ${AG_VAULT_BLIND_KEY:?chạy scripts/gen-dev-secrets}
+      # AH-285: owner metadata only; original user token is checked again by PF.
+      AG_VAULT_HOUSEHOLD_SCOPE_URL: http://api-platform:8080
     ports: ["127.0.0.1:8090:8090"]
 
   api-platform:

@@ -10,6 +10,7 @@ import '../../domain/roles.dart';
 import '../providers.dart';
 import 'plots_screen.dart';
 import 'household_seasons_screen.dart';
+import 'household_profile_screen.dart';
 
 final _householdsProvider = FutureProvider.autoDispose
     .family<List<HouseholdItem>, String?>(
@@ -89,6 +90,16 @@ class _HouseholdsScreenState extends ConsumerState<HouseholdsScreen> {
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      IconButton(
+                        tooltip: 'Chi tiết hộ ${h.label}',
+                        icon: const Icon(Icons.info_outline),
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) =>
+                                HouseholdProfileScreen(householdRef: h.ref),
+                          ),
+                        ),
+                      ),
                       if (canCall)
                         IconButton(
                           tooltip: 'Gọi ${h.label}',

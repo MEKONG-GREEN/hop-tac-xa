@@ -1,0 +1,130 @@
+paths:
+# @ag-order: 285004
+  /v1/household-profiles:
+    post:
+      summary: "FN-04: tạo hộ theo ma trận HTX, command bền vững"
+      operationId: createNativeHousehold
+      parameters:
+        - {name: Idempotency-Key, in: header, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/NativeHouseholdSave"}
+      responses:
+        "201":
+          description: "Đã ghi ở PF và Vault; không chứa PII"
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/NativeHouseholdMutation"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+# @ag-order: 285005
+  /v1/households/{ref}/profile/revisions:
+    post:
+      summary: "FN-04: sửa hộ theo revision, giữ nguyên mã và HTX"
+      operationId: updateNativeHousehold
+      parameters:
+        - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: Idempotency-Key, in: header, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/NativeHouseholdSave"}
+      responses:
+        "200":
+          description: "Đã sửa, retry cũ không ghi đè thay đổi mới"
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/NativeHouseholdMutation"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+# @ag-order: 285006
+  /v1/households/{ref}/profile/deletions:
+    post:
+      summary: "FN-04: xóa hộ chưa có sản xuất; giữ metadata và audit"
+      operationId: deleteNativeHousehold
+      parameters:
+        - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: Idempotency-Key, in: header, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expected_revision]
+              properties:
+                expected_revision: {type: integer, minimum: 1}
+      responses:
+        "200":
+          description: "Đã xóa khỏi danh sách, không xóa cứng audit"
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/NativeHouseholdMutation"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+# @ag-order: 285007
+  /v1/household-commands/{command}/identity-scope:
+    get:
+      summary: "Owner xác minh actor/tenant/HTX của command, không gọi Vault"
+      operationId: householdCommandScope
+      parameters:
+        - {name: command, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: "Metadata no-store, không PII"
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [command_ref, household_ref, cooperative_ref, operation, expected_revision, commune_code, completed]
+                properties:
+                  command_ref: {type: string, format: uuid}
+                  household_ref: {type: string, format: uuid}
+                  cooperative_ref: {type: string, format: uuid}
+                  operation: {type: string, enum: [create, update]}
+                  expected_revision: {type: integer, minimum: 0}
+                  commune_code: {type: string}
+                  completed: {type: boolean}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+components:
+  schemas:
+# @ag-order: 285003
+    NativeHouseholdSave:
+      type: object
+      required: [cooperative_ref, cultivated_area_ha, identity]
+      properties:
+        cooperative_ref: {type: string, format: uuid}
+        commune_code: {type: string}
+        cultivated_area_ha: {$ref: "#/components/schemas/Decimal"}
+        livestock_area_ha: {oneOf: [{$ref: "#/components/schemas/Decimal"}, {type: "null"}]}
+        active: {type: boolean, default: true}
+        expected_revision: {type: integer, minimum: 0}
+        identity:
+          type: object
+          required: [full_name, phone, national_id, address]
+          properties:
+            full_name: {type: string, minLength: 1, maxLength: 200}
+            phone: {type: string, pattern: "^0[0-9]{9}$"}
+            national_id: {type: string, pattern: "^[0-9]{12}$"}
+            address: {type: string, maxLength: 500}
+# @ag-order: 285004
+    NativeHouseholdMutation:
+      type: object
+      required: [household_ref, command_ref, revision]
+      properties:
+        household_ref: {type: string, format: uuid}
+        command_ref: {type: string, format: uuid}
+        revision: {type: integer, minimum: 1}

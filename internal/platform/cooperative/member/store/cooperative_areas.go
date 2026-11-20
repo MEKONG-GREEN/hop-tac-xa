@@ -24,7 +24,7 @@ func AreasByCooperatives(ctx context.Context, tx pgx.Tx, refs []uuid.UUID) (map[
   coalesce(sum(h.livestock_area_ha), 0)::text
 FROM pf_coop.household_membership m
 JOIN pf_coop.household h ON h.tenant_id = m.tenant_id AND h.household_ref = m.household_ref
-WHERE m.until_date IS NULL AND m.org_ref = ANY($1::text[]::uuid[])
+WHERE m.until_date IS NULL AND NOT h.native_deleted AND m.org_ref = ANY($1::text[]::uuid[])
 GROUP BY m.org_ref`, uuidStrings(refs))
 	if err != nil {
 		return nil, err

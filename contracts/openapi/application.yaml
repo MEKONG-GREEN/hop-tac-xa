@@ -626,6 +626,7 @@ paths:
       parameters:
         - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
         - {name: phone, in: query, description: "SĐT chủ hộ cần tìm (khớp chính xác sau chuẩn hóa)", schema: {type: string, maxLength: 20}}
+        - {name: status, in: query, schema: {type: string, enum: [active, inactive]}}
         - {name: cursor, in: query, schema: {type: string}}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
       responses:
@@ -18117,6 +18118,149 @@ paths:
         "409": {$ref: "#/components/responses/Problem"}
         "422": {$ref: "#/components/responses/Problem"}
         "503": {$ref: "#/components/responses/Problem"}
+  /v1/cooperatives/{ref}/household-identity-scope:
+    get:
+      summary: "FN-04: owner xác minh phạm vi đăng ký định danh hộ, chỉ metadata"
+      operationId: householdRegistrationScope
+      parameters:
+        - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: "Không cache, không PII. Admin mọi HTX trong tenant; Đại diện đúng HTX mình. Thành viên không được đăng ký hộ."
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/HouseholdIdentityScope"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /v1/households/{ref}/identity-scope:
+    get:
+      summary: "FN-04: owner xác minh phạm vi đọc/sửa định danh hộ, chỉ metadata"
+      operationId: householdIdentityScope
+      parameters:
+        - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: "Không cache, không gọi Vault. Vai KN đi kèm không mở rộng phạm vi native; Thành viên chỉ được liên hệ đã che."
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/HouseholdIdentityScope"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /v1/households/{ref}/profile:
+    get:
+      summary: "FN-04: chi tiết hộ theo vai HTX; định danh đã che tại server cho Member"
+      operationId: nativeHouseholdProfile
+      parameters:
+        - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: "Chỉ dữ liệu thuộc quyền hiện tại, no-store; không giữ transaction khi gọi Vault"
+          headers:
+            Cache-Control: {schema: {type: string, const: no-store}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/NativeHouseholdProfile"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /v1/household-profiles:
+    post:
+      summary: "FN-04: tạo hộ theo ma trận HTX, command bền vững"
+      operationId: createNativeHousehold
+      parameters:
+        - {name: Idempotency-Key, in: header, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/NativeHouseholdSave"}
+      responses:
+        "201":
+          description: "Đã ghi ở PF và Vault; không chứa PII"
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/NativeHouseholdMutation"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /v1/households/{ref}/profile/revisions:
+    post:
+      summary: "FN-04: sửa hộ theo revision, giữ nguyên mã và HTX"
+      operationId: updateNativeHousehold
+      parameters:
+        - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: Idempotency-Key, in: header, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/NativeHouseholdSave"}
+      responses:
+        "200":
+          description: "Đã sửa, retry cũ không ghi đè thay đổi mới"
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/NativeHouseholdMutation"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /v1/households/{ref}/profile/deletions:
+    post:
+      summary: "FN-04: xóa hộ chưa có sản xuất; giữ metadata và audit"
+      operationId: deleteNativeHousehold
+      parameters:
+        - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: Idempotency-Key, in: header, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expected_revision]
+              properties:
+                expected_revision: {type: integer, minimum: 1}
+      responses:
+        "200":
+          description: "Đã xóa khỏi danh sách, không xóa cứng audit"
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/NativeHouseholdMutation"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /v1/household-commands/{command}/identity-scope:
+    get:
+      summary: "Owner xác minh actor/tenant/HTX của command, không gọi Vault"
+      operationId: householdCommandScope
+      parameters:
+        - {name: command, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: "Metadata no-store, không PII"
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [command_ref, household_ref, cooperative_ref, operation, expected_revision, commune_code, completed]
+                properties:
+                  command_ref: {type: string, format: uuid}
+                  household_ref: {type: string, format: uuid}
+                  cooperative_ref: {type: string, format: uuid}
+                  operation: {type: string, enum: [create, update]}
+                  expected_revision: {type: integer, minimum: 0}
+                  commune_code: {type: string}
+                  completed: {type: boolean}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
 components:
   securitySchemes:
     oidc:
@@ -19000,6 +19144,8 @@ components:
       type: object
       required: [household_ref, cooperative_ref, commune_code, cultivated_area_ha, member_since, active]
       properties:
+        code: {type: string, readOnly: true}
+        revision: {type: integer, minimum: 1, readOnly: true}
         household_ref: {type: string, format: uuid, description: "Mã tham chiếu trong kho định danh (R-41)"}
         cooperative_ref: {type: [string, "null"], format: uuid}
         commune_code: {type: string}
@@ -29355,4 +29501,57 @@ components:
       properties:
         ref: {type: string, format: uuid}
         code: {type: string}
+        revision: {type: integer, minimum: 1}
+    HouseholdIdentityScope:
+      type: object
+      additionalProperties: false
+      required: [ref, cooperative_ref, active, contact_access, can_write]
+      properties:
+        ref: {type: string, format: uuid}
+        cooperative_ref: {type: [string, "null"], format: uuid}
+        active: {type: boolean}
+        contact_access: {type: string, enum: [full, masked]}
+        can_write: {type: boolean}
+    NativeHouseholdProfile:
+      type: object
+      additionalProperties: false
+      required: [household, identity, contact_access, code, revision]
+      properties:
+        household: {$ref: "#/components/schemas/Household"}
+        code: {type: string, readOnly: true}
+        revision: {type: integer, minimum: 1}
+        contact_access: {type: string, enum: [full, masked]}
+        identity:
+          type: object
+          additionalProperties: false
+          required: [full_name, phone, national_id, address]
+          properties:
+            full_name: {type: string}
+            phone: {type: string}
+            national_id: {type: string}
+            address: {type: string}
+    NativeHouseholdSave:
+      type: object
+      required: [cooperative_ref, cultivated_area_ha, identity]
+      properties:
+        cooperative_ref: {type: string, format: uuid}
+        commune_code: {type: string}
+        cultivated_area_ha: {$ref: "#/components/schemas/Decimal"}
+        livestock_area_ha: {oneOf: [{$ref: "#/components/schemas/Decimal"}, {type: "null"}]}
+        active: {type: boolean, default: true}
+        expected_revision: {type: integer, minimum: 0}
+        identity:
+          type: object
+          required: [full_name, phone, national_id, address]
+          properties:
+            full_name: {type: string, minLength: 1, maxLength: 200}
+            phone: {type: string, pattern: "^0[0-9]{9}$"}
+            national_id: {type: string, pattern: "^[0-9]{12}$"}
+            address: {type: string, maxLength: 500}
+    NativeHouseholdMutation:
+      type: object
+      required: [household_ref, command_ref, revision]
+      properties:
+        household_ref: {type: string, format: uuid}
+        command_ref: {type: string, format: uuid}
         revision: {type: integer, minimum: 1}

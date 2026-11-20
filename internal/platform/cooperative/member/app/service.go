@@ -53,9 +53,10 @@ var householdWriterRoles = []string{partyport.RoleRegistryAdmin, partyport.RoleK
 // Service là use case nông hộ/xã viên/hồ sơ HTX. Trường port có thể nối dần; thiếu port mà thao tác cần →
 // 503 party.dependency_unavailable.
 type Service struct {
-	Units partyport.AdminUnits
-	DB    tenant.Beginner // pool của pf/cooperative (db.ForModule → r_cooperative)
-	Clock clock.Clock
+	ProductionHistory port.HouseholdProductionHistory
+	Units             partyport.AdminUnits
+	DB                tenant.Beginner // pool của pf/cooperative (db.ForModule → r_cooperative)
+	Clock             clock.Clock
 	// Orgs, Codes, Dir: Nút tổ chức của pf/party (HTX = Nút kind=cooperative).
 	Orgs  partyport.Orgs
 	Codes partyport.OrgCodes

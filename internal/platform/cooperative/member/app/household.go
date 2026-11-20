@@ -170,6 +170,8 @@ func (s *Service) createHousehold(ctx context.Context, p authz.Principal, sc aut
 		}
 		if cur != nil {
 			res.Household = *cur
+		} else {
+			return ErrHouseholdNotFound
 		}
 		return nil
 	})
@@ -227,10 +229,25 @@ type HouseholdPage struct {
 //
 // phone khác rỗng: tìm đúng SĐT qua chỉ mục mù của kho định danh (HTX US-HH-01 AC-2) —
 // trả tối đa một hộ của HTX này. Họ tên chỉ nằm ở kho (R-04) nên không tìm theo tên.
-func (s *Service) ListHouseholds(ctx context.Context, coopRef, after uuid.UUID, limit int, phone string) (HouseholdPage, error) {
+func (s *Service) ListHouseholds(ctx context.Context, coopRef, after uuid.UUID, limit int, phone string, states ...string) (HouseholdPage, error) {
 	p, err := authz.Require(ctx, householdReaderRoles...)
 	if err != nil {
 		return HouseholdPage{}, err
+	}
+	state := ""
+	if len(states) > 0 {
+		state = states[0]
+	}
+	if state != "" && state != "active" && state != "inactive" {
+		return HouseholdPage{}, problem.Validation.WithField("status", "Chọn Đang tham gia hoặc Ngừng tham gia")
+	}
+	if p.KN == nil && isOwnCoopOnly(p) {
+		if p.OrgRef == uuid.Nil {
+			return HouseholdPage{}, problem.NodeScopeRequired
+		}
+		if coopRef != p.OrgRef {
+			return HouseholdPage{}, ErrOrgNotFound
+		}
 	}
 	if limit <= 0 || limit > 200 {
 		limit = 50
@@ -263,14 +280,14 @@ func (s *Service) ListHouseholds(ctx context.Context, coopRef, after uuid.UUID, 
 				return nil
 			}
 			h, e := store.HouseholdByRef(ctx, tx, byPhone)
-			if e == nil && h != nil && h.CooperativeRef == coopRef {
+			if e == nil && h != nil && h.CooperativeRef == coopRef && (state == "" || h.Active == (state == "active")) {
 				items = []domain.Household{*h}
 			}
 			if e != nil {
 				return e
 			}
 		} else {
-			items, e = store.ListHouseholdsByCooperative(ctx, tx, coopRef, after, limit+1)
+			items, e = store.ListHouseholdsByCooperative(ctx, tx, coopRef, after, limit+1, state)
 			if e != nil {
 				return e
 			}
@@ -301,6 +318,10 @@ func (s *Service) ListHouseholds(ctx context.Context, coopRef, after uuid.UUID, 
 	for _, h := range items {
 		v := HouseholdView{Household: h, ActiveAreaHa: activeAreas[h.Ref]}
 		v.Availability = domain.HouseholdAreaAvailability(h.CultivatedAreaHa, v.ActiveAreaHa, h.Active)
+		if h.Pending {
+			v.Availability.CanOpen = false
+			v.Availability.Reason = "Hộ đang được cập nhật; thử lại thao tác đang chờ."
+		}
 		if s.Vault == nil {
 			v.LabelUnavailable = true
 		} else if d, err := s.Vault.Label(ctx, port.IdentityFieldSupport, h.Ref); err != nil {

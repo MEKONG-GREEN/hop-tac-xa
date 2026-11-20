@@ -18,6 +18,9 @@ import (
 // Household là hồ sơ nông hộ ở pf_coop: CHỈ mã tham chiếu và thuộc tính không
 // định danh (R-04). Họ tên, SĐT, CCCD, địa chỉ nằm ở kho định danh.
 type Household struct {
+	Code             string
+	Revision         int64
+	Pending          bool
 	Ref              uuid.UUID // = Created.Ref của kho định danh
 	CommuneCode      string
 	CultivatedAreaHa *decimal.Decimal

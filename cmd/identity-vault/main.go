@@ -121,8 +121,12 @@ func run(log *slog.Logger) error {
 		return err
 	}
 	defer pool.Close()
+	householdScopes, err := householdScopesFromEnv(os.Getenv)
+	if err != nil {
+		return err
+	}
 	mod, err := identity.New(identity.Config{DB: pool, Clock: clock.System{}, KMS: keys, BlindKey: blind, Quota: quota,
-		RequireMFASensitive: requireMFA})
+		RequireMFASensitive: requireMFA, HouseholdScopes: householdScopes})
 	if err != nil {
 		return err
 	}

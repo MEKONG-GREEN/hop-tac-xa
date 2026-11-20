@@ -22,6 +22,28 @@ type HouseholdIdentities interface {
 	LookupPhone(ctx context.Context, phone string) (uuid.UUID, error)
 }
 
+// NativeHouseholdIdentityReader returns only the native FN-04 projection
+// permitted by the identity owner. Masking is enforced by Vault, not the UI.
+type NativeHouseholdIdentityReader interface {
+	NativeHouseholdIdentity(context.Context, uuid.UUID) (HouseholdIdentity, error)
+}
+
+type NativeHouseholdCommandScope struct {
+	CommandRef       uuid.UUID `json:"command_ref"`
+	HouseholdRef     uuid.UUID `json:"household_ref"`
+	CooperativeRef   uuid.UUID `json:"cooperative_ref"`
+	Operation        string    `json:"operation"`
+	ExpectedRevision int64     `json:"expected_revision"`
+	CommuneCode      string    `json:"commune_code"`
+	Completed        bool      `json:"completed"`
+}
+type NativeHouseholdIdentityWriter interface {
+	WriteNativeHouseholdIdentity(context.Context, uuid.UUID, HouseholdIdentity) error
+}
+type HouseholdProductionHistory interface {
+	HasHouseholdProduction(context.Context, uuid.UUID) (bool, error)
+}
+
 // IdentityPurpose là mục đích đọc nhãn của HouseholdIdentities.Label.
 type IdentityPurpose string
 

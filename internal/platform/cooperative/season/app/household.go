@@ -122,6 +122,9 @@ func (s *Service) OpenHouseholdSeason(ctx context.Context, in HouseholdOpenInput
 		if !h.Active {
 			return SeasonResult{}, ErrHouseholdInactive
 		}
+		if h.Pending {
+			return SeasonResult{}, ErrDependency.WithDetail("Hộ đang được cập nhật; thử lại sau")
+		}
 		if h.CultivatedAreaHa == nil {
 			return SeasonResult{}, ErrHouseholdLand
 		}

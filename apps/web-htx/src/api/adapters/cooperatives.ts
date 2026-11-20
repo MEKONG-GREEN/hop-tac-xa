@@ -52,8 +52,8 @@ export function getCooperative(api: ApiClient, ref: string): Promise<Cooperative
 }
 
 /** Nông hộ thành viên kèm trạng thái đồng ý theo mục đích (G-04). */
-export function householdsPage(api: ApiClient, ref: string, cursor: string | undefined, limit = 20): Promise<Page<HouseholdListItem>> {
-  return unwrap(api.GET("/v1/cooperatives/{ref}/households", { params: { path: { ref }, query: { cursor, limit } } }));
+export function householdsPage(api: ApiClient, ref: string, cursor: string | undefined, limit = 20,status?:"active"|"inactive"): Promise<Page<HouseholdListItem>> {
+  return unwrap(api.GET("/v1/cooperatives/{ref}/households", { params: { path: { ref }, query: { cursor, limit,status } } }));
 }
 
 /** Mọi HTX trong phạm vi (gom trang cursor, tối đa `max`). */
