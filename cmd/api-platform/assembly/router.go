@@ -128,6 +128,9 @@ type publicRoutes interface {
 func chain(d Deps, auth ...gin.HandlerFunc) []gin.HandlerFunc {
 	out := append(auth, memberWriteGuard(htxroles.MemberWriteRoutes()))
 	out = append(out, httpx.Middlewares(d.Modules)...)
+	// Session selection can narrow a dual-role token to Member. Recheck before
+	// replay/handlers, retaining the early guard for ordinary Member tokens.
+	out = append(out, memberWriteGuard(htxroles.MemberWriteRoutes()))
 	return append(out, idempotency.Middleware(db.ForModule(d.Ops, db.Ops)))
 }
 
