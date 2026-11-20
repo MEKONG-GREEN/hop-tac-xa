@@ -18,7 +18,8 @@ func (s *Service) VarietyInUse(ctx context.Context, code string) (bool, error) {
 		return tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pf_coop.season_event WHERE variety_code = $1::text)
 		    OR EXISTS (SELECT 1 FROM pf_coop.harvest_declaration WHERE variety_code = $1::text)
 		    OR EXISTS (SELECT 1 FROM pf_coop.variety_sop_binding WHERE variety_code = $1::text)
-		    OR EXISTS (SELECT 1 FROM pf_coop.sop_template WHERE variety_code = $1::text AND deleted_at IS NULL)`, code).Scan(&used)
+		    OR EXISTS (SELECT 1 FROM pf_coop.sop_template WHERE variety_code = $1::text AND deleted_at IS NULL)
+		    OR EXISTS (SELECT 1 FROM pf_coop.straw_factor_event WHERE variety_code = $1::text)`, code).Scan(&used)
 	})
 	return used, err
 }

@@ -415,6 +415,9 @@ Cổng `geo.GpsLog.RecordFix` (module khác gọi, không qua HTTP) trả lỗi 
 | 422 | `cropcycle.sop_not_published` | pf/cropcycle: ghim vào vụ một phiên bản chưa phát hành hoặc của mẫu đã ngừng dùng |
 | 422 | `cropcycle.no_sop_for_variety` | pf/cropcycle: giống chưa gắn mẫu SOP đã ban hành — chọn `sop_version_id` khi mở vụ (HTX US-SEASON-01 AC-1) |
 | 422 | `cropcycle.binding_invalid` | pf/cropcycle: chỉ gắn giống với mẫu SOP **hệ thống** đã ban hành |
+| 409 | `cropcycle.straw_factor_taken` | FN-11: Giống này đã có hệ số |
+| 404 | `cropcycle.straw_factor_not_found` | FN-11: Giống chưa có hệ số được cấu hình |
+| 409 | `cropcycle.straw_factor_concurrent` | FN-11: Hệ số đã thay đổi; tải lại trước khi sửa |
 | 404 | `cropcycle.season_not_found` | pf/cropcycle: không có vụ trong phạm vi đọc |
 | 404 | `cropcycle.plot_not_found` | pf/cropcycle: pf/geo không có thửa |
 | 422 | `cropcycle.plot_invalid` | pf/cropcycle: thửa chưa gán HTX (nháp), đã ngừng dùng hoặc không có diện tích |

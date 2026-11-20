@@ -1,0 +1,6 @@
+{
+  "id": "straw-factors",
+  "source": "./straw-factors",
+  "app": [],
+  "admin": [{ "export": "strawFactorRoutes", "order": 282100 }]
+}

@@ -69,9 +69,10 @@ import { rosterRoutes as route56 } from "./roster";
 import { seasonCalendarRoutes as route57 } from "./season-calendars";
 import { seasonCatalogAdminRoutes as route58 } from "./season-catalog";
 import { simulationRoutes as route59 } from "./simulation";
-import { syncMonitorRoutes as route60 } from "./syncmonitor";
-import { waterwayAppRoutes as route61 } from "./waterway";
-import { waterwayAdminRoutes as route62 } from "./waterway";
+import { strawFactorRoutes as route60 } from "./straw-factors";
+import { syncMonitorRoutes as route61 } from "./syncmonitor";
+import { waterwayAppRoutes as route62 } from "./waterway";
+import { waterwayAdminRoutes as route63 } from "./waterway";
 
 export const commonRouteRegistrations: RouteRegistration[] = [
   { surface: "admin", order: 13, routes: route0 },
@@ -134,9 +135,10 @@ export const commonRouteRegistrations: RouteRegistration[] = [
   { surface: "app", order: 176, routes: route57 },
   { surface: "admin", order: 121, routes: route58 },
   { surface: "app", order: 52, routes: route59 },
-  { surface: "admin", order: 15, routes: route60 },
-  { surface: "app", order: 51, routes: route61 },
-  { surface: "admin", order: 18, routes: route62 },
+  { surface: "admin", order: 282100, routes: route60 },
+  { surface: "admin", order: 15, routes: route61 },
+  { surface: "app", order: 51, routes: route62 },
+  { surface: "admin", order: 18, routes: route63 },
 ];
 
 const registrations = [...commonRouteRegistrations, ...registeredKnRoutes()];

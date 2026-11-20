@@ -4581,6 +4581,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/cropcycle/straw-factors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FN-11: hệ số theo giống lúa, Admin/MFA; chưa cấu hình dùng 35% */
+        get: operations["listStrawFactors"];
+        put?: never;
+        /** FN-11: thêm hệ số, không xóa */
+        post: operations["createStrawFactor"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cropcycle/straw-factors/{variety_code}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** FN-11: sửa hệ số và ghi lịch sử trước/sau, chỉ hiệu lực từ thời điểm lưu */
+        post: operations["reviseStrawFactor"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cropcycle/straw-factors/{variety_code}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FN-11: lịch sử theo giống, mới nhất trước; không sửa/xóa lịch sử */
+        get: operations["strawFactorHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/cooperative-profiles": {
         parameters: {
             query?: never;
@@ -7053,6 +7105,30 @@ export interface components {
             /** @enum {string} */
             outcome: "deleted" | "hidden";
             item: components["schemas"]["CatalogItem"];
+        };
+        StrawFactorRow: {
+            variety_code: string;
+            variety_name: string;
+            active: boolean;
+            configured: boolean;
+            percentage: string;
+            revision: number;
+            /** Format: date-time */
+            effective_at: string | null;
+        };
+        StrawFactorEvent: {
+            /** Format: uuid */
+            id: string;
+            variety_code: string;
+            percentage: string;
+            previous_percentage: string | null;
+            revision: number;
+            /** Format: date-time */
+            effective_at: string;
+            /** Format: date-time */
+            recorded_at: string;
+            /** Format: uuid */
+            actor_ref: string;
         };
         HTXProfileInput: {
             name: string;
@@ -16552,6 +16628,127 @@ export interface operations {
             422: components["responses"]["Problem"];
             /** @description masterdata.dependency_unavailable */
             503: components["responses"]["Problem"];
+        };
+    };
+    listStrawFactors: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Giữ cả dòng đã cấu hình cho giống bị ẩn */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["StrawFactorRow"][];
+                    };
+                };
+            };
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createStrawFactor: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    variety_code: string;
+                    /** @description 0–100%, tối đa 4 chữ số thập phân */
+                    percentage: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Đã thêm hoặc replay cùng thao tác */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrawFactorEvent"];
+                };
+            };
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    reviseStrawFactor: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                variety_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    percentage: string;
+                    expected_revision: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Đã lưu một revision hoặc replay */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrawFactorEvent"];
+                };
+            };
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    strawFactorHistory: {
+        parameters: {
+            query?: {
+                before_revision?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                variety_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Lịch sử và con trỏ tải tiếp */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["StrawFactorEvent"][];
+                        next_before_revision: number | null;
+                    };
+                };
+            };
+            403: components["responses"]["Problem"];
         };
     };
     htxProfileCreate: {

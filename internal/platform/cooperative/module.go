@@ -129,6 +129,9 @@ func NewFacade(src Sources) *Module { return &Module{svc: &app.Service{Store: sr
 // UseFarmerHouseholds nối liên kết tài khoản nông dân ↔ nông hộ (pf/accounts) sau khi module đó được dựng.
 func (m *Module) UseFarmerHouseholds(f port.FarmerHouseholds) { m.season.Farmers = f }
 
+// StrawFactors supplies the time-effective FN-11 coefficient to statistics.
+func (m *Module) StrawFactors() port.StrawFactors { return m.season }
+
 // UseSharing nối cổng cấp quyền chia sẻ của pf/party (ADR-0020): bề mặt đối tác /v1/partner/plots*,
 // /v1/partner/season-harvest-dates.
 func (m *Module) UseSharing(pa partyport.PartnerAccess) { m.season.Sharing, m.plot.Sharing = pa, pa }
