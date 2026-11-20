@@ -92,9 +92,13 @@ Tự phê duyệt hoặc tự từ chối phiên bản tham số của chính m�
 | 422 | `party.import_invalid` | pf/party: tệp nhập (nông hộ, cây tổ chức; CSV UTF-8 hoặc .xlsx) sai mẫu — thiếu cột bắt buộc, sai định dạng, không phải UTF-8, tệp .xls cũ, ô công thức (không tính công thức; `detail` nêu ô), quá số dòng/dung lượng — từ chối cả tệp |
 | 409 | `party.cooperative_name_taken` | pf/party: "Tên HTX này đã tồn tại, vui lòng chọn tên khác." — sao chép hồ sơ HTX (`POST /v1/cooperatives/{ref}/copy`, HTX US-HTX-03 AC-3) hoặc dòng nhập HTX (`POST /v1/cooperatives/import`, lý do theo dòng) trùng tên HTX đã có (không phân biệt hoa thường); `existing_ref` là HTX đang giữ tên |
 | 409 | `party.cooperative_profile_pending` | pf/party, AH-283: ý định sửa hồ sơ chưa hoàn tất ở các owner. Giữ nguyên dữ liệu và Idempotency-Key để thử lại thao tác trước; không mở thao tác mới trên cùng HTX. |
+| 503 | `vault.household_scope_unavailable` | vault/identity, AH-285: không xác minh được phạm vi định danh hộ từ owner; không trả PII hoặc suy thiếu nguồn thành quyền xem toàn bộ. |
+| 409 | `vault.household_national_id_taken` | AH-285: CCCD đã tồn tại trong tenant; không tạo/sửa hộ, không trả tham chiếu của hộ đang giữ CCCD. |
+| 409 | `vault.household_phone_taken` | AH-285: SĐT đã được sử dụng; phân biệt với CCCD trùng. |
 | 409 | `party.cooperative_in_use` | pf/party, AH-283: không xóa HTX đã phát sinh dữ liệu. `detail` nêu chính xác số hộ và tài khoản, kể cả hộ ngừng hoạt động và tài khoản lịch sử; các trường `pending_accounts`, `has_sharing`, `has_business` giải thích nguồn chặn khác. |
 | 409 | `party.cooperative_profile_changed` | pf/party, AH-283: `expected_revision` không còn là phiên bản hiện tại; tải lại hồ sơ trước khi sửa. |
 | 409 | `party.household_phone_taken` | pf/party: sao chép nông hộ với SĐT/CCCD đã có trong kho định danh — trong `POST /v1/households/copy` thành lý do dòng "SĐT đã tồn tại" (HTX US-HH-02 AC-4) |
+| 409 | `party.household_has_production` | AH-285: hộ có bất kỳ lịch sử vụ hoặc phiếu thu gom do owner công bố; chặn xóa, gợi ý Ngừng tham gia. |
 | 404 | `party.household_contact_unavailable` | pf/party: `GET /v1/households/{ref}/contact` — chủ hộ chưa có SĐT hợp lệ hoặc đã xóa định danh (HTX US-HH-03) |
 | 404 | `party.household_not_found` | pf/party: `POST /v1/households/{ref}/membership` — nông hộ không có hoặc ngoài phạm vi (không lộ sự tồn tại); KN v7.7: cả `PUT /v1/kn/households/{ref}`, `GET …/log` ngoài phạm vi ngữ cảnh phiên |
 | 403 | `party.read_only` | pf/party (KN v7.7 FN-XA-03.03): ngữ cảnh phiên Cấp Tỉnh (`kn_tinh`) hoặc Cấp Quốc gia (`kn_tw`) ghi vào `/v1/kn/cooperatives*`, `/v1/kn/households*` — chỉ xem (BRD §5.1) |

@@ -154,6 +154,7 @@ paths:
       parameters:
         - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
         - {name: phone, in: query, description: "SĐT chủ hộ cần tìm (khớp chính xác sau chuẩn hóa)", schema: {type: string, maxLength: 20}}
+        - {name: status, in: query, schema: {type: string, enum: [active, inactive]}}
         - {name: cursor, in: query, schema: {type: string}}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
       responses:
@@ -5308,6 +5309,8 @@ components:
       type: object
       required: [household_ref, cooperative_ref, commune_code, cultivated_area_ha, member_since, active]
       properties:
+        code: {type: string, readOnly: true}
+        revision: {type: integer, minimum: 1, readOnly: true}
         household_ref: {type: string, format: uuid, description: "Mã tham chiếu trong kho định danh (R-41)"}
         cooperative_ref: {type: [string, "null"], format: uuid}
         commune_code: {type: string}

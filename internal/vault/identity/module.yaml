@@ -13,6 +13,11 @@ provides:
     - Directory
     - HTXContactEraser
     - HTXContacts
+    - HouseholdCommandVerifier
+    - HouseholdIdentityReader
+    - HouseholdIdentityWriter
+    - HouseholdPhoneLookup
+    - HouseholdScopeVerifier
     - ProfileBatch
     - Profiles
     - Revisions

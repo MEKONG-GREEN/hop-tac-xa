@@ -107,6 +107,7 @@ func New(db tenant.Beginner, clk clock.Clock, deps Deps) *Module {
 	m.plot.Vault = deps.Farmers
 	m.season = &seasonapp.Service{DB: db, Clock: clk, Scope: deps.Scope, Orgs: deps.Orgs, Plots: m.plot, Params: deps.Params,
 		Catalogs: deps.Catalogs, GpsLog: deps.GpsLog}
+	m.member.ProductionHistory = seasonapp.HouseholdHistory{DB: db}
 	m.bilateral = &bilateralapp.Service{DB: db, Clock: clk}
 	m.ledger = bilateralapp.Ledger{DB: db, Clock: clk}
 	m.anchor = &anchorapp.Service{DB: db, Clock: clk, Creator: deps.CooperativeRegistrar}

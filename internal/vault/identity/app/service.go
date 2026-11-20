@@ -58,6 +58,9 @@ type Service struct {
 	// đủ) và Unwrap (mở DEK ảnh). cmd/identity-vault bật mặc định ở production
 	// (AG_VAULT_REQUIRE_MFA), tắt ở dev/test khi token thử chưa có amr.
 	RequireMFASensitive bool
+	// HouseholdScopes verifies current membership using the original caller's
+	// token. A missing verifier disables the narrow native household API.
+	HouseholdScopes client.HouseholdScopeVerifier
 }
 
 var _ client.Client = (*Service)(nil)
@@ -351,16 +354,26 @@ func (s *Service) Resolve(ctx context.Context, purpose client.Purpose, ref uuid.
 	if err := s.sensitive(ctx, p, domain.OpResolve, purpose, true, true); err != nil {
 		return client.Identity{}, err
 	}
+	return s.resolveAuthorized(ctx, p, purpose, ref, "")
+}
+
+// resolveAuthorized is shared storage/crypto work after the caller's specific
+// authorization. expectedKind prevents narrow APIs from opening other subjects.
+func (s *Service) resolveAuthorized(ctx context.Context, p authz.Principal, purpose client.Purpose, ref uuid.UUID, expectedKind client.SubjectKind) (client.Identity, error) {
 	var sealed sealedIdentity
 	var subj *store.Subject
 	var result error
-	err = tenant.WithTenantTx(ctx, s.DB, p.TenantID, func(tx pgx.Tx) error {
+	err := tenant.WithTenantTx(ctx, s.DB, p.TenantID, func(tx pgx.Tx) error {
 		st, err := s.subjectState(ctx, tx, p, ref, domain.OpResolve, purpose, false)
 		if err != nil || st.fail != nil {
 			result = st.fail
 			return err
 		}
 		subj = st.subj
+		if expectedKind != "" && subj.Kind != string(expectedKind) {
+			result = client.ProblemNotFound
+			return s.logAccess(ctx, tx, p, &ref, true, domain.OpResolve, purpose, domain.OutcomeNotFound)
+		}
 		sealed, err = fetchIdentity(ctx, tx, ref)
 		return err
 	})
