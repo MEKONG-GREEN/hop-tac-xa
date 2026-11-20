@@ -105,6 +105,7 @@ func (c *householdScopeHTTP) readObject(ctx context.Context, path string, out an
 		return ProblemHouseholdScopeUnavailable
 	}
 	req.Header.Set("Authorization", "Bearer "+raw)
+	forwardWorkingRole(ctx, req)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Cache-Control", "no-store")
 	resp, err := c.hc.Do(req)

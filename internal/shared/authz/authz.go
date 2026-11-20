@@ -24,8 +24,11 @@ const (
 
 // Principal là người gọi đã xác thực.
 type Principal struct {
-	ActorRef uuid.UUID // = sub của token; mã tham chiếu, không phải định danh
-	TenantID uuid.UUID // từ claim tenant_id của token (R-16)
+	// roleCeiling can only reduce authenticated roles for a selected working role.
+	// Original Roles, actor, tenant, organization and MFA remain unchanged.
+	roleCeiling []string
+	ActorRef    uuid.UUID // = sub của token; mã tham chiếu, không phải định danh
+	TenantID    uuid.UUID // từ claim tenant_id của token (R-16)
 	// OrgRef là đơn vị công tác của người gọi (claim org_ref): TTKN TW, TTKN tỉnh,
 	// tổ khuyến nông xã, HTX, Cục KTHT… Phạm vi dữ liệu theo cây phân cấp tính từ
 	// đây ở tầng ứng dụng (ADR-0009, R-33). uuid.Nil nếu token không có.
@@ -43,7 +46,32 @@ type Principal struct {
 }
 
 // Has cho biết người gọi có vai r.
-func (p Principal) Has(r string) bool { return slices.Contains(p.Roles, r) }
+func (p Principal) Has(r string) bool {
+	return slices.Contains(p.Roles, r) && (p.roleCeiling == nil || slices.Contains(p.roleCeiling, r))
+}
+
+// WithRoleCeiling intersects authorization with a server-validated selection.
+// It cannot introduce a role absent from the signed authentication principal.
+func (p Principal) WithRoleCeiling(allowed ...string) Principal {
+	ceiling := make([]string, 0, len(allowed))
+	for _, r := range allowed {
+		if p.Has(r) && !slices.Contains(ceiling, r) {
+			ceiling = append(ceiling, r)
+		}
+	}
+	p.roleCeiling = ceiling
+	return p
+}
+
+func (p Principal) EffectiveRoles() []string {
+	roles := make([]string, 0, len(p.Roles))
+	for _, r := range p.Roles {
+		if p.Has(r) {
+			roles = append(roles, r)
+		}
+	}
+	return roles
+}
 
 type ctxKey struct{}
 

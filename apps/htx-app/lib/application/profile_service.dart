@@ -29,6 +29,7 @@ class ProfileService {
     required LocalDb db,
     required CatalogCache catalogs,
     required Future<String?> Function() accessToken,
+    this.workingRole,
   }) : _db = db,
        _catalogs = catalogs,
        _token = accessToken;
@@ -36,6 +37,7 @@ class ProfileService {
   final LocalDb _db;
   final CatalogCache _catalogs;
   final Future<String?> Function() _token;
+  final String? Function()? workingRole;
 
   static const _meKey = 'htx.me';
 
@@ -81,6 +83,10 @@ class ProfileService {
   Future<void> _put(String key, Object v) => _db.setMeta(key, jsonEncode(v));
 
   Future<List<String>> roles() async {
+    final selected = workingRole?.call();
+    if (selected != null) {
+      return rolesFromJwt(await _token()).contains(selected) ? [selected] : [];
+    }
     final me = await _get(_meKey);
     if (me is Map && me['roles'] is List) {
       return [for (final r in me['roles'] as List) '$r'];
@@ -101,6 +107,7 @@ class ProfileService {
   ///   ngay, trước khi hỏi đồng ý và trước mọi lượt đồng bộ.
   /// Không đọc được token (thiếu, hỏng) → giữ bản đệm.
   Future<HtxMode> entryMode() async {
+    if (workingRole?.call() != null) return mode();
     final cached = await mode();
     final tokenRoles = rolesFromJwt(await _token());
     if (tokenRoles.isEmpty) return cached;

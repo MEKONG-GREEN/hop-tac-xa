@@ -1,0 +1,79 @@
+paths:
+# @ag-order: 27500
+  /v1/accounts/htx-users:
+    get:
+      summary: Danh sách tài khoản FN-07 trong tenant (Admin, realm HTX)
+      description: Chỉ Admin đã qua MFA. Snapshot đầy đủ tối đa 2000 tài khoản IAM; vượt giới hạn trả lỗi. Cache-Control no-store.
+      responses:
+        '200':
+          description: Danh sách đầy đủ cho bộ lọc, số đếm và phân trang UX-01
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/AccountsUser' }
+    post:
+      summary: Tạo tài khoản FN-07 trong realm HTX (Admin)
+      description: Một HTX, tối đa hai vai Đại diện/Thành viên; Admin không HTX. Mật khẩu tạm 8 ký tự chỉ trả một lần, bắt đổi lần đầu; replay không trả mật khẩu.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [username, full_name, phone, roles]
+              properties:
+                username: { type: string, minLength: 3, maxLength: 64 }
+                full_name: { type: string, minLength: 1, maxLength: 100 }
+                phone: { type: string, pattern: '^0[0-9]{9}$' }
+                email: { type: string, description: Bắt buộc với Admin để nhận OTP email }
+                cooperative_ref: { type: [string, 'null'], format: uuid }
+                roles:
+                  type: array
+                  minItems: 1
+                  maxItems: 2
+                  uniqueItems: true
+                  items: { type: string, enum: [platform_admin, coop_manager, htx_member] }
+      responses:
+        '201':
+          description: Đã tạo, mật khẩu chỉ trong phản hồi này; Cache-Control no-store
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NativeHTXAccountCreated' }
+        '200':
+          description: Phát lại, mật khẩu null
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NativeHTXAccountCreated' }
+# @ag-order: 27501
+  /v1/accounts/htx-users/{id}:
+    get:
+      summary: Chi tiết tài khoản FN-07 (Admin, realm HTX)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Tài khoản trong tenant hiện tại, không có mật khẩu
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccountsUser' }
+components:
+  schemas:
+# @ag-order: 27502
+    NativeHTXAccountCreated:
+      type: object
+      required: [user, temporary_password]
+      properties:
+        user: { $ref: '#/components/schemas/AccountsUser' }
+        temporary_password: { type: [string, 'null'], description: Chỉ phản hồi đầu tiên; không ghi log hoặc lưu cache }
+# @ag-end

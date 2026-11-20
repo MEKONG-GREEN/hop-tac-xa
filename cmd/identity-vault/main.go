@@ -37,6 +37,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -141,7 +142,7 @@ func run(log *slog.Logger) error {
 		addr = ":8090"
 	}
 	srv := &http.Server{
-		Addr: addr, Handler: NewRouter(Deps{Log: log, Verifier: verifier, Module: mod, DB: pool, KMSLocal: localKMS, KMSProvider: kmsProvider}),
+		Addr: addr, Handler: NewRouter(Deps{NativeHTX: strings.HasSuffix(strings.TrimSuffix(issuer, "/"), "/realms/agrigreen-htx"), Log: log, Verifier: verifier, Module: mod, DB: pool, KMSLocal: localKMS, KMSProvider: kmsProvider}),
 		TLSConfig:         tlsCfg,
 		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second,
 	}

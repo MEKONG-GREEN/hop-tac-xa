@@ -12,6 +12,7 @@ import type { MenuTree } from "@/kn/contract";
 import { contextLabel, contextShortLabel, optionLabel, otherOptions } from "@/kn/session";
 import { canSee, disabledModules, findNavItem, homeFor, visibleNav, type DisabledModules } from "@/nav/nav";
 import { AccountMenu } from "@/shell/AccountMenu";
+import { HtxRolePicker } from "@/shell/HtxRolePicker";
 import { Breadcrumb, BreadcrumbTailProvider, useBreadcrumbTailValue, type Crumb } from "@/shell/Breadcrumb";
 import { crumbsFor, legacyMenu, menuAllows, withExtraGroups } from "@/shell/menu";
 import { NoCoopState, OUT_OF_SCOPE_NOTICE, ShellExitContext, ShellNoCoopContext, useShellNotice, writeShellNotice } from "@/shell/notice";
@@ -122,7 +123,8 @@ export function AppShell({ children, SidebarComponent = Sidebar }: {
   children: ReactNode;
   SidebarComponent?: ComponentType<ComponentProps<typeof Sidebar>>;
 }) {
-  const { status, principal, logout, scopeWarning, kn, selectContext, changePassword, api, dataConsent } = useAuth();
+  const { status, principal, logout, scopeWarning, kn, selectContext, changePassword, api, dataConsent,htxRoles } = useAuth();
+  const needsHtxRole=!!htxRoles && htxRoles.roles.length>1 && !htxRoles.selected;
   const pathname = usePathname() ?? "/";
   const router = useRouter();
   const [navOpen, setNavOpen] = useState(false);
@@ -164,17 +166,19 @@ export function AppShell({ children, SidebarComponent = Sidebar }: {
     } else if (status === "authenticated") {
       // AH-23: chưa đồng ý thu thập dữ liệu (hoặc chưa xác định được) → màn Đồng ý, trước cả bước chọn vai trò.
       if (dataConsent.status === "required" || dataConsent.status === "error") router.replace(`/dong-y-thu-thap?returnTo=${encodeURIComponent(pathname)}`);
+      else if (needsHtxRole) return;
       else if (kn.status === "choose") router.replace(`/chon-vai-tro?returnTo=${encodeURIComponent(pathname)}`);
       else if (kn.status === "active" && kn.context && pathname === "/") router.replace(kn.context.default_route);
       // Trang chi tiết (vd /htx/<id> thừa hưởng mục /htx) → rời kèm thông báo; trang danh sách giữ FN-05/EX-01.
       else if (redirecting && findNavItem(pathname)?.href !== pathname) exit(OUT_OF_SCOPE_NOTICE);
       else if (redirecting) router.replace(homeFor(principal, disabled));
     }
-  }, [status, bare, pathname, router, redirecting, principal, kn.status, kn.context, disabled, dataConsent.status, exit]);
+  }, [status, bare, pathname, router, redirecting, principal, kn.status, kn.context, disabled, dataConsent.status, exit,needsHtxRole]);
 
   const note = noteState?.path === pathname ? noteState.text : null;
 
   if (bare) return <>{children}</>;
+  if (status==="authenticated" && needsHtxRole && htxRoles && dataConsent.status==="not_required") return <HtxRolePicker roles={htxRoles.roles} select={htxRoles.select} />;
   if (status !== "authenticated" || !principal || kn.status === "choose" || dataConsent.status !== "not_required") {
     return (
       <main style={{ display: "grid", placeItems: "center", minHeight: "100vh" }}>
@@ -223,10 +227,14 @@ export function AppShell({ children, SidebarComponent = Sidebar }: {
             <NotificationBell />
             <AccountMenu
               displayName={principal.displayName}
-              subtitle={ctx ? contextShortLabel(ctx) : legacyScopeText(principal)}
-              current={ctx ? contextLabel(ctx) : legacyScopeText(principal)}
-              others={others.map((o) => ({ key: `${o.assignment.assignment_id}|${o.department?.code ?? ""}`, label: optionLabel(o) }))}
+              subtitle={htxRoles?.selected ? roleLabel(htxRoles.selected) : ctx ? contextShortLabel(ctx) : legacyScopeText(principal)}
+              current={htxRoles?.selected ? roleLabel(htxRoles.selected) : ctx ? contextLabel(ctx) : legacyScopeText(principal)}
+              others={htxRoles && htxRoles.roles.length>1 ? [{key:"htx:choose",label:"Đổi vai trò"}] : others.map((o) => ({ key: `${o.assignment.assignment_id}|${o.department?.code ?? ""}`, label: optionLabel(o) }))}
               onSwitch={async (key) => {
+                if(key==="htx:choose" && htxRoles) {
+                  if(window.confirm("Dữ liệu chưa lưu sẽ mất. Tiếp tục đổi vai trò?")) htxRoles.chooseAgain();
+                  return;
+                }
                 const [assignment_id = "", dept = ""] = key.split("|");
                 const next = await selectContext({ assignment_id, department_code: dept || null });
                 router.push(next.default_route);

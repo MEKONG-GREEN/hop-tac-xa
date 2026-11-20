@@ -24,10 +24,11 @@ type Pinger interface {
 
 // Deps là phụ thuộc của identity-vault.
 type Deps struct {
-	Log      *slog.Logger
-	Verifier *authz.Verifier // xác minh token người dùng cuối được chuyển tiếp (R-54)
-	Module   httpx.Module
-	DB       Pinger
+	NativeHTX bool
+	Log       *slog.Logger
+	Verifier  *authz.Verifier // xác minh token người dùng cuối được chuyển tiếp (R-54)
+	Module    httpx.Module
+	DB        Pinger
 	// KMSLocal: kho chạy KEK phần mềm — phơi ở /readyz (kms_local=1) để vận hành thấy rủi ro (M10).
 	KMSLocal    bool
 	KMSProvider string
@@ -54,7 +55,7 @@ func NewRouter(d Deps) *gin.Engine {
 		}
 		c.JSON(http.StatusOK, gin.H{"status": "ready", "kms_local": kmsLocal, "kms_provider": d.KMSProvider})
 	})
-	v1 := r.Group("/v1", httpx.Authenticate(d.Verifier))
+	v1 := r.Group("/v1", httpx.Authenticate(d.Verifier), vaultWorkingRole(d.NativeHTX))
 	d.Module.RegisterApp(v1)
 	return r
 }

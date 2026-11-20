@@ -84,17 +84,20 @@ class MemoryBlobStore extends BlobStore {
 
 /// Access token JWT giả mang `realm_access.roles` (không ký — máy chủ giả
 /// không kiểm).
-String fakeJwt(List<String> roles) {
+String fakeJwt(List<String> roles, {bool native = false}) {
   String b(Object o) =>
       base64Url.encode(utf8.encode(jsonEncode(o))).replaceAll('=', '');
   return '${b({'alg': 'none'})}.${b({
     'sub': 'u-1',
+    if (native) 'tenant_id': 'tenant-1',
+    if (native) 'org_ref': coopRef,
     'realm_access': {'roles': roles},
   })}.sig';
 }
 
 class JwtOidc implements OidcClient {
-  JwtOidc(this.roles);
+  JwtOidc(this.roles, {this.native = false});
+  final bool native;
 
   /// Vai của token cấp ở lần đăng nhập kế tiếp; test đổi để giả vai được cấp
   /// hoặc gỡ giữa hai lần đăng nhập.
@@ -105,7 +108,7 @@ class JwtOidc implements OidcClient {
   Future<OidcTokens> signIn() async {
     signIns++;
     return OidcTokens(
-      accessToken: fakeJwt(roles),
+      accessToken: fakeJwt(roles, native: native),
       refreshToken: 'rt',
       accessTokenExpiry: DateTime.utc(2100),
     );
@@ -165,7 +168,8 @@ class TestEnv {
     List<String> roles = const ['farmer'],
     FakeServer? server,
     DbOpener? opener,
-  }) : oidc = JwtOidc(roles),
+    this.nativeRealm = false,
+  }) : oidc = JwtOidc(roles, native: nativeRealm),
        roles = roles,
        server = server ?? FakeServer(),
        opener = opener ?? MemoryDbOpener() {
@@ -177,6 +181,7 @@ class TestEnv {
   static const _coopRoles = ['coop_manager', 'htx_member'];
 
   final List<String> roles;
+  final bool nativeRealm;
   final FakeServer server;
 
   /// CSDL của app; mặc định trong bộ nhớ (mất khi đóng).
@@ -199,9 +204,11 @@ class TestEnv {
   );
 
   late final HtxPlatform platform = HtxPlatform(
-    config: const AppConfig(
+    config: AppConfig(
       apiBaseUrl: 'https://api.test',
-      oidcIssuer: 'https://id.agrigreen.test/realms/agrigreen',
+      oidcIssuer: nativeRealm
+          ? 'https://id.agrigreen.test/realms/agrigreen-htx'
+          : 'https://id.agrigreen.test/realms/agrigreen',
       oidcClientId: htxOidcClientId,
       oidcRedirectUrl: htxOidcRedirect,
     ),

@@ -172,7 +172,8 @@ func (m *Memory) CreateUser(_ context.Context, nu port.NewUser) (uuid.UUID, erro
 	}
 	id := uuid.New() // Keycloak sinh UUIDv4
 	m.users[id] = &memUser{u: port.User{
-		ID: id, Username: fold(nu.Username), Email: fold(nu.Email), FirstName: nu.FirstName, LastName: nu.LastName,
+		CreationRef: nu.CreationRef,
+		ID:          id, Username: fold(nu.Username), Email: fold(nu.Email), FirstName: nu.FirstName, LastName: nu.LastName,
 		Phone: nu.Phone, Enabled: true, EmailVerified: nu.EmailVerified && nu.Email != "", TenantID: nu.TenantID, OrgRef: nu.OrgRef,
 		RequiredActions: slices.Clone(nu.RequiredActions), CreatedAt: m.now().UTC(),
 	}}
@@ -218,6 +219,10 @@ func attr(u port.User, k string) string {
 		return u.OrgRef.String()
 	case port.AttrPhone:
 		return u.Phone
+	case port.AttrCreationRef:
+		if u.CreationRef != uuid.Nil {
+			return u.CreationRef.String()
+		}
 	}
 	return ""
 }
@@ -498,6 +503,27 @@ func (m *Memory) SetPassword(_ context.Context, id uuid.UUID, password string) e
 		return port.ErrPasswordPolicy
 	}
 	m.passwords[id] = sum
+	return nil
+}
+
+// SetTemporaryPassword simulates the dedicated HTX realm's eight-character policy.
+func (m *Memory) SetTemporaryPassword(_ context.Context, id uuid.UUID, password string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.fail("SetTemporaryPassword"); err != nil {
+		return err
+	}
+	u, err := m.get(id)
+	if err != nil {
+		return err
+	}
+	if len(password) < 8 {
+		return port.ErrPasswordPolicy
+	}
+	m.passwords[id] = sha256.Sum256([]byte(password))
+	if !slices.Contains(u.u.RequiredActions, port.ActionUpdatePassword) {
+		u.u.RequiredActions = append(u.u.RequiredActions, port.ActionUpdatePassword)
+	}
 	return nil
 }
 

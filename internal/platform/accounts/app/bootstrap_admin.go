@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/MEKONG-GREEN/hop-tac-xa/contracts/htxroles"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/domain"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/port"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/authz"
@@ -23,6 +24,8 @@ import (
 
 // BootstrapAdminInput là tham số lệnh khởi tạo. TenantID và OrgRef bắt buộc, không có giá trị mặc định.
 type BootstrapAdminInput struct {
+	NativeHTX bool
+	Phone     string `pii:"true"`
 	TenantID  uuid.UUID
 	OrgRef    uuid.UUID
 	Username  string `pii:"true"`
@@ -51,7 +54,7 @@ func BootstrapAdmin(ctx context.Context, dir port.Directory, in BootstrapAdminIn
 		return uuid.Nil, "", errNoDirectoryYet
 	case in.TenantID == uuid.Nil:
 		return uuid.Nil, "", errors.New("accounts: thiếu tenant (bắt buộc, không có giá trị mặc định)")
-	case in.OrgRef == uuid.Nil:
+	case in.OrgRef == uuid.Nil && !in.NativeHTX:
 		return uuid.Nil, "", errors.New("accounts: thiếu đơn vị (bắt buộc, không có giá trị mặc định)")
 	case username == "":
 		return uuid.Nil, "", errors.New("accounts: thiếu tên đăng nhập")
@@ -60,17 +63,44 @@ func BootstrapAdmin(ctx context.Context, dir port.Directory, in BootstrapAdminIn
 	if !ok {
 		return uuid.Nil, "", errors.New("accounts: thiếu email hợp lệ (Admin nhận mã OTP đăng nhập qua email)")
 	}
+	if in.NativeHTX {
+		v, err := (domain.NativeAccountInput{Username: username, FullName: in.LastName + " " + in.FirstName, Phone: in.Phone, Email: email, CooperativeRef: in.OrgRef, Roles: []string{htxroles.Admin}}).Normalize()
+		if err != nil {
+			return uuid.Nil, "", err
+		}
+		in.Phone = v.Phone
+		users, err := dir.FindUsers(ctx, port.Query{Attributes: map[string]string{port.AttrPhone: in.Phone}, Max: 1})
+		if err != nil {
+			return uuid.Nil, "", err
+		}
+		if len(users) > 0 {
+			return uuid.Nil, "", ErrPhoneTaken
+		}
+	}
 	setter, ok := dir.(port.PasswordSetter)
 	if !ok {
 		return uuid.Nil, "", errors.New("accounts: Keycloak Admin chưa hỗ trợ đặt mật khẩu")
 	}
-	password, err := tempPassword(rnd)
+	var password string
+	var err error
+	var setPassword = setter.SetPassword
+	if in.NativeHTX {
+		temporary, ok := dir.(port.TemporaryPasswordSetter)
+		if !ok {
+			return uuid.Nil, "", errors.New("accounts: Keycloak chưa hỗ trợ mật khẩu tạm FN-07")
+		}
+		setPassword = temporary.SetTemporaryPassword
+		password, err = nativeTemporaryPasswordFrom(rnd)
+	} else {
+		password, err = tempPassword(rnd)
+	}
 	if err != nil {
 		return uuid.Nil, "", err
 	}
 	id, err := dir.CreateUser(ctx, port.NewUser{
 		Username: username, Email: email, EmailVerified: true, FirstName: in.FirstName, LastName: in.LastName,
 		TenantID: in.TenantID, OrgRef: in.OrgRef,
+		Phone:           in.Phone,
 		RequiredActions: []string{port.ActionUpdatePassword},
 	})
 	if errors.Is(err, port.ErrUserExists) {
@@ -88,7 +118,7 @@ func BootstrapAdmin(ctx context.Context, dir port.Directory, in BootstrapAdminIn
 	if err := dir.AddRealmRoles(ctx, id, []string{authz.RolePlatformAdmin}); err != nil {
 		return compensate(err)
 	}
-	if err := setter.SetPassword(ctx, id, password); err != nil {
+	if err := setPassword(ctx, id, password); err != nil {
 		return compensate(err)
 	}
 	return id, password, nil
