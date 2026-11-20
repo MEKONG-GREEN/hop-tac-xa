@@ -76,6 +76,10 @@ func (h Handler) RegisterApp(rg *gin.RouterGroup) {
 
 // RegisterAdmin gắn route Admin API (MFA bắt buộc): soạn, phát hành SOP; dựng lại bảng chiếu.
 func (h Handler) RegisterAdmin(rg *gin.RouterGroup) {
+	rg.GET("/cropcycle/straw-factors", h.listStrawFactors)
+	rg.POST("/cropcycle/straw-factors", h.writeStrawFactor(true))
+	rg.POST("/cropcycle/straw-factors/:variety_code/revisions", h.writeStrawFactor(false))
+	rg.GET("/cropcycle/straw-factors/:variety_code/history", h.strawFactorHistory)
 	rg.GET("/cropcycle/sops", h.listSOPs(true))
 	rg.POST("/cropcycle/sops", h.createSOP)
 	rg.GET("/cropcycle/sops/:ref", h.getSOP(true))

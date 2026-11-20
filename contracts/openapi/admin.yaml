@@ -6745,6 +6745,93 @@ paths:
         "409": {description: "masterdata.crop_type_has_visible_varieties | masterdata.catalog_item_read_only", $ref: "#/components/responses/Problem"}
         "422": {description: masterdata.catalog_delete_unsupported, $ref: "#/components/responses/Problem"}
         "503": {description: masterdata.dependency_unavailable, $ref: "#/components/responses/Problem"}
+  /v1/cropcycle/straw-factors:
+    get:
+      operationId: listStrawFactors
+      summary: "FN-11: hệ số theo giống lúa, Admin/MFA; chưa cấu hình dùng 35%"
+      responses:
+        "200":
+          description: "Giữ cả dòng đã cấu hình cho giống bị ẩn"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: "#/components/schemas/StrawFactorRow"}}
+        "403": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+    post:
+      operationId: createStrawFactor
+      summary: "FN-11: thêm hệ số, không xóa"
+      parameters:
+        - {$ref: "#/components/parameters/IdempotencyKey"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [variety_code, percentage]
+              properties:
+                variety_code: {type: string}
+                percentage: {type: string, description: "0–100%, tối đa 4 chữ số thập phân"}
+      responses:
+        "201":
+          description: "Đã thêm hoặc replay cùng thao tác"
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/StrawFactorEvent"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /v1/cropcycle/straw-factors/{variety_code}/revisions:
+    post:
+      operationId: reviseStrawFactor
+      summary: "FN-11: sửa hệ số và ghi lịch sử trước/sau, chỉ hiệu lực từ thời điểm lưu"
+      parameters:
+        - {name: variety_code, in: path, required: true, schema: {type: string}}
+        - {$ref: "#/components/parameters/IdempotencyKey"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [percentage, expected_revision]
+              properties:
+                percentage: {type: string}
+                expected_revision: {type: integer, minimum: 1}
+      responses:
+        "200":
+          description: "Đã lưu một revision hoặc replay"
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/StrawFactorEvent"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /v1/cropcycle/straw-factors/{variety_code}/history:
+    get:
+      operationId: strawFactorHistory
+      summary: "FN-11: lịch sử theo giống, mới nhất trước; không sửa/xóa lịch sử"
+      parameters:
+        - {name: variety_code, in: path, required: true, schema: {type: string}}
+        - {name: before_revision, in: query, schema: {type: integer, minimum: 1}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 99, default: 20}}
+      responses:
+        "200":
+          description: "Lịch sử và con trỏ tải tiếp"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_before_revision]
+                properties:
+                  items: {type: array, items: {$ref: "#/components/schemas/StrawFactorEvent"}}
+                  next_before_revision: {type: [integer, "null"]}
+        "403": {$ref: "#/components/responses/Problem"}
   /v1/cooperative-profiles:
     post:
       summary: "FN-03: Admin tạo hồ sơ HTX, không bắt buộc MST/neo KN"
@@ -8993,6 +9080,29 @@ components:
       properties:
         outcome: {type: string, enum: [deleted, hidden]}
         item: {$ref: "#/components/schemas/CatalogItem"}
+    StrawFactorRow:
+      type: object
+      required: [variety_code, variety_name, active, configured, percentage, revision, effective_at]
+      properties:
+        variety_code: {type: string}
+        variety_name: {type: string}
+        active: {type: boolean}
+        configured: {type: boolean}
+        percentage: {type: string}
+        revision: {type: integer}
+        effective_at: {type: [string, "null"], format: date-time}
+    StrawFactorEvent:
+      type: object
+      required: [id, variety_code, percentage, previous_percentage, revision, effective_at, recorded_at, actor_ref]
+      properties:
+        id: {type: string, format: uuid}
+        variety_code: {type: string}
+        percentage: {type: string}
+        previous_percentage: {type: [string, "null"]}
+        revision: {type: integer}
+        effective_at: {type: string, format: date-time}
+        recorded_at: {type: string, format: date-time}
+        actor_ref: {type: string, format: uuid}
     HTXProfileInput:
       type: object
       additionalProperties: false

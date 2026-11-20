@@ -133,6 +133,9 @@ func (m *Module) UseFarmerHouseholds(f port.FarmerHouseholds) { m.season.Farmers
 // UseTaskImages connects the narrow image-receipt verifier for journal writes.
 func (m *Module) UseTaskImages(p evport.OwnedImages) { m.season.TaskImages = p }
 
+// StrawFactors supplies the time-effective FN-11 coefficient to statistics.
+func (m *Module) StrawFactors() port.StrawFactors { return m.season }
+
 // UseSharing nối cổng cấp quyền chia sẻ của pf/party (ADR-0020): bề mặt đối tác /v1/partner/plots*,
 // /v1/partner/season-harvest-dates.
 func (m *Module) UseSharing(pa partyport.PartnerAccess) { m.season.Sharing, m.plot.Sharing = pa, pa }
