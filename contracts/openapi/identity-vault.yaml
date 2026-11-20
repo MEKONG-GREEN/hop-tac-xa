@@ -17,6 +17,41 @@ servers:
 security:
   - oidc: []
 paths:
+  /v1/household-identities/{ref}/read:
+    post:
+      summary: "FN-04: định danh hộ theo bằng chứng owner và ma trận vai HTX"
+      operationId: readHouseholdIdentity
+      description: |
+        Mục đích extension.contact; không cấp vai vault_registrar. Mỗi lần đọc
+        xác minh token gốc tại PF trước và sau giải mã, không giữ transaction
+        khi gọi owner/KMS. Member chỉ nhận SĐT dạng 0907***011 và CCCD dạng
+        079******789; không có tham số yêu cầu bản rõ. Đại diện chỉ hộ HTX mình;
+        Admin trong tenant và bắt buộc MFA. Chỉ chủ thể household. Thiếu kết nối
+        owner trả 503; quyền bị thu hồi hoặc sai HTX trả 404. Không cache PII.
+      parameters:
+        - $ref: "#/components/parameters/Ref"
+        - $ref: "#/components/parameters/Purpose"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                purpose: {type: string, const: extension.contact}
+      responses:
+        "200":
+          description: "Định danh hộ với trường liên hệ đã che theo quyền server"
+          headers:
+            Cache-Control: {schema: {type: string, const: no-store}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Identity"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
   /v1/htx-contacts/{ref}/read:
     post:
       summary: Đọc liên hệ riêng HTX; Admin mọi HTX, Đại diện HTX mình, Member chỉ bản che

@@ -1,0 +1,46 @@
+paths:
+# @ag-order: 285001
+  /v1/cooperatives/{ref}/household-identity-scope:
+    get:
+      summary: "FN-04: owner xác minh phạm vi đăng ký định danh hộ, chỉ metadata"
+      operationId: householdRegistrationScope
+      parameters:
+        - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: "Không cache, không PII. Admin mọi HTX trong tenant; Đại diện đúng HTX mình. Thành viên không được đăng ký hộ."
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/HouseholdIdentityScope"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+# @ag-order: 285002
+  /v1/households/{ref}/identity-scope:
+    get:
+      summary: "FN-04: owner xác minh phạm vi đọc/sửa định danh hộ, chỉ metadata"
+      operationId: householdIdentityScope
+      parameters:
+        - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: "Không cache, không gọi Vault. Vai KN đi kèm không mở rộng phạm vi native; Thành viên chỉ được liên hệ đã che."
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/HouseholdIdentityScope"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+components:
+  schemas:
+# @ag-order: 285001
+    HouseholdIdentityScope:
+      type: object
+      additionalProperties: false
+      required: [ref, cooperative_ref, active, contact_access, can_write]
+      properties:
+        ref: {type: string, format: uuid}
+        cooperative_ref: {type: [string, "null"], format: uuid}
+        active: {type: boolean}
+        contact_access: {type: string, enum: [full, masked]}
+        can_write: {type: boolean}

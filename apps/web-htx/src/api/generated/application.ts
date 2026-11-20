@@ -12985,6 +12985,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/cooperatives/{ref}/household-identity-scope": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FN-04: owner xác minh phạm vi đăng ký định danh hộ, chỉ metadata */
+        get: operations["householdRegistrationScope"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/households/{ref}/identity-scope": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FN-04: owner xác minh phạm vi đọc/sửa định danh hộ, chỉ metadata */
+        get: operations["householdIdentityScope"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -27733,6 +27767,16 @@ export interface components {
             ref: string;
             code: string;
             revision: number;
+        };
+        HouseholdIdentityScope: {
+            /** Format: uuid */
+            ref: string;
+            /** Format: uuid */
+            cooperative_ref: string | null;
+            active: boolean;
+            /** @enum {string} */
+            contact_access: "full" | "masked";
+            can_write: boolean;
         };
     };
     responses: {
@@ -55509,6 +55553,56 @@ export interface operations {
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    householdRegistrationScope: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Không cache, không PII. Admin mọi HTX trong tenant; Đại diện đúng HTX mình. Thành viên không được đăng ký hộ. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HouseholdIdentityScope"];
+                };
+            };
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    householdIdentityScope: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Không cache, không gọi Vault. Vai KN đi kèm không mở rộng phạm vi native; Thành viên chỉ được liên hệ đã che. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HouseholdIdentityScope"];
+                };
+            };
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
     };
