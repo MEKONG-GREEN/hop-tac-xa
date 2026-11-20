@@ -57,5 +57,8 @@ func (s *Service) NativeHouseholdProfile(ctx context.Context, ref uuid.UUID) (Na
 	if latest.CooperativeRef != scope.CooperativeRef || latest.ContactAccess != scope.ContactAccess {
 		return NativeHouseholdProfile{}, ErrHouseholdNotFound
 	}
+	if household.Revision != scope.Revision || latest.Revision != household.Revision {
+		return NativeHouseholdProfile{}, ErrDependency.WithDetail("Hồ sơ hộ vừa thay đổi; tải lại để xem dữ liệu hiện tại")
+	}
 	return NativeHouseholdProfile{Household: *household, Identity: identity, ContactAccess: latest.ContactAccess}, nil
 }

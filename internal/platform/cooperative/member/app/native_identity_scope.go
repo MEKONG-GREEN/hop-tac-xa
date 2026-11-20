@@ -21,6 +21,7 @@ type NativeIdentityScope struct {
 	Active         bool
 	ContactAccess  string
 	CanWrite       bool
+	Revision       int64
 }
 
 func nativeHouseholdCaller(ctx context.Context, action htxroles.Action) (authz.Principal, error) {
@@ -99,5 +100,5 @@ func (s *Service) NativeHouseholdIdentityScope(ctx context.Context, ref uuid.UUI
 		access = "masked"
 	}
 	return NativeIdentityScope{Ref: household.Ref, CooperativeRef: household.CooperativeRef, Active: household.Active,
-		ContactAccess: access, CanWrite: household.CooperativeRef != uuid.Nil && htxroles.Allows(p.Has, "FN-04", htxroles.Update)}, nil
+		ContactAccess: access, CanWrite: household.CooperativeRef != uuid.Nil && htxroles.Allows(p.Has, "FN-04", htxroles.Update), Revision: household.Revision}, nil
 }

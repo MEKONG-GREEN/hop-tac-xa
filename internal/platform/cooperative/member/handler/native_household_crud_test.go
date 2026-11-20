@@ -130,6 +130,40 @@ type identityCommitOutage struct {
 	fail   bool
 }
 
+type identityReadHook struct {
+	port.HouseholdIdentities
+	reader port.NativeHouseholdIdentityReader
+	after  func()
+}
+
+func (r identityReadHook) NativeHouseholdIdentity(ctx context.Context, ref uuid.UUID) (port.HouseholdIdentity, error) {
+	id, err := r.reader.NativeHouseholdIdentity(ctx, ref)
+	if err == nil {
+		r.after()
+	}
+	return id, err
+}
+
+func TestAH285NativeProfileRejectsConcurrentRevisionChange(t *testing.T) {
+	f := nativeVaultFixture(t)
+	tree := f.seedTree(f.root())
+	rep := f.as(f.tenant, tree.c1, htxroles.Representative)
+	created := nativePost(rep, "/v1/household-profiles", "read-race-create", nativeBody(tree.c1, "0907285091", "079123456791", "2"))
+	if created.status != 201 {
+		t.Fatalf("create: %d %v", created.status, created.body)
+	}
+	ref := created.body["household_ref"].(string)
+	original := f.svc.Vault
+	f.svc.Vault = identityReadHook{HouseholdIdentities: original, reader: original.(port.NativeHouseholdIdentityReader), after: func() {
+		if _, err := f.env.AdminPool(t, migrations.PF).Exec(context.Background(), `UPDATE pf_coop.household SET cultivated_area_ha=3 WHERE household_ref=$1`, ref); err != nil {
+			t.Fatal(err)
+		}
+	}}
+	if r := rep.appDo(http.MethodGet, "/v1/households/"+ref+"/profile", nil); r.status != 503 || r.body["identity"] != nil {
+		t.Fatalf("concurrent profile returned a mixed revision: %d", r.status)
+	}
+}
+
 func (w *identityCommitOutage) WriteNativeHouseholdIdentity(ctx context.Context, command uuid.UUID, id port.HouseholdIdentity) error {
 	err := w.writer.WriteNativeHouseholdIdentity(ctx, command, id)
 	if err != nil {
