@@ -2,18 +2,6 @@
   "Roles": [],
   "Access": [
     {
-      "Reader": "r_accounts",
-      "View": "pf_party_pub.v1_cooperative_references"
-    },
-    {
-      "Reader": "r_accounts",
-      "View": "pf_party_pub.v1_cooperative_tombstones"
-    },
-    {
-      "Reader": "r_accounts",
-      "View": "pf_party_pub.v1_org_tree"
-    },
-    {
       "Reader": "r_agg",
       "View": "pf_accounts_pub.v1_cooperative_references"
     },
@@ -55,47 +43,7 @@
     },
     {
       "Reader": "r_agg",
-      "View": "pf_party_pub.v1_cooperative_tombstones"
-    },
-    {
-      "Reader": "r_agg",
       "View": "pf_sync_pub.v1_cooperative_references"
-    },
-    {
-      "Reader": "r_contact",
-      "View": "pf_party_pub.v1_cooperative_references"
-    },
-    {
-      "Reader": "r_contact",
-      "View": "pf_party_pub.v1_cooperative_tombstones"
-    },
-    {
-      "Reader": "r_contact",
-      "View": "pf_party_pub.v1_org_tree"
-    },
-    {
-      "Reader": "r_cooperative",
-      "View": "pf_party_pub.v1_cooperative_references"
-    },
-    {
-      "Reader": "r_cooperative",
-      "View": "pf_party_pub.v1_cooperative_tombstones"
-    },
-    {
-      "Reader": "r_cooperative",
-      "View": "pf_party_pub.v1_org_tree"
-    },
-    {
-      "Reader": "r_cropcycle",
-      "View": "pf_party_pub.v1_cooperative_references"
-    },
-    {
-      "Reader": "r_cropcycle",
-      "View": "pf_party_pub.v1_cooperative_tombstones"
-    },
-    {
-      "Reader": "r_cropcycle",
-      "View": "pf_party_pub.v1_org_tree"
     },
     {
       "Reader": "r_extension",
@@ -108,46 +56,6 @@
     {
       "Reader": "r_extension",
       "View": "pf_party_pub.v1_cooperative_references"
-    },
-    {
-      "Reader": "r_extension",
-      "View": "pf_party_pub.v1_cooperative_tombstones"
-    },
-    {
-      "Reader": "r_geo",
-      "View": "pf_party_pub.v1_cooperative_references"
-    },
-    {
-      "Reader": "r_geo",
-      "View": "pf_party_pub.v1_cooperative_tombstones"
-    },
-    {
-      "Reader": "r_geo",
-      "View": "pf_party_pub.v1_org_tree"
-    },
-    {
-      "Reader": "r_hrm",
-      "View": "pf_party_pub.v1_cooperative_references"
-    },
-    {
-      "Reader": "r_hrm",
-      "View": "pf_party_pub.v1_cooperative_tombstones"
-    },
-    {
-      "Reader": "r_hrm",
-      "View": "pf_party_pub.v1_org_tree"
-    },
-    {
-      "Reader": "r_mechanization",
-      "View": "pf_party_pub.v1_cooperative_references"
-    },
-    {
-      "Reader": "r_mechanization",
-      "View": "pf_party_pub.v1_cooperative_tombstones"
-    },
-    {
-      "Reader": "r_mechanization",
-      "View": "pf_party_pub.v1_org_tree"
     },
     {
       "Reader": "r_metrics",
@@ -191,23 +99,7 @@
     },
     {
       "Reader": "r_metrics",
-      "View": "pf_party_pub.v1_cooperative_tombstones"
-    },
-    {
-      "Reader": "r_metrics",
       "View": "pf_sync_pub.v1_cooperative_references"
-    },
-    {
-      "Reader": "r_notify",
-      "View": "pf_party_pub.v1_cooperative_references"
-    },
-    {
-      "Reader": "r_notify",
-      "View": "pf_party_pub.v1_cooperative_tombstones"
-    },
-    {
-      "Reader": "r_notify",
-      "View": "pf_party_pub.v1_org_tree"
     },
     {
       "Reader": "r_party",
@@ -323,35 +215,15 @@
     },
     {
       "Reader": "r_party",
-      "View": "pf_party_pub.v1_cooperative_tombstones"
-    },
-    {
-      "Reader": "r_party",
       "View": "pf_party_pub.v1_org_tree"
     },
     {
       "Reader": "r_party",
       "View": "pf_sync_pub.v1_cooperative_references"
-    },
-    {
-      "Reader": "r_sync",
-      "View": "pf_party_pub.v1_cooperative_references"
-    },
-    {
-      "Reader": "r_sync",
-      "View": "pf_party_pub.v1_cooperative_tombstones"
-    },
-    {
-      "Reader": "r_sync",
-      "View": "pf_party_pub.v1_org_tree"
     }
   ],
   "Memberships": [
     {
-      "Reader": "r_accounts",
-      "Granted": "r_party_pub"
-    },
-    {
       "Reader": "r_agg",
       "Granted": "r_accounts_pub"
     },
@@ -372,30 +244,6 @@
       "Granted": "r_sync_pub"
     },
     {
-      "Reader": "r_contact",
-      "Granted": "r_party_pub"
-    },
-    {
-      "Reader": "r_cooperative",
-      "Granted": "r_party_pub"
-    },
-    {
-      "Reader": "r_cropcycle",
-      "Granted": "r_party_pub"
-    },
-    {
-      "Reader": "r_geo",
-      "Granted": "r_party_pub"
-    },
-    {
-      "Reader": "r_hrm",
-      "Granted": "r_party_pub"
-    },
-    {
-      "Reader": "r_mechanization",
-      "Granted": "r_party_pub"
-    },
-    {
       "Reader": "r_metrics",
       "Granted": "r_accounts_pub"
     },
@@ -414,10 +262,6 @@
     {
       "Reader": "r_metrics",
       "Granted": "r_sync_pub"
-    },
-    {
-      "Reader": "r_notify",
-      "Granted": "r_party_pub"
     },
     {
       "Reader": "r_party",
@@ -462,10 +306,6 @@
     {
       "Reader": "r_party",
       "Granted": "r_sync_pub"
-    },
-    {
-      "Reader": "r_sync",
-      "Granted": "r_party_pub"
     }
   ]
 }

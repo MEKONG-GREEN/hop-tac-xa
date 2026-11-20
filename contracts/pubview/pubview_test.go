@@ -13,7 +13,7 @@ func TestContracts_W1110(t *testing.T) {
 		t.Fatal(err)
 	}
 	// W11.10: 3 hợp đồng; PFPUB: + họ closed_figures/v1 (pf_extension_pub, pf_forms_pub).
-	if len(cs) != 24 { // AH-283: +11 hợp đồng tham chiếu owner và 1 hợp đồng dấu xóa HTX
+	if len(cs) != 23 { // AH-283: +11 hợp đồng tham chiếu owner; chốt vòng đời là metadata shared
 		t.Fatalf("số hợp đồng view _pub: %d", len(cs))
 	}
 	reg, err := modreg.Load("../..")

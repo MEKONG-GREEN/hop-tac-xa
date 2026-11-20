@@ -6,17 +6,50 @@ ALTER TABLE pf_party.org_event DROP CONSTRAINT org_event_action_v2;
 CREATE INDEX org_event_deleted ON pf_party.org_event(tenant_id,org_ref)
  WHERE kind='cooperative' AND action='deleted';
 
-CREATE VIEW pf_party_pub.v1_cooperative_tombstones WITH(security_barrier=true) AS
- SELECT DISTINCT tenant_id,org_ref AS cooperative_ref FROM pf_party.org_event
- WHERE kind='cooperative' AND action='deleted';
-REVOKE ALL ON pf_party_pub.v1_cooperative_tombstones FROM PUBLIC;
-GRANT SELECT ON pf_party_pub.v1_cooperative_tombstones TO r_party_pub;
--- capture_plot_scope_loss chạy dưới own_cooperative và ghi metadata mất
--- phạm vi của thửa. Guard tham chiếu mới cũng phải kiểm được dấu xóa ở đây,
--- không cấp cả r_party_pub hay quyền bảng riêng cho vai owner.
-GRANT USAGE ON SCHEMA pf_party_pub TO own_cooperative;
-GRANT SELECT ON pf_party_pub.v1_cooperative_tombstones TO own_cooperative;
+-- Metadata của giao thức vòng đời, không phải dữ liệu nghiệp vụ công bố.
+-- Ghi cùng transaction DELETE đã được guard của Party kiểm chứng; writer
+-- thường và trigger owner chỉ cần đọc chốt, không nhận thêm vai publication.
+CREATE TABLE shared.cooperative_lifecycle_tombstone (
+ tenant_id uuid NOT NULL,cooperative_ref uuid NOT NULL,deletion_command_ref uuid NOT NULL,
+ source_seq bigint NOT NULL CHECK(source_seq>0),recorded_at timestamptz NOT NULL DEFAULT now(),
+ PRIMARY KEY(tenant_id,cooperative_ref)
+);
+SELECT shared.apply_tenant_rls('shared.cooperative_lifecycle_tombstone');
+GRANT USAGE,CREATE ON SCHEMA shared TO own_party;
+ALTER TABLE shared.cooperative_lifecycle_tombstone OWNER TO own_party;
+REVOKE ALL ON shared.cooperative_lifecycle_tombstone FROM PUBLIC;
+GRANT SELECT ON shared.cooperative_lifecycle_tombstone TO ag_shared_user,own_cooperative;
+GRANT USAGE ON SCHEMA shared TO own_party;
+GRANT EXECUTE ON FUNCTION shared.current_tenant() TO own_party;
 GRANT EXECUTE ON FUNCTION shared.guard_deleted_cooperative() TO own_cooperative;
+CREATE TRIGGER trg_immutable_cooperative_lifecycle BEFORE UPDATE OR DELETE
+ ON shared.cooperative_lifecycle_tombstone FOR EACH ROW EXECUTE FUNCTION shared.fn_immutable();
+CREATE TRIGGER trg_no_truncate_cooperative_lifecycle BEFORE TRUNCATE
+ ON shared.cooperative_lifecycle_tombstone FOR EACH STATEMENT EXECUTE FUNCTION shared.fn_immutable();
+
+CREATE FUNCTION shared.capture_deleted_cooperative() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
+BEGIN
+ IF TG_OP<>'DELETE' OR TG_LEVEL<>'ROW' OR TG_TABLE_SCHEMA<>'pf_party' OR TG_TABLE_NAME<>'org' THEN
+  RAISE EXCEPTION 'invalid cooperative lifecycle source' USING ERRCODE='42501';
+ END IF;
+ IF OLD.kind<>'cooperative' OR current_setting('app.purpose',true) IS DISTINCT FROM 'registry.cooperative_delete' THEN
+  RETURN OLD; -- không biến seed/repair đặc quyền thành thao tác xóa nghiệp vụ
+ END IF;
+ IF OLD.tenant_id IS DISTINCT FROM nullif(current_setting('app.tenant_id',true),'')::uuid
+  OR nullif(current_setting('app.actor_ref',true),'') IS NULL
+  OR OLD.active OR OLD.last_seq<1 OR OLD.last_event_id IS NULL THEN
+  RAISE EXCEPTION 'invalid cooperative lifecycle deletion' USING ERRCODE='23514';
+ END IF;
+ INSERT INTO shared.cooperative_lifecycle_tombstone(tenant_id,cooperative_ref,deletion_command_ref,source_seq)
+ VALUES(OLD.tenant_id,OLD.ref,OLD.last_event_id,OLD.last_seq) ON CONFLICT DO NOTHING;
+ RETURN OLD;
+END $$;
+ALTER FUNCTION shared.capture_deleted_cooperative() OWNER TO own_party;
+REVOKE CREATE ON SCHEMA shared FROM own_party;
+REVOKE ALL ON FUNCTION shared.capture_deleted_cooperative() FROM PUBLIC;
+CREATE TRIGGER trg_deleted_cooperative_lifecycle AFTER DELETE ON pf_party.org
+ FOR EACH ROW EXECUTE FUNCTION shared.capture_deleted_cooperative();
 
 ALTER TABLE pf_party.htx_profile_completion DROP CONSTRAINT htx_profile_completion_tenant_id_org_ref_fkey;
 ALTER TABLE pf_party.htx_profile_completion ADD CONSTRAINT htx_profile_completion_tenant_id_org_ref_fkey

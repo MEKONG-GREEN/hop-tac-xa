@@ -77,7 +77,7 @@ BEGIN
  -- Thứ tự ổn định khi một bản ghi có nhiều HTX/người sở hữu.
  FOR ref IN SELECT DISTINCT value FROM unnest(refs) value ORDER BY value LOOP
   PERFORM pg_advisory_xact_lock_shared(hashtextextended('cooperative-life:'||tenant::text||':'||ref::text,283));
-  IF EXISTS(SELECT 1 FROM pf_party_pub.v1_cooperative_tombstones d
+  IF EXISTS(SELECT 1 FROM shared.cooperative_lifecycle_tombstone d
             WHERE d.tenant_id=tenant AND d.cooperative_ref=ref) THEN
    RAISE EXCEPTION 'cooperative was permanently deleted'
     USING ERRCODE='23503',CONSTRAINT='cooperative_permanently_deleted';
@@ -159,6 +159,12 @@ LANGUAGE sql STABLE SECURITY INVOKER SET search_path=pg_catalog,pg_temp AS $$
  JOIN pg_class c ON c.relnamespace=n.oid AND c.relname=r.source_table
  JOIN pg_attribute a ON a.attrelid=c.oid AND a.attname=r.source_column
  WHERE r.reference_mode<>'metadata' AND (
+ NOT EXISTS(SELECT 1 FROM pg_trigger t JOIN pg_proc f ON f.oid=t.tgfoid
+  JOIN pg_namespace fn ON fn.oid=f.pronamespace
+  WHERE t.tgrelid='pf_party.org'::regclass AND NOT t.tgisinternal
+   AND fn.nspname='shared' AND f.proname='capture_deleted_cooperative' AND f.pronargs=0
+   AND t.tgenabled IN ('O','A') AND (t.tgtype::integer & 11)=9)
+ OR
  NOT EXISTS(SELECT 1 FROM pg_trigger t WHERE t.tgrelid=c.oid AND NOT t.tgisinternal
   AND t.tgfoid='shared.guard_deleted_cooperative()'::regprocedure AND t.tgenabled IN ('O','A')
   AND (t.tgtype::integer & 23)=23

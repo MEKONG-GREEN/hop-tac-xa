@@ -107,6 +107,10 @@ Mỗi owner công bố `v1_cooperative_references` qua schema `_pub`, chỉ gồ
 tham chiếu và loại nguồn, không có PII. Writer giữ khóa shared theo tenant/HTX;
 xóa giữ khóa exclusive trước khi khóa dòng tổ chức và đếm lại. Catalog guard
 kiểm các cột tham chiếu UUID/UUID[] đã có cả trigger lẫn dependency view.
+Chốt chống phục hồi là metadata giao thức trong shared, ghi nguyên tử cùng
+DELETE đã được Party xác minh và giữ bất biến. Vai ứng dụng chỉ đọc; không
+được tự tạo dấu xóa. Trigger owner đọc cùng metadata này, không nhận thêm
+vai publication hoặc quyền trực tiếp lên schema/view `_pub` của module khác.
 Owner mới phải cập nhật publication trong migration và khai hợp đồng; thiếu
 coverage chặn xóa cả ở runtime lẫn CI. Module chỉ-DB chỉ thêm khai báo view,
 không khôi phục mã nghiệp vụ hay mở rộng danh sách ngoại lệ DBOnly.

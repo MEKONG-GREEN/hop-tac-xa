@@ -220,6 +220,13 @@ func TestAH283DeleteUnusedCooperativeNoResurrection(t *testing.T) {
 	if r := a.remove(org, "ah283-delete-unused", 1); r.status != http.StatusOK || r.body["deleted"] != true {
 		t.Fatalf("delete unused: %d %v", r.status, r.body)
 	}
+	var captured bool
+	if err := a.f.admin.QueryRow(context.Background(), `SELECT EXISTS(
+ SELECT 1 FROM shared.cooperative_lifecycle_tombstone m JOIN pf_party.org_event e
+ ON e.tenant_id=m.tenant_id AND e.org_ref=m.cooperative_ref AND e.id=m.deletion_command_ref AND e.seq=m.source_seq
+ WHERE m.tenant_id=$1 AND m.cooperative_ref=$2 AND e.action='deleted')`, a.f.tid, org).Scan(&captured); err != nil || !captured {
+		t.Fatalf("lifecycle marker not captured with source deletion: %v", err)
+	}
 	nodes, err := a.party.KRefOrgs().OrgNodes(context.Background(), a.f.tid)
 	if err != nil {
 		t.Fatal(err)
@@ -371,6 +378,14 @@ func TestAH283DeleteDatabaseGuardsCannotBeBypassed(t *testing.T) {
 	org, _ := a.create("HTX kiểm tra chốt DB", "ah283-db-fence")
 	ctx := authz.WithPrincipal(context.Background(), authz.Principal{TenantID: a.f.tid, ActorRef: ids.New(), Roles: []string{authz.RolePlatformAdmin}, MFA: true})
 	partyDB := db.ForModule(pgtest.Get(t).Pool(t, migrations.PF, dbadmin.AppPlatform), db.Module("pf/party"))
+	forgery := tenant.WithTenantTx(ctx, partyDB, a.f.tid, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `INSERT INTO shared.cooperative_lifecycle_tombstone(tenant_id,cooperative_ref,deletion_command_ref,source_seq) VALUES($1,$2,$3,1)`, a.f.tid, org, ids.New())
+		return err
+	})
+	var forgeryPG *pgconn.PgError
+	if !errors.As(forgery, &forgeryPG) || forgeryPG.Code != "42501" {
+		t.Fatalf("application may not forge lifecycle marker: %v", forgery)
+	}
 	for _, purpose := range []string{"", "registry.cooperative_delete"} {
 		callCtx := authz.WithPurpose(ctx, purpose)
 		err := tenant.WithTenantTx(callCtx, partyDB, a.f.tid, func(tx pgx.Tx) error {

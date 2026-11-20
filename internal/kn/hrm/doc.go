@@ -5,5 +5,4 @@
 // không đơn vị triển khai nào ghép nó. Gỡ hẳn khi gộp lại (squash) migration cho hệ HTX.
 //
 //ag:pubview pf_hrm_pub.cooperative_references v1
-//ag:readpubview pf_party_pub.cooperative_tombstones v1
 package hrm
