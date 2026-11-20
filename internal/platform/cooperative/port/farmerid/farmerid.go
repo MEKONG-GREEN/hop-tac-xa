@@ -49,6 +49,18 @@ func Households(c client.Client) port.HouseholdIdentities {
 
 type households struct{ c client.Client }
 
+func (h households) NativeHouseholdIdentity(ctx context.Context, ref uuid.UUID) (port.HouseholdIdentity, error) {
+	r, ok := client.AsHouseholdIdentityReader(h.c)
+	if !ok {
+		return port.HouseholdIdentity{}, client.ProblemHouseholdScopeUnavailable
+	}
+	id, err := r.ReadHouseholdIdentity(ctx, client.PurposeContact, ref)
+	if err != nil {
+		return port.HouseholdIdentity{}, err
+	}
+	return port.HouseholdIdentity{FullName: id.FullName, Phone: id.Phone, NationalID: id.NationalID, Address: id.Address, AreaCode: id.AreaCode}, nil
+}
+
 func (h households) RegisterHousehold(ctx context.Context, id port.HouseholdIdentity) (uuid.UUID, error) {
 	cr, err := h.c.Create(ctx, client.PurposeRegistryAdmin, client.Identity{Kind: client.SubjectHousehold, FullName: id.FullName,
 		Phone: id.Phone, NationalID: id.NationalID, Address: id.Address, AreaCode: id.AreaCode})

@@ -13019,6 +13019,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/households/{ref}/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** FN-04: chi tiết hộ theo vai HTX; định danh đã che tại server cho Member */
+        get: operations["nativeHouseholdProfile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -27777,6 +27794,17 @@ export interface components {
             /** @enum {string} */
             contact_access: "full" | "masked";
             can_write: boolean;
+        };
+        NativeHouseholdProfile: {
+            household: components["schemas"]["Household"];
+            /** @enum {string} */
+            contact_access: "full" | "masked";
+            identity: {
+                full_name: string;
+                phone: string;
+                national_id: string;
+                address: string;
+            };
         };
     };
     responses: {
@@ -55599,6 +55627,32 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HouseholdIdentityScope"];
+                };
+            };
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    nativeHouseholdProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Chỉ dữ liệu thuộc quyền hiện tại, no-store; không giữ transaction khi gọi Vault */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NativeHouseholdProfile"];
                 };
             };
             403: components["responses"]["Problem"];

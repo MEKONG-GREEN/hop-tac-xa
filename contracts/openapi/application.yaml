@@ -18147,6 +18147,23 @@ paths:
         "403": {$ref: "#/components/responses/Problem"}
         "404": {$ref: "#/components/responses/Problem"}
         "503": {$ref: "#/components/responses/Problem"}
+  /v1/households/{ref}/profile:
+    get:
+      summary: "FN-04: chi tiết hộ theo vai HTX; định danh đã che tại server cho Member"
+      operationId: nativeHouseholdProfile
+      parameters:
+        - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: "Chỉ dữ liệu thuộc quyền hiện tại, no-store; không giữ transaction khi gọi Vault"
+          headers:
+            Cache-Control: {schema: {type: string, const: no-store}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/NativeHouseholdProfile"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
 components:
   securitySchemes:
     oidc:
@@ -29396,3 +29413,19 @@ components:
         active: {type: boolean}
         contact_access: {type: string, enum: [full, masked]}
         can_write: {type: boolean}
+    NativeHouseholdProfile:
+      type: object
+      additionalProperties: false
+      required: [household, identity, contact_access]
+      properties:
+        household: {$ref: "#/components/schemas/Household"}
+        contact_access: {type: string, enum: [full, masked]}
+        identity:
+          type: object
+          additionalProperties: false
+          required: [full_name, phone, national_id, address]
+          properties:
+            full_name: {type: string}
+            phone: {type: string}
+            national_id: {type: string}
+            address: {type: string}

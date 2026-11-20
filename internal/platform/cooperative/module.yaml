@@ -28,6 +28,7 @@ provides:
     - HouseholdIdentities
     - Households
     - MachineCounts
+    - NativeHouseholdIdentityReader
     - Plots
     - Resolve
     - Seasons

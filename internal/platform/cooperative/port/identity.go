@@ -22,6 +22,12 @@ type HouseholdIdentities interface {
 	LookupPhone(ctx context.Context, phone string) (uuid.UUID, error)
 }
 
+// NativeHouseholdIdentityReader returns only the native FN-04 projection
+// permitted by the identity owner. Masking is enforced by Vault, not the UI.
+type NativeHouseholdIdentityReader interface {
+	NativeHouseholdIdentity(context.Context, uuid.UUID) (HouseholdIdentity, error)
+}
+
 // IdentityPurpose là mục đích đọc nhãn của HouseholdIdentities.Label.
 type IdentityPurpose string
 

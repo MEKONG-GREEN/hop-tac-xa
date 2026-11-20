@@ -2,8 +2,8 @@
 
 // Màn "Quản lý nông hộ" dùng chung (/htx/[id] tab Nông hộ và /htx/nong-ho của Quản lý HTX):
 // tìm theo SĐT (HTX US-HH-01 AC-2), gọi nhanh (US-HH-03), sao chép hàng loạt (US-HH-02 AC-2..4).
-// Định danh chủ hộ không bao giờ nằm ở web: danh sách chỉ có nhãn đã che; SĐT đọc lúc bấm gọi
-// (GET /v1/households/{ref}/contact, no-store) và không lưu lại sau khi đóng.
+// Danh sách chỉ có nhãn đã che. Chi tiết đọc theo quyền từ server khi mở,
+// no-store; không lưu định danh vào local/session storage.
 import { useState, type FormEvent } from "react";
 import { householdsPage } from "@/api/adapters/cooperatives";
 import { unwrap } from "@/api/client";
@@ -24,6 +24,7 @@ import { formatDate, formatDateTime } from "@/lib/format";
 import { toApiProblem, useAsync } from "@/lib/useAsync";
 import { ResultList } from "./common";
 import { HouseholdSeasonsDialog } from "./HouseholdSeasonsDialog";
+import { HouseholdProfileButton } from "./HouseholdProfileButton";
 import { CANNOT_CALL, copyDraftErrors, copyPayload, householdQuery, likelyCanCall, type CopyDraft } from "./households";
 
 /** Mục đích xử lý dữ liệu (R-42) → nhãn ngắn. */
@@ -214,6 +215,7 @@ export function HouseholdsPanel({ coop, readOnly = false, showSeasons = false }:
   const [copying, setCopying] = useState(false);
   const [seasonHousehold, setSeasonHousehold] = useState<HouseholdListItem | null>(null);
   const canViewSeasons = showSeasons && hasRole(principal, ROLES.platformAdmin, ROLES.coopManager, ROLES.htxMember) && matrixAllows(principal, "KHMV-FN-03-XEM", "R");
+  const canViewProfile = hasRole(principal, ROLES.platformAdmin, ROLES.coopManager, ROLES.htxMember) && matrixAllows(principal, "FN-04", "R");
   // FN-05/AC-01: nút thao tác (sao chép, chọn, gọi) theo ma trận — Thành viên HTX (FN-04: R) không thấy.
   const canWrite =
     !readOnly && coop.active && hasRole(principal, ROLES.coopManager, ROLES.knOfficer, ROLES.knProvinceAdmin, ROLES.registryAdmin) && matrixAllows(principal, "FN-04", "C");
@@ -253,8 +255,8 @@ export function HouseholdsPanel({ coop, readOnly = false, showSeasons = false }:
       <div className="alert alert-info" style={{ marginBottom: 12 }}>
         <Icon name="info" />
         <span>
-          Thông tin định danh nông hộ (họ tên, SĐT, CCCD, địa chỉ) được lưu tách trong kho định danh mã hoá. Web vận hành chỉ hiển thị{" "}
-          <b style={{ display: "inline" }}>nhãn đã che</b>; SĐT chỉ đọc khi bấm “Gọi” và không lưu lại.
+          Danh sách hiển thị nhãn đã che. Thông tin chi tiết được hiển thị theo quyền của bạn;
+          Thành viên HTX chỉ xem SĐT và CCCD đã che.
         </span>
       </div>
       <form className="row" role="search" onSubmit={submitSearch} style={{ marginBottom: 12, alignItems: "flex-end" }}>
@@ -308,6 +310,7 @@ export function HouseholdsPanel({ coop, readOnly = false, showSeasons = false }:
               <th scope="col">Vào HTX</th>
               <th scope="col">Đồng ý chia sẻ dữ liệu</th>
               <th scope="col">Trạng thái</th>
+              {canViewProfile ? <th scope="col">Hồ sơ hộ</th> : null}
               {canViewSeasons ? <th scope="col">Vụ canh tác</th> : null}
               {canWrite ? <th scope="col">Liên hệ</th> : null}
             </tr>
@@ -336,6 +339,7 @@ export function HouseholdsPanel({ coop, readOnly = false, showSeasons = false }:
                   <ConsentBadges consents={h.consents} />
                 </td>
                 <td>{h.active ? <span className="chip c-ok">Thành viên</span> : <span className="chip c-mute">Đã rời</span>}</td>
+                {canViewProfile ? <td><HouseholdProfileButton householdRef={h.household_ref} /></td> : null}
                 {canViewSeasons ? <td><button className="btn btn-o btn-sm" onClick={() => setSeasonHousehold(h)}>Xem vụ</button></td> : null}
                 {canWrite ? (
                   <td style={{ minWidth: 150 }}>

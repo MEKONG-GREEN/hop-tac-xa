@@ -20,6 +20,10 @@ Nền tảng quyền đọc định danh hộ đã có mã và kiểm thử, ch�
   Không cấp thêm `vault_registrar`, không thay quyền API Resolve dùng chung.
 - HTTP không theo redirect; lỗi owner không phản chiếu payload về caller.
   Phản hồi định danh và metadata đều `Cache-Control: no-store`.
+- GET `/v1/households/:ref/profile` nối cổng đọc hẹp trên Application API
+  hiện hữu. Dialog chi tiết chỉ tải lúc mở, không lưu trình duyệt; đổi danh
+  tính/phạm vi hoặc đóng dialog sẽ dọn dữ liệu. Test HTTP đi qua cả PF → Vault
+  → owner và test UI giữ bản che, dọn kết quả cũ khi request chưa hoàn tất.
 
 ## Cấu hình
 
@@ -42,7 +46,7 @@ phải cho phép token đó được cả hai API xác minh, không dùng tài k
    canh tác > 0, chăn nuôi >= 0; giữ kiểm tra tổng diện tích vụ đang hoạt động.
 3. Ngừng hoạt động và xóa theo lịch sử sản xuất/phiếu thu gom qua owner; không
    tự bỏ qua dependency nguồn và không làm mất lịch sử kiểm toán.
-4. Form tạo/sửa/xóa và chi tiết trên web theo cùng ma trận server; Admin chọn
+4. Form tạo/sửa/xóa trên web theo cùng ma trận server; Admin chọn
    HTX, Đại diện dùng HTX mình. Chỉ mở quyền ghi Admin cùng giao diện và test.
 5. Danh sách/chi tiết chỉ đọc trên app, bản che dành cho Member; đầy đủ CI,
    tự review rồi merge trước khi chuyển story sang trạng thái hoàn tất.

@@ -56,6 +56,17 @@ func TestAH285NativeHouseholdIdentityThroughVaultAndOwnerHTTP(t *testing.T) {
 		{"Foreign tenant", f.as(ids.New(), uuid.Nil, htxroles.Admin), "", "", client.CodeNotFound},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			profile := tc.who.appDo(http.MethodGet, "/v1/households/"+ref.String()+"/profile", nil)
+			if profile.hdr.Get("Cache-Control") != "no-store" {
+				t.Fatal("PF identity response was cached")
+			}
+			if tc.code == "" {
+				if profile.status != http.StatusOK || str(profile.body, "identity", "phone") != tc.phone || str(profile.body, "identity", "national_id") != tc.national {
+					t.Fatalf("PF profile boundary: status=%d", profile.status)
+				}
+			} else if profile.status != http.StatusNotFound {
+				t.Fatalf("foreign PF profile: status=%d", profile.status)
+			}
 			ctx, cancel := context.WithTimeout(authz.WithRawToken(context.Background(), tc.who.token), 10*time.Second)
 			defer cancel()
 			out, err := reader.ReadHouseholdIdentity(ctx, client.PurposeContact, ref)
