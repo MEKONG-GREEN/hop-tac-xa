@@ -25,6 +25,6 @@ func (h Handler) nativeHouseholdProfile(c *gin.Context) {
 		httpx.Fail(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"household": toHouseholdDTO(out.Household), "contact_access": out.ContactAccess,
+	c.JSON(http.StatusOK, gin.H{"household": toHouseholdDTO(out.Household), "contact_access": out.ContactAccess, "code": out.Household.Code, "revision": out.Household.Revision,
 		"identity": nativeHouseholdIdentityDTO{FullName: out.Identity.FullName, Phone: out.Identity.Phone, NationalID: out.Identity.NationalID, Address: out.Identity.Address}})
 }

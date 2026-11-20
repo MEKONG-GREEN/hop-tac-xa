@@ -193,7 +193,7 @@ func sumExpr(tbl string) string {
 	case "household":
 		// AH-283 adds nullable livestock area after W3.3. Keep comparing every
 		// original field; verify below that legacy rows stay unreported (NULL).
-		return "(to_jsonb(x) - 'livestock_area_ha')::text"
+		return "(to_jsonb(x) - 'livestock_area_ha' - 'native_deleted' - 'native_revision' - 'native_code')::text"
 	}
 	return "to_jsonb(x)::text"
 }
@@ -287,6 +287,15 @@ func TestCooperativeSchemaMoveRehearsal_W33(t *testing.T) {
 	}
 	if rewrittenLegacyLivestock {
 		t.Fatal("AH-283 must preserve NULL livestock area on pre-migration households")
+	}
+	var invalidNativeDefaults bool
+	if err := admin.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pf_coop.household
+	  WHERE native_deleted OR native_revision <> 1
+	    OR native_code <> 'H-' || upper(replace(household_ref::text,'-','')))`).Scan(&invalidNativeDefaults); err != nil {
+		t.Fatal(err)
+	}
+	if invalidNativeDefaults {
+		t.Fatal("AH-285 must preserve legacy households and initialize their native revision/code")
 	}
 	for _, tbl := range movedTables {
 		if after[tbl] != before[tbl] {

@@ -25,6 +25,7 @@ import { toApiProblem, useAsync } from "@/lib/useAsync";
 import { ResultList } from "./common";
 import { HouseholdSeasonsDialog } from "./HouseholdSeasonsDialog";
 import { HouseholdProfileButton } from "./HouseholdProfileButton";
+import { HouseholdEditorButton } from "./HouseholdEditor";
 import { CANNOT_CALL, copyDraftErrors, copyPayload, householdQuery, likelyCanCall, type CopyDraft } from "./households";
 
 /** Mục đích xử lý dữ liệu (R-42) → nhãn ngắn. */
@@ -211,6 +212,7 @@ export function HouseholdsPanel({ coop, readOnly = false, showSeasons = false }:
   const [search, setSearch] = useState<{ phone: string } | null>(null);
   const [queryError, setQueryError] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
+  const [status,setStatus]=useState<""|"active"|"inactive">("");
   const [picked, setPicked] = useState<Map<string, HouseholdListItem>>(new Map());
   const [copying, setCopying] = useState(false);
   const [seasonHousehold, setSeasonHousehold] = useState<HouseholdListItem | null>(null);
@@ -219,10 +221,10 @@ export function HouseholdsPanel({ coop, readOnly = false, showSeasons = false }:
   // FN-05/AC-01: nút thao tác (sao chép, chọn, gọi) theo ma trận — Thành viên HTX (FN-04: R) không thấy.
   const canWrite =
     !readOnly && coop.active && hasRole(principal, ROLES.coopManager, ROLES.knOfficer, ROLES.knProvinceAdmin, ROLES.registryAdmin) && matrixAllows(principal, "FN-04", "C");
-  const list = usePagedList((cursor) => householdsPage(api, id, cursor, 20), [api, id, version]);
+  const list = usePagedList((cursor) => householdsPage(api, id, cursor, 20,status||undefined), [api, id, version,status]);
   const found = useAsync(
-    () => (search ? unwrap(api.GET("/v1/cooperatives/{ref}/households", { params: { path: { ref: id }, query: { phone: search.phone } } })) : Promise.resolve(null)),
-    [api, id, search, version],
+    () => (search ? unwrap(api.GET("/v1/cooperatives/{ref}/households", { params: { path: { ref: id }, query: { phone: search.phone,status:status||undefined } } })) : Promise.resolve(null)),
+    [api, id, search, version,status],
   );
   const communeName = (code: string) => (code === coop.admin_unit_code ? (coop.commune_name ?? code) : code);
   const rows = search ? (found.data?.items ?? []) : list.items;
@@ -260,6 +262,7 @@ export function HouseholdsPanel({ coop, readOnly = false, showSeasons = false }:
         </span>
       </div>
       <form className="row" role="search" onSubmit={submitSearch} style={{ marginBottom: 12, alignItems: "flex-end" }}>
+        <div className="field"><label htmlFor={`hh-status-${id}`}>Trạng thái</label><select id={`hh-status-${id}`} className="input" value={status} onChange={(e)=>setStatus(e.target.value as typeof status)}><option value="">Tất cả trạng thái</option><option value="active">Đang tham gia</option><option value="inactive">Ngừng tham gia</option></select></div>
         <div className="field" style={{ flex: "1 1 260px" }}>
           <label htmlFor={`hh-q-${id}`}>Tìm nông hộ theo SĐT</label>
           <input id={`hh-q-${id}`} className="input" type="search" inputMode="tel" placeholder="0xxxxxxxxx" value={query} onChange={(e) => setQuery(e.target.value)} />
@@ -285,6 +288,8 @@ export function HouseholdsPanel({ coop, readOnly = false, showSeasons = false }:
           </button>
         ) : null}
       </form>
+      {!readOnly ? <HouseholdEditorButton coop={coop} onSaved={()=>setVersion((v)=>v+1)}/> : null}
+      <p className="small mute">Đang hiển thị {rows.length} hộ.</p>
       {queryError ? (
         <p className="err small" role="alert">
           {queryError}
@@ -307,7 +312,7 @@ export function HouseholdsPanel({ coop, readOnly = false, showSeasons = false }:
               <th scope="col" className="num">Đang canh tác (ha)</th>
               <th scope="col" className="num">Còn lại (ha)</th>
               <th scope="col">Khả năng mở vụ</th>
-              <th scope="col">Vào HTX</th>
+              {!canViewProfile ? <th scope="col">Vào HTX</th> : null}
               <th scope="col">Đồng ý chia sẻ dữ liệu</th>
               <th scope="col">Trạng thái</th>
               {canViewProfile ? <th scope="col">Hồ sơ hộ</th> : null}
@@ -334,12 +339,12 @@ export function HouseholdsPanel({ coop, readOnly = false, showSeasons = false }:
                     <span className="chip c-warn">{h.open_season_blocked_reason || "Chưa xác định diện tích còn lại."}</span>
                   )}
                 </td>
-                <td>{formatDate(h.member_since)}</td>
+                {!canViewProfile ? <td>{formatDate(h.member_since)}</td> : null}
                 <td>
                   <ConsentBadges consents={h.consents} />
                 </td>
-                <td>{h.active ? <span className="chip c-ok">Thành viên</span> : <span className="chip c-mute">Đã rời</span>}</td>
-                {canViewProfile ? <td><HouseholdProfileButton householdRef={h.household_ref} /></td> : null}
+                <td>{h.active ? <span className="chip c-ok">Đang tham gia</span> : <span className="chip c-mute">{canViewProfile?"Ngừng tham gia":"Đã rời"}</span>}</td>
+                {canViewProfile ? <td><HouseholdProfileButton householdRef={h.household_ref} readOnly={readOnly} onSaved={()=>setVersion((v)=>v+1)} /></td> : null}
                 {canViewSeasons ? <td><button className="btn btn-o btn-sm" onClick={() => setSeasonHousehold(h)}>Xem vụ</button></td> : null}
                 {canWrite ? (
                   <td style={{ minWidth: 150 }}>

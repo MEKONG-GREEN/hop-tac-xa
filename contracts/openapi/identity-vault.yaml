@@ -17,6 +17,63 @@ servers:
 security:
   - oidc: []
 paths:
+  /v1/household-commands/{command}/identity:
+    post:
+      summary: "Ghi định danh hộ theo command owner, giữ quyền Vault dùng chung"
+      operationId: writeHouseholdIdentity
+      parameters:
+        - {name: command, in: path, required: true, schema: {type: string, format: uuid}}
+        - {$ref: "#/components/parameters/Purpose"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [full_name,phone,national_id,address]
+              properties:
+                purpose: {type: string, const: extension.contact}
+                full_name: {type: string, minLength: 1, maxLength: 200}
+                phone: {type: string, pattern: "^0[0-9]{9}$"}
+                national_id: {type: string, pattern: "^[0-9]{12}$"}
+                address: {type: string, maxLength: 500}
+      responses:
+        "204": {description: "Đã ghi hoặc replay đúng receipt; không trả PII"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /v1/household-identities/phone-lookup:
+    post:
+      summary: "Tìm đúng SĐT, chỉ trả ref sau khi owner xác minh phạm vi hiện tại"
+      operationId: lookupHouseholdPhone
+      parameters:
+        - {$ref: "#/components/parameters/Purpose"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value]
+              properties:
+                purpose: {type: string, const: extension.contact}
+                value: {type: string}
+      responses:
+        "200":
+          description: "Chỉ mã hộ, no-store; không cấp quyền Lookup dùng chung"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ref]
+                properties:
+                  ref: {type: string, format: uuid}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/Problem"}
   /v1/household-identities/{ref}/read:
     post:
       summary: "FN-04: định danh hộ theo bằng chứng owner và ma trận vai HTX"

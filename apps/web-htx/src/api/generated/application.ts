@@ -13036,6 +13036,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/household-profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** FN-04: tạo hộ theo ma trận HTX, command bền vững */
+        post: operations["createNativeHousehold"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/households/{ref}/profile/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** FN-04: sửa hộ theo revision, giữ nguyên mã và HTX */
+        post: operations["updateNativeHousehold"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/households/{ref}/profile/deletions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** FN-04: xóa hộ chưa có sản xuất; giữ metadata và audit */
+        post: operations["deleteNativeHousehold"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/household-commands/{command}/identity-scope": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Owner xác minh actor/tenant/HTX của command, không gọi Vault */
+        get: operations["householdCommandScope"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -13816,6 +13884,8 @@ export interface components {
             digitized_plots: number | null;
         };
         Household: {
+            readonly code?: string;
+            readonly revision?: number;
             /**
              * Format: uuid
              * @description Mã tham chiếu trong kho định danh (R-41)
@@ -27797,6 +27867,8 @@ export interface components {
         };
         NativeHouseholdProfile: {
             household: components["schemas"]["Household"];
+            readonly code: string;
+            revision: number;
             /** @enum {string} */
             contact_access: "full" | "masked";
             identity: {
@@ -27805,6 +27877,29 @@ export interface components {
                 national_id: string;
                 address: string;
             };
+        };
+        NativeHouseholdSave: {
+            /** Format: uuid */
+            cooperative_ref: string;
+            commune_code?: string;
+            cultivated_area_ha: components["schemas"]["Decimal"];
+            livestock_area_ha?: components["schemas"]["Decimal"] | null;
+            /** @default true */
+            active: boolean;
+            expected_revision?: number;
+            identity: {
+                full_name: string;
+                phone: string;
+                national_id: string;
+                address: string;
+            };
+        };
+        NativeHouseholdMutation: {
+            /** Format: uuid */
+            household_ref: string;
+            /** Format: uuid */
+            command_ref: string;
+            revision: number;
         };
     };
     responses: {
@@ -28863,6 +28958,7 @@ export interface operations {
             query?: {
                 /** @description SĐT chủ hộ cần tìm (khớp chính xác sau chuẩn hóa) */
                 phone?: string;
+                status?: "active" | "inactive";
                 cursor?: string;
                 limit?: number;
             };
@@ -55658,6 +55754,140 @@ export interface operations {
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
+        };
+    };
+    createNativeHousehold: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NativeHouseholdSave"];
+            };
+        };
+        responses: {
+            /** @description Đã ghi ở PF và Vault; không chứa PII */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NativeHouseholdMutation"];
+                };
+            };
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateNativeHousehold: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NativeHouseholdSave"];
+            };
+        };
+        responses: {
+            /** @description Đã sửa, retry cũ không ghi đè thay đổi mới */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NativeHouseholdMutation"];
+                };
+            };
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    deleteNativeHousehold: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    expected_revision: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Đã xóa khỏi danh sách, không xóa cứng audit */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NativeHouseholdMutation"];
+                };
+            };
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    householdCommandScope: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                command: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Metadata no-store, không PII */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        command_ref: string;
+                        /** Format: uuid */
+                        household_ref: string;
+                        /** Format: uuid */
+                        cooperative_ref: string;
+                        /** @enum {string} */
+                        operation: "create" | "update";
+                        expected_revision: number;
+                        commune_code: string;
+                        completed: boolean;
+                    };
+                };
+            };
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
         };
     };
 }

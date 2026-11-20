@@ -12,6 +12,36 @@ type HouseholdIdentityReader interface {
 	ReadHouseholdIdentity(context.Context, Purpose, uuid.UUID) (Identity, error)
 }
 
+type HouseholdPhoneLookup interface {
+	LookupHouseholdPhone(context.Context, Purpose, string) (uuid.UUID, error)
+}
+
+func (c *httpClient) LookupHouseholdPhone(ctx context.Context, purpose Purpose, value string) (uuid.UUID, error) {
+	if purpose == "" {
+		return uuid.Nil, ProblemPurposeRequired
+	}
+	var out LookupResponse
+	err := c.do(ctx, call{method: "POST", path: "/v1/household-identities/phone-lookup", purpose: purpose, in: LookupRequest{Purpose: string(purpose), Value: value}, out: &out})
+	if err != nil {
+		return uuid.Nil, err
+	}
+	ref, err := uuid.Parse(out.Ref)
+	if err != nil || ref == uuid.Nil {
+		return uuid.Nil, ProblemHouseholdScopeUnavailable
+	}
+	return ref, nil
+}
+func (l local) LookupHouseholdPhone(ctx context.Context, purpose Purpose, value string) (uuid.UUID, error) {
+	if purpose == "" {
+		return uuid.Nil, ProblemPurposeRequired
+	}
+	q, ok := l.s.(HouseholdPhoneLookup)
+	if !ok {
+		return uuid.Nil, ProblemHouseholdScopeUnavailable
+	}
+	return q.LookupHouseholdPhone(ctx, purpose, value)
+}
+
 func AsHouseholdIdentityReader(c Client) (HouseholdIdentityReader, bool) {
 	r, ok := c.(HouseholdIdentityReader)
 	return r, ok

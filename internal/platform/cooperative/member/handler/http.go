@@ -39,6 +39,10 @@ func (h Handler) RegisterApp(rg *gin.RouterGroup) {
 	rg.GET("/cooperatives/:ref/household-identity-scope", h.nativeHouseholdRegistrationScope)
 	rg.GET("/households/:ref/identity-scope", h.nativeHouseholdIdentityScope)
 	rg.GET("/households/:ref/profile", h.nativeHouseholdProfile)
+	rg.POST("/household-profiles", h.nativeCreateHousehold)
+	rg.POST("/households/:ref/profile/revisions", h.nativeUpdateHousehold)
+	rg.POST("/households/:ref/profile/deletions", h.nativeDeleteHousehold)
+	rg.GET("/household-commands/:command/identity-scope", h.nativeHouseholdCommandScope)
 	rg.POST("/households/:ref/membership", h.changeMembership)
 	h.registerKN(rg)
 }
@@ -177,6 +181,8 @@ func (f *fieldErrs) date(field string, s *string) *time.Time {
 // ---------------------------------------------------------------------------
 
 type householdDTO struct {
+	Code             string           `json:"code,omitempty"`
+	Revision         int64            `json:"revision,omitempty"`
 	HouseholdRef     string           `json:"household_ref"`
 	CooperativeRef   *string          `json:"cooperative_ref"`
 	CommuneCode      string           `json:"commune_code"`
@@ -188,6 +194,7 @@ type householdDTO struct {
 
 func toHouseholdDTO(hh domain.Household) householdDTO {
 	d := householdDTO{
+		Code: hh.Code, Revision: hh.Revision,
 		HouseholdRef: hh.Ref.String(), CooperativeRef: refPtr(hh.CooperativeRef), CommuneCode: hh.CommuneCode,
 		CultivatedAreaHa: hh.CultivatedAreaHa, LivestockAreaHa: hh.LivestockAreaHa, Active: hh.Active,
 	}
@@ -243,7 +250,7 @@ func (h Handler) listHouseholds(c *gin.Context) {
 	if !ok {
 		return
 	}
-	page, err := h.Svc.ListHouseholds(c.Request.Context(), ref, after, queryLimit(c), c.Query("phone"))
+	page, err := h.Svc.ListHouseholds(c.Request.Context(), ref, after, queryLimit(c), c.Query("phone"), c.Query("status"))
 	if err != nil {
 		httpx.Fail(c, err)
 		return

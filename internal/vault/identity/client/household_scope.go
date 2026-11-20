@@ -69,49 +69,73 @@ func (c *householdScopeHTTP) read(ctx context.Context, ref uuid.UUID, path strin
 	if ref == uuid.Nil {
 		return HouseholdIdentityScope{}, ProblemNotFound
 	}
+	var scope HouseholdIdentityScope
+	if err := c.readObject(ctx, path, &scope); err != nil {
+		return HouseholdIdentityScope{}, err
+	}
+	if scope.Ref != ref || (scope.ContactAccess != "full" && scope.ContactAccess != "masked") || (scope.CanWrite && scope.ContactAccess != "full") ||
+		(registration && (scope.CooperativeRef != ref || scope.ContactAccess != "full" || scope.CanWrite != scope.Active)) {
+		return HouseholdIdentityScope{}, ProblemHouseholdScopeUnavailable
+	}
+	return scope, nil
+}
+
+func (c *householdScopeHTTP) HouseholdCommandScope(ctx context.Context, command uuid.UUID) (HouseholdCommandScope, error) {
+	var scope HouseholdCommandScope
+	if command == uuid.Nil {
+		return scope, ProblemNotFound
+	}
+	if err := c.readObject(ctx, "/v1/household-commands/"+command.String()+"/identity-scope", &scope); err != nil {
+		return scope, err
+	}
+	if scope.CommandRef != command || scope.HouseholdRef == uuid.Nil || scope.CooperativeRef == uuid.Nil || scope.CommuneCode == "" ||
+		(scope.Operation != "create" && scope.Operation != "update") || (scope.Operation == "create" && scope.ExpectedRevision != 0) || (scope.Operation == "update" && scope.ExpectedRevision < 1) {
+		return HouseholdCommandScope{}, ProblemHouseholdScopeUnavailable
+	}
+	return scope, nil
+}
+
+func (c *householdScopeHTTP) readObject(ctx context.Context, path string, out any) error {
 	raw, ok := authz.RawToken(ctx)
 	if !ok {
-		return HouseholdIdentityScope{}, problem.Unauthenticated.WithCause(ErrNoToken)
+		return problem.Unauthenticated.WithCause(ErrNoToken)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, nil)
 	if err != nil {
-		return HouseholdIdentityScope{}, ProblemHouseholdScopeUnavailable
+		return ProblemHouseholdScopeUnavailable
 	}
 	req.Header.Set("Authorization", "Bearer "+raw)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Cache-Control", "no-store")
 	resp, err := c.hc.Do(req)
 	if err != nil {
-		return HouseholdIdentityScope{}, ProblemHouseholdScopeUnavailable
+		return ProblemHouseholdScopeUnavailable
 	}
 	defer func() { _ = resp.Body.Close() }()
 	switch resp.StatusCode {
 	case http.StatusUnauthorized:
-		return HouseholdIdentityScope{}, problem.Unauthenticated
+		return problem.Unauthenticated
 	case http.StatusForbidden:
-		return HouseholdIdentityScope{}, problem.Forbidden
+		return problem.Forbidden
 	case http.StatusNotFound:
-		return HouseholdIdentityScope{}, ProblemNotFound
+		return ProblemNotFound
 	case http.StatusOK:
 	default:
-		return HouseholdIdentityScope{}, ProblemHouseholdScopeUnavailable
+		return ProblemHouseholdScopeUnavailable
 	}
 	const maxScope = 64 << 10
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxScope+1))
 	if err != nil || len(body) > maxScope {
-		return HouseholdIdentityScope{}, ProblemHouseholdScopeUnavailable
+		return ProblemHouseholdScopeUnavailable
 	}
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.DisallowUnknownFields()
-	var scope HouseholdIdentityScope
-	if err := decoder.Decode(&scope); err != nil {
-		return HouseholdIdentityScope{}, ProblemHouseholdScopeUnavailable
+	if err := decoder.Decode(out); err != nil {
+		return ProblemHouseholdScopeUnavailable
 	}
 	var trailing any
-	if err := decoder.Decode(&trailing); err != io.EOF || scope.Ref != ref ||
-		(scope.ContactAccess != "full" && scope.ContactAccess != "masked") || (scope.CanWrite && scope.ContactAccess != "full") ||
-		(registration && (scope.CooperativeRef != ref || scope.ContactAccess != "full" || scope.CanWrite != scope.Active)) {
-		return HouseholdIdentityScope{}, ProblemHouseholdScopeUnavailable
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return ProblemHouseholdScopeUnavailable
 	}
-	return scope, nil
+	return nil
 }

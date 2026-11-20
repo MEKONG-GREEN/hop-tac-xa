@@ -33,6 +33,8 @@ type Handler struct {
 // Register gắn route vào nhóm /v1 đã có xác thực.
 func (h Handler) Register(rg *gin.RouterGroup) {
 	rg.POST("/household-identities/:ref/read", h.readHouseholdIdentity)
+	rg.POST("/household-identities/phone-lookup", h.lookupHouseholdPhone)
+	rg.POST("/household-commands/:command/identity", h.writeHouseholdIdentity)
 	rg.POST("/htx-contacts/:ref/read", h.readHTXContact)
 	rg.POST("/htx-contacts/:ref/erasure-check", h.validateHTXContactErasure)
 	rg.POST("/htx-contacts/:ref/erasures/:command", h.Idem, h.eraseHTXContact)

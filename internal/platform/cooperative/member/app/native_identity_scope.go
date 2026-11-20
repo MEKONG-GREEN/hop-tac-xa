@@ -91,6 +91,9 @@ func (s *Service) NativeHouseholdIdentityScope(ctx context.Context, ref uuid.UUI
 	if household == nil || (!p.Has(htxroles.Admin) && household.CooperativeRef != p.OrgRef) {
 		return NativeIdentityScope{}, ErrHouseholdNotFound
 	}
+	if household.Pending {
+		return NativeIdentityScope{}, ErrDependency.WithDetail("Hộ đang được cập nhật; thử lại thao tác đang chờ")
+	}
 	access := "full"
 	if htxroles.IsMemberOnly(p.Has) {
 		access = "masked"

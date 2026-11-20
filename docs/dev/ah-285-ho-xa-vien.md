@@ -3,9 +3,9 @@
 Nhánh đích: `dev-agent`. AH-51 đã hoàn tất; AH-283 là dependency hồ sơ HTX.
 Requirement đối chiếu comment Jira ngày 17/11/2026 và ma trận FN-04 dùng chung.
 
-## Phần đang triển khai
+## Luồng dữ liệu
 
-Nền tảng quyền đọc định danh hộ đã có mã và kiểm thử, chưa phải toàn bộ story:
+FN-04 dùng cùng bảng hộ/membership hiện hữu và ma trận `contracts/htxroles`:
 
 - Cooperative xác minh membership bằng token gốc tại hai GET metadata
   `/v1/households/:ref/identity-scope` và
@@ -38,18 +38,47 @@ Không tắt kiểm chứng TLS. Chuyển tiếp token người dùng gốc; c�
 phải cho phép token đó được cả hai API xác minh, không dùng tài khoản dịch vụ
 để thay quyền người dùng.
 
-## Phần còn lại trước khi hoàn tất AH-285
+## Ghi và xóa hồ sơ
 
-1. Luồng tạo/sửa định danh native với CCCD 12 số, SĐT 10 số bắt đầu bằng 0,
+1. Luồng tạo/sửa định danh native nhận CCCD 12 số, SĐT 10 số bắt đầu bằng 0,
    chống trùng trong tenant và command/receipt bền vững khi PF hoặc Vault lỗi.
 2. Mã hộ sinh tự động và bất biến; HTX bắt buộc, không đổi sau tạo. Diện tích
    canh tác > 0, chăn nuôi >= 0; giữ kiểm tra tổng diện tích vụ đang hoạt động.
 3. Ngừng hoạt động và xóa theo lịch sử sản xuất/phiếu thu gom qua owner; không
    tự bỏ qua dependency nguồn và không làm mất lịch sử kiểm toán.
 4. Form tạo/sửa/xóa trên web theo cùng ma trận server; Admin chọn
-   HTX, Đại diện dùng HTX mình. Chỉ mở quyền ghi Admin cùng giao diện và test.
-5. Danh sách/chi tiết chỉ đọc trên app, bản che dành cho Member; đầy đủ CI,
-   tự review rồi merge trước khi chuyển story sang trạng thái hoàn tất.
+   HTX bắt buộc khi tạo, Đại diện dùng HTX mình. Màn sửa giữ nguyên HTX/mã hộ.
+5. Danh sách/chi tiết chỉ đọc trên app, bản che dành cho Member. Chi tiết chỉ
+   đọc online trong bộ nhớ, không ghi LocalDb hoặc hàng đợi đồng bộ.
 
-Chưa thay luồng KN hiện có, chưa mở rộng quyền ghi Admin, chưa đánh dấu story
-hoàn tất chỉ vì phần xác minh định danh đã chạy được.
+POST `/v1/household-profiles`, POST `/v1/households/:ref/profile/revisions`
+và POST `/v1/households/:ref/profile/deletions` nhận Idempotency-Key. Command
+PF chỉ giữ actor, mã tham chiếu và metadata; receipt Vault giữ HMAC có khóa
+của payload, không ghi CCCD/SĐT rõ hoặc digest dễ dò vào PF. Receipt và cập
+nhật bản mã/blind-index/audit của Vault commit trong cùng transaction. Mỗi
+hộ chỉ có một command đang chờ; retry cũ so payload rồi trả receipt, không
+ghi lại định danh mới. Biết chắc CCCD/SĐT trùng thì giải phóng command lỗi;
+kết quả chưa rõ giữ chốt. Chưa có worker đối soát/thử lại tự động: web giữ
+khóa trong RAM, lỗi chưa rõ yêu cầu thử lại cùng thao tác.
+
+Trong lúc command chờ, đọc chi tiết trả 503; mở vụ mới và các luồng ghi KN
+khác bị chặn tại DB. Vụ đã mở tiếp tục làm việc. Guard diện tích khóa cùng
+dòng hộ với bên mở vụ, kiểm lại tổng diện tích đang canh tác khi commit.
+
+Xóa là xóa logic khỏi các danh sách/chi tiết, giữ metadata, audit và định
+danh mã hóa/chỉ mục chống trùng tại Vault. Mã hộ sinh từ UUID, bất biến.
+CCCD đã lưu vẫn thuộc không gian chống trùng sau khi xóa logic. Không xóa
+cứng sổ hoặc tự giải phóng PII dùng chung với luồng KN. Mỗi lần xóa kiểm
+port lịch sử mùa vụ, gồm cả vụ đã đóng/hủy. DB kiểm lại dưới khóa dòng hộ
+và yêu cầu source command/audit event; producer không ghi mới vào hộ đã xóa.
+Lịch sử trước một lần chuyển HTX theo KN được kiểm toàn tenant trong hàm
+owner chỉ trả boolean, phục hồi nguyên phạm vi node/xã sau khi kiểm.
+
+Phiếu thu gom theo hộ chưa có producer (AH-232..234, theo quyết định 15/11).
+Khi triển khai phải nối owner đó vào port lịch sử và protocol khóa hộ trước
+khi bật ghi phiếu; không dùng nguồn thống kê/tổng HTX để thay lịch sử hộ.
+Luồng KN hiện hữu được giữ; cập nhật metadata của KN tăng revision và tôn
+trọng chốt native. Không gán thêm vai Vault rộng cho Admin/Đại diện.
+
+Chỉ chuyển story hoàn tất sau tự review, đầy đủ CI đúng SHA và merge vào
+`dev-agent`. Phần hộ của HTX được chia sẻ thuộc AH-286/FN-09.

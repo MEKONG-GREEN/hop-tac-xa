@@ -26,9 +26,11 @@ provides:
     - FarmerIdentity
     - HTXConfirmations
     - HouseholdIdentities
+    - HouseholdProductionHistory
     - Households
     - MachineCounts
     - NativeHouseholdIdentityReader
+    - NativeHouseholdIdentityWriter
     - Plots
     - Resolve
     - Seasons

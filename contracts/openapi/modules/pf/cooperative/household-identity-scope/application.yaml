@@ -66,9 +66,11 @@ components:
     NativeHouseholdProfile:
       type: object
       additionalProperties: false
-      required: [household, identity, contact_access]
+      required: [household, identity, contact_access, code, revision]
       properties:
         household: {$ref: "#/components/schemas/Household"}
+        code: {type: string, readOnly: true}
+        revision: {type: integer, minimum: 1}
         contact_access: {type: string, enum: [full, masked]}
         identity:
           type: object
