@@ -72,6 +72,7 @@ provides:
   publications:
     - pf_extension_pub.closed_figures/v1
     - pf_extension_pub.consolidation_closed/v1
+    - pf_extension_pub.cooperative_references/v1
     - pf_extension_pub.directive_target_ack/v1
     - pf_extension_pub.field_report/v1
     - pf_extension_pub.task/v1

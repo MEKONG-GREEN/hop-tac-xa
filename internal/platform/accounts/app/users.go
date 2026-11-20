@@ -110,6 +110,10 @@ func (s *Service) create(ctx context.Context, a *actor, in CreateInput) (Result,
 		return Result{}, err
 	}
 	acts := domain.RequiredActionsWithCatalog(pr.roles, s.RoleCatalog())
+	reservation, err := s.reserveCooperativeIdentity(ctx, a, pr.org, in.IdemKey, in)
+	if err != nil {
+		return Result{}, err
+	}
 	id, err := s.Dir.CreateUser(ctx, port.NewUser{
 		Username: pr.prof.Username, Email: pr.prof.Email, FirstName: pr.prof.FirstName, LastName: pr.prof.LastName,
 		Phone: pr.prof.Phone, TenantID: a.p.TenantID, OrgRef: pr.org, RequiredActions: acts,
@@ -122,6 +126,9 @@ func (s *Service) create(ctx context.Context, a *actor, in CreateInput) (Result,
 		if derr := s.Dir.DeleteUser(context.WithoutCancel(ctx), id); derr != nil {
 			return Result{}, errors.Join(cause, derr)
 		}
+		if err := s.releaseCooperativeIdentity(context.WithoutCancel(ctx), a, reservation, pr.org); err != nil {
+			return Result{}, errors.Join(cause, err)
+		}
 		return Result{}, cause
 	}
 	if err := s.Dir.AddRealmRoles(ctx, id, pr.roles); err != nil {
@@ -129,7 +136,7 @@ func (s *Service) create(ctx context.Context, a *actor, in CreateInput) (Result,
 	}
 	acc := domain.Account{UserRef: id, OrgRef: pr.org, Roles: pr.roles, Enabled: true}
 	ev := newEvent(a.p.TenantID, a.p.ActorRef, acc, domain.ActionCreated, s.now(), in.IdemKey, "")
-	ev.Details = map[string]any{"required_actions": acts}
+	ev.Details = map[string]any{"required_actions": acts, "identity_reservation": reservation.String()}
 	replayed, err := s.write(ctx, a.p.TenantID, &ev)
 	if err != nil {
 		return compensate(err)
@@ -418,6 +425,13 @@ func (s *Service) Assign(ctx context.Context, in AssignInput) (Result, error) {
 	if err := domain.RolesFitOrgWithCatalog(newRoles, string(o.Kind), s.RoleCatalog()); err != nil {
 		return Result{}, fieldProblem(err)
 	}
+	var reservation uuid.UUID
+	if in.OrgRef != uuid.Nil {
+		reservation, err = s.reserveCooperativeIdentity(ctx, a, orgRef, in.IdemKey, in)
+		if err != nil {
+			return Result{}, err
+		}
+	}
 	if orgRef != t.user.OrgRef {
 		if err := s.Dir.SetOrgRef(ctx, t.user.ID, orgRef); err != nil {
 			return Result{}, dirErr(err)
@@ -459,6 +473,9 @@ func (s *Service) Assign(ctx context.Context, in AssignInput) (Result, error) {
 	acc.OrgRef, acc.Roles = orgRef, newRoles
 	ev := newEvent(a.p.TenantID, a.p.ActorRef, acc, domain.ActionAssignmentChanged, s.now(), in.IdemKey, "")
 	ev.Details = map[string]any{"prev_org_ref": prev.OrgRef.String(), "prev_roles": prev.Roles, "added": nonNil(add), "removed": nonNil(remove), "totp_required": totp}
+	if reservation != uuid.Nil {
+		ev.Details["identity_reservation"] = reservation.String()
+	}
 	replayed, err := s.write(ctx, a.p.TenantID, &ev)
 	return Result{Account: ev.Account, Event: ev, User: t.user, Replayed: replayed}, err
 }

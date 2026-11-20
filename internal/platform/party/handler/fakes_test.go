@@ -93,6 +93,13 @@ func (v *fakeVault) WriteHTXContact(ctx context.Context, purpose client.Purpose,
 	return v.htxContacts.WriteHTXContact(ctx, purpose, ref, command, in)
 }
 
+func (v *fakeVault) ValidateHTXContactErasure(ctx context.Context, purpose client.Purpose, ref uuid.UUID) error {
+	return v.htxContacts.ValidateHTXContactErasure(ctx, purpose, ref)
+}
+func (v *fakeVault) EraseHTXContact(ctx context.Context, purpose client.Purpose, ref, command uuid.UUID) error {
+	return v.htxContacts.EraseHTXContact(ctx, purpose, ref, command)
+}
+
 var errNotImplemented = errors.New("fakeVault: không dùng trong kiểm thử")
 
 func (v *fakeVault) Create(ctx context.Context, purpose client.Purpose, id client.Identity) (client.Created, error) {

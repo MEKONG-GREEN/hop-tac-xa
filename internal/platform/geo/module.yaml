@@ -23,6 +23,7 @@ provides:
   events: [pf.geo.facility.recorded/v1]
   internal_events: []
   publications:
+    - pf_geo_pub.cooperative_references/v1
     - pf_geo_pub.layer_geometry/v1
     - pf_geo_pub.plot_boundary/v1
     - pf_geo_pub.plot_event/v1

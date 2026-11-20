@@ -324,7 +324,10 @@ func TestPlotScopeTombstoneMigrationBackfill(t *testing.T) {
 	// Reconstruct only this new projection's pre-DDL state inside a private test
 	// transaction. Rollback restores the installed projection; no source table,
 	// source ledger, FORCE RLS policy or immutable source trigger is changed.
-	if _, err = tx.Exec(ctx, `DROP FUNCTION pf_coop.capture_plot_scope_loss() CASCADE; DROP TABLE pf_coop.plot_scope_tombstone`); err != nil {
+	// AH-283's later reference publication depends on this projection. Remove
+	// that metadata only within the same rollback-only pre-DDL rehearsal.
+	if _, err = tx.Exec(ctx, `DROP VIEW pf_cooperative_pub.v1_cooperative_references;
+DROP FUNCTION pf_coop.capture_plot_scope_loss() CASCADE; DROP TABLE pf_coop.plot_scope_tombstone`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = tx.Exec(ctx, `SELECT set_config('app.tenant_id',$1,true),set_config('app.node_id',$2,true),set_config('app.xa_ids','{sentinel}',true)`, f.tenant.String(), f.coopA.String()); err != nil {

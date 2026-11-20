@@ -253,6 +253,8 @@ func Build(ctx context.Context, open PoolOpener, clk clock.Clock, ext External) 
 	// dòng tài khoản của bảng Ảnh hưởng, tên người thao tác trong Log (Keycloak, dự phòng danh bạ cán bộ).
 	pty.UseSessionContext(acc.SessionContext())
 	pty.UseDepartmentUsage(acc.DepartmentUsage())
+	pty.UseCooperativeAccountUsers(acc.CooperativeAccountUsers())
+	pty.UseCooperativePrivateReferences(coop.CooperativePrivateReferences())
 	pty.UseOrgImpact(acc.OrgImpact())
 	pty.UseActorNames(acc.ActorNames())
 	pty.UseMachineCounts(mech.MachineCounts())                                                    // KN v7.7 FN-XA-03.03/03.04: cảnh báo số máy khi vô hiệu hóa HTX

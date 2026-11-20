@@ -185,6 +185,9 @@ func (r *Registry) CreateHTXProfile(ctx context.Context, in HTXProfileInput) (Or
 }
 
 func (r *Registry) finishHTXCreateContact(ctx context.Context, tid uuid.UUID, result OrgResult, in HTXProfileInput, digest string) (OrgResult, error) {
+	if err := r.ensureCooperativeNotDeleted(ctx, tid, result.Org.Ref); err != nil {
+		return OrgResult{}, err
+	}
 	if result.Event.Details["htx_contact"] != true || result.Event.Details["request_sha256"] != digest {
 		return OrgResult{}, problem.IdempotencyConflict
 	}

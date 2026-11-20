@@ -44,7 +44,13 @@ func htxProfileHash(in UpdateHTXProfileInput) (string, error) {
 func (r *Registry) profilePending(ctx context.Context, tid, ref uuid.UUID) (bool, error) {
 	var pending bool
 	err := tenant.WithTenantTx(ctx, r.DB, tid, func(tx pgx.Tx) error {
-		var err error
+		org, err := store.OrgByRef(ctx, tx, ref, false)
+		if err != nil {
+			return err
+		}
+		if org == nil || org.Kind != port.OrgCooperative {
+			return ErrOrgNotFound
+		}
 		pending, err = store.HTXProfilePending(ctx, tx, ref)
 		return err
 	})
@@ -179,6 +185,9 @@ func (r *Registry) UpdateHTXProfile(ctx context.Context, in UpdateHTXProfileInpu
 }
 
 func (r *Registry) finishHTXProfile(ctx context.Context, p authz.Principal, result OrgResult, in UpdateHTXProfileInput, digest string) (OrgResult, error) {
+	if err := r.ensureCooperativeNotDeleted(ctx, p.TenantID, in.Ref); err != nil {
+		return OrgResult{}, err
+	}
 	event := result.Event
 	if event.Action != domain.ActionProfileUpdated || event.Org.Ref != in.Ref || event.Details["request_sha256"] != digest {
 		return OrgResult{}, problem.IdempotencyConflict

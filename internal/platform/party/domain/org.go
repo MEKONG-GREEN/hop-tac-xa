@@ -40,6 +40,7 @@ const (
 	ActionMoved          OrgAction = "moved"
 	ActionRenamed        OrgAction = "renamed"
 	ActionProfileUpdated OrgAction = "profile_updated"
+	ActionDeleted        OrgAction = "deleted"
 	ActionDeactivated    OrgAction = "deactivated"
 	ActionReactivated    OrgAction = "reactivated"
 )
