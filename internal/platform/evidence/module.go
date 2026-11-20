@@ -73,3 +73,6 @@ func (m *Module) UsePurpose(purpose string, policy port.PurposePolicy) {
 
 // Files trả cổng tệp minh chứng.
 func (m *Module) Files() port.Files { return m.svc }
+
+// OwnedImages supplies metadata-free upload receipt checks to domain writers.
+func (m *Module) OwnedImages() port.OwnedImages { return m.svc }

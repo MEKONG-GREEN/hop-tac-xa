@@ -33,6 +33,7 @@ import (
 	seasonapp "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/season/app"
 	seasonhttp "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/season/handler"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/store"
+	evport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/evidence/port"
 	geoport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/geo/port"
 	mdport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/masterdata/port"
 	partyport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/party/port"
@@ -128,6 +129,9 @@ func NewFacade(src Sources) *Module { return &Module{svc: &app.Service{Store: sr
 
 // UseFarmerHouseholds nối liên kết tài khoản nông dân ↔ nông hộ (pf/accounts) sau khi module đó được dựng.
 func (m *Module) UseFarmerHouseholds(f port.FarmerHouseholds) { m.season.Farmers = f }
+
+// UseTaskImages connects the narrow image-receipt verifier for journal writes.
+func (m *Module) UseTaskImages(p evport.OwnedImages) { m.season.TaskImages = p }
 
 // UseSharing nối cổng cấp quyền chia sẻ của pf/party (ADR-0020): bề mặt đối tác /v1/partner/plots*,
 // /v1/partner/season-harvest-dates.
