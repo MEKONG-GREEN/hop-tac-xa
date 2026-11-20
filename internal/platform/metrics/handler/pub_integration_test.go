@@ -62,13 +62,13 @@ func TestPubViewsDeclaredAndPrivileges_W63(t *testing.T) {
 	admin := env.AdminPool(t, migrations.PF)
 	ctx := context.Background()
 	views := pubViews(t)
-	if len(views) != 9 { // HTX-DATA-A: + pf/cooperative; W11.76: + pf/price; PFPUB: + pf/forms (pf_forms_pub)
+	if len(views) != 14 { // AH-283: + accounts/contact/hrm/notify/sync, chỉ metadata tham chiếu HTX
 		t.Fatalf("module công bố view _pub: %v", views)
 	}
 	// W6.3: 11 view (pf 000124); W11.10: + pf_extension_pub.v1_consolidation_closed (pf 000144); W11.76: +
 	// pf_price_pub.v1_board_daily, v1_ticket_week (pf 000152); PFPUB (ADR-0053): + họ closed_figures/v1 —
 	// pf_forms_pub.v1_closed_figures, pf_extension_pub.v1_closed_figures (pf 20261013150108, 20261013150110).
-	if n := countViews(views); n != 23 { // HTX-DATA-A: +4 published views; #271: + pf_cooperative_pub.v1_plot_export
+	if n := countViews(views); n != 34 { // AH-283: +11 nguồn tham chiếu; metadata vòng đời không công bố
 		t.Fatalf("số view _pub đã khai: %d", n)
 	}
 	declared := map[string]bool{}

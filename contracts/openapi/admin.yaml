@@ -6772,6 +6772,57 @@ paths:
         "409": {$ref: "#/components/responses/Problem"}
         "422": {$ref: "#/components/responses/Problem"}
         "503": {$ref: "#/components/responses/Problem"}
+  /v1/cooperatives/{ref}/deletion:
+    get:
+      summary: "FN-03: Admin kiểm tra toàn bộ dữ liệu trước khi xóa HTX"
+      operationId: htxDeletionCheck
+      parameters:
+        - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: "Không cache; hộ gồm ngừng hoạt động, tài khoản gồm lịch sử và khóa. Thiếu nguồn kiểm tra trả 503."
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/HTXDeletionCheck"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /v1/cooperatives/{ref}/deletions:
+    post:
+      summary: "FN-03: Admin xóa HTX tạo nhầm chưa phát sinh dữ liệu; giữ sổ kiểm toán"
+      operationId: htxDelete
+      parameters:
+        - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+        - {$ref: "#/components/parameters/IdempotencyKey"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_revision]
+              properties:
+                expected_revision: {type: integer, minimum: 1}
+      responses:
+        "200":
+          description: "Đã xóa hồ sơ và liên hệ riêng HTX; cùng khóa tiếp tục thao tác khi Vault gián đoạn."
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - {$ref: "#/components/schemas/HTXProfileWritten"}
+                  - type: object
+                    required: [deleted]
+                    properties:
+                      deleted: {type: boolean, const: true}
+        "400": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
 components:
   securitySchemes:
     oidc:
@@ -8959,6 +9010,20 @@ components:
         ref: {type: string, format: uuid}
         code: {type: string, description: "Mã HTX hệ thống sinh, không sửa"}
         revision: {type: integer, minimum: 1}
+    HTXDeletionCheck:
+      type: object
+      required: [ref, code, name, revision, households, accounts, pending_accounts, has_sharing, has_business, can_delete]
+      properties:
+        ref: {type: string, format: uuid}
+        code: {type: string}
+        name: {type: string}
+        revision: {type: integer, minimum: 1}
+        households: {type: integer, minimum: 0}
+        accounts: {type: integer, minimum: 0}
+        pending_accounts: {type: integer, minimum: 0}
+        has_sharing: {type: boolean}
+        has_business: {type: boolean}
+        can_delete: {type: boolean}
   requestBodies:
     ContentTransition:
       required: true

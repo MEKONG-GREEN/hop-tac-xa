@@ -36,6 +36,7 @@ function adminMfa(persona: MockPersona) {
 export function htxProfileWriteProblem(persona: MockPersona, method: string, path: string): Response | null {
   if (method !== "POST") return null;
   if (path === "/v1/cooperative-profiles") return !hasRole(persona, "platform_admin") ? problem(403, "forbidden", "Chỉ Admin được thêm HTX") : adminMfa(persona);
+  if (/^\/v1\/cooperatives\/[\w-]+\/deletions$/.test(path)) return !hasRole(persona, "platform_admin") ? problem(403, "forbidden", "Chỉ Admin được xóa HTX") : adminMfa(persona);
   const match = /^\/v1\/cooperatives\/([\w-]+)\/profile\/revisions$/.exec(path);
   if (!match) return null;
   if (hasRole(persona, "platform_admin")) return adminMfa(persona);
@@ -91,6 +92,17 @@ export const htxProfileAppRoutes: Route[] = [
 ];
 
 export const htxProfileAdminRoutes: Route[] = [
+  { method: "GET", pattern: /^\/v1\/cooperatives\/([\w-]+)\/deletion$/, handler: ({ persona, params }) => {
+    if (!hasRole(persona, "platform_admin")) return problem(403, "forbidden", "Chỉ Admin được xóa HTX");
+    const mfa = adminMfa(persona); if (mfa) return mfa;
+    if (persona.me.tenant_id !== TENANT || !findCoop(params[0])) return problem(404, "party.org_not_found", "Không tìm thấy HTX");
+    // Mock hiện không có lịch sử đầy đủ của mọi owner; không giả số 0 để cho xóa.
+    return problem(503, "party.dependency_unavailable", "Chế độ mô phỏng chưa có đủ nguồn kiểm tra xóa HTX");
+  } },
+  { method: "POST", pattern: /^\/v1\/cooperatives\/([\w-]+)\/deletions$/, handler: ({ persona, url }) => {
+    const denied = htxProfileWriteProblem(persona, "POST", url.pathname); if (denied) return denied;
+    return problem(503, "party.dependency_unavailable", "Chế độ mô phỏng chưa có đủ nguồn kiểm tra xóa HTX");
+  } },
   { method: "POST", pattern: /^\/v1\/cooperative-profiles$/, handler: ({ persona, body, url }) => {
     const denied = htxProfileWriteProblem(persona, "POST", url.pathname); if (denied) return denied;
     if (persona.me.tenant_id !== TENANT) return problem(403, "forbidden", "Ngoài phạm vi");

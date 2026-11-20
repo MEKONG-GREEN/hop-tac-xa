@@ -93,6 +93,7 @@ Tự phê duyệt hoặc tự từ chối phiên bản tham số của chính m�
 | 409 | `party.cooperative_name_taken` | pf/party: "Tên HTX này đã tồn tại, vui lòng chọn tên khác." — sao chép hồ sơ HTX (`POST /v1/cooperatives/{ref}/copy`, HTX US-HTX-03 AC-3) hoặc dòng nhập HTX (`POST /v1/cooperatives/import`, lý do theo dòng) trùng tên HTX đã có (không phân biệt hoa thường); `existing_ref` là HTX đang giữ tên |
 | 409 | `party.cooperative_profile_pending` | pf/party, AH-283: ý định sửa hồ sơ chưa hoàn tất ở các owner. Giữ nguyên dữ liệu và Idempotency-Key để thử lại thao tác trước; không mở thao tác mới trên cùng HTX. |
 | 503 | `vault.household_scope_unavailable` | vault/identity, AH-285: không xác minh được phạm vi định danh hộ từ owner; không trả PII hoặc suy thiếu nguồn thành quyền xem toàn bộ. |
+| 409 | `party.cooperative_in_use` | pf/party, AH-283: không xóa HTX đã phát sinh dữ liệu. `detail` nêu chính xác số hộ và tài khoản, kể cả hộ ngừng hoạt động và tài khoản lịch sử; các trường `pending_accounts`, `has_sharing`, `has_business` giải thích nguồn chặn khác. |
 | 409 | `party.cooperative_profile_changed` | pf/party, AH-283: `expected_revision` không còn là phiên bản hiện tại; tải lại hồ sơ trước khi sửa. |
 | 409 | `party.household_phone_taken` | pf/party: sao chép nông hộ với SĐT/CCCD đã có trong kho định danh — trong `POST /v1/households/copy` thành lý do dòng "SĐT đã tồn tại" (HTX US-HH-02 AC-4) |
 | 404 | `party.household_contact_unavailable` | pf/party: `GET /v1/households/{ref}/contact` — chủ hộ chưa có SĐT hợp lệ hoặc đã xóa định danh (HTX US-HH-03) |

@@ -665,6 +665,10 @@ func enqueueStatusEvent(ctx context.Context, tx pgx.Tx, ev domain.OrgEvent, hous
 		TraceID: telemetry.TraceID(ctx), Producer: "pf/party",
 	}
 	switch ev.Action {
+	case domain.ActionDeleted:
+		base.Type = port.EventOrgDeleted
+		base.Payload = port.OrgDeletedV1{OrgRef: ev.Org.Ref, Kind: string(ev.Org.Kind), Code: ev.Org.Code, AdminUnitCode: ev.Org.AdminUnitCode,
+			ParentRef: refPtr(ev.Org.ParentRef), Active: false, Reason: ev.Reason, ActorRef: ev.ActorRef, EventTime: ev.EventTime.Format(time.RFC3339), Seq: ev.Seq}
 	case domain.ActionCreated:
 		base.Type = port.EventOrgCreated
 		base.Payload = port.OrgCreatedV1{

@@ -151,6 +151,12 @@ func (m *Module) UseCoopProfiles(p port.CoopProfiles) {
 // UseCooperativeAreas nối nguồn diện tích hộ; không dùng diện tích đăng ký KN.
 func (m *Module) UseCooperativeAreas(p port.CooperativeAreaSource) { m.reg.Areas = p }
 
+// UseCooperativeAccountUsers nối nguồn IAM thật cho kiểm tra xóa HTX, thiếu thì fail-closed.
+func (m *Module) UseCooperativeAccountUsers(p port.CooperativeAccountUsers) { m.reg.AccountUsers = p }
+func (m *Module) UseCooperativePrivateReferences(p port.CooperativePrivateReferences) {
+	m.reg.PrivateReferences = p
+}
+
 // UseInventoryMachines nối nguồn AH-260 khi có. Không tự dùng máy cơ giới KN
 // thay thế; chưa nối thì API trả null và giao diện hiện "—" theo quyết định PO.
 func (m *Module) UseInventoryMachines(p port.InventoryMachineSource) { m.reg.InventoryMachines = p }

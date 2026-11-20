@@ -52,6 +52,47 @@ paths:
         "404": {$ref: "#/components/responses/Problem"}
         "429": {$ref: "#/components/responses/Problem"}
         "503": {$ref: "#/components/responses/Problem"}
+  /v1/htx-contacts/{ref}/erasure-check:
+    post:
+      summary: Admin kiểm tra nguồn xóa liên hệ riêng HTX sẵn sàng
+      operationId: validateHTXContactErasure
+      parameters:
+        - {$ref: "#/components/parameters/Ref"}
+        - {$ref: "#/components/parameters/Purpose"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                purpose: {type: string}
+      responses:
+        "204": {description: Sẵn sàng; không cache}
+        "403": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+  /v1/htx-contacts/{ref}/erasures/{command}:
+    post:
+      summary: Admin xóa liên hệ riêng HTX; giữ dấu xóa và audit, không sửa định danh người hay hộ
+      operationId: eraseHTXContact
+      parameters:
+        - {$ref: "#/components/parameters/Ref"}
+        - {$ref: "#/components/parameters/Purpose"}
+        - {name: command, in: path, required: true, schema: {type: string, format: uuid}, description: UUIDv7 sự kiện xóa của Party}
+        - {name: Idempotency-Key, in: header, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                purpose: {type: string}
+      responses:
+        "204": {description: Đã xóa bản mã liên hệ; thử lại không tạo lại dữ liệu}
+        "403": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
   /v1/htx-contacts/{ref}/read:
     post:
       summary: Đọc liên hệ riêng HTX; Admin mọi HTX, Đại diện HTX mình, Member chỉ bản che

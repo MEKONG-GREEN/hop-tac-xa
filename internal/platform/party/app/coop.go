@@ -126,6 +126,9 @@ func (r *Registry) completeCoop(ctx context.Context, tid uuid.UUID, res OrgResul
 	if res.Event.Org.Kind != port.OrgCooperative || res.Event.Action != domain.ActionCreated {
 		return res, nil
 	}
+	if err := r.ensureCooperativeNotDeleted(ctx, tid, res.Org.Ref); err != nil {
+		return OrgResult{}, err
+	}
 	ps, err := r.coopProfiles()
 	if err != nil {
 		return OrgResult{}, err

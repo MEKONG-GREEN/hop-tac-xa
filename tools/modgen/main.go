@@ -137,10 +137,22 @@ func run(root string, check bool) ([]string, error) {
 		if m == nil {
 			m = &modreg.Manifest{Name: name, Version: "1.0.0", Path: d + "/" + modreg.FileName}
 		}
-		// Module chỉ còn khai báo DB (modreg.DBOnlyModules): manifest ĐÓNG BĂNG — không tính lại từ mã (không còn mã), để
-		// vai nhóm, view công bố và quyền đọc suy từ nó giữ đúng như lúc migration được viết.
+		// DB-only giữ nguyên hợp đồng runtime lịch sử. Chỉ metadata view công bố
+		// trong doc.go được bổ sung cho migration mới; không suy lại ports/deps/
+		// events/permissions từ module đã bỏ mã nghiệp vụ.
 		if existing[name] != nil && slices.Contains(modreg.DBOnlyModules, name) {
-			all = append(all, m)
+			next := dbOnlyPublicationMetadata(m, s, owners[name])
+			all = append(all, &next)
+			want := modreg.Format(&next)
+			p := filepath.Join(root, filepath.FromSlash(d), modreg.FileName)
+			got, err := os.ReadFile(p)
+			if err != nil {
+				return nil, err
+			}
+			if !bytes.Equal(normalizeEOL(got), want) {
+				stale = append(stale, d+"/"+modreg.FileName)
+				writes = append(writes, write{path: p, data: want})
+			}
 			continue
 		}
 		next := *m
@@ -235,6 +247,23 @@ func run(root string, check bool) ([]string, error) {
 		}
 	}
 	return stale, nil
+}
+
+func dbOnlyPublicationMetadata(original *modreg.Manifest, s *scan, owned []string) modreg.Manifest {
+	next := *original
+	merge := func(old, added []string) []string {
+		values := slices.Concat(old, added)
+		slices.Sort(values)
+		return slices.Compact(values)
+	}
+	next.Provides.Publications = merge(original.Provides.Publications, s.directives["pubview"])
+	next.Consumes.Publications = merge(original.Consumes.Publications, s.directives["readpubview"])
+	cluster, module, _ := strings.Cut(original.Name, "/")
+	pubSchema := cluster + "_" + module + "_pub"
+	if slices.Contains(owned, pubSchema) {
+		next.OwnsSchema = merge(original.OwnsSchema, []string{pubSchema})
+	}
+	return next
 }
 
 // checkApps là cổng W1.3: app/*/app.yaml hợp lệ, đủ bảy ứng dụng, và mỗi cmd/<đơn vị>

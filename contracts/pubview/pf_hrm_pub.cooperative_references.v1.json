@@ -1,0 +1,55 @@
+{
+  "view": "pf_hrm_pub.v1_cooperative_references",
+  "directive": "pf_hrm_pub.cooperative_references/v1",
+  "owner": "pf/hrm",
+  "status": "published",
+  "package": "AH-283",
+  "migration": "pf 20261119091457",
+  "family": "cooperative_references/v1",
+  "consumers": [
+    "r_party: deletion eligibility, plus r_metrics/r_agg under publication policy"
+  ],
+  "purpose": "Historical/current reference presence and distinct household/account counts for DATA-03. No active-only filter. No PII payload.",
+  "grain": "tenant x organization x category x subject/presence marker x source column",
+  "key": [
+    "tenant_id",
+    "cooperative_ref",
+    "category",
+    "record_ref",
+    "source"
+  ],
+  "closed_rule": "All source history and current records, including inactive households, disabled and reassigned accounts, revoked shares. Profile projections and their own audit are explicitly excluded.",
+  "personal_data": false,
+  "columns": [
+    {
+      "name": "tenant_id",
+      "type": "uuid",
+      "nullable": false,
+      "description": "Tenant of the source"
+    },
+    {
+      "name": "cooperative_ref",
+      "type": "uuid",
+      "nullable": false,
+      "description": "Referenced organization; consumer selects the cooperative being deleted"
+    },
+    {
+      "name": "category",
+      "type": "text",
+      "nullable": false,
+      "description": "households/accounts/pending_accounts/sharing/business"
+    },
+    {
+      "name": "record_ref",
+      "type": "uuid",
+      "nullable": false,
+      "description": "Household/user/operation reference for exact distinct counts; otherwise cooperative_ref as presence marker"
+    },
+    {
+      "name": "source",
+      "type": "text",
+      "nullable": false,
+      "description": "Owner table/column; no payload or person name"
+    }
+  ]
+}

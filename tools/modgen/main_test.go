@@ -1,12 +1,34 @@
 package main
 
 import (
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/modreg"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
 )
+
+func TestDBOnlyPublicationMetadataPreservesHistoricalRuntime(t *testing.T) {
+	original := modreg.Manifest{Name: "pf/contact", Version: "1.0.0", Depends: map[string]string{"vault/identity": ">=1.0 <2"},
+		Provides: modreg.Provides{Ports: []string{"Labels", "Names"}, Events: []string{"historical.event/v1"}, Publications: []string{"pf_contact_pub.old/v1"}},
+		Consumes: modreg.Consumes{Events: []string{"historical.input/v1"}}, Permissions: []string{"old_role"}, OwnsSchema: []string{"pf_contact"}}
+	source := &scan{ports: []string{"MustNotRestoreRuntimeCode"}, deps: []string{"pf/party"}, roles: []string{"new_runtime_role"}, directives: map[string][]string{
+		"pubview": {"pf_contact_pub.references/v1", "pf_contact_pub.references/v1"}, "readpubview": {"pf_party_pub.tombstones/v1"},
+		"event": {"must.not.publish/v1"}, "publication": {"must_not_publish"}}}
+	got := dbOnlyPublicationMetadata(&original, source, []string{"pf_contact", "pf_contact_pub", "pf_other"})
+	want := original
+	want.Provides.Publications = []string{"pf_contact_pub.old/v1", "pf_contact_pub.references/v1"}
+	want.Consumes.Publications = []string{"pf_party_pub.tombstones/v1"}
+	want.OwnsSchema = []string{"pf_contact", "pf_contact_pub"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("DB-only metadata changed runtime contract: got=%+v want=%+v", got, want)
+	}
+	if !slices.Equal(original.OwnsSchema, []string{"pf_contact"}) || !slices.Equal(original.Provides.Publications, []string{"pf_contact_pub.old/v1"}) {
+		t.Fatal("original frozen manifest mutated")
+	}
+}
 
 // TestRunInvalidDoesNotOverwrite: bộ manifest không hợp lệ thì tệp đã có giữ nguyên,
 // tệp chưa có vẫn được tạo khung để điền tay.

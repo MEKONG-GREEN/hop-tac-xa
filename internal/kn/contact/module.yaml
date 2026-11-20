@@ -12,11 +12,11 @@ provides:
   ports: [Labels, Names, Staff]
   events: []
   internal_events: []
-  publications: []
+  publications: [pf_contact_pub.cooperative_references/v1]
   data_products: []
 consumes:
   events: []
 permissions: []
 shares: []
-owns_schema: [pf_contact]
+owns_schema: [pf_contact, pf_contact_pub]
 enable: always

@@ -84,8 +84,23 @@ func (s *Service) ReadHTXContact(ctx context.Context, purpose client.Purpose, re
 	// Đây là liên hệ FN-03 theo HTX, không mở định danh đầy đủ hoặc DEK.
 	// Giữ quyền Đại diện theo ma trận HTX; MFA của Admin kiểm tại Admin API.
 	var row *store.HTXContactCommand
-	if err := tenant.WithTenantTx(ctx, s.DB, p.TenantID, func(tx pgx.Tx) error { var e error; row, e = store.HTXContactCurrent(ctx, tx, ref); return e }); err != nil {
+	var erased bool
+	if err := tenant.WithTenantTx(ctx, s.DB, p.TenantID, func(tx pgx.Tx) error {
+		var e error
+		erased, e = store.HTXContactErased(ctx, tx, ref)
+		if e != nil {
+			return e
+		}
+		row, e = store.HTXContactCurrent(ctx, tx, ref)
+		return e
+	}); err != nil {
 		return client.HTXContact{}, err
+	}
+	if erased {
+		if err := s.logAccessTx(ctx, p, ref, op, purpose, domain.OutcomeErased); err != nil {
+			return client.HTXContact{}, err
+		}
+		return client.HTXContact{}, client.ProblemErased
 	}
 	if row == nil {
 		if err := s.logAccessTx(ctx, p, ref, op, purpose, domain.OutcomeNotFound); err != nil {
@@ -102,7 +117,7 @@ func (s *Service) ReadHTXContact(ctx context.Context, purpose client.Purpose, re
 		out.Phone = domain.MaskPhone(out.Phone)
 		out.Masked = true
 	}
-	if err := s.logAccessTx(ctx, p, ref, op, purpose, domain.OutcomeOK); err != nil {
+	if err := s.logHTXContactRead(ctx, p, ref, op, purpose); err != nil {
 		return client.HTXContact{}, err
 	}
 	return out, nil
@@ -186,6 +201,11 @@ func (s *Service) WriteHTXContact(ctx context.Context, purpose client.Purpose, r
 		}
 		if err := store.LockHTXContact(ctx, tx, ref); err != nil {
 			return err
+		}
+		if erased, err := store.HTXContactErased(ctx, tx, ref); err != nil {
+			return err
+		} else if erased {
+			return client.ProblemErased
 		}
 		if err := store.ApplyHTXContact(ctx, tx, row); err != nil {
 			return err

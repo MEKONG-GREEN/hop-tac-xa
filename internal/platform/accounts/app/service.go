@@ -458,7 +458,19 @@ func sameRequest(prev domain.Event, action domain.Action, actorRef, user uuid.UU
 // write ghi một dòng sổ; trùng idem_key (gọi song song) → đọc lại bản đã ghi, chỉ khi bản đó cùng thao
 // tác/người gọi/tài khoản (tạo tài khoản: đích mới sinh nên không so) — khác thì 422 (#154).
 func (s *Service) write(ctx context.Context, tid uuid.UUID, e *domain.Event) (replayed bool, err error) {
-	err = tenant.WithTenantTx(ctx, s.DB, tid, func(tx pgx.Tx) error { return record(ctx, tx, e) })
+	err = tenant.WithTenantTx(ctx, s.DB, tid, func(tx pgx.Tx) error {
+		if err := record(ctx, tx, e); err != nil {
+			return err
+		}
+		if raw, ok := e.Details["identity_reservation"].(string); ok {
+			operation, err := uuid.Parse(raw)
+			if err != nil {
+				return err
+			}
+			return store.ReleaseCooperativeIdentity(ctx, tx, operation, e.Account.OrgRef)
+		}
+		return nil
+	})
 	if errors.Is(ledger.Classify(err), ledger.ErrDuplicate) {
 		prev, rerr := s.replay(ctx, tid, e.IdemKey)
 		if rerr == nil && prev != nil {

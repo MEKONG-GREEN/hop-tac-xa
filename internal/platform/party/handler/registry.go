@@ -41,6 +41,8 @@ func (h Registry) RegisterApp(rg *gin.RouterGroup) {
 // RegisterAdmin gắn route Admin API (MFA bắt buộc ở router).
 func (h Registry) RegisterAdmin(rg *gin.RouterGroup) {
 	rg.POST("/cooperative-profiles", h.createHTXProfile)
+	rg.GET("/cooperatives/:ref/deletion", h.cooperativeDeletion)
+	rg.POST("/cooperatives/:ref/deletions", h.deleteCooperative)
 	rg.GET("/orgs", h.adminListOrgs)
 	rg.POST("/orgs", h.createOrg)
 	rg.GET("/orgs/export.xlsx", h.exportOrgTree)

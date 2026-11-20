@@ -22,9 +22,16 @@ type OrgNode struct {
 
 // OrgNodes liệt kê mọi tổ chức của tenant trong giao dịch (kể cả đã vô hiệu hóa).
 func OrgNodes(ctx context.Context, tx pgx.Tx) ([]OrgNode, error) {
-	rows, err := tx.Query(ctx, `SELECT ref, kind, code, coalesce(admin_unit_code, ''),
+	rows, err := tx.Query(ctx, `WITH deleted AS (
+SELECT DISTINCT ON (org_ref) org_ref,kind,code,admin_unit_code,parent_ref,seq
+FROM pf_party.org_event WHERE action='deleted' AND kind='cooperative' ORDER BY org_ref,seq DESC)
+SELECT ref, kind, code, coalesce(admin_unit_code, ''),
 	    coalesce(parent_ref, '00000000-0000-0000-0000-000000000000'::uuid), active, last_seq
-	  FROM pf_party.org ORDER BY ref`)
+	  FROM pf_party.org o WHERE NOT EXISTS(SELECT 1 FROM deleted d WHERE d.org_ref=o.ref)
+UNION ALL
+SELECT org_ref,kind,code,coalesce(admin_unit_code,''),
+coalesce(parent_ref,'00000000-0000-0000-0000-000000000000'::uuid),false,seq FROM deleted
+ORDER BY ref`)
 	if err != nil {
 		return nil, err
 	}

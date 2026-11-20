@@ -38,6 +38,7 @@ const (
 	EventOrgCreated        = app.EventOrgCreated
 	EventOrgMoved          = app.EventOrgMoved
 	EventOrgDeactivated    = app.EventOrgDeactivated
+	EventOrgDeleted        = app.EventOrgDeleted
 	EventOrgReactivated    = app.EventOrgReactivated
 	EventAdminUnitChanged  = app.EventAdminUnitChanged
 	EventShareGrantApprove = app.EventShareGrantApprove
