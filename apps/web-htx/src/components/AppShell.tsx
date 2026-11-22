@@ -13,6 +13,7 @@ import { contextLabel, contextShortLabel, optionLabel, otherOptions } from "@/kn
 import { canSee, disabledModules, findNavItem, homeFor, visibleNav, type DisabledModules } from "@/nav/nav";
 import { AccountMenu } from "@/shell/AccountMenu";
 import { HtxRolePicker } from "@/shell/HtxRolePicker";
+import { Dialog } from "./Dialog";
 import { Breadcrumb, BreadcrumbTailProvider, useBreadcrumbTailValue, type Crumb } from "@/shell/Breadcrumb";
 import { crumbsFor, legacyMenu, menuAllows, withExtraGroups } from "@/shell/menu";
 import { NoCoopState, OUT_OF_SCOPE_NOTICE, ShellExitContext, ShellNoCoopContext, useShellNotice, writeShellNotice } from "@/shell/notice";
@@ -128,6 +129,8 @@ export function AppShell({ children, SidebarComponent = Sidebar }: {
   const pathname = usePathname() ?? "/";
   const router = useRouter();
   const [navOpen, setNavOpen] = useState(false);
+  // AH-270 AC-N1: đổi vai trò, HTX làm việc hỏi xác nhận vì dữ liệu chưa lưu sẽ mất.
+  const [confirmRole, setConfirmRole] = useState(false);
   const prefCollapsed = useStoredValue(COLLAPSE_KEY) === "1";
   // Thông báo trong menu tài khoản gắn với trang hiện tại (đổi trang → ẩn).
   const [noteState, setNoteState] = useState<{ path: string; text: string } | null>(null);
@@ -178,7 +181,7 @@ export function AppShell({ children, SidebarComponent = Sidebar }: {
   const note = noteState?.path === pathname ? noteState.text : null;
 
   if (bare) return <>{children}</>;
-  if (status==="authenticated" && needsHtxRole && htxRoles && dataConsent.status==="not_required") return <HtxRolePicker roles={htxRoles.roles} select={htxRoles.select} />;
+  if (status==="authenticated" && needsHtxRole && htxRoles && dataConsent.status==="not_required") return <HtxRolePicker roles={htxRoles.roles} select={htxRoles.select} htxName={principal?.orgName} />;
   if (status !== "authenticated" || !principal || kn.status === "choose" || dataConsent.status !== "not_required") {
     return (
       <main style={{ display: "grid", placeItems: "center", minHeight: "100vh" }}>
@@ -229,10 +232,10 @@ export function AppShell({ children, SidebarComponent = Sidebar }: {
               displayName={principal.displayName}
               subtitle={htxRoles?.selected ? roleLabel(htxRoles.selected) : ctx ? contextShortLabel(ctx) : legacyScopeText(principal)}
               current={htxRoles?.selected ? roleLabel(htxRoles.selected) : ctx ? contextLabel(ctx) : legacyScopeText(principal)}
-              others={htxRoles && htxRoles.roles.length>1 ? [{key:"htx:choose",label:"Đổi vai trò"}] : others.map((o) => ({ key: `${o.assignment.assignment_id}|${o.department?.code ?? ""}`, label: optionLabel(o) }))}
+              others={htxRoles && htxRoles.roles.length>1 ? [{key:"htx:choose",label:"Đổi vai trò, HTX làm việc"}] : others.map((o) => ({ key: `${o.assignment.assignment_id}|${o.department?.code ?? ""}`, label: optionLabel(o) }))}
               onSwitch={async (key) => {
                 if(key==="htx:choose" && htxRoles) {
-                  if(window.confirm("Dữ liệu chưa lưu sẽ mất. Tiếp tục đổi vai trò?")) htxRoles.chooseAgain();
+                  setConfirmRole(true);
                   return;
                 }
                 const [assignment_id = "", dept = ""] = key.split("|");
@@ -246,6 +249,18 @@ export function AppShell({ children, SidebarComponent = Sidebar }: {
               onLogout={() => void logout()}
               note={note}
             />
+            {confirmRole && htxRoles ? (
+              <Dialog
+                title="Đổi vai trò, HTX làm việc"
+                onClose={() => setConfirmRole(false)}
+                actions={<>
+                  <button type="button" className="btn" onClick={() => setConfirmRole(false)}>Hủy</button>
+                  <button type="button" className="btn btn-p" onClick={() => { setConfirmRole(false); htxRoles.chooseAgain(); }}>Tiếp tục</button>
+                </>}
+              >
+                <p>Dữ liệu chưa lưu sẽ mất. Tiếp tục đổi vai trò?</p>
+              </Dialog>
+            ) : null}
           </header>
           <main className="body" id="main" tabIndex={-1}>
             {ctx?.support_session_id ? <SupportBanner /> : null}

@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/app"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/domain"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/httpx"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/idempotency"
@@ -80,4 +81,60 @@ func (h Handler) nativeUser(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, toUserDTO(u))
+}
+
+// nativeUserReply trả tài khoản sau khi sửa/khóa; bản lưu cho phát lại (idempotency) không giữ PII của IAM.
+func nativeUserReply(c *gin.Context, u app.UserView, replayed bool) {
+	user := toUserDTO(u)
+	cached := user
+	cached.Username, cached.Email, cached.FirstName, cached.LastName, cached.Phone = "", "", "", "", nil
+	stored, err := json.Marshal(gin.H{"user": cached, "replayed": replayed})
+	if err != nil {
+		httpx.Fail(c, err)
+		return
+	}
+	idempotency.SetStoredBody(c, stored)
+	c.JSON(http.StatusOK, gin.H{"user": user, "replayed": replayed})
+}
+
+func (h Handler) nativeUpdate(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	id, ok := pathID(c)
+	if !ok {
+		return
+	}
+	var in app.NativeUpdateInput
+	decoder := json.NewDecoder(c.Request.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&in); err != nil {
+		httpx.Fail(c, problem.BadRequest.WithDetail("Thân request FN-07 phải đúng cấu trúc JSON"))
+		return
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		httpx.Fail(c, problem.BadRequest.WithDetail("Chỉ nhận một đối tượng JSON"))
+		return
+	}
+	u, replayed, err := h.Svc.NativeUpdate(c.Request.Context(), id, in, key(c))
+	if err != nil {
+		httpx.Fail(c, err)
+		return
+	}
+	nativeUserReply(c, u, replayed)
+}
+
+func (h Handler) nativeLock(locked bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("Cache-Control", "no-store")
+		id, ok := pathID(c)
+		if !ok {
+			return
+		}
+		u, replayed, err := h.Svc.NativeSetLocked(c.Request.Context(), id, locked, key(c))
+		if err != nil {
+			httpx.Fail(c, err)
+			return
+		}
+		nativeUserReply(c, u, replayed)
+	}
 }

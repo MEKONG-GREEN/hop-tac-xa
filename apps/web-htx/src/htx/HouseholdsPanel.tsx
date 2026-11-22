@@ -360,7 +360,7 @@ export function HouseholdsPanel({ coop, readOnly: readOnlyProp = false, showSeas
                   <ConsentBadges consents={h.consents} />
                 </td>
                 <td>{h.active ? <span className="chip c-ok">Đang tham gia</span> : <span className="chip c-mute">{canViewProfile?"Ngừng tham gia":"Đã rời"}</span>}</td>
-                {canViewProfile ? <td><HouseholdProfileButton householdRef={h.household_ref} readOnly={readOnly} onSaved={()=>setVersion((v)=>v+1)} /></td> : null}
+                {canViewProfile ? <td><HouseholdProfileButton householdRef={h.household_ref} readOnly={readOnly} shared={shared} onSaved={()=>setVersion((v)=>v+1)} /></td> : null}
                 {canViewSeasons ? <td><button className="btn btn-o btn-sm" onClick={() => setSeasonHousehold(h)}>Xem vụ</button></td> : null}
                 {canWrite ? (
                   <td style={{ minWidth: 150 }}>

@@ -36,6 +36,7 @@ func (h Handler) RegisterApp(rg *gin.RouterGroup) {
 	rg.GET("/htx-sharing/candidates", h.nativeSharingCandidates)
 	rg.POST("/htx-sharing", h.nativeSharingCreate)
 	rg.POST("/htx-sharing/:ref/transitions", h.nativeSharingTransition)
+	rg.GET("/cooperatives/:ref/htx-sharing", h.cooperativeSharingList)
 	rg.GET("/cooperatives/:ref/households", h.listHouseholds)
 	rg.POST("/households", h.createHousehold)
 	rg.POST("/households/copy", h.copyHouseholds)

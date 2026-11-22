@@ -21,6 +21,20 @@ func (h Handler) nativeSharingList(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"items": out})
 }
+func (h Handler) cooperativeSharingList(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	ref, err := uuid.Parse(c.Param("ref"))
+	if err != nil {
+		httpx.Fail(c, problem.NotFound)
+		return
+	}
+	out, err := h.Svc.NativeCooperativeSharingList(c.Request.Context(), ref)
+	if err != nil {
+		httpx.Fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"items": out})
+}
 func (h Handler) nativeSharingCandidates(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	out, err := h.Svc.NativeSharingCandidates(c.Request.Context())
