@@ -11,7 +11,7 @@ import (
 func writeNativeIdentityScope(c *gin.Context, scope app.NativeIdentityScope) {
 	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusOK, gin.H{"ref": scope.Ref.String(), "cooperative_ref": refPtr(scope.CooperativeRef),
-		"active": scope.Active, "contact_access": scope.ContactAccess, "can_write": scope.CanWrite})
+		"active": scope.Active, "contact_access": scope.ContactAccess, "can_write": scope.CanWrite, "shared": scope.Shared})
 }
 
 func (h Handler) nativeHouseholdRegistrationScope(c *gin.Context) {

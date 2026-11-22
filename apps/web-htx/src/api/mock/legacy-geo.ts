@@ -1,7 +1,8 @@
 import type { PlotFeature } from "../types";
 import { uuidv7 } from "../idempotency";
 import { boundaryOf, COOPERATIVES, findCoop, plotsOf } from "./data";
-import { inScope, json, omit, pageSlice, problem, type Route } from "./http";
+import { inScope, json, omit, ownCoopOnly, pageSlice, problem, type Route } from "./http";
+import { nativeSharedRead } from "./native-sharing";
 import { MISSING_BOUNDARY } from "./ops";
 
 const PLOT_STATE = new Map<string, Pick<PlotFeature["properties"], "cooperative_ref" | "status" | "needs_review">>();
@@ -27,7 +28,10 @@ export const appRoutes38: Route[] = [{
     pattern: /^\/v1\/cooperatives\/([\w-]+)\/plots$/,
     handler: ({ params, url, persona }) => {
       const c = findCoop(params[0]);
-      if (!c || !inScope(persona, c.province_code, c.api.admin_unit_code)) return problem(403, "geo.out_of_scope", "Out of scope");
+      // FN-06 (AH-274): HTX đã duyệt chia sẻ được đọc thửa (chỉ xem); HTX khác của Đại diện/Thành viên HTX → 403.
+      const shared = !!c && nativeSharedRead(persona, c.api.ref);
+      if (!c || (!shared && !inScope(persona, c.province_code, c.api.admin_unit_code))) return problem(403, "geo.out_of_scope", "Out of scope");
+      if (!shared && ownCoopOnly(persona) && persona.me.org?.ref !== c.api.ref) return problem(403, "geo.out_of_scope", "Out of scope");
       const own = plotsWithState(c).filter((p) => p.properties.cooperative_ref === c.api.ref);
       const { slice, next } = pageSlice(own, url, 200, 1000);
       return json({ type: "FeatureCollection", features: slice, next_cursor: next });

@@ -21,7 +21,11 @@ func (s *Service) CooperativeAreas(ctx context.Context, refs []uuid.UUID) (map[u
 		return out, nil
 	}
 	var areas map[uuid.UUID]store.CooperativeAreas
-	if err := tenant.FromCtxTx(ctx, s.DB, func(tx pgx.Tx) error {
+	tid, err := tenant.FromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.nativeReadTx(ctx, tid, func(tx pgx.Tx) error {
 		var err error
 		areas, err = store.AreasByCooperatives(ctx, tx, refs)
 		return err

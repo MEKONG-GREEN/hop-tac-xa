@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ApiProblem } from "@/api/problem";
 import { ProblemAlert } from "@/components/ProblemAlert";
-import { NO_COOP_NOTICE, OUT_OF_SCOPE_NOTICE, ShellExitContext, ShellNoCoopContext, useExitOnNotFound } from "./notice";
+import { NO_COOP_NOTICE, OUT_OF_SCOPE_NOTICE, SHARING_STOPPED_NOTICE, ShellExitContext, ShellNoCoopContext, useExitOnNotFound, useExitOnSharingStopped } from "./notice";
 
 const problemOf = (status: number, code: string) => new ApiProblem({ type: "about:blank", title: code, status, code });
 
@@ -63,5 +63,31 @@ describe("<ProblemAlert> với tài khoản chưa gắn HTX (FN-06/EX-02, AC-N1)
     render(<ProblemAlert problem={problemOf(403, "node_scope_required")} />);
     expect(screen.queryByText(NO_COOP_NOTICE)).toBeNull();
     expect(screen.getByRole("alert")).toBeTruthy();
+  });
+});
+
+describe("useExitOnSharingStopped (FN-06/AC-N1, AH-274)", () => {
+  function SharedProbe({ problem, shared }: { problem: ApiProblem | null; shared: boolean }) {
+    return <p>{useExitOnSharingStopped(problem, shared) ? "đang rời" : "ở lại"}</p>;
+  }
+  const run = (problem: ApiProblem | null, shared: boolean, exit: ((t: string, to?: string) => void) | null) =>
+    render(
+      <ShellExitContext.Provider value={exit}>
+        <SharedProbe problem={problem} shared={shared} />
+      </ShellExitContext.Provider>,
+    );
+
+  it.each([404, 403])("HTX đang xem ngừng chia sẻ (%i) → về danh sách HTX kèm câu ngừng chia sẻ", (status) => {
+    const exit = vi.fn();
+    run(problemOf(status, "party.org_not_found"), true, exit);
+    expect(exit).toHaveBeenCalledWith(SHARING_STOPPED_NOTICE, "/htx");
+    expect(SHARING_STOPPED_NOTICE).toBe("HTX đã ngừng chia sẻ dữ liệu cho HTX của bạn");
+  });
+
+  it("không phải màn chia sẻ hoặc lỗi khác → ở lại", () => {
+    const exit = vi.fn();
+    run(problemOf(404, "party.org_not_found"), false, exit);
+    run(problemOf(500, "internal_error"), true, exit);
+    expect(exit).not.toHaveBeenCalled();
   });
 });

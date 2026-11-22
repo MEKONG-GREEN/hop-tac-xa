@@ -11,6 +11,8 @@ import { useStoredValue, writeStoredValue } from "@/lib/useStoredValue";
 /** Một câu cho cả "không tồn tại" và "ngoài phạm vi" — tách ra là lộ điều máy chủ đang giấu (404). */
 export const OUT_OF_SCOPE_NOTICE = "Không tìm thấy dữ liệu, hoặc bạn không có quyền xem dữ liệu này.";
 export const NO_COOP_NOTICE = "Tài khoản chưa được gắn HTX. Liên hệ người cấp tài khoản.";
+/** FN-06/AC-N1 (AH-274): HTX đang xem thu hồi chia sẻ → về danh sách HTX kèm câu này. */
+export const SHARING_STOPPED_NOTICE = "HTX đã ngừng chia sẻ dữ liệu cho HTX của bạn";
 
 export const NOTICE_KEY = "ag.shell.notice";
 
@@ -51,7 +53,7 @@ export function useShellNotice(pathname: string): string | null {
  * Rời trang hiện tại về trang đầu tiên được xem kèm câu thông báo. AppShell chỉ cung cấp cho người dùng App HTX;
  * vai khác (khuyến nông…) và ngoài khung nhận null.
  */
-export const ShellExitContext = createContext<((text: string) => void) | null>(null);
+export const ShellExitContext = createContext<((text: string, to?: string) => void) | null>(null);
 
 /** Người dùng là Đại diện HTX / Thành viên HTX chưa gắn HTX (lacksCoop — AppShell cung cấp; ngoài khung là false). */
 export const ShellNoCoopContext = createContext(false);
@@ -65,6 +67,19 @@ export function useExitOnNotFound(problem: ApiProblem | null | undefined): boole
   const leaving = !!exit && problem?.status === 404;
   useEffect(() => {
     if (leaving && exit) exit(OUT_OF_SCOPE_NOTICE);
+  }, [leaving, exit]);
+  return leaving;
+}
+
+/**
+ * FN-06/AC-N1 (AH-274): đang xem dữ liệu HTX được chia sẻ mà lần tải kế tiếp bị máy chủ từ chối (404/403 — đã thu hồi)
+ * → không giữ dữ liệu cũ, về danh sách HTX kèm câu ngừng chia sẻ. Trả true khi đang rời.
+ */
+export function useExitOnSharingStopped(problem: Pick<ApiProblem, "status"> | null | undefined, shared: boolean): boolean {
+  const exit = useContext(ShellExitContext);
+  const leaving = !!exit && shared && (problem?.status === 404 || problem?.status === 403);
+  useEffect(() => {
+    if (leaving && exit) exit(SHARING_STOPPED_NOTICE, "/htx");
   }, [leaving, exit]);
   return leaving;
 }

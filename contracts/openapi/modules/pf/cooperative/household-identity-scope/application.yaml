@@ -62,6 +62,7 @@ components:
         active: {type: boolean}
         contact_access: {type: string, enum: [full, masked]}
         can_write: {type: boolean}
+        shared: {type: boolean, description: Quyền chia sẻ hiện hành chỉ xem và che định danh}
 # @ag-order: 285002
     NativeHouseholdProfile:
       type: object

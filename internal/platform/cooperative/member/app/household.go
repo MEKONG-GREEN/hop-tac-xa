@@ -241,12 +241,19 @@ func (s *Service) ListHouseholds(ctx context.Context, coopRef, after uuid.UUID, 
 	if state != "" && state != "active" && state != "inactive" {
 		return HouseholdPage{}, problem.Validation.WithField("status", "Chọn Đang tham gia hoặc Ngừng tham gia")
 	}
+	shared := p.KN == nil && isOwnCoopOnly(p) && coopRef != p.OrgRef
 	if p.KN == nil && isOwnCoopOnly(p) {
 		if p.OrgRef == uuid.Nil {
 			return HouseholdPage{}, problem.NodeScopeRequired
 		}
 		if coopRef != p.OrgRef {
-			return HouseholdPage{}, ErrOrgNotFound
+			allowed, err := s.nativeCanReadCooperative(ctx, p, coopRef)
+			if err != nil {
+				return HouseholdPage{}, err
+			}
+			if !allowed {
+				return HouseholdPage{}, ErrOrgNotFound
+			}
 		}
 	}
 	if limit <= 0 || limit > 200 {
@@ -257,6 +264,9 @@ func (s *Service) ListHouseholds(ctx context.Context, coopRef, after uuid.UUID, 
 		return HouseholdPage{}, err
 	}
 	phone = strings.TrimSpace(phone)
+	if shared && phone != "" {
+		return HouseholdPage{}, problem.Forbidden
+	}
 	byPhone := uuid.Nil
 	if phone != "" {
 		// Kho định danh tự kiểm vai vault_registrar trên token được chuyển tiếp.
@@ -270,9 +280,9 @@ func (s *Service) ListHouseholds(ctx context.Context, coopRef, after uuid.UUID, 
 	}
 	var items []domain.Household
 	var activeAreas map[uuid.UUID]decimal.Decimal
-	err = tenant.WithTenantTx(ctx, s.DB, p.TenantID, func(tx pgx.Tx) error {
+	err = s.nativeReadTx(ctx, p.TenantID, func(tx pgx.Tx) error {
 		var e error
-		if coop == nil || !visible(sc, coop.AdminUnitCode) {
+		if coop == nil || (!shared && !visible(sc, coop.AdminUnitCode)) {
 			return nil
 		}
 		if phone != "" {
@@ -302,10 +312,10 @@ func (s *Service) ListHouseholds(ctx context.Context, coopRef, after uuid.UUID, 
 	if err != nil {
 		return HouseholdPage{}, err
 	}
-	if coop == nil || !visible(sc, coop.AdminUnitCode) {
+	if coop == nil || (!shared && !visible(sc, coop.AdminUnitCode)) {
 		return HouseholdPage{}, ErrOrgNotFound
 	}
-	if isOwnCoopOnly(p) && coop.Ref != p.OrgRef {
+	if isOwnCoopOnly(p) && coop.Ref != p.OrgRef && !shared {
 		return HouseholdPage{}, ErrOrgNotFound
 	}
 	var pg HouseholdPage
@@ -322,7 +332,15 @@ func (s *Service) ListHouseholds(ctx context.Context, coopRef, after uuid.UUID, 
 			v.Availability.CanOpen = false
 			v.Availability.Reason = "Hộ đang được cập nhật; thử lại thao tác đang chờ."
 		}
-		if s.Vault == nil {
+		if shared {
+			profile, err := s.NativeHouseholdProfile(ctx, h.Ref)
+			if err != nil {
+				return HouseholdPage{}, err
+			}
+			v.Label, v.MaskedPhone = profile.Identity.FullName, profile.Identity.Phone
+			v.Availability.CanOpen = false
+			v.Availability.Reason = "Dữ liệu được chia sẻ chỉ xem"
+		} else if s.Vault == nil {
 			v.LabelUnavailable = true
 		} else if d, err := s.Vault.Label(ctx, port.IdentityFieldSupport, h.Ref); err != nil {
 			v.LabelUnavailable = true
@@ -330,6 +348,15 @@ func (s *Service) ListHouseholds(ctx context.Context, coopRef, after uuid.UUID, 
 			v.Label, v.MaskedPhone = d.Label, d.MaskedPhone
 		}
 		pg.Items = append(pg.Items, v)
+	}
+	if shared {
+		allowed, err := s.nativeCanReadCooperative(ctx, p, coopRef)
+		if err != nil {
+			return HouseholdPage{}, err
+		}
+		if !allowed {
+			return HouseholdPage{}, ErrOrgNotFound
+		}
 	}
 	return pg, nil
 }

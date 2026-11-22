@@ -41,7 +41,11 @@ func (s *Service) Profiles(ctx context.Context, refs []uuid.UUID) (map[uuid.UUID
 		return out, nil
 	}
 	var rows map[uuid.UUID]store.Profile
-	if err := tenant.FromCtxTx(ctx, s.DB, func(tx pgx.Tx) error {
+	tid, err := tenant.FromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.nativeReadTx(ctx, tid, func(tx pgx.Tx) error {
 		var e error
 		rows, e = store.ProfilesByRefs(ctx, tx, refs)
 		return e

@@ -49,8 +49,13 @@ func (s *Service) LookupHouseholdPhone(ctx context.Context, purpose client.Purpo
 	if !found {
 		return uuid.Nil, client.ProblemNotFound
 	}
-	if _, err = s.householdReadScope(ctx, p, ref); err != nil {
+	scope, err := s.householdReadScope(ctx, p, ref)
+	if err != nil {
 		return uuid.Nil, err
+	}
+	// A shared (masked) reader must not confirm a full phone number by probing.
+	if scope.Shared {
+		return uuid.Nil, client.ProblemNotFound
 	}
 	if err = s.logAccessTx(ctx, p, ref, domain.OpLookup, purpose, domain.OutcomeOK); err != nil {
 		return uuid.Nil, err

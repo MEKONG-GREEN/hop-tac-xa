@@ -106,6 +106,7 @@ func New(db tenant.Beginner, clk clock.Clock, deps Deps) *Module {
 	m.plot = &plotapp.Service{DB: db, Clock: clk, Scope: deps.Scope, Params: deps.Params, Units: deps.AdminUnits, Orgs: deps.Orgs,
 		Households: memberships{m.member}, Markers: markers{m.member}, AdminGeom: deps.AdminGeom}
 	m.plot.Vault = deps.Farmers
+	m.plot.SharedReads = m.member // FN-06: thửa của HTX đã duyệt chia sẻ, chỉ đọc
 	m.season = &seasonapp.Service{DB: db, Clock: clk, Scope: deps.Scope, Orgs: deps.Orgs, Plots: m.plot, Params: deps.Params,
 		Catalogs: deps.Catalogs, GpsLog: deps.GpsLog}
 	m.member.ProductionHistory = seasonapp.HouseholdHistory{DB: db}
@@ -238,6 +239,9 @@ func (m *Module) CoopProfiles() partyport.CoopProfiles { return m.member }
 
 // CooperativeAreas trả nguồn tổng diện tích hộ cho hồ sơ HTX (AH-283).
 func (m *Module) CooperativeAreas() partyport.CooperativeAreaSource { return m.member }
+
+// NativeSharing trả nguồn HTX đã duyệt chia sẻ đang hiệu lực cho danh sách/chi tiết HTX (FN-06, AH-274).
+func (m *Module) NativeSharing() partyport.NativeCooperativeSharing { return m.member }
 func (m *Module) CooperativePrivateReferences() partyport.CooperativePrivateReferences {
 	return m.member
 }

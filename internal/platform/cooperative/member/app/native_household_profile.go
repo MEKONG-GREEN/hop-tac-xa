@@ -7,7 +7,6 @@ import (
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/member/domain"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/member/store"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/port"
-	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/tenant"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -35,7 +34,7 @@ func (s *Service) NativeHouseholdProfile(ctx context.Context, ref uuid.UUID) (Na
 		return NativeHouseholdProfile{}, ErrDependency.WithDetail("Chưa nối định danh hộ theo quyền HTX")
 	}
 	var household *domain.Household
-	err = tenant.WithTenantTx(ctx, s.DB, p.TenantID, func(tx pgx.Tx) error {
+	err = s.nativeReadTx(ctx, p.TenantID, func(tx pgx.Tx) error {
 		var e error
 		household, e = store.HouseholdByRef(ctx, tx, ref)
 		return e

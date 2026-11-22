@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"time"
 
@@ -804,7 +805,7 @@ func (r *Registry) ListCooperatives(ctx context.Context, q ListQuery) (CoopPage,
 	}
 	q.normalize()
 	sc, err := r.scopeFor(ctx, p)
-	if err == nil && !sc.Empty() {
+	if err == nil && !sc.Empty() && !ownCoopOnly(p) {
 		sc, err = r.narrowScope(ctx, sc, q.AdminUnit)
 	}
 	if err != nil || sc.Empty() {
@@ -815,13 +816,23 @@ func (r *Registry) ListCooperatives(ctx context.Context, q ListQuery) (CoopPage,
 		return CoopPage{}, err
 	}
 	if ownCoopOnly(p) { // FN-06: chỉ HTX gắn với tài khoản
-		only = intersectRefs(only, []uuid.UUID{p.OrgRef})
+		refs, err := r.nativeCooperativeRefs(ctx, p)
+		if err != nil {
+			return CoopPage{}, err
+		}
+		only = intersectRefs(only, refs)
+	}
+	all, units := sc.All, sc.Units
+	if ownCoopOnly(p) {
+		// Exact refs include approved sources outside the caller's commune.
+		// Neither principal nor server session scope is modified.
+		all, units = q.AdminUnit == "", []string{q.AdminUnit}
 	}
 	var orgs []store.CoopOrg
 	err = tenant.WithTenantTx(ctx, r.DB, p.TenantID, func(tx pgx.Tx) error {
 		var e error
 		orgs, e = store.ListCooperativeOrgs(ctx, tx, store.CoopOrgFilter{
-			All: sc.All, Units: sc.Units, Q: q.Q, QRefs: qRefs, Only: only, IncludeInactive: q.IncludeInactive, After: q.After, Limit: q.Limit + 1,
+			All: all, Units: units, Q: q.Q, QRefs: qRefs, Only: only, IncludeInactive: q.IncludeInactive, After: q.After, Limit: q.Limit + 1,
 		})
 		return e
 	})
@@ -836,6 +847,19 @@ func (r *Registry) ListCooperatives(ctx context.Context, q ListQuery) (CoopPage,
 	}
 	if pg.Items, err = r.cooperatives(ctx, p.TenantID, orgs, false); err != nil {
 		return CoopPage{}, err
+	}
+	if ownCoopOnly(p) {
+		refs, err := r.nativeCooperativeRefs(ctx, p)
+		if err != nil {
+			return CoopPage{}, err
+		}
+		filtered := pg.Items[:0]
+		for _, item := range pg.Items {
+			if slices.Contains(refs, item.Ref) {
+				filtered = append(filtered, item)
+			}
+		}
+		pg.Items = filtered
 	}
 	return pg, nil
 }
@@ -856,7 +880,13 @@ func (r *Registry) GetCooperative(ctx context.Context, ref uuid.UUID) (Cooperati
 		return Cooperative{}, problem.NodeScopeRequired
 	}
 	if ownCoopOnly(p) && ref != p.OrgRef {
-		return Cooperative{}, ErrOrgNotFound
+		allowed, err := r.nativeCooperativeVisible(ctx, p, ref)
+		if err != nil {
+			return Cooperative{}, err
+		}
+		if !allowed {
+			return Cooperative{}, ErrOrgNotFound
+		}
 	}
 	var org *store.CoopOrg
 	if err := tenant.WithTenantTx(ctx, r.DB, p.TenantID, func(tx pgx.Tx) error {
@@ -866,12 +896,21 @@ func (r *Registry) GetCooperative(ctx context.Context, ref uuid.UUID) (Cooperati
 	}); err != nil {
 		return Cooperative{}, err
 	}
-	if org == nil || !visible(sc, org.AdminUnitCode) {
+	if org == nil || (!ownCoopOnly(p) && !visible(sc, org.AdminUnitCode)) {
 		return Cooperative{}, ErrOrgNotFound
 	}
 	cs, err := r.cooperatives(ctx, p.TenantID, []store.CoopOrg{*org}, false)
 	if err != nil {
 		return Cooperative{}, err
+	}
+	if ownCoopOnly(p) {
+		allowed, err := r.nativeCooperativeVisible(ctx, p, ref)
+		if err != nil {
+			return Cooperative{}, err
+		}
+		if !allowed {
+			return Cooperative{}, ErrOrgNotFound
+		}
 	}
 	return cs[0], nil
 }
