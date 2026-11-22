@@ -11,7 +11,6 @@ import 'support/test_env.dart';
 
 /// Ô trên trang chủ: Thành viên HTX (ma trận KHMV, quyết định 17/11/2026).
 const _memberTiles = [
-  'Thông tin HTX',
   'Nông hộ',
   'Bản đồ lô ruộng',
   'Lịch thời vụ',
@@ -19,6 +18,7 @@ const _memberTiles = [
   'Ghi nhật ký hộ',
   'Nhật ký hàng loạt',
   'Khai sản lượng',
+  'Thông tin HTX',
   'Tin tức',
   'Hàng đợi đồng bộ',
 ];
@@ -26,13 +26,13 @@ const _memberTiles = [
 /// Ô trên trang chủ: Đại diện HTX (chỉ xem dữ liệu ma trận, giữ chức năng
 /// ngoài ma trận).
 const _managerTiles = [
-  'Thông tin HTX',
   'Nông hộ',
   'Bản đồ lô ruộng',
   'Xem vụ và nhật ký hộ',
   'Duyệt nhật ký',
   'Thu gom rơm MKG',
   'Tổng quan',
+  'Thông tin HTX',
   'Tin tức',
   'Hàng đợi đồng bộ',
 ];
@@ -75,7 +75,7 @@ Future<void> _back(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('[FN-05/AC-01, AH-59] Thành viên HTX: trang chủ đúng 9 ô; nông hộ và bản đồ chỉ '
+  testWidgets('[FN-05/AC-01, AH-59] Thành viên HTX: trang chủ đúng 10 ô; nông hộ và bản đồ chỉ '
       'xem (không gọi, không thêm/sửa/xóa, không sửa ranh); chi tiết lô có nút '
       'ghi nhật ký, khai sản lượng, sửa/hủy vụ', (tester) async {
     final env = _env(const ['htx_member']);

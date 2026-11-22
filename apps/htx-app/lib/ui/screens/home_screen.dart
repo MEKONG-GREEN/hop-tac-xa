@@ -102,14 +102,6 @@ class HomeScreen extends ConsumerWidget {
       HtxMode.manager || HtxMode.member => [
         for (final (screen, tile) in <(HtxScreen, Widget)>[
           (
-            HtxScreen.cooperativeInfo,
-            BigTile(
-              icon: Icons.apartment,
-              label: 'Thông tin HTX',
-              onTap: () => open(const CooperativeInfoScreen()),
-            ),
-          ),
-          (
             HtxScreen.households,
             BigTile(
               icon: Icons.groups,
@@ -190,6 +182,14 @@ class HomeScreen extends ConsumerWidget {
               icon: Icons.bar_chart,
               label: 'Tổng quan',
               onTap: () => open(const DashboardScreen()),
+            ),
+          ),
+          (
+            HtxScreen.cooperativeInfo,
+            BigTile(
+              icon: Icons.apartment,
+              label: 'Thông tin HTX',
+              onTap: () => open(const CooperativeInfoScreen()),
             ),
           ),
           (
