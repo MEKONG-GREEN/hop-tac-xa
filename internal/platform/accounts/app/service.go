@@ -189,6 +189,8 @@ type actor struct {
 	sc        authz.Scope
 	grantable []string
 	orgs      map[uuid.UUID]*partyport.Org // bộ nhớ đệm tra tổ chức trong một request
+	// coop khác Nil: Đại diện HTX quản lý tài khoản Thành viên của HTX này (FN-08, AH-277).
+	coop uuid.UUID
 }
 
 func (s *Service) caller(ctx context.Context) (*actor, error) {

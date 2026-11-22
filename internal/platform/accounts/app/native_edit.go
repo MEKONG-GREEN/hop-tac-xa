@@ -31,8 +31,8 @@ type NativeUpdateInput struct {
 const nativeLockReason = "FN-07: Admin khóa hoặc mở khóa tài khoản"
 
 // nativeTarget đọc tài khoản trong realm HTX của tenant người gọi, kèm vai FN-07 đã kiểm.
-func (s *Service) nativeTarget(ctx context.Context, id uuid.UUID) (UserView, error) {
-	users, err := s.NativeUsers(ctx)
+func (s *Service) nativeTarget(ctx context.Context, a *actor, id uuid.UUID) (UserView, error) {
+	users, err := s.nativeUsers(ctx, a)
 	if err != nil {
 		return UserView{}, err
 	}
@@ -91,6 +91,10 @@ func (s *Service) NativeUpdate(ctx context.Context, id uuid.UUID, input NativeUp
 	if err != nil {
 		return UserView{}, false, err
 	}
+	return s.nativeUpdate(ctx, a, id, input, key)
+}
+
+func (s *Service) nativeUpdate(ctx context.Context, a *actor, id uuid.UUID, input NativeUpdateInput, key string) (UserView, bool, error) {
 	if err := requireKey(key); err != nil {
 		return UserView{}, false, err
 	}
@@ -107,8 +111,11 @@ func (s *Service) NativeUpdate(ctx context.Context, id uuid.UUID, input NativeUp
 	}); err != nil {
 		return UserView{}, false, err
 	}
-	cur, err := s.nativeTarget(ctx, id)
+	cur, err := s.nativeTarget(ctx, a, id)
 	if err != nil {
+		return UserView{}, false, err
+	}
+	if input, err = coopUpdateInput(a, cur, input); err != nil {
 		return UserView{}, false, err
 	}
 	next, err := nativeNext(cur, input)
@@ -132,7 +139,8 @@ func (s *Service) NativeUpdate(ctx context.Context, id uuid.UUID, input NativeUp
 	if len(fields) == 0 {
 		return UserView{}, false, ErrState.WithDetail("Không có thay đổi.")
 	}
-	if id == a.p.ActorRef && (rolesChanged || orgChanged) {
+	// Đại diện HTX được tự bật/tắt kiêm Thành viên HTX cho chính mình (FN-08/AC-06, BR-04); Admin thì không.
+	if id == a.p.ActorRef && (orgChanged || (rolesChanged && a.coop == uuid.Nil)) {
 		return UserView{}, false, ErrSelfAction
 	}
 	if slices.Contains(fields, "phone") {
@@ -231,7 +239,7 @@ func (s *Service) NativeUpdate(ctx context.Context, id uuid.UUID, input NativeUp
 	if err != nil {
 		return UserView{}, false, err
 	}
-	out, err := s.nativeTarget(ctx, id)
+	out, err := s.nativeTarget(ctx, a, id)
 	return out, false, err
 }
 
@@ -242,14 +250,19 @@ func (s *Service) NativeSetLocked(ctx context.Context, id uuid.UUID, locked bool
 	if err != nil {
 		return UserView{}, false, err
 	}
+	return s.nativeSetLocked(ctx, a, id, locked, key)
+}
+
+func (s *Service) nativeSetLocked(ctx context.Context, a *actor, id uuid.UUID, locked bool, key string) (UserView, bool, error) {
 	if id == a.p.ActorRef {
 		return UserView{}, false, ErrSelfAction
 	}
-	if _, err := s.nativeTarget(ctx, id); err != nil {
+	if _, err := s.nativeTarget(ctx, a, id); err != nil {
 		return UserView{}, false, err
 	}
 	in := LockInput{UserID: id, IdemKey: key, Reason: nativeLockReason}
 	var res Result
+	var err error
 	if locked {
 		res, err = s.lock(ctx, a, in)
 	} else {
@@ -258,6 +271,6 @@ func (s *Service) NativeSetLocked(ctx context.Context, id uuid.UUID, locked bool
 	if err != nil {
 		return UserView{}, false, err
 	}
-	out, err := s.nativeTarget(ctx, id)
+	out, err := s.nativeTarget(ctx, a, id)
 	return out, res.Replayed, err
 }

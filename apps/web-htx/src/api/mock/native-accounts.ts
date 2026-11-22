@@ -78,3 +78,60 @@ export const nativeAccountRoutes: Route[] = [
 
 /** Thêm tài khoản vào mock (kiểm thử). */
 export function seedNativeAccount(tenant: string, user: AccountsUser) { users.set(user.id, { tenant, user }); }
+
+// FN-08 (AH-277): Đại diện HTX quản lý Thành viên HTX của HTX mình trên Application API — khớp accounts/app.Coop*.
+function coopGuard({ persona }: Ctx) {
+  if (!hasRole(persona, "coop_manager") || hasRole(persona, "platform_admin")) return problem(403, "forbidden", "Chỉ Đại diện HTX");
+  if (!persona.me.org?.ref) return problem(403, "node_scope_required", "Tài khoản chưa gắn HTX");
+  return null;
+}
+const coopVisible = (ctx: Ctx, u: AccountsUser) =>
+  u.id === ctx.persona.me.actor_ref || (u.org_ref === ctx.persona.me.org?.ref && (u.roles ?? []).length === 1 && (u.roles ?? [])[0] === "htx_member");
+function coopFind(ctx: Ctx) {
+  const found = users.get(ctx.params[0] ?? "");
+  return found && found.tenant === ctx.persona.me.tenant_id && coopVisible(ctx, found.user) ? found : null;
+}
+export const coopAccountRoutes: Route[] = [
+  { method: "GET", pattern: /^\/v1\/htx-accounts$/, handler: (ctx) => coopGuard(ctx) ?? json({ items: [...users.values()].filter((v) => v.tenant === ctx.persona.me.tenant_id && coopVisible(ctx, v.user)).map((v) => v.user) }, 200, headers) },
+  { method: "POST", pattern: /^\/v1\/htx-accounts$/, handler: (ctx) => {
+    const denied = coopGuard(ctx); if (denied) return denied;
+    const input = (ctx.body ?? {}) as Record<string, unknown>;
+    const roles = Array.isArray(input.roles) ? input.roles : [];
+    if (roles.length !== 1 || roles[0] !== "htx_member") return problem(403, "accounts.role_not_grantable", "Đại diện HTX chỉ tạo tài khoản Thành viên HTX");
+    if (input.cooperative_ref !== ctx.persona.me.org?.ref) return problem(403, "party.out_of_scope", "Chỉ tạo tài khoản cho HTX của bạn");
+    if (typeof input.full_name !== "string" || !input.full_name.trim()) return validation([{ field: "full_name", reason: "Bắt buộc nhập" }]);
+    if (typeof input.phone !== "string" || !/^0[0-9]{9}$/.test(input.phone.trim())) return validation([{ field: "phone", reason: "SĐT gồm 10 chữ số, bắt đầu bằng 0" }]);
+    if ([...users.values()].some((v) => v.user.phone === input.phone)) return problem(409, "accounts.phone_taken", "SĐT đã được dùng cho tài khoản khác");
+    const user: AccountsUser = { id: uuidv7(), username: String(input.username ?? "").trim().toLowerCase(), first_name: input.full_name.trim(), last_name: "", phone: input.phone.trim(), email: typeof input.email === "string" ? input.email : "", email_verified: false, org_ref: String(input.cooperative_ref), roles: ["htx_member"], enabled: true, lock_cause: null, required_actions: ["UPDATE_PASSWORD"], created_at: new Date().toISOString(), tracked: true };
+    users.set(user.id, { tenant: ctx.persona.me.tenant_id, user });
+    return json({ user, temporary_password: uuidv7().replaceAll("-", "").slice(-8) }, 201, headers);
+  } },
+  { method: "POST", pattern: /^\/v1\/htx-accounts\/([\w-]+)\/revisions$/, handler: (ctx) => {
+    const denied = coopGuard(ctx); if (denied) return denied;
+    const found = coopFind(ctx); if (!found) return problem(404, "not_found", "Không tìm thấy tài khoản");
+    const input = (ctx.body ?? {}) as Record<string, unknown>;
+    const u = found.user;
+    if (u.id === ctx.persona.me.actor_ref) {
+      const member = typeof input.also_member === "boolean" ? input.also_member : (u.roles ?? []).includes("htx_member");
+      const next = { ...u, roles: member ? ["coop_manager", "htx_member"] : ["coop_manager"] };
+      users.set(u.id, { tenant: found.tenant, user: next });
+      return json({ user: next, replayed: false }, 200, headers);
+    }
+    if (input.cooperative_ref && input.cooperative_ref !== ctx.persona.me.org?.ref) return problem(403, "party.out_of_scope", "Không đổi HTX của Thành viên HTX");
+    if (typeof input.full_name !== "string" || !input.full_name.trim()) return validation([{ field: "full_name", reason: "Bắt buộc nhập" }]);
+    if (typeof input.phone !== "string" || !/^0[0-9]{9}$/.test(input.phone.trim())) return validation([{ field: "phone", reason: "SĐT gồm 10 chữ số, bắt đầu bằng 0" }]);
+    const next = { ...u, first_name: input.full_name.trim(), last_name: "", phone: input.phone.trim(), email: typeof input.email === "string" ? input.email : u.email };
+    users.set(u.id, { tenant: found.tenant, user: next });
+    return json({ user: next, replayed: false }, 200, headers);
+  } },
+  { method: "POST", pattern: /^\/v1\/htx-accounts\/([\w-]+)\/(lock|unlock)$/, handler: (ctx) => {
+    const denied = coopGuard(ctx); if (denied) return denied;
+    const found = coopFind(ctx); if (!found) return problem(404, "not_found", "Không tìm thấy tài khoản");
+    if (found.user.id === ctx.persona.me.actor_ref) return problem(403, "accounts.self_action", "Không được tự khóa, mở khóa tài khoản của chính mình");
+    const lock = ctx.params[1] === "lock";
+    if (found.user.enabled !== lock) return problem(409, "accounts.state_conflict", lock ? "Tài khoản đã bị khóa." : "Tài khoản đang hoạt động.");
+    const next: AccountsUser = { ...found.user, enabled: !lock, lock_cause: lock ? "manual" : null };
+    users.set(next.id, { tenant: found.tenant, user: next });
+    return json({ user: next, replayed: false }, 200, headers);
+  } },
+];

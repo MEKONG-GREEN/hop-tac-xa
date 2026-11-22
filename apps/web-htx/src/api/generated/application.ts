@@ -12408,6 +12408,246 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/htx-accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * FN-08 Tài khoản của HTX mình (Đại diện HTX)
+         * @description AH-277. Thành viên HTX của HTX người gọi và dòng của chính người gọi (FN-08/AC-01, BR-01). Không có Admin, Đại diện HTX khác. Cache-Control no-store.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Danh sách đầy đủ cho bộ lọc, số đếm và phân trang UX-01 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: components["schemas"]["HTXAccount"][];
+                        };
+                    };
+                };
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /**
+         * FN-08 Đại diện HTX tạo tài khoản Thành viên HTX của HTX mình
+         * @description AH-277. roles phải đúng [htx_member] và cooperative_ref là HTX của người gọi; khác → 403 (AC-N1). Mật khẩu tạm 8 ký tự chỉ trả một lần, bắt đổi lần đầu; phát lại không trả mật khẩu.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        username: string;
+                        full_name: string;
+                        phone: string;
+                        email?: string;
+                        /** Format: uuid */
+                        cooperative_ref: string;
+                        roles: "htx_member"[];
+                    };
+                };
+            };
+            responses: {
+                /** @description Phát lại, mật khẩu null */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HTXAccountCreated"];
+                    };
+                };
+                /** @description Đã tạo, mật khẩu chỉ trong phản hồi này */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HTXAccountCreated"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/htx-accounts/{id}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * FN-08 Sửa tài khoản Thành viên HTX, hoặc bật/tắt kiêm Thành viên HTX cho chính mình
+         * @description AH-277. Tài khoản Thành viên HTX của HTX mình: sửa họ tên, SĐT, email; không đổi HTX, không cấp vai kiêm. Tài khoản
+         *     của chính người gọi: chỉ also_member có hiệu lực (FN-08/AC-06, QTPQ-Q-28), có hiệu lực từ lần đăng nhập kế tiếp.
+         *     Tài khoản ngoài phạm vi → 404 (AC-04).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        full_name: string;
+                        phone: string;
+                        email?: string;
+                        /** Format: uuid */
+                        cooperative_ref?: string | null;
+                        also_member?: boolean;
+                    };
+                };
+            };
+            responses: {
+                /** @description Tài khoản sau khi sửa */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HTXAccountChanged"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/htx-accounts/{id}/lock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * FN-08 Khóa tài khoản Thành viên HTX của HTX mình
+         * @description AH-277, FN-08/AC-05. Không tự khóa chính mình (FN-07/BR-07); ngoài phạm vi → 404.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Đã khóa */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HTXAccountChanged"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/htx-accounts/{id}/unlock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** FN-08 Mở khóa tài khoản Thành viên HTX của HTX mình */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Đã mở khóa */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HTXAccountChanged"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/htx-sharing": {
         parameters: {
             query?: never;
@@ -24962,6 +25202,36 @@ export interface components {
             attempt: number;
             /** Format: date-time */
             submitted_at: string;
+        };
+        /** @description Tài khoản realm HTX trong phạm vi Đại diện HTX — PII chỉ hiển thị, không lưu ở pf, không ghi log */
+        HTXAccount: {
+            /** Format: uuid */
+            id: string;
+            username: string;
+            email: string;
+            first_name: string;
+            last_name: string;
+            phone: string | null;
+            enabled: boolean;
+            email_verified: boolean;
+            /** Format: uuid */
+            org_ref: string | null;
+            roles: string[] | null;
+            /** @enum {string|null} */
+            lock_cause: "manual" | "org_deactivated" | "dormant_45d" | null;
+            required_actions: string[];
+            /** Format: date-time */
+            created_at: string | null;
+            tracked: boolean;
+        };
+        HTXAccountCreated: {
+            user: components["schemas"]["HTXAccount"];
+            /** @description Chỉ phản hồi đầu tiên; không ghi log hoặc lưu cache */
+            temporary_password: string | null;
+        };
+        HTXAccountChanged: {
+            user: components["schemas"]["HTXAccount"];
+            replayed: boolean;
         };
         NativeSharing: {
             /** Format: uuid */

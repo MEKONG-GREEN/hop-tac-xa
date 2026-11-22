@@ -129,6 +129,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
       // VTKM-Q-07 (AH-274): danh mục dùng chung Vật tư/Máy móc — Đại diện HTX, Thành viên HTX chỉ xem và xuất Excel.
       { href: "/htx/danh-muc-vat-tu", module: "pf/masterdata", label: "Danh mục vật tư, máy móc", icon: "warehouse", roles: [ROLES.coopManager, ROLES.htxMember] },
       { href: "/htx/chia-se", module: "pf/cooperative", label: "Liên kết & chia sẻ dữ liệu", icon: "send", roles: [ROLES.coopManager], fn: "FN-09" },
+      { href: "/htx/tai-khoan", module: "pf/accounts", label: "Tài khoản Thành viên HTX", icon: "user", roles: [ROLES.coopManager], fn: "FN-08", hidden: !nativeHTXRealm && !config.mock },
       { href: "/htx/lo-ruong", module: "pf/geo", label: "Lô ruộng & ranh giới", icon: "plot", roles: HTX_READ },
       // AH-39: gắn dòng ma trận KHMV — Thành viên HTX thấy (và thao tác) vụ, nhật ký, sản lượng của HTX mình.
       { href: "/htx/mua-vu", module: "pf/cropcycle", label: "Vụ canh tác", icon: "season", roles: HTX_READ, fn: "KHMV-FN-03-XEM" },

@@ -17243,6 +17243,120 @@ paths:
             application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: {schema: {type: string, format: binary}}
         "403": {description: forbidden, $ref: "#/components/responses/Problem"}
         "404": {description: masterdata.catalog_not_found, $ref: "#/components/responses/Problem"}
+  /v1/htx-accounts:
+    get:
+      summary: FN-08 Tài khoản của HTX mình (Đại diện HTX)
+      description: AH-277. Thành viên HTX của HTX người gọi và dòng của chính người gọi (FN-08/AC-01, BR-01). Không có Admin, Đại diện HTX khác. Cache-Control no-store.
+      responses:
+        '200':
+          description: Danh sách đầy đủ cho bộ lọc, số đếm và phân trang UX-01
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/HTXAccount'}}
+        '403': {$ref: '#/components/responses/Problem'}
+    post:
+      summary: FN-08 Đại diện HTX tạo tài khoản Thành viên HTX của HTX mình
+      description: AH-277. roles phải đúng [htx_member] và cooperative_ref là HTX của người gọi; khác → 403 (AC-N1). Mật khẩu tạm 8 ký tự chỉ trả một lần, bắt đổi lần đầu; phát lại không trả mật khẩu.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [username, full_name, phone, cooperative_ref, roles]
+              properties:
+                username: {type: string, minLength: 3, maxLength: 64}
+                full_name: {type: string, minLength: 1, maxLength: 100}
+                phone: {type: string, pattern: '^0[0-9]{9}$'}
+                email: {type: string}
+                cooperative_ref: {type: string, format: uuid}
+                roles: {type: array, minItems: 1, maxItems: 1, items: {type: string, enum: [htx_member]}}
+      responses:
+        '201':
+          description: Đã tạo, mật khẩu chỉ trong phản hồi này
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HTXAccountCreated'}
+        '200':
+          description: Phát lại, mật khẩu null
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HTXAccountCreated'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+  /v1/htx-accounts/{id}/revisions:
+    post:
+      summary: FN-08 Sửa tài khoản Thành viên HTX, hoặc bật/tắt kiêm Thành viên HTX cho chính mình
+      description: |
+        AH-277. Tài khoản Thành viên HTX của HTX mình: sửa họ tên, SĐT, email; không đổi HTX, không cấp vai kiêm. Tài khoản
+        của chính người gọi: chỉ also_member có hiệu lực (FN-08/AC-06, QTPQ-Q-28), có hiệu lực từ lần đăng nhập kế tiếp.
+        Tài khoản ngoài phạm vi → 404 (AC-04).
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [full_name, phone]
+              properties:
+                full_name: {type: string, minLength: 1, maxLength: 100}
+                phone: {type: string, pattern: '^0[0-9]{9}$'}
+                email: {type: string}
+                cooperative_ref: {type: [string, 'null'], format: uuid}
+                also_member: {type: boolean}
+      responses:
+        '200':
+          description: Tài khoản sau khi sửa
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HTXAccountChanged'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+  /v1/htx-accounts/{id}/lock:
+    post:
+      summary: FN-08 Khóa tài khoản Thành viên HTX của HTX mình
+      description: AH-277, FN-08/AC-05. Không tự khóa chính mình (FN-07/BR-07); ngoài phạm vi → 404.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Đã khóa
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HTXAccountChanged'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+  /v1/htx-accounts/{id}/unlock:
+    post:
+      summary: FN-08 Mở khóa tài khoản Thành viên HTX của HTX mình
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Đã mở khóa
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HTXAccountChanged'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
   /v1/htx-sharing:
     get:
       summary: Yêu cầu chia sẻ gửi đến và đã gửi của Đại diện HTX
@@ -28895,6 +29009,37 @@ components:
         submission_id: {type: string, format: uuid}
         attempt: {type: integer, format: int64, minimum: 1}
         submitted_at: {type: string, format: date-time}
+    HTXAccount:
+      type: object
+      description: Tài khoản realm HTX trong phạm vi Đại diện HTX — PII chỉ hiển thị, không lưu ở pf, không ghi log
+      required: [id, username, email, first_name, last_name, phone, enabled, email_verified, org_ref, roles, lock_cause, required_actions, created_at, tracked]
+      properties:
+        id: {type: string, format: uuid}
+        username: {type: string}
+        email: {type: string}
+        first_name: {type: string}
+        last_name: {type: string}
+        phone: {type: [string, 'null']}
+        enabled: {type: boolean}
+        email_verified: {type: boolean}
+        org_ref: {type: [string, 'null'], format: uuid}
+        roles: {type: [array, 'null'], items: {type: string}}
+        lock_cause: {type: [string, 'null'], enum: [manual, org_deactivated, dormant_45d, null]}
+        required_actions: {type: array, items: {type: string}}
+        created_at: {type: [string, 'null'], format: date-time}
+        tracked: {type: boolean}
+    HTXAccountCreated:
+      type: object
+      required: [user, temporary_password]
+      properties:
+        user: {$ref: '#/components/schemas/HTXAccount'}
+        temporary_password: {type: [string, 'null'], description: Chỉ phản hồi đầu tiên; không ghi log hoặc lưu cache}
+    HTXAccountChanged:
+      type: object
+      required: [user, replayed]
+      properties:
+        user: {$ref: '#/components/schemas/HTXAccount'}
+        replayed: {type: boolean}
     NativeSharing:
       type: object
       required: [ref, requester_cooperative_ref, owner_cooperative_ref, state, revision, requested_at, processed_at, actor_ref]
