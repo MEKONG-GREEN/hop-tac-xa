@@ -42,4 +42,39 @@ export const nativeAccountRoutes: Route[] = [
     // Synthetic mock credential only; never stored in users or replay responses.
     return json({ user, temporary_password: uuidv7().replaceAll("-", "").slice(-8) }, 201, headers);
   } },
+  // AH-276: sửa (không đổi tên đăng nhập, vai chính), khóa, mở khóa — khớp accounts/app.NativeUpdate, NativeSetLocked.
+  { method: "POST", pattern: /^\/v1\/accounts\/htx-users\/([\w-]+)\/revisions$/, handler: (ctx) => {
+    const denied = guard(ctx); if (denied) return denied;
+    const found = users.get(ctx.params[0] ?? "");
+    if (found?.tenant !== ctx.persona.me.tenant_id) return problem(404, "not_found", "Không tìm thấy tài khoản");
+    const input = (ctx.body ?? {}) as Record<string, unknown>;
+    if (Object.keys(input).some((k) => !["full_name", "phone", "email", "cooperative_ref", "also_member"].includes(k))) return problem(400, "bad_request", "Không sửa được tên đăng nhập hoặc vai trò");
+    const u = found.user, main = (u.roles ?? [])[0] ?? "";
+    if (typeof input.full_name !== "string" || !input.full_name.trim()) return validation([{ field: "full_name", reason: "Bắt buộc nhập" }]);
+    if (typeof input.phone !== "string" || !/^0[0-9]{9}$/.test(input.phone.trim())) return validation([{ field: "phone", reason: "SĐT gồm 10 chữ số, bắt đầu bằng 0" }]);
+    if (main !== "platform_admin" && !COOPERATIVES.some((c) => c.api.ref === input.cooperative_ref && c.api.active)) return validation([{ field: "cooperative_ref", reason: "Chọn HTX" }]);
+    if (input.also_member === true && main !== "coop_manager") return validation([{ field: "also_member", reason: "Chỉ tài khoản Đại diện HTX được kiêm Thành viên HTX" }]);
+    if ([...users.values()].some((v) => v.user.id !== u.id && v.user.phone === input.phone)) return problem(409, "accounts.phone_taken", "SĐT đã được dùng cho tài khoản khác");
+    const orgChanged = main !== "platform_admin" && input.cooperative_ref !== u.org_ref;
+    if (u.id === ctx.persona.me.actor_ref && orgChanged) return problem(403, "accounts.self_action", "Không tự đổi HTX của chính mình");
+    const member = main === "coop_manager" ? (typeof input.also_member === "boolean" ? input.also_member : (u.roles ?? []).includes("htx_member")) : false;
+    const next: AccountsUser = { ...u, first_name: input.full_name.trim(), last_name: "", phone: input.phone.trim(), email: typeof input.email === "string" ? input.email : u.email,
+      org_ref: main === "platform_admin" ? null : String(input.cooperative_ref), roles: main === "coop_manager" && member ? ["coop_manager", "htx_member"] : [main] };
+    users.set(u.id, { tenant: found.tenant, user: next });
+    return json({ user: next, replayed: false }, 200, headers);
+  } },
+  { method: "POST", pattern: /^\/v1\/accounts\/htx-users\/([\w-]+)\/(lock|unlock)$/, handler: (ctx) => {
+    const denied = guard(ctx); if (denied) return denied;
+    const found = users.get(ctx.params[0] ?? "");
+    if (found?.tenant !== ctx.persona.me.tenant_id) return problem(404, "not_found", "Không tìm thấy tài khoản");
+    if (found.user.id === ctx.persona.me.actor_ref) return problem(403, "accounts.self_action", "Không được tự khóa, mở khóa tài khoản của chính mình");
+    const lock = ctx.params[1] === "lock";
+    if (found.user.enabled !== lock) return problem(409, "accounts.state_conflict", lock ? "Tài khoản đã bị khóa." : "Tài khoản đang hoạt động.");
+    const next: AccountsUser = { ...found.user, enabled: !lock, lock_cause: lock ? "manual" : null };
+    users.set(next.id, { tenant: found.tenant, user: next });
+    return json({ user: next, replayed: false }, 200, headers);
+  } },
 ];
+
+/** Thêm tài khoản vào mock (kiểm thử). */
+export function seedNativeAccount(tenant: string, user: AccountsUser) { users.set(user.id, { tenant, user }); }

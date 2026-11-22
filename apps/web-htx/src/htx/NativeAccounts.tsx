@@ -13,6 +13,7 @@ import { clientList, ListScreen } from "@/components/patterns/listScreen";
 import { PageHead, Loading } from "@/components/ui";
 import { toApiProblem, useAsync } from "@/lib/useAsync";
 import type { ApiProblem } from "@/api/problem";
+import { NativeAccountDetail } from "./NativeAccountDetail";
 
 type Input = AdminPaths["/v1/accounts/htx-users"]["post"]["requestBody"]["content"]["application/json"];
 const roleLabels = { platform_admin: "Admin", coop_manager: "Đại diện HTX", htx_member: "Thành viên HTX" } as const;
@@ -21,7 +22,7 @@ const state = (u: AccountsUser) => !u.enabled ? "locked" : u.required_actions.in
 const stateLabels: Record<string, string> = { locked: "Đã khóa", pending: "Chờ đổi mật khẩu", active: "Đang hoạt động" };
 
 export function NativeAccounts() {
-  const { api, adminApi } = useAuth();
+  const { api, adminApi, principal } = useAuth();
   const list = useAsync(async () => {
     const [users, coops] = await Promise.all([unwrap(adminApi.GET("/v1/accounts/htx-users")), listAllCooperatives(api,{includeInactive:true})]);
     return { users: users.items, coops };
@@ -77,7 +78,7 @@ export function NativeAccounts() {
       {input.roles[0] !== "platform_admin" && <label className="field">HTX<select className="select" value={input.cooperative_ref ?? ""} onChange={(e) => change({ cooperative_ref: e.target.value || null })}><option value="">Chọn HTX</option>{coops.filter((c) => c.active).map((c) => <option key={c.ref} value={c.ref}>{c.name}</option>)}</select>{errors.cooperative_ref && <span className="err">{errors.cooperative_ref}</span>}</label>}
       <div className="row"><button className="btn primary" disabled={busy} type="submit">{busy ? "Đang tạo…" : "Lưu tài khoản"}</button><button className="btn" disabled={busy} type="button" onClick={() => setCreating(false)}>Hủy</button></div>
     </form>}
-    {selected && <section className="card stack" aria-label="Chi tiết tài khoản"><strong>{name(selected)}</strong><p>{selected.username} · {selected.phone} · {coopName(selected.org_ref)}</p><p>{(selected.roles ?? []).map((r) => roleLabels[r as keyof typeof roleLabels] ?? r).join(", ")} · {stateLabels[state(selected)]}</p><button type="button" className="btn" onClick={() => setSelected(null)}>Đóng</button></section>}
+    {selected && <NativeAccountDetail key={selected.id} user={selected} coops={coops} onChanged={(u) => { setSelected(u); list.reload(); }} onClose={() => setSelected(null)} />}
     {list.loading ? <Loading /> : <ListScreen caption="Tài khoản HTX" tabsLabel="Vai trò tài khoản" tabs={filtered.tabs} tab={tab} onTab={(v) => { setTab(v); setPage(1); }}
       filterBar={<FilterBar resultCount={filtered.total} activeCount={Number(!!search) + Number(!!status) + Number(!!coop)} onClear={() => { setSearch(""); setStatus(""); setCoop(""); setPage(1); }}>
         <SearchBox value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Tên, tên đăng nhập hoặc đúng SĐT" />
@@ -86,7 +87,7 @@ export function NativeAccounts() {
       </FilterBar>}
       rows={filtered.rows} rowKey={(u) => u.id} total={filtered.total} page={filtered.page} onPage={setPage} sort={sort} onSort={setSort}
       code={{ key: "username", header: "Mã / tên đăng nhập", sortKey: "username", cell: (u) => u.username }}
-      main={{ key: "name", header: "Họ tên", sortKey: "name", title: name, sub: (u) => `${u.phone ?? "—"} · ${coopName(u.org_ref)}`, open: (u) => ({ onClick: () => setSelected(u) }) }}
+      main={{ key: "name", header: "Họ tên", sortKey: "name", title: (u) => principal?.subject === u.id ? `${name(u)} (bạn)` : name(u), sub: (u) => `${u.phone ?? "—"} · ${coopName(u.org_ref)}`, open: (u) => ({ onClick: () => setSelected(u) }) }}
       columns={[{ key: "roles", header: "Vai trò", cell: (u) => (u.roles ?? []).map((r) => roleLabels[r as keyof typeof roleLabels] ?? r).join(", ") }, { key: "status", header: "Trạng thái", sortKey: "status", cell: (u) => stateLabels[state(u)] }]}
       actions={{ cell: (u) => <button type="button" className="btn" onClick={() => setSelected(u)}>Chi tiết</button> }} empty={<p>Không có bản ghi phù hợp</p>} />}
   </div>;
