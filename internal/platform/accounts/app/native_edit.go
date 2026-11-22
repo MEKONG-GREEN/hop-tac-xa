@@ -116,13 +116,19 @@ func (s *Service) NativeUpdate(ctx context.Context, id uuid.UUID, input NativeUp
 		return UserView{}, false, fieldProblem(err)
 	}
 	fields, rolesChanged, orgChanged := nativeChanged(cur, next)
-	if prev != nil {
+	// Đổi HTX/vai ghi ở sổ tài khoản (assignment_changed); sổ chỉnh sửa chỉ nhận trường hồ sơ (ràng buộc của bảng).
+	prevAssignment, err := s.replayFor(ctx, a, "native-edit:"+key, domain.ActionAssignmentChanged, id)
+	if err != nil {
+		return UserView{}, false, err
+	}
+	if prev != nil || prevAssignment != nil {
 		// Sổ chỉ giữ tên trường: phát lại hợp lệ khi cùng người gọi, cùng tài khoản và nội dung đã đúng hiện trạng.
-		if prev.ActorRef != a.p.ActorRef || prev.UserRef != id || len(fields) > 0 {
+		if (prev != nil && (prev.ActorRef != a.p.ActorRef || prev.UserRef != id)) || len(fields) > 0 {
 			return UserView{}, false, problem.IdempotencyConflict
 		}
 		return cur, true, nil
 	}
+	profileFields := slices.DeleteFunc(slices.Clone(fields), func(f string) bool { return f == "roles" || f == "cooperative_ref" })
 	if len(fields) == 0 {
 		return UserView{}, false, ErrState.WithDetail("Không có thay đổi.")
 	}
@@ -201,10 +207,12 @@ func (s *Service) NativeUpdate(ctx context.Context, id uuid.UUID, input NativeUp
 		}
 		revoked = true
 	}
-	pc := store.ProfileChange{ID: ids.New(), TenantID: a.p.TenantID, UserRef: id, Fields: fields, EventTime: s.now(), ActorRef: a.p.ActorRef, IdemKey: idem}
 	err = tenant.WithTenantTx(ctx, s.DB, a.p.TenantID, func(tx pgx.Tx) error {
-		if err := ledger.Classify(store.InsertProfileChange(ctx, tx, &pc)); err != nil {
-			return err
+		if len(profileFields) > 0 {
+			pc := store.ProfileChange{ID: ids.New(), TenantID: a.p.TenantID, UserRef: id, Fields: profileFields, EventTime: s.now(), ActorRef: a.p.ActorRef, IdemKey: idem}
+			if err := ledger.Classify(store.InsertProfileChange(ctx, tx, &pc)); err != nil {
+				return err
+			}
 		}
 		if rolesChanged || orgChanged {
 			enabled := cur.User.Enabled
