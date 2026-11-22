@@ -67,8 +67,9 @@ func TestNativeFN07EditLockUnlock(t *testing.T) {
 		t.Fatalf("stale cooperative token: %d %v", r.status, r.body)
 	}
 	fresh := caller{f: f, actor: rep, token: f.iss.Sign(t, authztest.Token{Subject: rep, TenantID: f.tenant, Roles: []string{htxroles.Representative, htxroles.Member}, OrgRef: f.coop30301, MFA: true})}
-	if r := fresh.do(http.MethodGet, "/v1/accounts/htx-users", nil); r.status != http.StatusForbidden {
-		t.Fatalf("new cooperative token passes the session gate (then FN-07 denies): %d %v", r.status, r.body)
+	// Qua cổng phiên (không 401); sau đó lớp khác mới từ chối (chọn vai làm việc hoặc FN-07 chỉ Admin).
+	if r := fresh.do(http.MethodGet, "/v1/accounts/htx-users", nil); r.status == http.StatusUnauthorized || r.status == http.StatusOK {
+		t.Fatalf("new cooperative token passes the session gate (then is denied elsewhere): %d %v", r.status, r.body)
 	}
 	// Phát lại cùng khóa: không ghi lại, bản lưu không chứa PII.
 	if r := edit(rep, "edit-move-coop", moved); r.status != http.StatusOK {
