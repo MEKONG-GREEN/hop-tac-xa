@@ -55,21 +55,44 @@ GRANT SELECT,INSERT,UPDATE ON pf_coop.native_sharing TO r_cooperative;
 GRANT SELECT,INSERT ON pf_coop.native_sharing_event,pf_coop.native_sharing_operation TO r_cooperative;
 SELECT shared.publish_cooperative_references('pf_coop','pf_cooperative_pub','r_cooperative_pub');
 
--- The application opts in only on native Representative read paths, retaining
--- the signed caller node. PostgreSQL READ ONLY is an additional write barrier:
--- broadening USING alone on an ALL policy must never enable DELETE/UPDATE.
+-- Live point check for the application (before/after a shared read). Never
+-- referenced from a policy: RLS stays free of per-row repo functions (DB-14).
 CREATE FUNCTION pf_coop.native_shared_read_allowed(source uuid) RETURNS boolean
 LANGUAGE sql STABLE SECURITY INVOKER SET search_path=pg_catalog,pg_temp AS $$
- SELECT current_setting('transaction_read_only')='on'
- AND current_setting('app.native_shared_read',true)='on'
- AND EXISTS(SELECT 1 FROM pf_coop.native_sharing g
+ SELECT EXISTS(SELECT 1 FROM pf_coop.native_sharing g
   JOIN k_ref.org a ON a.tenant_id=g.tenant_id AND a.ref=g.requester_cooperative_ref AND a.active
   JOIN k_ref.org b ON b.tenant_id=g.tenant_id AND b.ref=g.owner_cooperative_ref AND b.active
   WHERE g.tenant_id=shared.current_tenant() AND g.requester_cooperative_ref=k_ref.ctx_uuid('app.node_id')
    AND g.owner_cooperative_ref=source AND g.state='approved')
 $$;
 REVOKE ALL ON FUNCTION pf_coop.native_shared_read_allowed(uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION pf_coop.native_shared_read_allowed(uuid) TO r_cooperative,own_cooperative;
+GRANT EXECUTE ON FUNCTION pf_coop.native_shared_read_allowed(uuid) TO r_cooperative;
+
+-- The application opts in only on native Representative read paths, retaining
+-- the signed caller node. The opt-in recomputes the live approved owners of the
+-- caller's cooperative and pins them, local to this transaction, in
+-- app.native_shared_sources; outside a READ ONLY transaction it pins nothing.
+-- Policies read only that context value and transaction_read_only (both inline
+-- to current_setting), so no role needs this table or function to evaluate RLS.
+-- PostgreSQL READ ONLY is an additional write barrier: broadening USING on an
+-- ALL policy must never enable DELETE/UPDATE; WITH CHECK is unchanged.
+CREATE FUNCTION pf_coop.native_shared_read_begin() RETURNS uuid[]
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
+DECLARE node text:=nullif(current_setting('app.node_id',true),'');sources uuid[]:='{}';
+BEGIN
+ IF current_setting('transaction_read_only')='on'
+  AND node ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+  SELECT coalesce(array_agg(DISTINCT g.owner_cooperative_ref),'{}') INTO sources FROM pf_coop.native_sharing g
+   JOIN k_ref.org a ON a.tenant_id=g.tenant_id AND a.ref=g.requester_cooperative_ref AND a.active
+   JOIN k_ref.org b ON b.tenant_id=g.tenant_id AND b.ref=g.owner_cooperative_ref AND b.active
+   WHERE g.tenant_id=shared.current_tenant() AND g.requester_cooperative_ref=node::uuid AND g.state='approved';
+ END IF;
+ PERFORM set_config('app.native_shared_sources',sources::text,true);
+ RETURN sources;
+END $$;
+ALTER FUNCTION pf_coop.native_shared_read_begin() OWNER TO own_cooperative;
+REVOKE ALL ON FUNCTION pf_coop.native_shared_read_begin() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION pf_coop.native_shared_read_begin() TO r_cooperative;
 DO $$ DECLARE t text;col text;previous text;branch text; BEGIN
  FOR t,col IN SELECT * FROM (VALUES ('cooperative','org_ref'),('household_membership','org_ref'),
   ('plot','cooperative_ref'),('plot_boundary','cooperative_ref'),('season_current','cooperative_ref'),
@@ -77,14 +100,16 @@ DO $$ DECLARE t text;col text;previous text;branch text; BEGIN
   ('yield_summary','cooperative_ref'),('cooperative_area','cooperative_ref')) x(t,c) LOOP
   SELECT pg_get_expr(polqual,polrelid) INTO STRICT previous FROM pg_policy
    WHERE polrelid=format('pf_coop.%I',t)::regclass AND polname='p_scope' AND NOT polpermissive;
-  branch:=format('(%I.tenant_id=shared.current_tenant() AND pf_coop.native_shared_read_allowed(%I.%I))',t,t,col);
+  branch:=format($b$(%1$I.tenant_id=shared.current_tenant() AND current_setting('transaction_read_only')='on'
+   AND %1$I.%2$I=ANY(k_ref.ctx_text('app.native_shared_sources')::uuid[]))$b$,t,col);
   -- WITH CHECK remains byte-for-byte the existing own-node write rule.
   EXECUTE format('ALTER POLICY p_scope ON pf_coop.%I USING ((%s) OR %s)',t,previous,branch);
  END LOOP;
  SELECT pg_get_expr(polqual,polrelid) INTO STRICT previous FROM pg_policy
   WHERE polrelid='pf_coop.household'::regclass AND polname='p_scope' AND NOT polpermissive;
  EXECUTE format($p$ALTER POLICY p_scope ON pf_coop.household USING ((%s) OR
-  (household.tenant_id=shared.current_tenant() AND EXISTS(SELECT 1 FROM pf_coop.household_membership m
+  (household.tenant_id=shared.current_tenant() AND current_setting('transaction_read_only')='on'
+   AND EXISTS(SELECT 1 FROM pf_coop.household_membership m
    WHERE m.tenant_id=household.tenant_id AND m.household_ref=household.household_ref AND m.until_date IS NULL
-    AND pf_coop.native_shared_read_allowed(m.org_ref))))$p$,previous);
+    AND m.org_ref=ANY(k_ref.ctx_text('app.native_shared_sources')::uuid[]))))$p$,previous);
 END $$;

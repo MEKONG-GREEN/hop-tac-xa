@@ -39,7 +39,7 @@ func (s *Service) sharedPlotsOfCooperative(ctx context.Context, a access, coop, 
 	}
 	var items []store.Plot
 	err := tenant.WithTenantTxOptions(ctx, s.DB, a.p.TenantID, pgx.TxOptions{AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, `SELECT set_config('app.native_shared_read','on',true)`); err != nil {
+		if _, err := tx.Exec(ctx, `SELECT pf_coop.native_shared_read_begin()`); err != nil {
 			return err
 		}
 		var e error

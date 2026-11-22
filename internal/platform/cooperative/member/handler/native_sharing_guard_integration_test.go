@@ -147,7 +147,7 @@ func TestNativeSharedReadRLSNeverOpensWrites(t *testing.T) {
 		var n int
 		err := tenant.WithTenantTxOptions(ctxA, f.db, f.tenant, pgx.TxOptions{AccessMode: mode}, func(tx pgx.Tx) error {
 			if optIn {
-				if _, err := tx.Exec(ctxA, `SELECT set_config('app.native_shared_read','on',true)`); err != nil {
+				if _, err := tx.Exec(ctxA, `SELECT pf_coop.native_shared_read_begin()`); err != nil {
 					return err
 				}
 			}
@@ -162,7 +162,7 @@ func TestNativeSharedReadRLSNeverOpensWrites(t *testing.T) {
 		t.Helper()
 		var changed int64
 		_ = tenant.WithTenantTxOptions(ctxA, f.db, f.tenant, pgx.TxOptions{AccessMode: mode}, func(tx pgx.Tx) error {
-			if _, err := tx.Exec(ctxA, `SELECT set_config('app.native_shared_read','on',true)`); err != nil {
+			if _, err := tx.Exec(ctxA, `SELECT pf_coop.native_shared_read_begin()`); err != nil {
 				return err
 			}
 			tag, err := tx.Exec(ctxA, stmt, household)
@@ -190,6 +190,23 @@ func TestNativeSharedReadRLSNeverOpensWrites(t *testing.T) {
 	if visible(pgx.ReadOnly, false) != 0 || visible(pgx.ReadWrite, true) != 0 {
 		t.Fatal("shared branch requires both opt-in and READ ONLY")
 	}
+	// A pinned source list outside READ ONLY opens neither reads nor writes.
+	var forged int
+	var forgedChanged int64
+	_ = tenant.WithTenantTxOptions(ctxA, f.db, f.tenant, pgx.TxOptions{AccessMode: pgx.ReadWrite}, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctxA, `SELECT set_config('app.native_shared_sources',$1,true)`, "{"+tr.c2.String()+"}"); err != nil {
+			return err
+		}
+		if err := tx.QueryRow(ctxA, `SELECT count(*) FROM pf_coop.household WHERE household_ref=$1`, household).Scan(&forged); err != nil {
+			return err
+		}
+		tag, err := tx.Exec(ctxA, `UPDATE pf_coop.household SET revision=revision WHERE household_ref=$1`, household)
+		forgedChanged = tag.RowsAffected()
+		return err
+	})
+	if forged != 0 || forgedChanged != 0 {
+		t.Fatalf("read-write transaction with pinned sources saw %d, changed %d", forged, forgedChanged)
+	}
 	for _, stmt := range []string{
 		`UPDATE pf_coop.household SET revision=revision WHERE household_ref=$1`,
 		`DELETE FROM pf_coop.household WHERE household_ref=$1`,
@@ -208,7 +225,7 @@ func TestNativeSharedReadRLSNeverOpensWrites(t *testing.T) {
 	other := authz.WithPrincipal(context.Background(), authz.Principal{ActorRef: ids.New(), TenantID: f.tenant, OrgRef: uuid.New(), Roles: []string{htxroles.Representative}})
 	var n int
 	_ = tenant.WithTenantTxOptions(other, f.db, f.tenant, pgx.TxOptions{AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
-		_, _ = tx.Exec(other, `SELECT set_config('app.native_shared_read','on',true)`)
+		_, _ = tx.Exec(other, `SELECT pf_coop.native_shared_read_begin()`)
 		return tx.QueryRow(other, `SELECT count(*) FROM pf_coop.household WHERE household_ref=$1`, household).Scan(&n)
 	})
 	if n != 0 {

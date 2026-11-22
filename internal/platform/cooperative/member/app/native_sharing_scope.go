@@ -21,7 +21,7 @@ func (s *Service) nativeReadTx(ctx context.Context, tid uuid.UUID, fn func(pgx.T
 	return tenant.WithTenantTxOptions(ctx, s.DB, tid, pgx.TxOptions{AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
 		p, ok := authz.FromContext(ctx)
 		if ok && nativeSharedReader(p) {
-			if _, err := tx.Exec(ctx, `SELECT set_config('app.native_shared_read','on',true)`); err != nil {
+			if _, err := tx.Exec(ctx, `SELECT pf_coop.native_shared_read_begin()`); err != nil {
 				return err
 			}
 		}
