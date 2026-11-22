@@ -35228,11 +35228,15 @@ export interface operations {
                      * @description ADR-0061: id thử thách bước 1 trả về — chỉ gửi ở bước 2 của Admin
                      */
                     challenge_id?: string;
+                    /** @description AH-269 (FN-01/AC-04): mật khẩu mới ở bước đổi mật khẩu lần đầu, gửi kèm mật khẩu tạm; tối thiểu 06 ký tự, khác mật khẩu tạm */
+                    new_password?: string;
+                    /** @description AH-269: nhập lại mật khẩu mới */
+                    confirm_password?: string;
                 };
             };
         };
         responses: {
-            /** @description authenticated (kèm token) | otp_required (bước 1 của Admin: đã gửi mã qua email, chưa có token) */
+            /** @description authenticated (kèm token) | otp_required (bước 1 của Admin: đã gửi mã qua email, chưa có token) | password_change_required (AH-269: mật khẩu tạm đúng, cần đổi mật khẩu lần đầu, chưa có token) */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -35240,7 +35244,7 @@ export interface operations {
                 content: {
                     "application/json": {
                         /** @enum {string} */
-                        status: "authenticated" | "otp_required";
+                        status: "authenticated" | "otp_required" | "password_change_required";
                         access_token?: string;
                         refresh_token?: string;
                         /** @description authenticated: hạn access token (giây); otp_required: hạn mã OTP (giây) */
@@ -35265,7 +35269,7 @@ export interface operations {
             403: components["responses"]["Problem"];
             /** @description accounts.login_otp_expired (mã OTP email hết hạn, đã dùng, đã hủy hoặc đã có mã mới) */
             410: components["responses"]["Problem"];
-            /** @description validation_failed (EX-01: thiếu identifier hoặc password; có challenge_id mà thiếu otp) */
+            /** @description validation_failed (EX-01: thiếu identifier hoặc password; có challenge_id mà thiếu otp; AH-269 EX-05: new_password dưới 06 ký tự hoặc trùng mật khẩu tạm, confirm_password không khớp) */
             422: components["responses"]["Problem"];
             /** @description accounts.login_temporarily_locked: extension retry_after_minutes, header Retry-After (giây) */
             423: components["responses"]["Problem"];

@@ -60,6 +60,9 @@ type LoginInput struct {
 	Password    string `pii:"true"`
 	OTP         string `pii:"true"`
 	ChallengeID uuid.UUID
+	// NewPassword, ConfirmPassword: đổi mật khẩu lần đầu (AH-269); Password là mật khẩu tạm.
+	NewPassword     string `pii:"true"`
+	ConfirmPassword string `pii:"true"`
 }
 
 // LoginResult: Status authenticated kèm Tokens; otp_required kèm OTP (bước 1 của đăng nhập bằng OTP email).
@@ -246,6 +249,8 @@ func (s *Service) loginKnown(ctx context.Context, u port.User, in LoginInput) (L
 			return LoginResult{}, "temp_locked", loginTempLocked(lockFor)
 		}
 		return LoginResult{}, "failed", loginFailed(remaining)
+	case errors.Is(err, port.ErrAccountNotSetUp) && s.firstPasswordOnly(u):
+		return s.firstPassword(ctx, u, in)
 	case errors.Is(err, port.ErrAccountNotSetUp):
 		return LoginResult{}, "setup_required", ErrLoginSetupRequired
 	case errors.Is(err, port.ErrAccountDisabled):

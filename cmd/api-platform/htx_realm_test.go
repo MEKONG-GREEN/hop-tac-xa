@@ -17,7 +17,7 @@ func TestHTXRealmIsolation(t *testing.T) {
 	if err := json.Unmarshal(raw, &realm); err != nil {
 		t.Fatal(err)
 	}
-	if realm.PasswordPolicy != "length(8) and notUsername and passwordHistory(5)" {
+	if realm.PasswordPolicy != "length(6) and notUsername and passwordHistory(5)" {
 		t.Fatal("FN-07 password policy")
 	}
 	if realm.RegistrationAllowed || realm.LoginWithEmail || !realm.BruteForceProtected {

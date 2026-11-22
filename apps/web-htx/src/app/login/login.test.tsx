@@ -14,7 +14,7 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/config", async (orig) => ({ config: { ...((await orig()) as { config: object }).config, mock: false, support: null } }));
 
-const signIn = vi.fn<(identifier: string, password: string, otp?: string, challengeId?: string) => Promise<SignInOutcome>>();
+const signIn = vi.fn<(identifier: string, password: string, otp?: string, challengeId?: string, change?: { newPassword: string; confirmPassword: string }) => Promise<SignInOutcome>>();
 const login = vi.fn(async () => undefined);
 const auth = {
   status: "anonymous" as "anonymous" | "authenticated" | "loading",
@@ -242,5 +242,51 @@ describe("Trang Đăng nhập (FN-01)", () => {
       await submit(user);
       await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(text));
     }
+  });
+});
+
+describe("Đổi mật khẩu lần đầu (AH-269, FN-01/AC-04)", () => {
+  it("mật khẩu tạm đúng → khung đổi mật khẩu; kiểm tại trường; đổi thành công gửi kèm mật khẩu tạm", async () => {
+    const user = userEvent.setup();
+    signIn.mockResolvedValueOnce({ kind: "password_change_required" });
+    render(<LoginPage />);
+    await fill(user, "moi.tao", "Tam12345");
+    await submit(user);
+    expect(await screen.findByRole("heading", { name: "Đổi mật khẩu lần đầu" })).toBeInTheDocument();
+    const next = screen.getByLabelText(/^Mật khẩu mới/);
+    const confirm = screen.getByLabelText(/^Nhập lại mật khẩu mới/);
+    await user.type(next, "12345");
+    await user.type(confirm, "12345");
+    await user.click(screen.getByRole("button", { name: "Đổi mật khẩu" }));
+    expect(screen.getByText("Mật khẩu tối thiểu 06 ký tự")).toBeInTheDocument();
+    await user.clear(next);
+    await user.type(next, "Tam12345");
+    expect(screen.getByText("Mật khẩu mới phải khác mật khẩu tạm")).toBeInTheDocument();
+    await user.clear(next);
+    await user.type(next, "matkhau1");
+    expect(screen.getByText("Mật khẩu nhập lại không khớp")).toBeInTheDocument();
+    expect(signIn).toHaveBeenCalledTimes(1);
+    await user.clear(confirm);
+    await user.type(confirm, "matkhau1");
+    signIn.mockResolvedValueOnce({ kind: "authenticated" });
+    await user.click(screen.getByRole("button", { name: "Đổi mật khẩu" }));
+    await waitFor(() => expect(signIn).toHaveBeenCalledTimes(2));
+    expect(signIn.mock.calls[1]).toEqual(["moi.tao", "Tam12345", undefined, undefined, { newPassword: "matkhau1", confirmPassword: "matkhau1" }]);
+  });
+
+  it("lỗi tại trường do máy chủ trả hiện đúng chỗ; Quay lại về màn mật khẩu", async () => {
+    const user = userEvent.setup();
+    signIn.mockResolvedValueOnce({ kind: "password_change_required" });
+    render(<LoginPage />);
+    await fill(user, "moi.tao", "Tam12345");
+    await submit(user);
+    await screen.findByRole("heading", { name: "Đổi mật khẩu lần đầu" });
+    await user.type(screen.getByLabelText(/^Mật khẩu mới/), "matkhau1");
+    await user.type(screen.getByLabelText(/^Nhập lại mật khẩu mới/), "matkhau1");
+    signIn.mockResolvedValueOnce({ kind: "password_invalid", fields: { new_password: "Mật khẩu mới không hợp lệ: không trùng tên đăng nhập hoặc mật khẩu đã dùng gần đây" } });
+    await user.click(screen.getByRole("button", { name: "Đổi mật khẩu" }));
+    expect(await screen.findByText(/không trùng tên đăng nhập/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Quay lại" }));
+    expect(screen.getByRole("button", { name: "Đăng nhập" })).toBeInTheDocument();
   });
 });

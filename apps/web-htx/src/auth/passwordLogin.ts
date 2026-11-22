@@ -29,6 +29,10 @@ export interface OtpPrompt {
 /** Kết quả đăng nhập theo mã problem của máy chủ (docs/errors.md, pf/accounts). */
 export type LoginOutcome =
   | { kind: "authenticated"; tokens: LoginTokens }
+  /** AH-269: mật khẩu tạm đúng, cần đổi mật khẩu lần đầu (chưa có token) — gửi lại kèm change. */
+  | { kind: "password_change_required" }
+  /** AH-269: mật khẩu mới không hợp lệ (FN-01/EX-05); fields: trường → câu thông báo tại trường. */
+  | { kind: "password_invalid"; fields: Record<string, string> }
   /** ADR-0061: Admin đúng mật khẩu, mã OTP đã gửi qua email — gửi lại cùng mật khẩu kèm challengeId và mã. */
   | ({ kind: "otp_required" } & OtpPrompt)
   /** accounts.login_otp_invalid: mã email sai, `remaining` = số lần thử còn lại của mã. */
@@ -56,9 +60,15 @@ export type LoginOutcome =
 
 export type RefreshOutcome = { kind: "ok"; tokens: LoginTokens } | { kind: "expired" } | { kind: "error" };
 
+/** AH-269: mật khẩu mới ở bước đổi mật khẩu lần đầu (gửi kèm mật khẩu tạm). */
+export interface FirstPasswordChange {
+  newPassword: string;
+  confirmPassword: string;
+}
+
 export interface PasswordLoginApi {
   /** `challengeId` có giá trị là bước 2 của Admin (ADR-0061): `otp` là mã trong email. */
-  login: (identifier: string, password: string, otp?: string, challengeId?: string) => Promise<LoginOutcome>;
+  login: (identifier: string, password: string, otp?: string, challengeId?: string, change?: FirstPasswordChange) => Promise<LoginOutcome>;
   refresh: (refreshToken: string) => Promise<RefreshOutcome>;
   /** Lỗi bị bỏ qua: đăng xuất ở web luôn xóa phiên cục bộ. */
   logout: (refreshToken: string) => Promise<void>;
@@ -114,11 +124,14 @@ export function createPasswordLoginApi(opts: { baseUrl: string; fetch?: (input: 
   });
 
   return {
-    async login(identifier, password, otp, challengeId) {
+    async login(identifier, password, otp, challengeId, change) {
       let res;
       try {
         res = await client.POST("/v1/public/auth/login", {
-          body: { identifier, password, ...(otp ? { otp } : {}), ...(challengeId ? { challenge_id: challengeId } : {}) },
+          body: {
+            identifier, password, ...(otp ? { otp } : {}), ...(challengeId ? { challenge_id: challengeId } : {}),
+            ...(change ? { new_password: change.newPassword, confirm_password: change.confirmPassword } : {}),
+          },
         });
       } catch {
         return { kind: "network" };
@@ -127,6 +140,7 @@ export function createPasswordLoginApi(opts: { baseUrl: string; fetch?: (input: 
       const problem = (res.error ?? {}) as ProblemBody;
       switch (response.status) {
         case 200: {
+          if (data?.status === "password_change_required") return { kind: "password_change_required" };
           if (data?.status === "otp_required") {
             const prompt = toOtpPrompt(data);
             return prompt ? { kind: "otp_required", ...prompt } : { kind: "unavailable" };
@@ -141,6 +155,11 @@ export function createPasswordLoginApi(opts: { baseUrl: string; fetch?: (input: 
           if (problem.code === "accounts.account_locked") return { kind: "account_locked" };
           if (problem.code === "accounts.login_otp_email_missing") return { kind: "otp_email_missing" };
           return problem.code === "accounts.login_setup_required" ? { kind: "setup_required" } : { kind: "unavailable" };
+        case 422: {
+          const errors = (res.error as { errors?: { field?: string; reason?: string }[] } | undefined)?.errors ?? [];
+          const fields = Object.fromEntries(errors.filter((e) => e.field).map((e) => [e.field as string, e.reason ?? "Không hợp lệ"]));
+          return change && Object.keys(fields).length ? { kind: "password_invalid", fields } : { kind: "unavailable" };
+        }
         case 410:
           return problem.code === "accounts.login_otp_expired" ? { kind: "otp_expired" } : { kind: "unavailable" };
         case 423:

@@ -43,7 +43,7 @@
   "offlineSessionIdleTimeout": 259200,
   "offlineSessionMaxLifespanEnabled": true,
   "offlineSessionMaxLifespan": 259200,
-  "passwordPolicy": "length(8) and notUsername and passwordHistory(5)",
+  "passwordPolicy": "length(6) and notUsername and passwordHistory(5)",
   "otpPolicyType": "totp",
   "otpPolicyAlgorithm": "HmacSHA1",
   "otpPolicyDigits": 6,

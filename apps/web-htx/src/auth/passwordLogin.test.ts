@@ -126,3 +126,23 @@ describe("passwordLogin.refresh và logout", () => {
     await expect(harness(reply(503, { code: "accounts.dependency_unavailable" })).api.logout("rt")).resolves.toBeUndefined();
   });
 });
+
+describe("passwordLogin.login — đổi mật khẩu lần đầu (AH-269)", () => {
+  it("mật khẩu tạm đúng → password_change_required, không có token", async () => {
+    const { api } = harness(reply(200, { status: "password_change_required" }));
+    expect(await api.login("moi.tao", "Tam12345")).toEqual({ kind: "password_change_required" });
+  });
+
+  it("gửi kèm new_password, confirm_password; 422 → lỗi tại trường", async () => {
+    const { api, sent } = harness(reply(422, { code: "validation_failed", status: 422, errors: [{ field: "new_password", reason: "Mật khẩu tối thiểu 06 ký tự" }] }));
+    const r = await api.login("moi.tao", "Tam12345", undefined, undefined, { newPassword: "12345", confirmPassword: "12345" });
+    expect(await sent[0]!.json()).toEqual({ identifier: "moi.tao", password: "Tam12345", new_password: "12345", confirm_password: "12345" });
+    expect(r).toEqual({ kind: "password_invalid", fields: { new_password: "Mật khẩu tối thiểu 06 ký tự" } });
+  });
+
+  it("đổi thành công → authenticated kèm token", async () => {
+    const { api } = harness(reply(200, TOKENS));
+    const r = await api.login("moi.tao", "Tam12345", undefined, undefined, { newPassword: "matkhau1", confirmPassword: "matkhau1" });
+    expect(r.kind).toBe("authenticated");
+  });
+});

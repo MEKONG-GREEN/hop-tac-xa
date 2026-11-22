@@ -40,3 +40,9 @@ IAM giữ thuộc tính `htx_creation_ref` bằng UUID thao tác, chỉ quản t
 Chọn vai là phần kỹ thuật cần cho AC tài khoản hai vai của AH-275 và làm nền AH-270. Web và app giữ lựa chọn trong phiên, gửi `X-HTX-Role` ở từng request. Máy chủ kiểm vai thuộc token đã xác thực rồi đặt trần phân quyền bằng phép giao; không sửa role claim, actor, tenant, HTX hoặc MFA. Tài khoản hai vai chưa chọn bị chặn dữ liệu nghiệp vụ (409 `accounts.working_role_required`); chỉ được đọc thông tin khởi tạo và đồng ý dữ liệu. `/v1/me` trả vai có hiệu lực sau chọn. Token một vai tự dùng vai đó.
 
 Vault kiểm lại lựa chọn theo JWT gốc và chuyển tiếp đúng vai khi hỏi bằng chứng phạm vi từ chủ dữ liệu. Cache idempotency gắn với vai làm việc để kết quả của Đại diện không phát lại dưới vai Thành viên. Vai trong UI được thu hẹp tương ứng. Đổi vai có xác nhận trước khi bỏ form; app giữ checkpoint vai và danh tính của dữ liệu chờ để không gửi các khóa bất biến dưới vai khác. Các phần quan hệ chia sẻ của AH-270 cần AH-274/AH-278, không coi toàn bộ AH-270 hoàn tất chỉ vì có bộ chọn vai.
+
+## Bổ sung 22/11/2026 (AH-269)
+
+FN-01/BR-03 và trả lời PO ở AH-280 chốt mật khẩu do người dùng tự đặt tối thiểu **06** ký tự. Chính sách realm `agrigreen-htx` đổi thành `length(6) and notUsername and passwordHistory(5)`; mật khẩu tạm FN-07 vẫn sinh 8 ký tự. Realm `agrigreen` (KN) không đổi. Môi trường đã import realm cần cập nhật chính sách mật khẩu bằng tay vì import không ghi đè realm đã có.
+
+Đổi mật khẩu lần đầu chạy ngay ở màn đăng nhập của ứng dụng: `POST /v1/public/auth/login` trả `status: password_change_required` khi mật khẩu tạm đúng; lượt gửi lại kèm `new_password`, `confirm_password` đặt mật khẩu cố định qua Admin REST (Keycloak bỏ `UPDATE_PASSWORD`) rồi đăng nhập bằng mật khẩu mới.
