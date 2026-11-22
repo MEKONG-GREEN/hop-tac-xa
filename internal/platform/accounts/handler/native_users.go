@@ -165,4 +165,54 @@ func (h Handler) registerCoopAccounts(rg *gin.RouterGroup) {
 	rg.POST("/htx-accounts/:id/revisions", h.nativeUpdateWith(h.Svc.CoopNativeUpdate))
 	rg.POST("/htx-accounts/:id/lock", h.nativeLockWith(h.Svc.CoopNativeSetLocked, true))
 	rg.POST("/htx-accounts/:id/unlock", h.nativeLockWith(h.Svc.CoopNativeSetLocked, false))
+	rg.POST("/htx-accounts/:id/password-reset", h.nativeResetWith(h.Svc.CoopNativeResetPassword))
+	// PUT: middleware Idempotency-Key chỉ áp cho POST, nên thân chứa mật khẩu không bị băm vào kho idempotency.
+	rg.PUT("/me/password", h.changeOwnPassword)
+}
+
+// nativeResetWith: "Đặt lại mật khẩu" (AH-281) — mật khẩu tạm chỉ trong phản hồi đầu, bản lưu phát lại không có mật khẩu
+// hay PII của IAM.
+func (h Handler) nativeResetWith(reset func(context.Context, uuid.UUID, string) (app.NativeResetResult, error)) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("Cache-Control", "no-store")
+		id, ok := pathID(c)
+		if !ok {
+			return
+		}
+		res, err := reset(c.Request.Context(), id, key(c))
+		if err != nil {
+			httpx.Fail(c, err)
+			return
+		}
+		stored, err := json.Marshal(gin.H{"mode": res.Mode, "temporary_password": nil, "phone_hint": res.PhoneHint, "replayed": true})
+		if err != nil {
+			httpx.Fail(c, err)
+			return
+		}
+		idempotency.SetStoredBody(c, stored)
+		c.JSON(http.StatusOK, gin.H{"mode": res.Mode, "temporary_password": strPtr(res.TemporaryPassword), "phone_hint": res.PhoneHint, "replayed": res.Replayed})
+	}
+}
+
+type selfPasswordReq struct {
+	CurrentPassword string `json:"current_password" pii:"true"`
+	NewPassword     string `json:"new_password" pii:"true"`
+	ConfirmPassword string `json:"confirm_password" pii:"true"`
+}
+
+// changeOwnPassword: PUT /v1/me/password (AH-281) — không lưu thân request vào kho idempotency.
+func (h Handler) changeOwnPassword(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	var req selfPasswordReq
+	decoder := json.NewDecoder(c.Request.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		httpx.Fail(c, problem.BadRequest.WithDetail("Thân request phải đúng cấu trúc JSON"))
+		return
+	}
+	if err := h.Svc.ChangeOwnPassword(c.Request.Context(), app.SelfChangePassword{Current: req.CurrentPassword, New: req.NewPassword, Confirm: req.ConfirmPassword}); err != nil {
+		httpx.Fail(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
 }

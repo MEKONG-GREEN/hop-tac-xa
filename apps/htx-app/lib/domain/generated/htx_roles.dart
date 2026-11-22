@@ -251,7 +251,8 @@ const htxRoleMatrixJson = '''
     "POST /v1/cropcycle/farm-logs",
     "POST /v1/cropcycle/farm-logs/batch",
     "POST /v1/cropcycle/farm-logs/:id/corrections",
-    "POST /v1/me/data-consent"
+    "POST /v1/me/data-consent",
+    "PUT /v1/me/password"
   ]
 }
 ''';
