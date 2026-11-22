@@ -22,7 +22,7 @@ import { forgetIdentifier } from "@/lib/rememberLogin";
 import { buildPrincipal, decodeAccessToken, type AccessTokenClaims, type Principal } from "./principal";
 import { htxWorkingRole, withHtxWorkingRole, type HtxWorkingRole } from "./htxWorkingRole";
 import { getUserManager, safeReturnTo } from "./oidc";
-import { passwordLogin, type LoginOutcome } from "./passwordLogin";
+import { passwordLogin, type FirstPasswordChange, type LoginOutcome } from "./passwordLogin";
 import { passwordSession } from "./passwordSession";
 import { tokenStore } from "./tokenStore";
 
@@ -116,7 +116,7 @@ export interface AuthContextValue {
    * thiết lập (trang đăng nhập tự điều hướng vào trang đầu tiên được xem). Chế độ giả lập: mật khẩu thử (tài khoản KN v7.7).
    */
   /** `challengeId` có giá trị là bước 2 của Admin (ADR-0061): `otp` là mã trong email. */
-  signIn: (identifier: string, password: string, otp?: string, challengeId?: string) => Promise<SignInOutcome>;
+  signIn: (identifier: string, password: string, otp?: string, challengeId?: string, change?: FirstPasswordChange) => Promise<SignInOutcome>;
   /** Chỉ chế độ giả lập: đăng nhập bằng persona. */
   loginAsPersona: (personaId: string) => Promise<void>;
   /** Đổi mật khẩu: Keycloak kc_action=UPDATE_PASSWORD (chế độ giả lập: không làm gì). */
@@ -425,7 +425,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const signIn = useCallback(
-    async (identifier: string, password: string, otp?: string, challengeId?: string): Promise<SignInOutcome> => {
+    async (identifier: string, password: string, otp?: string, challengeId?: string, change?: FirstPasswordChange): Promise<SignInOutcome> => {
       if (config.mock) {
         const r = mockKnLogin(identifier, password);
         if (r.ok) {
@@ -434,7 +434,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         return r.error === "locked" ? { kind: "locked", minutes: LOCK_MINUTES } : { kind: "invalid", remaining: r.remaining };
       }
-      const outcome = await passwordLogin.login(identifier, password, otp, challengeId);
+      const outcome = await passwordLogin.login(identifier, password, otp, challengeId, change);
       if (outcome.kind !== "authenticated") return outcome;
       htxWorkingRole.clear(); // A fresh login asks dual-role users again; token refresh preserves a choice.
       // Token (kể cả refresh token) chỉ ở bộ nhớ của tab; làm mới trước hạn, thất bại thì về màn đăng nhập.

@@ -87,6 +87,12 @@ type ProfileUpdater interface {
 	UpdateProfile(ctx context.Context, id uuid.UUID, p ProfileUpdate) error
 }
 
+// RequiredActionRemover (tùy chọn, kiểm bằng type assertion) bỏ các required action của người dùng trong Keycloak
+// (AH-269: người dùng đã tự đặt mật khẩu ở bước đổi mật khẩu lần đầu).
+type RequiredActionRemover interface {
+	RemoveRequiredActions(ctx context.Context, id uuid.UUID, actions []string) error
+}
+
 // Directory là cổng Keycloak Admin REST (realm agrigreen) bằng tài khoản dịch vụ
 // agrigreen-accounts (manage-users, view-users, query-users; view-events cho lịch sử đăng nhập — W11.02). Bản HTTP ở
 // accounts.DirectoryFromEnv; bản trong bộ nhớ cho kiểm thử ở accounts.NewMemoryDirectory.
