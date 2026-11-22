@@ -4871,16 +4871,18 @@ paths:
                 password: {type: string, format: password, maxLength: 256}
                 otp: {type: string, pattern: "^[0-9]{6}$", description: "Mã OTP 6 số: TOTP khi tài khoản đã bật xác thực hai bước, hoặc mã trong email ở bước 2 của Admin (bắt buộc khi có challenge_id)"}
                 challenge_id: {type: string, format: uuid, description: "ADR-0061: id thử thách bước 1 trả về — chỉ gửi ở bước 2 của Admin"}
+                new_password: {type: string, maxLength: 256, description: "AH-269 (FN-01/AC-04): mật khẩu mới ở bước đổi mật khẩu lần đầu, gửi kèm mật khẩu tạm; tối thiểu 06 ký tự, khác mật khẩu tạm"}
+                confirm_password: {type: string, maxLength: 256, description: "AH-269: nhập lại mật khẩu mới"}
       responses:
         "200":
-          description: "authenticated (kèm token) | otp_required (bước 1 của Admin: đã gửi mã qua email, chưa có token)"
+          description: "authenticated (kèm token) | otp_required (bước 1 của Admin: đã gửi mã qua email, chưa có token) | password_change_required (AH-269: mật khẩu tạm đúng, cần đổi mật khẩu lần đầu, chưa có token)"
           content:
             application/json:
               schema:
                 type: object
                 required: [status]
                 properties:
-                  status: {type: string, enum: [authenticated, otp_required]}
+                  status: {type: string, enum: [authenticated, otp_required, password_change_required]}
                   access_token: {type: string}
                   refresh_token: {type: string}
                   expires_in: {type: integer, description: "authenticated: hạn access token (giây); otp_required: hạn mã OTP (giây)"}
@@ -4895,7 +4897,7 @@ paths:
           $ref: "#/components/responses/Problem"
         "403": {description: "accounts.account_locked (EX-03) | accounts.login_setup_required | accounts.login_otp_email_missing", $ref: "#/components/responses/Problem"}
         "410": {description: "accounts.login_otp_expired (mã OTP email hết hạn, đã dùng, đã hủy hoặc đã có mã mới)", $ref: "#/components/responses/Problem"}
-        "422": {description: "validation_failed (EX-01: thiếu identifier hoặc password; có challenge_id mà thiếu otp)", $ref: "#/components/responses/Problem"}
+        "422": {description: "validation_failed (EX-01: thiếu identifier hoặc password; có challenge_id mà thiếu otp; AH-269 EX-05: new_password dưới 06 ký tự hoặc trùng mật khẩu tạm, confirm_password không khớp)", $ref: "#/components/responses/Problem"}
         "423":
           description: "accounts.login_temporarily_locked: extension retry_after_minutes, header Retry-After (giây)"
           $ref: "#/components/responses/Problem"

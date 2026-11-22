@@ -92,9 +92,12 @@ func runLoginContract(t *testing.T, l port.PasswordLogin, d port.Directory, mem 
 	}
 
 	// Required action: chỉ báo sau khi mật khẩu đúng.
-	idC := mem.Seed(port.NewUser{Username: "tai-khoan-c", Email: "c@vi-du.vn", TenantID: tid, OrgRef: org,
-		RequiredActions: []string{port.ActionUpdatePassword}}, true)
+	idC := mem.Seed(port.NewUser{Username: "tai-khoan-c", Email: "c@vi-du.vn", TenantID: tid, OrgRef: org}, true)
 	if err := mem.SetPassword(ctx, idC, loginPassword); err != nil {
+		t.Fatal(err)
+	}
+	// Như Keycloak: mật khẩu cố định bỏ UPDATE_PASSWORD, nên gắn yêu cầu sau khi đặt mật khẩu.
+	if err := mem.AddRequiredActions(ctx, idC, []string{port.ActionUpdatePassword}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := l.PasswordGrant(ctx, "tai-khoan-c", loginPassword, ""); !errors.Is(err, port.ErrAccountNotSetUp) {

@@ -29,7 +29,9 @@ type Memory struct {
 	logout map[uuid.UUID]int
 	// passwords: băm SHA-256 của mật khẩu đã đặt bằng SetPassword (mô phỏng passwordHistory của realm).
 	passwords map[uuid.UUID][32]byte
-	failFor   map[string]error // tên thao tác → lỗi giả
+	// PasswordMinLen mô phỏng length(n) của chính sách realm; 0 = MinPasswordLen (realm KN). Realm HTX: 6 (FN-01/BR-03).
+	PasswordMinLen int
+	failFor        map[string]error // tên thao tác → lỗi giả
 	// sessions, events: phiên và sự kiện đăng nhập giả lập (RecordLogin, sessions.go).
 	sessions map[uuid.UUID][]port.Session
 	events   map[uuid.UUID][]port.LoginEvent
@@ -495,14 +497,21 @@ func (m *Memory) SetPassword(_ context.Context, id uuid.UUID, password string) e
 	if err := m.fail("SetPassword"); err != nil {
 		return err
 	}
-	if _, err := m.get(id); err != nil {
+	u, err := m.get(id)
+	if err != nil {
 		return err
 	}
+	minLen := m.PasswordMinLen
+	if minLen == 0 {
+		minLen = MinPasswordLen
+	}
 	sum := sha256.Sum256([]byte(password))
-	if prev, ok := m.passwords[id]; len([]rune(password)) < MinPasswordLen || (ok && prev == sum) {
+	if prev, ok := m.passwords[id]; len([]rune(password)) < minLen || (ok && prev == sum) {
 		return port.ErrPasswordPolicy
 	}
 	m.passwords[id] = sum
+	// Như Keycloak: đặt mật khẩu cố định (temporary=false) bỏ yêu cầu UPDATE_PASSWORD.
+	u.u.RequiredActions = slices.DeleteFunc(u.u.RequiredActions, func(a string) bool { return a == port.ActionUpdatePassword })
 	return nil
 }
 

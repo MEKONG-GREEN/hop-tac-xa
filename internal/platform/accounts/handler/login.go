@@ -35,6 +35,9 @@ type loginReq struct {
 	OTP        string `json:"otp" pii:"true"`
 	// ChallengeID: bước 2 của đăng nhập bằng OTP email (ADR-0061) — id thử thách bước 1 trả về.
 	ChallengeID string `json:"challenge_id"`
+	// NewPassword, ConfirmPassword: bước đổi mật khẩu lần đầu (FN-01/AC-04, AH-269) — gửi kèm mật khẩu tạm.
+	NewPassword     string `json:"new_password" pii:"true"`
+	ConfirmPassword string `json:"confirm_password" pii:"true"`
 }
 
 type refreshReq struct {
@@ -61,7 +64,7 @@ func (h Handler) login(c *gin.Context) {
 	if !bindJSON(c, &req) {
 		return
 	}
-	in := app.LoginInput{Identifier: req.Identifier, Password: req.Password, OTP: req.OTP}
+	in := app.LoginInput{Identifier: req.Identifier, Password: req.Password, OTP: req.OTP, NewPassword: req.NewPassword, ConfirmPassword: req.ConfirmPassword}
 	if req.ChallengeID != "" {
 		id, err := uuid.Parse(req.ChallengeID)
 		if err != nil {
@@ -86,6 +89,10 @@ func (h Handler) login(c *gin.Context) {
 			"status": res.Status, "challenge_id": res.OTP.ChallengeID, "email_hint": res.OTP.EmailHint,
 			"expires_in": res.OTP.ExpiresIn, "resend_after": res.OTP.ResendAfter,
 		})
+		return
+	}
+	if res.Status == app.LoginPasswordChangeRequired {
+		c.JSON(http.StatusOK, gin.H{"status": res.Status})
 		return
 	}
 	c.JSON(http.StatusOK, tokenBody(res.Status, res.Tokens))

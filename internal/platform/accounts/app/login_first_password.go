@@ -1,0 +1,92 @@
+package app
+
+// AH-269 (FN-01/AC-04, BR-03, EX-05; QTPQ-Q-05..Q-07): tài khoản realm HTX vừa được cấp mật khẩu tạm phải đổi mật
+// khẩu ngay ở màn đăng nhập của ứng dụng, trước khi có token.
+//   - Bước 1: đăng nhập bằng mật khẩu tạm → Keycloak chỉ báo "chưa hoàn tất thiết lập" SAU khi mật khẩu đúng →
+//     trả status password_change_required, không có token.
+//   - Bước 2: gửi lại mật khẩu tạm kèm mật khẩu mới và nhập lại. Máy chủ kiểm mật khẩu tạm lại bằng đúng một lần
+//     gọi Keycloak (cùng bộ đếm sai, cùng khóa tạm), đặt mật khẩu cố định (Keycloak bỏ UPDATE_PASSWORD), rồi đăng
+//     nhập bằng mật khẩu mới để vào thẳng trang chủ. Admin (OTP email) tiếp tục bước OTP như đăng nhập thường.
+//   - Không lưu, không băm, không ghi log mật khẩu; chỉ so sánh trong bộ nhớ của request.
+
+import (
+	"context"
+	"errors"
+	"unicode/utf8"
+
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/domain"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/port"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/problem"
+)
+
+// LoginPasswordChangeRequired: mật khẩu tạm đúng, cần đổi mật khẩu lần đầu (không có token).
+const LoginPasswordChangeRequired = "password_change_required"
+
+// Câu thông báo tại trường của bước đổi mật khẩu lần đầu (FN-01/EX-05, AC-N1, AC-N2).
+const (
+	MinFirstPasswordLen     = 6
+	MsgFirstPasswordShort   = "Mật khẩu tối thiểu 06 ký tự"
+	MsgFirstPasswordConfirm = "Mật khẩu nhập lại không khớp"
+	MsgFirstPasswordSame    = "Mật khẩu mới phải khác mật khẩu tạm"
+	MsgFirstPasswordPolicy  = "Mật khẩu mới không hợp lệ: không trùng tên đăng nhập hoặc mật khẩu đã dùng gần đây"
+)
+
+// firstPasswordOnly: chỉ realm HTX, và chỉ khi việc còn thiếu duy nhất là đổi mật khẩu tạm. Còn việc khác (vd đăng ký
+// TOTP) thì giữ lỗi cần hoàn tất thiết lập như trước.
+func (s *Service) firstPasswordOnly(u port.User) bool {
+	return len(s.NativeHTXKey) > 0 && len(u.RequiredActions) == 1 && u.RequiredActions[0] == port.ActionUpdatePassword
+}
+
+func validateFirstPassword(in LoginInput) error {
+	p := problem.Validation
+	bad := false
+	switch n := utf8.RuneCountInString(in.NewPassword); {
+	case n < MinFirstPasswordLen:
+		p, bad = p.WithField("new_password", MsgFirstPasswordShort), true
+	case len(in.NewPassword) > domain.MaxLoginPasswordLen:
+		p, bad = p.WithField("new_password", "Mật khẩu quá dài"), true
+	case in.NewPassword == in.Password:
+		p, bad = p.WithField("new_password", MsgFirstPasswordSame), true
+	}
+	if in.ConfirmPassword != in.NewPassword {
+		p, bad = p.WithField("confirm_password", MsgFirstPasswordConfirm), true
+	}
+	if bad {
+		return p
+	}
+	return nil
+}
+
+// firstPassword chạy khi mật khẩu tạm vừa được Keycloak xác nhận đúng (ErrAccountNotSetUp).
+func (s *Service) firstPassword(ctx context.Context, u port.User, in LoginInput) (LoginResult, string, error) {
+	if in.NewPassword == "" && in.ConfirmPassword == "" {
+		return LoginResult{Status: LoginPasswordChangeRequired}, LoginPasswordChangeRequired, nil
+	}
+	if err := validateFirstPassword(in); err != nil {
+		return LoginResult{}, "first_password_invalid", err
+	}
+	setter, ok := s.Dir.(port.PasswordSetter)
+	if !ok {
+		return LoginResult{}, "dependency_error", ErrDependency.WithDetail("Kho tài khoản không hỗ trợ đổi mật khẩu")
+	}
+	// Mật khẩu cố định: Keycloak bỏ yêu cầu UPDATE_PASSWORD; chính sách realm (độ dài, lịch sử) kiểm ở IAM.
+	if err := setter.SetPassword(ctx, u.ID, in.NewPassword); err != nil {
+		if errors.Is(err, port.ErrPasswordPolicy) {
+			return LoginResult{}, "first_password_policy", problem.Validation.WithField("new_password", MsgFirstPasswordPolicy)
+		}
+		return LoginResult{}, "dependency_error", dirErr(err)
+	}
+	ts, err := s.PwLogin.PasswordGrant(ctx, u.Username, in.NewPassword, "")
+	if err != nil {
+		return LoginResult{}, "dependency_error", dirErr(err)
+	}
+	if port.NeedsLoginEmailOTP(ts.Roles) {
+		// Admin: bước OTP email như đăng nhập thường; bước 2 dùng mật khẩu mới.
+		return s.loginEmailOTP(ctx, u, LoginInput{Identifier: in.Identifier, Password: in.NewPassword}, ts)
+	}
+	if s.missingSecondFactor(ts) {
+		s.endSession(ctx, ts.RefreshToken)
+		return LoginResult{}, "setup_required", ErrLoginSetupRequired
+	}
+	return LoginResult{Status: LoginAuthenticated, Tokens: ts}, "first_password_changed", nil
+}

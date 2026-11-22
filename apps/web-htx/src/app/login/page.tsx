@@ -12,6 +12,7 @@ import { BrandMark } from "@/shell/BrandMark";
 import { BRAND } from "@/shell/brand";
 import { LoginCard, type LoginError, type LoginSubmit } from "@/shell/LoginCard";
 import { LoginOtpForm, OTP_MESSAGES, type OtpStep } from "@/shell/LoginOtpForm";
+import { FirstPasswordForm } from "@/shell/FirstPasswordForm";
 import { menuAllows } from "@/shell/menu";
 import { purgeLegacyIdentifier, rememberIdentifier, useRememberedIdentifier } from "@/lib/rememberLogin";
 
@@ -90,6 +91,10 @@ function LoginInner() {
   const [otpStep, setOtpStep] = useState<OtpStep | null>(null);
   const [otpError, setOtpError] = useState<string | null>(null);
   const [lastIdentifier, setLastIdentifier] = useState<string | null>(null);
+  // AH-269: bước đổi mật khẩu lần đầu — mật khẩu tạm chỉ giữ trong bộ nhớ trang tới khi đổi xong hoặc quay lại.
+  const [firstPw, setFirstPw] = useState<{ identifier: string; password: string; seq: number } | null>(null);
+  const [firstPwFields, setFirstPwFields] = useState<Record<string, string>>({});
+  const [firstPwError, setFirstPwError] = useState<string | null>(null);
 
   useEffect(() => {
     if (status !== "authenticated" || !principal) return;
@@ -134,7 +139,11 @@ function LoginInner() {
       // Thành công: điều hướng do useEffect ở trên đảm nhiệm khi phiên đã thiết lập.
       if (r.kind === "authenticated") return;
       if (r.kind === "otp_required") showOtp(r, v.identifier, v.password);
-      else setError(toLoginError(r));
+      else if (r.kind === "password_change_required") {
+        setFirstPwFields({});
+        setFirstPwError(null);
+        setFirstPw((s) => ({ identifier: v.identifier, password: v.password, seq: (s?.seq ?? 0) + 1 }));
+      } else setError(toLoginError(r));
     } catch {
       setError({ kind: "message", text: NETWORK_ERROR });
     }
@@ -186,6 +195,39 @@ function LoginInner() {
     setBusy(false);
   };
 
+  const cancelFirstPassword = (err: LoginError | null = null) => {
+    if (firstPw) setLastIdentifier(firstPw.identifier);
+    setFirstPw(null);
+    setFirstPwFields({});
+    setFirstPwError(null);
+    setError(err);
+  };
+
+  const changeFirstPassword = async (newPassword: string, confirmPassword: string) => {
+    const p = firstPw;
+    if (!p) return;
+    setBusy(true);
+    setFirstPwFields({});
+    setFirstPwError(null);
+    try {
+      const r = await signIn(p.identifier, p.password, undefined, undefined, { newPassword, confirmPassword });
+      if (r.kind === "authenticated") {
+        setFirstPw(null);
+        return;
+      }
+      if (r.kind === "password_invalid") setFirstPwFields(r.fields);
+      else if (r.kind === "otp_required") {
+        // Admin: mật khẩu đã đổi; bước OTP email dùng mật khẩu mới.
+        setFirstPw(null);
+        showOtp(r, p.identifier, newPassword);
+      } else if (r.kind === "network" || r.kind === "unavailable" || r.kind === "rate_limited") setFirstPwError(messageFor(r));
+      else cancelFirstPassword(toLoginError(r));
+    } catch {
+      setFirstPwError(NETWORK_ERROR);
+    }
+    setBusy(false);
+  };
+
   // Việc lần đầu (đổi mật khẩu tạm, đăng ký OTP) hoàn tất ở trang xác thực của Keycloak cho tới khi có AH-269.
   const finishSetup = (identifier: string) => {
     setBusy(true);
@@ -214,7 +256,17 @@ function LoginInner() {
           </p>
         </section>
         <section className="login-side">
-          {otpStep ? (
+          {firstPw ? (
+            <FirstPasswordForm
+              key={firstPw.seq}
+              temporaryPassword={firstPw.password}
+              busy={busy || status === "loading"}
+              fieldErrors={firstPwFields}
+              error={firstPwError}
+              onSubmit={(n, c) => void changeFirstPassword(n, c)}
+              onCancel={() => cancelFirstPassword()}
+            />
+          ) : otpStep ? (
             <LoginOtpForm
               key={otpStep.seq}
               step={otpStep}
