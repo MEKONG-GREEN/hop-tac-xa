@@ -497,8 +497,7 @@ func (m *Memory) SetPassword(_ context.Context, id uuid.UUID, password string) e
 	if err := m.fail("SetPassword"); err != nil {
 		return err
 	}
-	u, err := m.get(id)
-	if err != nil {
+	if _, err := m.get(id); err != nil {
 		return err
 	}
 	minLen := m.PasswordMinLen
@@ -510,8 +509,21 @@ func (m *Memory) SetPassword(_ context.Context, id uuid.UUID, password string) e
 		return port.ErrPasswordPolicy
 	}
 	m.passwords[id] = sum
-	// Như Keycloak: đặt mật khẩu cố định (temporary=false) bỏ yêu cầu UPDATE_PASSWORD.
-	u.u.RequiredActions = slices.DeleteFunc(u.u.RequiredActions, func(a string) bool { return a == port.ActionUpdatePassword })
+	return nil
+}
+
+// RemoveRequiredActions thực hiện port.RequiredActionRemover.
+func (m *Memory) RemoveRequiredActions(_ context.Context, id uuid.UUID, actions []string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.fail("RemoveRequiredActions"); err != nil {
+		return err
+	}
+	u, err := m.get(id)
+	if err != nil {
+		return err
+	}
+	u.u.RequiredActions = slices.DeleteFunc(u.u.RequiredActions, func(a string) bool { return slices.Contains(actions, a) })
 	return nil
 }
 

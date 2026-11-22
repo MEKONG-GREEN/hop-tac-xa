@@ -492,6 +492,27 @@ func (c *Client) AddRequiredActions(ctx context.Context, id uuid.UUID, actions [
 	})
 }
 
+// RemoveRequiredActions thực hiện port.RequiredActionRemover (AH-269: bỏ UPDATE_PASSWORD sau khi người dùng tự đặt
+// mật khẩu ở bước đổi mật khẩu lần đầu).
+func (c *Client) RemoveRequiredActions(ctx context.Context, id uuid.UUID, actions []string) error {
+	return c.update(ctx, id, "bỏ required action", func(m map[string]any) {
+		var cur []string
+		if list, ok := m["requiredActions"].([]any); ok {
+			for _, a := range list {
+				if s, ok := a.(string); ok && !slices.Contains(actions, s) {
+					cur = append(cur, s)
+				}
+			}
+		}
+		if cur == nil {
+			cur = []string{}
+		}
+		m["requiredActions"] = cur
+	})
+}
+
+var _ port.RequiredActionRemover = (*Client)(nil)
+
 // ---------------------------------------------------------------------------
 // Vai realm
 // ---------------------------------------------------------------------------

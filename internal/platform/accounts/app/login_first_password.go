@@ -25,10 +25,10 @@ const LoginPasswordChangeRequired = "password_change_required"
 // Câu thông báo tại trường của bước đổi mật khẩu lần đầu (FN-01/EX-05, AC-N1, AC-N2).
 const (
 	MinFirstPasswordLen     = 6
-	MsgFirstPasswordShort   = "Mật khẩu tối thiểu 06 ký tự"
-	MsgFirstPasswordConfirm = "Mật khẩu nhập lại không khớp"
-	MsgFirstPasswordSame    = "Mật khẩu mới phải khác mật khẩu tạm"
-	MsgFirstPasswordPolicy  = "Mật khẩu mới không hợp lệ: không trùng tên đăng nhập hoặc mật khẩu đã dùng gần đây"
+	MsgFirstLoginTooShort   = "Mật khẩu tối thiểu 06 ký tự"
+	MsgFirstLoginMismatch   = "Mật khẩu nhập lại không khớp"
+	MsgFirstLoginSameAsTemp = "Mật khẩu mới phải khác mật khẩu tạm"
+	MsgFirstLoginPolicy     = "Mật khẩu mới không hợp lệ: không trùng tên đăng nhập hoặc mật khẩu đã dùng gần đây"
 )
 
 // firstPasswordOnly: chỉ realm HTX, và chỉ khi việc còn thiếu duy nhất là đổi mật khẩu tạm. Còn việc khác (vd đăng ký
@@ -42,14 +42,14 @@ func validateFirstPassword(in LoginInput) error {
 	bad := false
 	switch n := utf8.RuneCountInString(in.NewPassword); {
 	case n < MinFirstPasswordLen:
-		p, bad = p.WithField("new_password", MsgFirstPasswordShort), true
+		p, bad = p.WithField("new_password", MsgFirstLoginTooShort), true
 	case len(in.NewPassword) > domain.MaxLoginPasswordLen:
 		p, bad = p.WithField("new_password", "Mật khẩu quá dài"), true
 	case in.NewPassword == in.Password:
-		p, bad = p.WithField("new_password", MsgFirstPasswordSame), true
+		p, bad = p.WithField("new_password", MsgFirstLoginSameAsTemp), true
 	}
 	if in.ConfirmPassword != in.NewPassword {
-		p, bad = p.WithField("confirm_password", MsgFirstPasswordConfirm), true
+		p, bad = p.WithField("confirm_password", MsgFirstLoginMismatch), true
 	}
 	if bad {
 		return p
@@ -66,14 +66,18 @@ func (s *Service) firstPassword(ctx context.Context, u port.User, in LoginInput)
 		return LoginResult{}, "first_password_invalid", err
 	}
 	setter, ok := s.Dir.(port.PasswordSetter)
-	if !ok {
+	remover, ok2 := s.Dir.(port.RequiredActionRemover)
+	if !ok || !ok2 {
 		return LoginResult{}, "dependency_error", ErrDependency.WithDetail("Kho tài khoản không hỗ trợ đổi mật khẩu")
 	}
-	// Mật khẩu cố định: Keycloak bỏ yêu cầu UPDATE_PASSWORD; chính sách realm (độ dài, lịch sử) kiểm ở IAM.
+	// Mật khẩu cố định; chính sách realm (độ dài, lịch sử) kiểm ở IAM. Sau đó bỏ yêu cầu UPDATE_PASSWORD.
 	if err := setter.SetPassword(ctx, u.ID, in.NewPassword); err != nil {
 		if errors.Is(err, port.ErrPasswordPolicy) {
-			return LoginResult{}, "first_password_policy", problem.Validation.WithField("new_password", MsgFirstPasswordPolicy)
+			return LoginResult{}, "first_password_policy", problem.Validation.WithField("new_password", MsgFirstLoginPolicy)
 		}
+		return LoginResult{}, "dependency_error", dirErr(err)
+	}
+	if err := remover.RemoveRequiredActions(ctx, u.ID, []string{port.ActionUpdatePassword}); err != nil {
 		return LoginResult{}, "dependency_error", dirErr(err)
 	}
 	ts, err := s.PwLogin.PasswordGrant(ctx, u.Username, in.NewPassword, "")
