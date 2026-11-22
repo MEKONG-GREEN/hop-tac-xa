@@ -229,7 +229,7 @@ class HomeScreen extends ConsumerWidget {
                   1 &&
               ref.read(appControllerProvider).services!.workingRole.enabled)
             IconButton(
-              tooltip: 'Đổi vai trò',
+              tooltip: 'Đổi vai trò, HTX làm việc',
               icon: const Icon(Icons.switch_account),
               onPressed: () async {
                 final confirmed = await showDialog<bool>(

@@ -49,6 +49,9 @@ void main() {
       await loginAndSetPin(tester, env);
       expect(find.byType(WorkingRoleScreen), findsOneWidget);
       expect(find.byType(HomeScreen), findsNothing);
+      // AH-270 AC-06: hai thẻ ghi tên HTX làm việc.
+      expect(find.text('Chọn vai trò và HTX làm việc'), findsOneWidget);
+      expect(find.text('HTX Tân Phú'), findsNWidgets(2));
       await tester.tap(find.text('Thành viên HTX'));
       await settle(tester, 40);
       expect(find.text('AgriGreen HTX · Thành viên HTX'), findsOneWidget);
@@ -62,12 +65,12 @@ void main() {
             .selected,
         'htx_member',
       );
-      await tester.tap(find.byTooltip('Đổi vai trò'));
+      await tester.tap(find.byTooltip('Đổi vai trò, HTX làm việc'));
       await settle(tester);
       await tester.tap(find.text('Hủy'));
       await settle(tester);
       expect(find.byType(HomeScreen), findsOneWidget);
-      await tester.tap(find.byTooltip('Đổi vai trò'));
+      await tester.tap(find.byTooltip('Đổi vai trò, HTX làm việc'));
       await settle(tester);
       await tester.tap(find.text('Tiếp tục'));
       await settle(tester);
