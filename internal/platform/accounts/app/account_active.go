@@ -8,7 +8,12 @@ package app
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/MEKONG-GREEN/hop-tac-xa/contracts/htxroles"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/domain"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/store"
 
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/authz"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/problem"
@@ -27,16 +32,22 @@ func (s *Service) RequireActiveAccount(ctx context.Context) error {
 	if s.DB == nil {
 		return ErrDependency
 	}
-	var enabled bool
+	var acc *domain.Account
 	if err := tenant.WithTenantTxOptions(ctx, s.DB, p.TenantID, pgx.TxOptions{AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
 		var e error
-		enabled, e = accountEnabled(ctx, tx, p.ActorRef)
+		acc, e = store.Account(ctx, tx, p.ActorRef, false)
 		return e
 	}); err != nil {
 		return ErrDependency.WithCause(err)
 	}
-	if !enabled {
+	if acc != nil && !acc.Enabled {
 		return accountLockedEX03()
+	}
+	// AH-276 (QTPQ-Q-22, AC-N2): Admin đổi HTX của tài khoản realm HTX → token còn mang HTX cũ bị từ chối ở thao tác
+	// kế tiếp, người dùng đăng nhập lại và chỉ thấy HTX mới. Chỉ áp cho Đại diện/Thành viên HTX của realm HTX.
+	if acc != nil && len(s.NativeHTXKey) > 0 && acc.OrgRef != uuid.Nil && p.OrgRef != acc.OrgRef && p.KN == nil &&
+		p.SelectedSession == nil && !p.Has(htxroles.Admin) && (p.Has(htxroles.Representative) || p.Has(htxroles.Member)) {
+		return problem.Unauthenticated.WithDetail("HTX của tài khoản đã thay đổi. Vui lòng đăng nhập lại.")
 	}
 	return nil
 }

@@ -4687,6 +4687,160 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/accounts/htx-users/{id}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sửa tài khoản FN-07 (Admin, realm HTX)
+         * @description AH-276: sửa họ tên, SĐT, email, HTX; tên đăng nhập và vai chính không sửa được (FN-07/AC-06, BR-03).
+         *     also_member chỉ áp cho Đại diện HTX (kiêm Thành viên HTX, QTPQ-Q-23), vắng = giữ nguyên. Đổi HTX: cả hai vai
+         *     cùng chuyển, mọi phiên đang mở bị thu hồi (QTPQ-Q-21, Q-22). Không tự đổi HTX hoặc vai của chính mình.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        full_name: string;
+                        phone: string;
+                        /** @description Bắt buộc với Admin để nhận OTP email */
+                        email?: string;
+                        /** Format: uuid */
+                        cooperative_ref?: string | null;
+                        /** @description Chỉ với Đại diện HTX; vắng = giữ nguyên */
+                        also_member?: boolean;
+                    };
+                };
+            };
+            responses: {
+                /** @description Tài khoản sau khi sửa (replayed = true khi phát lại cùng khóa); Cache-Control no-store */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NativeHTXAccountChanged"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/accounts/htx-users/{id}/lock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Khóa tài khoản FN-07 (Admin)
+         * @description AH-276, FN-07/AC-07, BR-06, BR-07 — đăng nhập bị chặn, mọi phiên bị thu hồi, dữ liệu giữ nguyên; không tự khóa chính mình.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Đã khóa */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NativeHTXAccountChanged"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/accounts/htx-users/{id}/unlock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mở khóa tài khoản FN-07 (Admin)
+         * @description AH-276, FN-07/AC-07 — đăng nhập lại được; không tự mở khóa chính mình.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Đã mở khóa */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NativeHTXAccountChanged"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/masterdata/catalogs/{catalog}/items/{code}/delete": {
         parameters: {
             query?: never;
@@ -7231,6 +7385,10 @@ export interface components {
             user: components["schemas"]["AccountsUser"];
             /** @description Chỉ phản hồi đầu tiên; không ghi log hoặc lưu cache */
             temporary_password: string | null;
+        };
+        NativeHTXAccountChanged: {
+            user: components["schemas"]["AccountsUser"];
+            replayed: boolean;
         };
         CatalogDeleteResult: {
             /** @enum {string} */

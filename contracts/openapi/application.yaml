@@ -586,6 +586,7 @@ paths:
         - {name: admin_unit, in: query, description: "G-03: mã tỉnh hoặc xã hiện hành — chỉ HTX thuộc đơn vị này (và con cháu) giao với phạm vi người gọi; mã không có hiệu lực → 422 validation_failed (trường admin_unit)", schema: {type: string}}
         - {name: include_inactive, in: query, schema: {type: boolean, default: false}}
         - {name: confirmation, in: query, description: "D2: lọc theo trạng thái xác nhận; vắng = mọi HTX (gồm HTX tạm Chưa xác nhận)", schema: {$ref: "#/components/schemas/HTXConfirmationStatus"}}
+        - {name: relation, in: query, description: "FN-03/AC-01 (phạm vi theo HTX): own = HTX của tôi, shared = HTX được chia sẻ (chỉ xem); vắng = tất cả, HTX của người gọi đứng đầu trang đầu. Giá trị khác → 422 (trường relation)", schema: {type: string, enum: [own, shared]}}
         - {name: cursor, in: query, schema: {type: string}}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
       responses:
@@ -4871,16 +4872,18 @@ paths:
                 password: {type: string, format: password, maxLength: 256}
                 otp: {type: string, pattern: "^[0-9]{6}$", description: "Mã OTP 6 số: TOTP khi tài khoản đã bật xác thực hai bước, hoặc mã trong email ở bước 2 của Admin (bắt buộc khi có challenge_id)"}
                 challenge_id: {type: string, format: uuid, description: "ADR-0061: id thử thách bước 1 trả về — chỉ gửi ở bước 2 của Admin"}
+                new_password: {type: string, maxLength: 256, description: "AH-269 (FN-01/AC-04): mật khẩu mới ở bước đổi mật khẩu lần đầu, gửi kèm mật khẩu tạm; tối thiểu 06 ký tự, khác mật khẩu tạm"}
+                confirm_password: {type: string, maxLength: 256, description: "AH-269: nhập lại mật khẩu mới"}
       responses:
         "200":
-          description: "authenticated (kèm token) | otp_required (bước 1 của Admin: đã gửi mã qua email, chưa có token)"
+          description: "authenticated (kèm token) | otp_required (bước 1 của Admin: đã gửi mã qua email, chưa có token) | password_change_required (AH-269: mật khẩu tạm đúng, cần đổi mật khẩu lần đầu, chưa có token)"
           content:
             application/json:
               schema:
                 type: object
                 required: [status]
                 properties:
-                  status: {type: string, enum: [authenticated, otp_required]}
+                  status: {type: string, enum: [authenticated, otp_required, password_change_required]}
                   access_token: {type: string}
                   refresh_token: {type: string}
                   expires_in: {type: integer, description: "authenticated: hạn access token (giây); otp_required: hạn mã OTP (giây)"}
@@ -4895,7 +4898,7 @@ paths:
           $ref: "#/components/responses/Problem"
         "403": {description: "accounts.account_locked (EX-03) | accounts.login_setup_required | accounts.login_otp_email_missing", $ref: "#/components/responses/Problem"}
         "410": {description: "accounts.login_otp_expired (mã OTP email hết hạn, đã dùng, đã hủy hoặc đã có mã mới)", $ref: "#/components/responses/Problem"}
-        "422": {description: "validation_failed (EX-01: thiếu identifier hoặc password; có challenge_id mà thiếu otp)", $ref: "#/components/responses/Problem"}
+        "422": {description: "validation_failed (EX-01: thiếu identifier hoặc password; có challenge_id mà thiếu otp; AH-269 EX-05: new_password dưới 06 ký tự hoặc trùng mật khẩu tạm, confirm_password không khớp)", $ref: "#/components/responses/Problem"}
         "423":
           description: "accounts.login_temporarily_locked: extension retry_after_minutes, header Retry-After (giây)"
           $ref: "#/components/responses/Problem"
@@ -5039,6 +5042,44 @@ paths:
                   items: {type: array, items: {$ref: "#/components/schemas/ReportTemplate"}}
         "401": {$ref: "#/components/responses/Problem"}
         "403": {$ref: "#/components/responses/Problem"}
+  /v1/public/auth/password-otp:
+    post:
+      summary: "FN-10 Quên mật khẩu: gửi mã OTP qua SMS tới số điện thoại của tài khoản — KHÔNG Idempotency-Key"
+      description: >-
+        AH-280, ADR-0063 (realm HTX). Mã 06 chữ số, dùng một lần, hiệu lực 05 phút; gửi lại sau 60 giây (trong 60 giây trả lại
+        thử thách cũ, không gửi tin mới); tối đa 05 mã / tài khoản / 24 giờ. Chỉ gửi tới số đã lưu trong IAM. Phản hồi không
+        bao giờ chứa mã. Giới hạn theo IP như đăng nhập. Cache-Control no-store.
+      operationId: requestPasswordOTP
+      tags: [accounts]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [identifier]
+              properties:
+                identifier: {type: string, maxLength: 254, description: "Tên đăng nhập hoặc số điện thoại"}
+      responses:
+        "200":
+          description: Đã gửi (hoặc còn trong thời gian chờ gửi lại)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, challenge_id, phone_hint, expires_in, resend_after]
+                properties:
+                  status: {type: string, enum: [otp_sent]}
+                  challenge_id: {type: string, format: uuid}
+                  phone_hint: {type: string, description: "SĐT đã che 4 đầu / 3 cuối, vd 0913***222"}
+                  expires_in: {type: integer, description: Giây}
+                  resend_after: {type: integer, description: Giây}
+        "403": {description: "accounts.password_otp_blocked (EX-02: tài khoản đã khóa hoặc chưa có số điện thoại)", $ref: "#/components/responses/Problem"}
+        "404": {description: "accounts.password_otp_account_not_found (EX-01)", $ref: "#/components/responses/Problem"}
+        "422": {description: "validation_failed (thiếu identifier)", $ref: "#/components/responses/Problem"}
+        "429": {description: "accounts.password_otp_daily_limit (EX-05) | giới hạn theo IP", $ref: "#/components/responses/Problem"}
+        "503": {description: "accounts.password_otp_unavailable (kênh SMS tắt hoặc gửi lỗi — liên hệ người cấp tài khoản) | accounts.login_unavailable", $ref: "#/components/responses/Problem"}
   /v1/reports/exports:
     get:
       summary: Lịch sử xuất của CHÍNH người gọi (kể cả việc của lịch gửi họ sở hữu), mới nhất trước
@@ -5104,6 +5145,45 @@ paths:
         "422": {$ref: "#/components/responses/Problem"}
         "429": {$ref: "#/components/responses/Problem"}
         "503": {$ref: "#/components/responses/Problem"}
+  /v1/public/auth/password-otp/reset:
+    post:
+      summary: "FN-10 Quên mật khẩu: đặt mật khẩu mới bằng mã OTP — KHÔNG Idempotency-Key"
+      description: >-
+        AH-280. Sai mã → 401 kèm remaining_attempts; sai 05 lần → mã bị hủy (410); quá 05 phút → 410. Mật khẩu mới tối thiểu
+        06 ký tự, nhập lại phải khớp. Đúng → mật khẩu mới có hiệu lực, không phải đổi mật khẩu lần đầu, phiên cũ bị thu hồi.
+        Cache-Control no-store.
+      operationId: resetPasswordWithOTP
+      tags: [accounts]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [identifier, challenge_id, otp, new_password, confirm_password]
+              properties:
+                identifier: {type: string, maxLength: 254}
+                challenge_id: {type: string, format: uuid}
+                otp: {type: string, pattern: "^[0-9]{6}$"}
+                new_password: {type: string, maxLength: 256}
+                confirm_password: {type: string, maxLength: 256}
+      responses:
+        "200":
+          description: Đã đặt mật khẩu mới
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: {type: string, enum: [password_reset]}
+        "401": {description: "accounts.password_otp_invalid (EX-03, kèm remaining_attempts)", $ref: "#/components/responses/Problem"}
+        "403": {description: "accounts.password_otp_blocked", $ref: "#/components/responses/Problem"}
+        "404": {description: "accounts.password_otp_account_not_found", $ref: "#/components/responses/Problem"}
+        "410": {description: "accounts.password_otp_expired (EX-04, hoặc đã hủy sau 05 lần sai)", $ref: "#/components/responses/Problem"}
+        "422": {description: "validation_failed (EX-06: otp, new_password, confirm_password)", $ref: "#/components/responses/Problem"}
+        "503": {description: "accounts.login_unavailable | accounts.dependency_unavailable", $ref: "#/components/responses/Problem"}
   /v1/reports/exports/{id}:
     get:
       summary: Trạng thái việc xuất (người yêu cầu, hoặc người có phạm vi bao trọn)
@@ -17240,6 +17320,120 @@ paths:
             application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: {schema: {type: string, format: binary}}
         "403": {description: forbidden, $ref: "#/components/responses/Problem"}
         "404": {description: masterdata.catalog_not_found, $ref: "#/components/responses/Problem"}
+  /v1/htx-accounts:
+    get:
+      summary: FN-08 Tài khoản của HTX mình (Đại diện HTX)
+      description: AH-277. Thành viên HTX của HTX người gọi và dòng của chính người gọi (FN-08/AC-01, BR-01). Không có Admin, Đại diện HTX khác. Cache-Control no-store.
+      responses:
+        '200':
+          description: Danh sách đầy đủ cho bộ lọc, số đếm và phân trang UX-01
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/HTXAccount'}}
+        '403': {$ref: '#/components/responses/Problem'}
+    post:
+      summary: FN-08 Đại diện HTX tạo tài khoản Thành viên HTX của HTX mình
+      description: AH-277. roles phải đúng [htx_member] và cooperative_ref là HTX của người gọi; khác → 403 (AC-N1). Mật khẩu tạm 8 ký tự chỉ trả một lần, bắt đổi lần đầu; phát lại không trả mật khẩu.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [username, full_name, phone, cooperative_ref, roles]
+              properties:
+                username: {type: string, minLength: 3, maxLength: 64}
+                full_name: {type: string, minLength: 1, maxLength: 100}
+                phone: {type: string, pattern: '^0[0-9]{9}$'}
+                email: {type: string}
+                cooperative_ref: {type: string, format: uuid}
+                roles: {type: array, minItems: 1, maxItems: 1, items: {type: string, enum: [htx_member]}}
+      responses:
+        '201':
+          description: Đã tạo, mật khẩu chỉ trong phản hồi này
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HTXAccountCreated'}
+        '200':
+          description: Phát lại, mật khẩu null
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HTXAccountCreated'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+  /v1/htx-accounts/{id}/revisions:
+    post:
+      summary: FN-08 Sửa tài khoản Thành viên HTX, hoặc bật/tắt kiêm Thành viên HTX cho chính mình
+      description: |
+        AH-277. Tài khoản Thành viên HTX của HTX mình: sửa họ tên, SĐT, email; không đổi HTX, không cấp vai kiêm. Tài khoản
+        của chính người gọi: chỉ also_member có hiệu lực (FN-08/AC-06, QTPQ-Q-28), có hiệu lực từ lần đăng nhập kế tiếp.
+        Tài khoản ngoài phạm vi → 404 (AC-04).
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [full_name, phone]
+              properties:
+                full_name: {type: string, minLength: 1, maxLength: 100}
+                phone: {type: string, pattern: '^0[0-9]{9}$'}
+                email: {type: string}
+                cooperative_ref: {type: [string, 'null'], format: uuid}
+                also_member: {type: boolean}
+      responses:
+        '200':
+          description: Tài khoản sau khi sửa
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HTXAccountChanged'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+  /v1/htx-accounts/{id}/lock:
+    post:
+      summary: FN-08 Khóa tài khoản Thành viên HTX của HTX mình
+      description: AH-277, FN-08/AC-05. Không tự khóa chính mình (FN-07/BR-07); ngoài phạm vi → 404.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Đã khóa
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HTXAccountChanged'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+  /v1/htx-accounts/{id}/unlock:
+    post:
+      summary: FN-08 Mở khóa tài khoản Thành viên HTX của HTX mình
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Đã mở khóa
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HTXAccountChanged'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
   /v1/htx-sharing:
     get:
       summary: Yêu cầu chia sẻ gửi đến và đã gửi của Đại diện HTX
@@ -17316,6 +17510,26 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/NativeSharing'}
+  /v1/cooperatives/{ref}/htx-sharing:
+    get:
+      summary: Tab "Liên kết chia sẻ dữ liệu" của một HTX, chỉ đọc
+      description: |
+        FN-03, QTPQ-Q-55: Đại diện HTX chỉ trên HTX của mình (HTX khác, kể cả HTX được chia sẻ → 404); Admin trên mọi
+        HTX của tenant ở chế độ chỉ xem (không thao tác, FN-09/BR-03). Thành viên HTX → 403.
+      parameters:
+        - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Yêu cầu chia sẻ HTX này gửi đi và nhận được
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/NativeSharing'}}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
   /v1/extension/cnts/weekly-plan/schedule:
     post:
       summary: "Kế hoạch tuần BM-05 Phần II đã đăng ký → gửi duyệt Lịch công tác tuần của người gọi (BF-CN-WEEKLY, PRD UP-06). Mục sinh từ kế hoạch có mã ổn định theo xã và ngày — chỉ thay mục của kế hoạch xã này; mục của kế hoạch xã khác và mục tự thêm ở Lịch công tác giữ nguyên (trùng giờ chỉ cảnh báo, xem schedule.conflict_count)"
@@ -28872,6 +29086,37 @@ components:
         submission_id: {type: string, format: uuid}
         attempt: {type: integer, format: int64, minimum: 1}
         submitted_at: {type: string, format: date-time}
+    HTXAccount:
+      type: object
+      description: Tài khoản realm HTX trong phạm vi Đại diện HTX — PII chỉ hiển thị, không lưu ở pf, không ghi log
+      required: [id, username, email, first_name, last_name, phone, enabled, email_verified, org_ref, roles, lock_cause, required_actions, created_at, tracked]
+      properties:
+        id: {type: string, format: uuid}
+        username: {type: string}
+        email: {type: string}
+        first_name: {type: string}
+        last_name: {type: string}
+        phone: {type: [string, 'null']}
+        enabled: {type: boolean}
+        email_verified: {type: boolean}
+        org_ref: {type: [string, 'null'], format: uuid}
+        roles: {type: [array, 'null'], items: {type: string}}
+        lock_cause: {type: [string, 'null'], enum: [manual, org_deactivated, dormant_45d, null]}
+        required_actions: {type: array, items: {type: string}}
+        created_at: {type: [string, 'null'], format: date-time}
+        tracked: {type: boolean}
+    HTXAccountCreated:
+      type: object
+      required: [user, temporary_password]
+      properties:
+        user: {$ref: '#/components/schemas/HTXAccount'}
+        temporary_password: {type: [string, 'null'], description: Chỉ phản hồi đầu tiên; không ghi log hoặc lưu cache}
+    HTXAccountChanged:
+      type: object
+      required: [user, replayed]
+      properties:
+        user: {$ref: '#/components/schemas/HTXAccount'}
+        replayed: {type: boolean}
     NativeSharing:
       type: object
       required: [ref, requester_cooperative_ref, owner_cooperative_ref, state, revision, requested_at, processed_at, actor_ref]

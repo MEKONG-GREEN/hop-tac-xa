@@ -99,4 +99,13 @@ export const nativeSharingRoutes: Route[] = [
   } },
   { method: "POST", pattern: /^\/v1\/htx-sharing$/, handler: change },
   { method: "POST", pattern: /^\/v1\/htx-sharing\/([^/]+)\/transitions$/, handler: change },
+  // FN-03, QTPQ-Q-55: tab "Liên kết chia sẻ dữ liệu" — Đại diện HTX trên HTX của mình, Admin mọi HTX (chỉ xem).
+  { method: "GET", pattern: /^\/v1\/cooperatives\/([\w-]+)\/htx-sharing$/, handler: ({ params, persona }) => {
+    const coop = params[0] ?? "";
+    const admin = hasRole(persona, "platform_admin");
+    if (!admin && !hasRole(persona, "coop_manager")) return problem(403, "forbidden", "Không có quyền");
+    if (!COOPERATIVES.some((c) => c.api.ref === coop) || (!admin && persona.me.org?.ref !== coop)) return problem(404, "not_found", "Không tìm thấy");
+    const items = [...requests.values()].filter((g) => g.tenant === persona.me.tenant_id && [g.row.requester_cooperative_ref, g.row.owner_cooperative_ref].includes(coop)).map((g) => g.row);
+    return json({ items: items.sort((a, b) => b.requested_at.localeCompare(a.requested_at)) }, 200, headers);
+  } },
 ];

@@ -182,3 +182,58 @@ func TestAH285ReadHouseholdIdentityFailsClosedAndRechecksMembership(t *testing.T
 		t.Fatalf("person leaked through household API: %v", err)
 	}
 }
+
+// AH-286 (FN-04/AC-04, QTPQ-Q-61 AC-N1, AC-N2): Đại diện HTX đọc hộ của HTX đã chia sẻ cho mình chỉ nhận SĐT 4 đầu/3
+// cuối, CCCD 3 đầu/3 cuối, kể cả khi bên chủ trả "full"; hộ của HTX mình vẫn đầy đủ. Bằng chứng chủ không đúng dạng
+// chia sẻ chỉ xem (thiếu cờ, cho ghi, không che) hoặc vai khác Đại diện → không tìm thấy.
+func TestAH286SharedHouseholdIdentityAlwaysMasked(t *testing.T) {
+	s, env := newService(t)
+	s.DB = env.SizedPool(t, migrations.Vault, role, 1)
+	tid, own, owner := ids.New(), ids.New(), ids.New()
+	in := sample("0913456222")
+	in.NationalID = "079123456123"
+	created, err := s.Create(as(tid, true, client.RoleRegistrar), client.PurposeRegistryAdmin, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	read := func(roles []string, scope client.HouseholdIdentityScope) (client.Identity, error) {
+		t.Helper()
+		p := authz.Principal{TenantID: tid, ActorRef: ids.New(), OrgRef: own, Roles: roles, MFA: true}
+		ctx := authz.WithRawToken(authz.WithPrincipal(context.Background(), p), "original-household-user")
+		s.HouseholdScopes = householdScopeFunc(func(_ context.Context, ref uuid.UUID) (client.HouseholdIdentityScope, error) {
+			scope.Ref = ref
+			return scope, nil
+		})
+		return s.ReadHouseholdIdentity(ctx, client.PurposeContact, created.Ref)
+	}
+	rep := []string{htxroles.Representative}
+	shared := client.HouseholdIdentityScope{CooperativeRef: owner, ContactAccess: "masked", Shared: true}
+	out, err := read(rep, shared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Phone != "0913***222" || out.NationalID != "079******123" || out.FullName != in.FullName {
+		t.Fatalf("shared household must be masked: %q %q", out.Phone, out.NationalID)
+	}
+	out, err = read(rep, client.HouseholdIdentityScope{CooperativeRef: own, ContactAccess: "full"})
+	if err != nil || out.Phone != "0913456222" || out.NationalID != "079123456123" {
+		t.Fatalf("own household stays full: %v %q %q", err, out.Phone, out.NationalID)
+	}
+	for _, tc := range []struct {
+		name  string
+		roles []string
+		scope client.HouseholdIdentityScope
+	}{
+		{"owner forgot shared flag", rep, client.HouseholdIdentityScope{CooperativeRef: owner, ContactAccess: "masked"}},
+		{"owner returned full", rep, client.HouseholdIdentityScope{CooperativeRef: owner, ContactAccess: "full", Shared: true}},
+		{"owner granted write", rep, client.HouseholdIdentityScope{CooperativeRef: owner, ContactAccess: "masked", Shared: true, CanWrite: true}},
+		{"Member never benefits", []string{htxroles.Member}, shared},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := read(tc.roles, tc.scope)
+			if code(err) != client.CodeNotFound || out.Phone != "" || out.NationalID != "" {
+				t.Fatalf("got %v %q %q", err, out.Phone, out.NationalID)
+			}
+		})
+	}
+}

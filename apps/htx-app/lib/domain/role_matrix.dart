@@ -16,6 +16,9 @@ enum HtxAction {
 
 /// Mã chức năng của ma trận mà app di động dùng để ẩn/hiện màn và nút.
 abstract final class HtxFn {
+  /// Quản lý HTX (FN-03): app chỉ xem thông tin HTX của mình.
+  static const cooperative = 'FN-03';
+
   /// Quản lý hộ xã viên (Mục V).
   static const households = 'FN-04';
 

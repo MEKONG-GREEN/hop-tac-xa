@@ -3563,6 +3563,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/public/auth/password-otp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * FN-10 Quên mật khẩu: gửi mã OTP qua SMS tới số điện thoại của tài khoản — KHÔNG Idempotency-Key
+         * @description AH-280, ADR-0063 (realm HTX). Mã 06 chữ số, dùng một lần, hiệu lực 05 phút; gửi lại sau 60 giây (trong 60 giây trả lại thử thách cũ, không gửi tin mới); tối đa 05 mã / tài khoản / 24 giờ. Chỉ gửi tới số đã lưu trong IAM. Phản hồi không bao giờ chứa mã. Giới hạn theo IP như đăng nhập. Cache-Control no-store.
+         */
+        post: operations["requestPasswordOTP"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/reports/exports": {
         parameters: {
             query?: never;
@@ -3581,6 +3601,26 @@ export interface paths {
          * @description Mẫu htx.production (nguồn cropcycle.production — HTX US-DASH-02): sản lượng dự kiến – thực tế, diện tích, số nông hộ, tiến độ SOP theo HTX × vụ × giống, cùng số liệu bảng điều hành GET /v1/cropcycle/dashboard. Quản lý HTX chỉ xuất HTX của mình (params.cooperative_ref được gán); cán bộ KN theo phạm vi xã/tỉnh; platform_admin toàn bộ.
          */
         post: operations["requestReportExport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/public/auth/password-otp/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * FN-10 Quên mật khẩu: đặt mật khẩu mới bằng mã OTP — KHÔNG Idempotency-Key
+         * @description AH-280. Sai mã → 401 kèm remaining_attempts; sai 05 lần → mã bị hủy (410); quá 05 phút → 410. Mật khẩu mới tối thiểu 06 ký tự, nhập lại phải khớp. Đúng → mật khẩu mới có hiệu lực, không phải đổi mật khẩu lần đầu, phiên cũ bị thu hồi. Cache-Control no-store.
+         */
+        post: operations["resetPasswordWithOTP"];
         delete?: never;
         options?: never;
         head?: never;
@@ -12408,6 +12448,246 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/htx-accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * FN-08 Tài khoản của HTX mình (Đại diện HTX)
+         * @description AH-277. Thành viên HTX của HTX người gọi và dòng của chính người gọi (FN-08/AC-01, BR-01). Không có Admin, Đại diện HTX khác. Cache-Control no-store.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Danh sách đầy đủ cho bộ lọc, số đếm và phân trang UX-01 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: components["schemas"]["HTXAccount"][];
+                        };
+                    };
+                };
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        /**
+         * FN-08 Đại diện HTX tạo tài khoản Thành viên HTX của HTX mình
+         * @description AH-277. roles phải đúng [htx_member] và cooperative_ref là HTX của người gọi; khác → 403 (AC-N1). Mật khẩu tạm 8 ký tự chỉ trả một lần, bắt đổi lần đầu; phát lại không trả mật khẩu.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        username: string;
+                        full_name: string;
+                        phone: string;
+                        email?: string;
+                        /** Format: uuid */
+                        cooperative_ref: string;
+                        roles: "htx_member"[];
+                    };
+                };
+            };
+            responses: {
+                /** @description Phát lại, mật khẩu null */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HTXAccountCreated"];
+                    };
+                };
+                /** @description Đã tạo, mật khẩu chỉ trong phản hồi này */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HTXAccountCreated"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/htx-accounts/{id}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * FN-08 Sửa tài khoản Thành viên HTX, hoặc bật/tắt kiêm Thành viên HTX cho chính mình
+         * @description AH-277. Tài khoản Thành viên HTX của HTX mình: sửa họ tên, SĐT, email; không đổi HTX, không cấp vai kiêm. Tài khoản
+         *     của chính người gọi: chỉ also_member có hiệu lực (FN-08/AC-06, QTPQ-Q-28), có hiệu lực từ lần đăng nhập kế tiếp.
+         *     Tài khoản ngoài phạm vi → 404 (AC-04).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        full_name: string;
+                        phone: string;
+                        email?: string;
+                        /** Format: uuid */
+                        cooperative_ref?: string | null;
+                        also_member?: boolean;
+                    };
+                };
+            };
+            responses: {
+                /** @description Tài khoản sau khi sửa */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HTXAccountChanged"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/htx-accounts/{id}/lock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * FN-08 Khóa tài khoản Thành viên HTX của HTX mình
+         * @description AH-277, FN-08/AC-05. Không tự khóa chính mình (FN-07/BR-07); ngoài phạm vi → 404.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Đã khóa */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HTXAccountChanged"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/htx-accounts/{id}/unlock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** FN-08 Mở khóa tài khoản Thành viên HTX của HTX mình */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Đã mở khóa */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HTXAccountChanged"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/htx-sharing": {
         parameters: {
             query?: never;
@@ -12562,6 +12842,52 @@ export interface paths {
                 };
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperatives/{ref}/htx-sharing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Tab "Liên kết chia sẻ dữ liệu" của một HTX, chỉ đọc
+         * @description FN-03, QTPQ-Q-55: Đại diện HTX chỉ trên HTX của mình (HTX khác, kể cả HTX được chia sẻ → 404); Admin trên mọi
+         *     HTX của tenant ở chế độ chỉ xem (không thao tác, FN-09/BR-03). Thành viên HTX → 403.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    ref: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Yêu cầu chia sẻ HTX này gửi đi và nhận được */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: components["schemas"]["NativeSharing"][];
+                        };
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -24917,6 +25243,36 @@ export interface components {
             /** Format: date-time */
             submitted_at: string;
         };
+        /** @description Tài khoản realm HTX trong phạm vi Đại diện HTX — PII chỉ hiển thị, không lưu ở pf, không ghi log */
+        HTXAccount: {
+            /** Format: uuid */
+            id: string;
+            username: string;
+            email: string;
+            first_name: string;
+            last_name: string;
+            phone: string | null;
+            enabled: boolean;
+            email_verified: boolean;
+            /** Format: uuid */
+            org_ref: string | null;
+            roles: string[] | null;
+            /** @enum {string|null} */
+            lock_cause: "manual" | "org_deactivated" | "dormant_45d" | null;
+            required_actions: string[];
+            /** Format: date-time */
+            created_at: string | null;
+            tracked: boolean;
+        };
+        HTXAccountCreated: {
+            user: components["schemas"]["HTXAccount"];
+            /** @description Chỉ phản hồi đầu tiên; không ghi log hoặc lưu cache */
+            temporary_password: string | null;
+        };
+        HTXAccountChanged: {
+            user: components["schemas"]["HTXAccount"];
+            replayed: boolean;
+        };
         NativeSharing: {
             /** Format: uuid */
             ref: string;
@@ -29201,6 +29557,8 @@ export interface operations {
                 include_inactive?: boolean;
                 /** @description D2: lọc theo trạng thái xác nhận; vắng = mọi HTX (gồm HTX tạm Chưa xác nhận) */
                 confirmation?: components["schemas"]["HTXConfirmationStatus"];
+                /** @description FN-03/AC-01 (phạm vi theo HTX): own = HTX của tôi, shared = HTX được chia sẻ (chỉ xem); vắng = tất cả, HTX của người gọi đứng đầu trang đầu. Giá trị khác → 422 (trường relation) */
+                relation?: "own" | "shared";
                 cursor?: string;
                 limit?: number;
             };
@@ -35180,11 +35538,15 @@ export interface operations {
                      * @description ADR-0061: id thử thách bước 1 trả về — chỉ gửi ở bước 2 của Admin
                      */
                     challenge_id?: string;
+                    /** @description AH-269 (FN-01/AC-04): mật khẩu mới ở bước đổi mật khẩu lần đầu, gửi kèm mật khẩu tạm; tối thiểu 06 ký tự, khác mật khẩu tạm */
+                    new_password?: string;
+                    /** @description AH-269: nhập lại mật khẩu mới */
+                    confirm_password?: string;
                 };
             };
         };
         responses: {
-            /** @description authenticated (kèm token) | otp_required (bước 1 của Admin: đã gửi mã qua email, chưa có token) */
+            /** @description authenticated (kèm token) | otp_required (bước 1 của Admin: đã gửi mã qua email, chưa có token) | password_change_required (AH-269: mật khẩu tạm đúng, cần đổi mật khẩu lần đầu, chưa có token) */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -35192,7 +35554,7 @@ export interface operations {
                 content: {
                     "application/json": {
                         /** @enum {string} */
-                        status: "authenticated" | "otp_required";
+                        status: "authenticated" | "otp_required" | "password_change_required";
                         access_token?: string;
                         refresh_token?: string;
                         /** @description authenticated: hạn access token (giây); otp_required: hạn mã OTP (giây) */
@@ -35217,7 +35579,7 @@ export interface operations {
             403: components["responses"]["Problem"];
             /** @description accounts.login_otp_expired (mã OTP email hết hạn, đã dùng, đã hủy hoặc đã có mã mới) */
             410: components["responses"]["Problem"];
-            /** @description validation_failed (EX-01: thiếu identifier hoặc password; có challenge_id mà thiếu otp) */
+            /** @description validation_failed (EX-01: thiếu identifier hoặc password; có challenge_id mà thiếu otp; AH-269 EX-05: new_password dưới 06 ký tự hoặc trùng mật khẩu tạm, confirm_password không khớp) */
             422: components["responses"]["Problem"];
             /** @description accounts.login_temporarily_locked: extension retry_after_minutes, header Retry-After (giây) */
             423: components["responses"]["Problem"];
@@ -35397,6 +35759,54 @@ export interface operations {
             403: components["responses"]["Problem"];
         };
     };
+    requestPasswordOTP: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Tên đăng nhập hoặc số điện thoại */
+                    identifier: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Đã gửi (hoặc còn trong thời gian chờ gửi lại) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        status: "otp_sent";
+                        /** Format: uuid */
+                        challenge_id: string;
+                        /** @description SĐT đã che 4 đầu / 3 cuối, vd 0913***222 */
+                        phone_hint: string;
+                        /** @description Giây */
+                        expires_in: number;
+                        /** @description Giây */
+                        resend_after: number;
+                    };
+                };
+            };
+            /** @description accounts.password_otp_blocked (EX-02: tài khoản đã khóa hoặc chưa có số điện thoại) */
+            403: components["responses"]["Problem"];
+            /** @description accounts.password_otp_account_not_found (EX-01) */
+            404: components["responses"]["Problem"];
+            /** @description validation_failed (thiếu identifier) */
+            422: components["responses"]["Problem"];
+            /** @description accounts.password_otp_daily_limit (EX-05) | giới hạn theo IP */
+            429: components["responses"]["Problem"];
+            /** @description accounts.password_otp_unavailable (kênh SMS tắt hoặc gửi lỗi — liên hệ người cấp tài khoản) | accounts.login_unavailable */
+            503: components["responses"]["Problem"];
+        };
+    };
     listMyReportExports: {
         parameters: {
             query?: {
@@ -35466,6 +35876,52 @@ export interface operations {
             409: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
             429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    resetPasswordWithOTP: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    identifier: string;
+                    /** Format: uuid */
+                    challenge_id: string;
+                    otp: string;
+                    new_password: string;
+                    confirm_password: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Đã đặt mật khẩu mới */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        status: "password_reset";
+                    };
+                };
+            };
+            /** @description accounts.password_otp_invalid (EX-03, kèm remaining_attempts) */
+            401: components["responses"]["Problem"];
+            /** @description accounts.password_otp_blocked */
+            403: components["responses"]["Problem"];
+            /** @description accounts.password_otp_account_not_found */
+            404: components["responses"]["Problem"];
+            /** @description accounts.password_otp_expired (EX-04, hoặc đã hủy sau 05 lần sai) */
+            410: components["responses"]["Problem"];
+            /** @description validation_failed (EX-06: otp, new_password, confirm_password) */
+            422: components["responses"]["Problem"];
+            /** @description accounts.login_unavailable | accounts.dependency_unavailable */
             503: components["responses"]["Problem"];
         };
     };

@@ -2,7 +2,6 @@
 
 import { useState, type FormEvent } from "react";
 import { useAuth } from "@/auth/AuthProvider";
-import { unwrap, type AdminPaths } from "@/api/client";
 import type { AccountsUser } from "@/api/types";
 import { listAllCooperatives } from "@/api/adapters/cooperatives";
 import { newIdempotencyKey } from "@/api/idempotency";
@@ -13,19 +12,23 @@ import { clientList, ListScreen } from "@/components/patterns/listScreen";
 import { PageHead, Loading } from "@/components/ui";
 import { toApiProblem, useAsync } from "@/lib/useAsync";
 import type { ApiProblem } from "@/api/problem";
+import { NativeAccountDetail } from "./NativeAccountDetail";
 
-type Input = AdminPaths["/v1/accounts/htx-users"]["post"]["requestBody"]["content"]["application/json"];
+import { accountsClient, type AccountInput as Input, type AccountsScope } from "./accountsClient";
 const roleLabels = { platform_admin: "Admin", coop_manager: "Đại diện HTX", htx_member: "Thành viên HTX" } as const;
 const name = (u: AccountsUser) => `${u.last_name} ${u.first_name}`.trim();
 const state = (u: AccountsUser) => !u.enabled ? "locked" : u.required_actions.includes("UPDATE_PASSWORD") ? "pending" : "active";
 const stateLabels: Record<string, string> = { locked: "Đã khóa", pending: "Chờ đổi mật khẩu", active: "Đang hoạt động" };
 
-export function NativeAccounts() {
-  const { api, adminApi } = useAuth();
+/** FN-07 (Admin, scope "admin") và FN-08 (Đại diện HTX, scope "coop", AH-277): chỉ tạo Thành viên HTX của HTX mình. */
+export function NativeAccounts({ scope = "admin" }: { scope?: AccountsScope } = {}) {
+  const { api, adminApi, principal } = useAuth();
+  const coopScope = scope === "coop";
+  const client = accountsClient(scope, api, adminApi);
   const list = useAsync(async () => {
-    const [users, coops] = await Promise.all([unwrap(adminApi.GET("/v1/accounts/htx-users")), listAllCooperatives(api,{includeInactive:true})]);
-    return { users: users.items, coops };
-  }, [adminApi, api]);
+    const [users, coops] = await Promise.all([client.list(), listAllCooperatives(api,{includeInactive:true})]);
+    return { users, coops };
+  }, [adminApi, api, scope]);
   const [tab, setTab] = useState("all");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
@@ -34,7 +37,8 @@ export function NativeAccounts() {
   const [sort, setSort] = useState<SortState | null>({ key: "username", dir: "asc" });
   const [selected, setSelected] = useState<AccountsUser | null>(null);
   const [creating, setCreating] = useState(false);
-  const [input, setInput] = useState<Input>({ username: "", full_name: "", phone: "", email: "", cooperative_ref: null, roles: ["coop_manager"] });
+  const blank = (): Input => coopScope ? { username: "", full_name: "", phone: "", email: "", cooperative_ref: principal?.orgRef ?? null, roles: ["htx_member"] } : { username: "", full_name: "", phone: "", email: "", cooperative_ref: null, roles: ["coop_manager"] };
+  const [input, setInput] = useState<Input>(blank);
   const [idem, setIdem] = useState(newIdempotencyKey);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiProblem | null>(null);
@@ -52,9 +56,9 @@ export function NativeAccounts() {
   const submit = async (event: FormEvent) => {
     event.preventDefault(); if (busy) return; setBusy(true); setError(null);
     try {
-      const res = await unwrap(adminApi.POST("/v1/accounts/htx-users", { params: { header: { "Idempotency-Key": idem } }, body: input }));
+      const res = await client.create(input, idem);
       setCreating(false); setCredential({ username: res.user.username || input.username, password: res.temporary_password });
-      setInput({ username: "", full_name: "", phone: "", email: "", cooperative_ref: null, roles: ["coop_manager"] }); setIdem(newIdempotencyKey()); list.reload();
+      setInput(blank()); setIdem(newIdempotencyKey()); list.reload();
     } catch (e) { setError(toApiProblem(e)); } finally { setBusy(false); }
   };
   const errors = error ? fieldErrorMap(error) : {};
@@ -69,15 +73,15 @@ export function NativeAccounts() {
     </section>}
     {creating && <form className="card stack" onSubmit={(e) => void submit(e)} noValidate aria-label="Tạo tài khoản HTX">
       {error && <ProblemAlert problem={error} />}
-      {([ ["username", "Tên đăng nhập"], ["full_name", "Họ tên"], ["phone", "Số điện thoại"], ["email", "Email nhận OTP (bắt buộc với Admin)"] ] as const).map(([field, label]) => <label className="field" key={field}>{label}<input className="input" value={input[field] ?? ""} onChange={(e) => change({ [field]: e.target.value })} aria-invalid={!!errors[field]} autoComplete="off" />{errors[field] && <span className="err">{errors[field]}</span>}</label>)}
-      <label className="field">Vai trò<select className="select" value={input.roles[0]} onChange={(e) => { const role = e.target.value as Input["roles"][number]; change({ roles: [role], cooperative_ref: null }); }}>
+      {([ ["username", "Tên đăng nhập"], ["full_name", "Họ tên"], ["phone", "Số điện thoại"], ["email", coopScope ? "Email" : "Email nhận OTP (bắt buộc với Admin)"] ] as const).map(([field, label]) => <label className="field" key={field}>{label}<input className="input" value={input[field] ?? ""} onChange={(e) => change({ [field]: e.target.value })} aria-invalid={!!errors[field]} autoComplete="off" />{errors[field] && <span className="err">{errors[field]}</span>}</label>)}
+      {coopScope ? <p>Vai trò: Thành viên HTX · HTX: {coopName(principal?.orgRef ?? null)}</p> : <><label className="field">Vai trò<select className="select" value={input.roles[0]} onChange={(e) => { const role = e.target.value as Input["roles"][number]; change({ roles: [role], cooperative_ref: null }); }}>
         {Object.entries(roleLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
       </select></label>
       {input.roles[0] === "coop_manager" && <label><input type="checkbox" checked={input.roles.includes("htx_member")} onChange={(e) => change({ roles: e.target.checked ? ["coop_manager", "htx_member"] : ["coop_manager"] })} /> Đồng thời là Thành viên HTX</label>}
-      {input.roles[0] !== "platform_admin" && <label className="field">HTX<select className="select" value={input.cooperative_ref ?? ""} onChange={(e) => change({ cooperative_ref: e.target.value || null })}><option value="">Chọn HTX</option>{coops.filter((c) => c.active).map((c) => <option key={c.ref} value={c.ref}>{c.name}</option>)}</select>{errors.cooperative_ref && <span className="err">{errors.cooperative_ref}</span>}</label>}
+      {input.roles[0] !== "platform_admin" && <label className="field">HTX<select className="select" value={input.cooperative_ref ?? ""} onChange={(e) => change({ cooperative_ref: e.target.value || null })}><option value="">Chọn HTX</option>{coops.filter((c) => c.active).map((c) => <option key={c.ref} value={c.ref}>{c.name}</option>)}</select>{errors.cooperative_ref && <span className="err">{errors.cooperative_ref}</span>}</label>}</>}
       <div className="row"><button className="btn primary" disabled={busy} type="submit">{busy ? "Đang tạo…" : "Lưu tài khoản"}</button><button className="btn" disabled={busy} type="button" onClick={() => setCreating(false)}>Hủy</button></div>
     </form>}
-    {selected && <section className="card stack" aria-label="Chi tiết tài khoản"><strong>{name(selected)}</strong><p>{selected.username} · {selected.phone} · {coopName(selected.org_ref)}</p><p>{(selected.roles ?? []).map((r) => roleLabels[r as keyof typeof roleLabels] ?? r).join(", ")} · {stateLabels[state(selected)]}</p><button type="button" className="btn" onClick={() => setSelected(null)}>Đóng</button></section>}
+    {selected && <NativeAccountDetail key={selected.id} scope={scope} user={selected} coops={coops} onChanged={(u) => { setSelected(u); list.reload(); }} onClose={() => setSelected(null)} />}
     {list.loading ? <Loading /> : <ListScreen caption="Tài khoản HTX" tabsLabel="Vai trò tài khoản" tabs={filtered.tabs} tab={tab} onTab={(v) => { setTab(v); setPage(1); }}
       filterBar={<FilterBar resultCount={filtered.total} activeCount={Number(!!search) + Number(!!status) + Number(!!coop)} onClear={() => { setSearch(""); setStatus(""); setCoop(""); setPage(1); }}>
         <SearchBox value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Tên, tên đăng nhập hoặc đúng SĐT" />
@@ -86,7 +90,7 @@ export function NativeAccounts() {
       </FilterBar>}
       rows={filtered.rows} rowKey={(u) => u.id} total={filtered.total} page={filtered.page} onPage={setPage} sort={sort} onSort={setSort}
       code={{ key: "username", header: "Mã / tên đăng nhập", sortKey: "username", cell: (u) => u.username }}
-      main={{ key: "name", header: "Họ tên", sortKey: "name", title: name, sub: (u) => `${u.phone ?? "—"} · ${coopName(u.org_ref)}`, open: (u) => ({ onClick: () => setSelected(u) }) }}
+      main={{ key: "name", header: "Họ tên", sortKey: "name", title: (u) => principal?.subject === u.id ? `${name(u)} (bạn)` : name(u), sub: (u) => `${u.phone ?? "—"} · ${coopName(u.org_ref)}`, open: (u) => ({ onClick: () => setSelected(u) }) }}
       columns={[{ key: "roles", header: "Vai trò", cell: (u) => (u.roles ?? []).map((r) => roleLabels[r as keyof typeof roleLabels] ?? r).join(", ") }, { key: "status", header: "Trạng thái", sortKey: "status", cell: (u) => stateLabels[state(u)] }]}
       actions={{ cell: (u) => <button type="button" className="btn" onClick={() => setSelected(u)}>Chi tiết</button> }} empty={<p>Không có bản ghi phù hợp</p>} />}
   </div>;

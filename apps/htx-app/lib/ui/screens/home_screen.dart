@@ -13,6 +13,7 @@ import 'dashboard_screen.dart';
 import 'farm_log_screen.dart';
 import 'harvest_screen.dart';
 import 'households_screen.dart';
+import 'cooperative_info_screen.dart';
 import 'bulk_open_screen.dart';
 import 'collection_screen.dart';
 import 'news_screen.dart';
@@ -184,6 +185,14 @@ class HomeScreen extends ConsumerWidget {
             ),
           ),
           (
+            HtxScreen.cooperativeInfo,
+            BigTile(
+              icon: Icons.apartment,
+              label: 'Thông tin HTX',
+              onTap: () => open(const CooperativeInfoScreen()),
+            ),
+          ),
+          (
             HtxScreen.news,
             BigTile(
               icon: Icons.newspaper,
@@ -220,7 +229,7 @@ class HomeScreen extends ConsumerWidget {
                   1 &&
               ref.read(appControllerProvider).services!.workingRole.enabled)
             IconButton(
-              tooltip: 'Đổi vai trò',
+              tooltip: 'Đổi vai trò, HTX làm việc',
               icon: const Icon(Icons.switch_account),
               onPressed: () async {
                 final confirmed = await showDialog<bool>(
