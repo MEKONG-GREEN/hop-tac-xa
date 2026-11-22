@@ -133,7 +133,8 @@ func (s *Service) PlotsOfCooperative(ctx context.Context, coop, after uuid.UUID,
 		limit = 200
 	}
 	if a.coopOnly && coop != a.p.OrgRef {
-		return CoopPage{}, ErrOutOfScope
+		// FN-06: chỉ đọc thửa của HTX đã duyệt chia sẻ cho HTX của người gọi.
+		return s.sharedPlotsOfCooperative(ctx, a, coop, after, limit)
 	}
 	if a.sc.Empty() {
 		return CoopPage{Items: []store.Plot{}}, nil

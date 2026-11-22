@@ -38,6 +38,7 @@ provides:
     - Households
     - InventoryMachineSource
     - ModuleEnablement
+    - NativeCooperativeSharing
     - OrgCodes
     - OrgDirectory
     - OrgImpactSource

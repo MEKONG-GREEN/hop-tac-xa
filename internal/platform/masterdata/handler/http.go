@@ -26,6 +26,7 @@ func (h Handler) RegisterApp(rg *gin.RouterGroup) {
 	rg.GET("/masterdata/admin-units/:code/current", h.current)
 	rg.GET("/masterdata/catalogs/:catalog", h.listItems(false))
 	rg.GET("/masterdata/catalogs/:catalog/:code", h.item)
+	rg.GET("/masterdata/shared-catalogs/:catalog/export", h.exportSharedCatalog)
 	rg.GET("/masterdata/params/value", h.paramValue)
 	rg.GET("/masterdata/display-config", h.displayConfig)
 }

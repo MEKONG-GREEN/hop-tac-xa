@@ -58,16 +58,27 @@ type fixture struct {
 func newFixture(t *testing.T) *fixture { return newFixtureAt(t, clock.System{}) }
 
 // newFixtureAt dựng fixture với đồng hồ clk cho module (job accounts_dormant — D24).
-func newFixtureAt(t *testing.T, clk clock.Clock) *fixture {
+func newFixtureAt(t *testing.T, clk clock.Clock, native ...bool) *fixture {
 	env := pgtest.Get(t)
 	iss := authztest.New(t)
 	pool := env.Pool(t, migrations.PF, accounts.DBRole)
 	ops := env.Pool(t, migrations.PF, "platform_api")
 	dir := keycloak.NewMemory()
 	pty := newFakeParty()
-	mod := accounts.New(pgtest.Get(t).Pool(t, migrations.PF, dbadmin.AppPlatform), clk, accounts.Deps{Directory: dir, Scope: pty, Orgs: pty})
+	var nativeKey []byte
+	var roleCatalog *port.RoleCatalog
+	if len(native) > 0 && native[0] {
+		nativeKey = bytes.Repeat([]byte{27}, 32)
+		roleCatalog = port.HTXRoleCatalog()
+	}
+	mod := accounts.New(pgtest.Get(t).Pool(t, migrations.PF, dbadmin.AppPlatform), clk, accounts.Deps{NativeHTXKey: nativeKey, Roles: roleCatalog, Directory: dir, Scope: pty, Orgs: pty})
 	eng := httpx.NewEngine(telemetry.NewLogger("test", io.Discard), 1<<20)
-	mod.RegisterAdmin(eng.Group("/v1", httpx.Authenticate(iss.Verifier()), httpx.RequireMFA(), idempotency.Middleware(ops)))
+	adminGroup := eng.Group("/v1", httpx.Authenticate(iss.Verifier()), httpx.RequireMFA())
+	if len(nativeKey) > 0 {
+		adminGroup.Use(mod.Middleware())
+	}
+	adminGroup.Use(idempotency.Middleware(ops))
+	mod.RegisterAdmin(adminGroup)
 	srv := httptest.NewServer(eng)
 	t.Cleanup(srv.Close)
 	f := &fixture{t: t, env: env, iss: iss, admin: srv, dir: dir, party: pty, mod: mod, pool: pool, tenant: ids.New()}

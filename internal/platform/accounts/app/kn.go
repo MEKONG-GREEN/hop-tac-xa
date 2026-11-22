@@ -828,6 +828,9 @@ func profileNext(u port.User, in ProfilePatch) (domain.Profile, []string, error)
 // UpdateProfile sửa thông tin tài khoản ở Keycloak và ghi một dòng sổ chỉnh sửa. Đổi SĐT của tài khoản
 // đăng nhập bằng SĐT → đổi luôn tên đăng nhập (FN-CH-00.01).
 func (s *Service) UpdateProfile(ctx context.Context, user uuid.UUID, in ProfilePatch) (store.ProfileChange, bool, error) {
+	if len(s.NativeHTXKey) > 0 {
+		return store.ProfileChange{}, false, ErrNotGrantable.WithDetail("Không sửa tài khoản FN-07 qua luồng hồ sơ KN")
+	}
 	if err := requireKey(in.IdemKey); err != nil {
 		return store.ProfileChange{}, false, err
 	}

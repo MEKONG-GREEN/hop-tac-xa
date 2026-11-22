@@ -1,0 +1,5 @@
+{
+  "id": "native-sharing",
+  "source": "./native-sharing",
+  "app": [{ "export": "nativeSharingRoutes", "order": 278 }]
+}

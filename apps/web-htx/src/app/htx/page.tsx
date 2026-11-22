@@ -33,6 +33,8 @@ export default function CooperativesPage() {
   const [version, setVersion] = useState(0);
   const canImport = hasRole(principal, ROLES.registryAdmin, ROLES.platformAdmin, ROLES.knProvinceAdmin);
   const profileAudience = hasRole(principal, ROLES.platformAdmin, ROLES.coopManager, ROLES.htxMember);
+  // FN-06 (AH-274): Đại diện HTX thấy thêm HTX đã duyệt chia sẻ cho HTX mình — chỉ xem.
+  const sharedRow = (ref: string) => hasRole(principal, ROLES.coopManager) && !hasRole(principal, ROLES.platformAdmin) && !!principal?.orgRef && principal.orgRef !== ref;
   const dq = useDebounced(q);
 
   // Bộ lọc địa bàn: TW chọn tỉnh; tỉnh chọn xã trực thuộc; xã không cần lọc.
@@ -114,6 +116,7 @@ export default function CooperativesPage() {
                       {c.code}
                       {c.tax_code ? ` · MST ${c.tax_code}` : ""}
                     </div>
+                    {sharedRow(c.ref) ? <span className="chip c-info">Được chia sẻ · chỉ xem</span> : null}
                   </td>
                   <td>{coopPlace(c)}</td>
                   <td className="num">{profileAudience ? formatInt(c.household_areas?.households) : formatInt(c.member_households)}</td>

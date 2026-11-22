@@ -32,6 +32,10 @@ type Handler struct{ Svc *app.Service }
 
 // RegisterApp gắn route Application API (nhóm /v1 đã xác thực, có middleware Idempotency-Key).
 func (h Handler) RegisterApp(rg *gin.RouterGroup) {
+	rg.GET("/htx-sharing", h.nativeSharingList)
+	rg.GET("/htx-sharing/candidates", h.nativeSharingCandidates)
+	rg.POST("/htx-sharing", h.nativeSharingCreate)
+	rg.POST("/htx-sharing/:ref/transitions", h.nativeSharingTransition)
 	rg.GET("/cooperatives/:ref/households", h.listHouseholds)
 	rg.POST("/households", h.createHousehold)
 	rg.POST("/households/copy", h.copyHouseholds)

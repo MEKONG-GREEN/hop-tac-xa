@@ -157,6 +157,7 @@ func Build(ctx context.Context, open PoolOpener, clk clock.Clock, ext External) 
 		Catalogs: md.Catalogs(), GpsLog: g.GpsLog(), Households: farmerid.Households(ext.Vault), Farmers: farmerid.New(ext.Vault)}) // HTX US-GPS-03: log GPS qua consumer outbox pf.cropcycle.gps_log
 	pty.UseCoopProfiles(coop.CoopProfiles()) // tạo HTX hai bước, màn HTX, danh bạ đối tác
 	pty.UseCooperativeAreas(coop.CooperativeAreas())
+	pty.UseNativeSharing(coop.NativeSharing())
 	pty.UsePlotStats(coop.PlotStats()) // G-03: số thửa đã số hoá trong danh sách HTX
 	g.UsePlots(coop.PlotGeometry())    // HTX US-GPS-01/03: khoảng cách tới lô của log GPS
 	g.UseMapLayers(coop.MapLayers())   // GIS FN-01, US-INT-02: lớp HTX, lớp thửa của bản đồ gộp
@@ -226,7 +227,15 @@ func Build(ctx context.Context, open PoolOpener, clk clock.Clock, ext External) 
 	if err != nil {
 		return Modules{}, pools, err
 	}
-	acc := accounts.New(unit, clk, accounts.Deps{Roles: accport.NativeRoleCatalog(), Sessions: sessionRegistry, Navigation: pty.ContextNavigation(), Directory: dir, Scope: pty.ScopeResolver(), Orgs: pty.Orgs(),
+	nativeHTXKey, err := accounts.NativeHTXKeyFromEnv(os.Getenv)
+	if err != nil {
+		return Modules{}, pools, err
+	}
+	accountRoles := accport.NativeRoleCatalog()
+	if len(nativeHTXKey) > 0 {
+		accountRoles = accport.HTXRoleCatalog()
+	}
+	acc := accounts.New(unit, clk, accounts.Deps{NativeHTXKey: nativeHTXKey, Roles: accountRoles, Sessions: sessionRegistry, Navigation: pty.ContextNavigation(), Directory: dir, Scope: pty.ScopeResolver(), Orgs: pty.Orgs(),
 		Households: coop.PartyHouseholds(), Vault: ext.Vault, Params: md.Params(),
 		Departments: pty.Departments(), Units: md.AdminUnits(),
 		Modules: pty.ModuleEnablement()}) // W1.4: vai của module đã tắt không cấp được

@@ -16,6 +16,7 @@ import (
 // NativeIdentityScope is owner-verified metadata for the narrow household
 // identity API. It contains no identity payload and never calls Vault.
 type NativeIdentityScope struct {
+	Shared         bool
 	Ref            uuid.UUID
 	CooperativeRef uuid.UUID
 	Active         bool
@@ -81,7 +82,7 @@ func (s *Service) NativeHouseholdIdentityScope(ctx context.Context, ref uuid.UUI
 		return NativeIdentityScope{}, err
 	}
 	var household *domain.Household
-	err = tenant.WithTenantTx(ctx, s.DB, p.TenantID, func(tx pgx.Tx) error {
+	err = s.nativeReadTx(ctx, p.TenantID, func(tx pgx.Tx) error {
 		var e error
 		household, e = store.HouseholdByRef(ctx, tx, ref)
 		return e
@@ -89,16 +90,26 @@ func (s *Service) NativeHouseholdIdentityScope(ctx context.Context, ref uuid.UUI
 	if err != nil {
 		return NativeIdentityScope{}, err
 	}
-	if household == nil || (!p.Has(htxroles.Admin) && household.CooperativeRef != p.OrgRef) {
+	if household == nil {
 		return NativeIdentityScope{}, ErrHouseholdNotFound
+	}
+	shared := !p.Has(htxroles.Admin) && household.CooperativeRef != p.OrgRef
+	if shared {
+		allowed, err := s.nativeCanReadCooperative(ctx, p, household.CooperativeRef)
+		if err != nil {
+			return NativeIdentityScope{}, err
+		}
+		if !allowed {
+			return NativeIdentityScope{}, ErrHouseholdNotFound
+		}
 	}
 	if household.Pending {
 		return NativeIdentityScope{}, ErrDependency.WithDetail("Hộ đang được cập nhật; thử lại thao tác đang chờ")
 	}
 	access := "full"
-	if htxroles.IsMemberOnly(p.Has) {
+	if shared || htxroles.IsMemberOnly(p.Has) {
 		access = "masked"
 	}
 	return NativeIdentityScope{Ref: household.Ref, CooperativeRef: household.CooperativeRef, Active: household.Active,
-		ContactAccess: access, CanWrite: household.CooperativeRef != uuid.Nil && htxroles.Allows(p.Has, "FN-04", htxroles.Update), Revision: household.Revision}, nil
+		ContactAccess: access, Shared: shared, CanWrite: !shared && household.CooperativeRef != uuid.Nil && htxroles.Allows(p.Has, "FN-04", htxroles.Update), Revision: household.Revision}, nil
 }

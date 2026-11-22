@@ -17225,6 +17225,97 @@ paths:
       parameters: [{"name":"key","in":"path","required":true,"schema":{"$ref":"#/components/schemas/KHTCTemplateKey"}},{"$ref":"#/components/parameters/IdempotencyKey"}]
       requestBody: {"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/KHTCTemplatePreviewInput"}}}}
       responses: {"200":{"description":"Thành công","content":{"application/json":{"schema":{"$ref":"#/components/schemas/KHTCTemplatePreview"}}}},"400":{"$ref":"#/components/responses/Problem"},"401":{"$ref":"#/components/responses/Problem"},"403":{"$ref":"#/components/responses/Problem"},"404":{"$ref":"#/components/responses/Problem"},"409":{"$ref":"#/components/responses/Problem"},"422":{"$ref":"#/components/responses/Problem"},"503":{"$ref":"#/components/responses/Problem"}}
+  /v1/masterdata/shared-catalogs/{catalog}/export:
+    get:
+      summary: Xuất Excel chỉ đọc danh mục dùng chung Vật tư/Máy móc (VTKM-Q-07, AH-274)
+      description: Admin, Đại diện HTX, Thành viên HTX. Chỉ mục đang dùng của danh mục material hoặc machine_type.
+      operationId: exportSharedCatalog
+      tags: [masterdata]
+      parameters:
+        - {name: catalog, in: path, required: true, schema: {type: string, enum: [material, machine_type]}}
+      responses:
+        "200":
+          description: Tệp .xlsx
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: {schema: {type: string, format: binary}}
+        "403": {description: forbidden, $ref: "#/components/responses/Problem"}
+        "404": {description: masterdata.catalog_not_found, $ref: "#/components/responses/Problem"}
+  /v1/htx-sharing:
+    get:
+      summary: Yêu cầu chia sẻ gửi đến và đã gửi của Đại diện HTX
+      responses:
+        '200':
+          description: Lịch sử yêu cầu theo chiều HTX yêu cầu xem HTX nhận
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/NativeSharing'}}
+    post:
+      summary: Gửi yêu cầu xem toàn bộ dữ liệu HTX khác chỉ đọc
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [owner_cooperative_ref]
+              properties:
+                owner_cooperative_ref: {type: string, format: uuid}
+      responses:
+        '201':
+          description: Yêu cầu đang chờ, chưa cấp quyền đọc
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/NativeSharing'}
+  /v1/htx-sharing/candidates:
+    get:
+      summary: Danh mục HTX còn được gửi yêu cầu, chỉ mã và tên
+      responses:
+        '200':
+          description: Không bao gồm chính HTX mình hoặc cặp đang chờ/đã duyệt
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [ref, code, name]
+                      properties:
+                        ref: {type: string, format: uuid}
+                        code: {type: string}
+                        name: {type: string}
+  /v1/htx-sharing/{ref}/transitions:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      summary: Duyệt, từ chối, thu hồi theo đúng bên và phiên bản
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [action, expected_revision]
+              properties:
+                action: {type: string, enum: [approve, reject, revoke]}
+                expected_revision: {type: integer, minimum: 1}
+      responses:
+        '200':
+          description: Đã chuyển trạng thái và ghi lịch sử; quyền đọc đổi ngay
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/NativeSharing'}
   /v1/extension/cnts/weekly-plan/schedule:
     post:
       summary: "Kế hoạch tuần BM-05 Phần II đã đăng ký → gửi duyệt Lịch công tác tuần của người gọi (BF-CN-WEEKLY, PRD UP-06). Mục sinh từ kế hoạch có mã ổn định theo xã và ngày — chỉ thay mục của kế hoạch xã này; mục của kế hoạch xã khác và mục tự thêm ở Lịch công tác giữ nguyên (trùng giờ chỉ cảnh báo, xem schedule.conflict_count)"
@@ -28781,6 +28872,20 @@ components:
         submission_id: {type: string, format: uuid}
         attempt: {type: integer, format: int64, minimum: 1}
         submitted_at: {type: string, format: date-time}
+    NativeSharing:
+      type: object
+      required: [ref, requester_cooperative_ref, owner_cooperative_ref, state, revision, requested_at, processed_at, actor_ref]
+      properties:
+        ref: {type: string, format: uuid}
+        requester_cooperative_ref: {type: string, format: uuid}
+        owner_cooperative_ref: {type: string, format: uuid}
+        requester_name: {type: string}
+        owner_name: {type: string}
+        state: {type: string, enum: [requested, approved, rejected, revoked]}
+        revision: {type: integer, minimum: 1}
+        requested_at: {type: string, format: date-time}
+        processed_at: {type: [string, 'null'], format: date-time}
+        actor_ref: {type: string, format: uuid}
     KHTCReportPeriod: {"type":"object","properties":{"id":{"type":"string","format":"uuid"},"type":{"type":"string","enum":["week","month","quarter","year","program","adhoc"]},"year":{"type":"integer"},"name":{"type":"string"},"from":{"type":"string","format":"date-time"},"to":{"type":"string","format":"date-time"},"cutoff":{"type":"string","format":"date-time"},"departments":{"type":"array","items":{"type":"string"}},"no":{"type":["integer","null"]},"scope":{"type":["string","null"]}},"required":["id","type","year","name","from","to","cutoff","departments","no","scope"],"additionalProperties":false}
     KHTCReportPlan: {"type":"object","properties":{"VersionID":{"type":"string","format":"uuid"},"Year":{"type":"integer"},"Version":{"type":"integer"},"DecisionNo":{"type":"string"},"Entries":{"type":["array","null"],"items":{"type":"object","additionalProperties":true}}},"required":["VersionID","Year","Version","DecisionNo","Entries"],"additionalProperties":true}
     KHTCReportSourceRef: {"type":"object","properties":{"id":{"type":"string","format":"uuid"},"version":{"type":"integer"},"plan_version_id":{"type":["string","null"],"format":"uuid"},"figures_hash":{"type":"string"},"status_hash":{"type":"string"},"closed":{"type":"boolean"},"at":{"type":"string","format":"date-time"}},"required":["id","version","plan_version_id","figures_hash","status_hash","closed","at"],"additionalProperties":false}
@@ -29617,6 +29722,7 @@ components:
         active: {type: boolean}
         contact_access: {type: string, enum: [full, masked]}
         can_write: {type: boolean}
+        shared: {type: boolean, description: Quyền chia sẻ hiện hành chỉ xem và che định danh}
     NativeHouseholdProfile:
       type: object
       additionalProperties: false

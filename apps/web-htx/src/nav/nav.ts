@@ -1,6 +1,9 @@
 import type { ScopeLevel } from "@/auth/principal";
+import { config } from "@/config";
 import { matrixAllows, rolesWith, type HtxFunction } from "@/auth/permissions";
 import { API_CLIENT_ROLES, hasRole, KN_ROLES, METERING_READ_ROLES, MRV_ROLES, ROLES, type Principal } from "@/auth/principal";
+
+const nativeHTXRealm = config.oidc.issuer.replace(/\/$/, "").endsWith("/realms/agrigreen-htx");
 
 export type NavIcon =
   | "dashboard"
@@ -123,6 +126,9 @@ export const NAV_GROUPS: readonly NavGroup[] = [
       { href: "/htx", label: "Quản lý HTX & nông hộ", icon: "coop", levels: KN },
       { href: "/htx/dashboard", module: "pf/cropcycle", label: "Bảng điều hành sản xuất", icon: "chart", roles: HTX_READ },
       { href: "/htx/nong-ho", label: "Quản lý nông hộ", icon: "coop", roles: HTX_READ, fn: "FN-04" },
+      // VTKM-Q-07 (AH-274): danh mục dùng chung Vật tư/Máy móc — Đại diện HTX, Thành viên HTX chỉ xem và xuất Excel.
+      { href: "/htx/danh-muc-vat-tu", module: "pf/masterdata", label: "Danh mục vật tư, máy móc", icon: "warehouse", roles: [ROLES.coopManager, ROLES.htxMember] },
+      { href: "/htx/chia-se", module: "pf/cooperative", label: "Liên kết & chia sẻ dữ liệu", icon: "send", roles: [ROLES.coopManager], fn: "FN-09" },
       { href: "/htx/lo-ruong", module: "pf/geo", label: "Lô ruộng & ranh giới", icon: "plot", roles: HTX_READ },
       // AH-39: gắn dòng ma trận KHMV — Thành viên HTX thấy (và thao tác) vụ, nhật ký, sản lượng của HTX mình.
       { href: "/htx/mua-vu", module: "pf/cropcycle", label: "Vụ canh tác", icon: "season", roles: HTX_READ, fn: "KHMV-FN-03-XEM" },
@@ -161,7 +167,8 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     label: "6. Quản trị",
     items: [
       // FN-05: hai mục giữ vai "Tài khoản" (FN-07) và "Đơn vị hành chính" (FN-02) của App HTX tới khi có màn riêng.
-      { href: "/quan-tri/tai-khoan", label: "Tài khoản cán bộ", icon: "user", roles: [ROLES.platformAdmin, ROLES.accountAdmin, ROLES.accountAdminProvince], fn: "FN-07" },
+      { href: "/quan-tri/tai-khoan", label: "Tài khoản cán bộ", icon: "user", roles: [ROLES.platformAdmin, ROLES.accountAdmin, ROLES.accountAdminProvince], fn: "FN-07",hidden:nativeHTXRealm },
+      { href: "/quan-tri/tai-khoan-htx", label: "Tài khoản HTX", icon: "user", roles: [ROLES.platformAdmin], fn: "FN-07",hidden:!nativeHTXRealm && !config.mock },
       { href: "/quan-tri/danh-muc", module: "pf/masterdata", label: "Danh mục dùng chung", icon: "catalog", roles: [ROLES.platformAdmin, ROLES.masterdataAdmin], fn: "FN-02" },
       { href: "/quan-tri/don-vi-hanh-chinh", module: "pf/masterdata", label: "Đơn vị hành chính", icon: "catalog", roles: [ROLES.platformAdmin], fn: "FN-02" },
       {

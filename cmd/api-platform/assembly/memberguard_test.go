@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/httpx"
 	"github.com/gin-gonic/gin"
 
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/authz"
@@ -65,5 +66,41 @@ func TestMemberWriteGuard(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+type selectedHTXRoleModule struct{}
+
+func (selectedHTXRoleModule) RegisterApp(*gin.RouterGroup)   {}
+func (selectedHTXRoleModule) RegisterAdmin(*gin.RouterGroup) {}
+func (selectedHTXRoleModule) Middleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		p, _ := authz.FromContext(c.Request.Context())
+		c.Request = c.Request.WithContext(authz.WithPrincipal(c.Request.Context(), p.WithRoleCeiling(c.GetHeader("X-Test-Working-Role"))))
+		c.Next()
+	}
+}
+
+func TestMemberWriteGuardRechecksSelectedDualRoleBeforeHandler(t *testing.T) {
+	router := gin.New()
+	authenticate := func(c *gin.Context) {
+		c.Request = c.Request.WithContext(authz.WithPrincipal(c.Request.Context(), authz.Principal{Roles: []string{"coop_manager", "htx_member"}}))
+		c.Next()
+	}
+	router.Use(chain(Deps{Modules: []httpx.Module{selectedHTXRoleModule{}}}, authenticate)...)
+	// PUT intentionally skips POST's idempotency store. This test proves the
+	// global guard, independently of an individual handler's role checks.
+	router.PUT("/v1/non-member-write", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+	for _, test := range []struct {
+		role string
+		want int
+	}{{"htx_member", http.StatusForbidden}, {"coop_manager", http.StatusNoContent}} {
+		req := httptest.NewRequest(http.MethodPut, "/v1/non-member-write", nil)
+		req.Header.Set("X-Test-Working-Role", test.role)
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, req)
+		if response.Code != test.want {
+			t.Fatalf("selected %s: %d", test.role, response.Code)
+		}
 	}
 }

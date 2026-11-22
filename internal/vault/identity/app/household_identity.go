@@ -39,7 +39,9 @@ func (s *Service) householdReadScope(ctx context.Context, p authz.Principal, ref
 	if err != nil {
 		return client.HouseholdIdentityScope{}, err
 	}
-	if ref == uuid.Nil || scope.Ref != ref || (!p.Has(htxroles.Admin) && scope.CooperativeRef != p.OrgRef) {
+	shared := !p.Has(htxroles.Admin) && scope.CooperativeRef != p.OrgRef
+	if ref == uuid.Nil || scope.Ref != ref || (shared &&
+		(!p.Has(htxroles.Representative) || !scope.Shared || scope.ContactAccess != "masked" || scope.CanWrite)) {
 		return client.HouseholdIdentityScope{}, client.ProblemNotFound
 	}
 	if scope.ContactAccess != "full" && scope.ContactAccess != "masked" {

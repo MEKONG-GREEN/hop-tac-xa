@@ -43,6 +43,8 @@ func run(ctx context.Context, args []string, dir port.Directory, stdout io.Write
 	fs.SetOutput(os.Stderr)
 	tenantFlag := fs.String("tenant", "", "UUID tenant của Admin (bắt buộc)")
 	orgFlag := fs.String("org", "", "UUID đơn vị của Admin (bắt buộc)")
+	nativeHTX := fs.Bool("htx", false, "FN-07: Admin realm HTX, không có đơn vị, mật khẩu tạm 8 ký tự")
+	phone := fs.String("phone", "", "SĐT 10 chữ số bắt đầu bằng 0 (bắt buộc với -htx)")
 	username := fs.String("username", "", "tên đăng nhập (bắt buộc)")
 	email := fs.String("email", "", "email nhận mã OTP đăng nhập (bắt buộc)")
 	first := fs.String("first-name", "", "tên (tùy chọn)")
@@ -55,7 +57,12 @@ func run(ctx context.Context, args []string, dir port.Directory, stdout io.Write
 		fs.Usage()
 		return errors.New("-tenant bắt buộc và phải là UUID")
 	}
-	org, err := uuid.Parse(*orgFlag)
+	org := uuid.Nil
+	if *orgFlag != "" {
+		org, err = uuid.Parse(*orgFlag)
+	} else if !*nativeHTX {
+		err = errors.New("thiếu đơn vị")
+	}
 	if err != nil {
 		fs.Usage()
 		return errors.New("-org bắt buộc và phải là UUID")
@@ -72,6 +79,7 @@ func run(ctx context.Context, args []string, dir port.Directory, stdout io.Write
 		return errors.New("chưa cấu hình AG_KC_ADMIN_URL (cần AG_KC_ADMIN_URL, AG_KC_REALM, AG_KC_CLIENT_ID, AG_KC_CLIENT_SECRET)")
 	}
 	id, password, err := accounts.BootstrapAdmin(ctx, dir, accounts.BootstrapAdminInput{
+		NativeHTX: *nativeHTX, Phone: *phone,
 		TenantID: tenantID, OrgRef: org, Username: *username, Email: *email, FirstName: *first, LastName: *last,
 	}, rnd)
 	if err != nil {

@@ -10,14 +10,16 @@ import (
 
 // Thuộc tính người dùng trong Keycloak (khai trong user profile của realm).
 const (
-	AttrTenantID = "tenant_id"
-	AttrOrgRef   = "org_ref"
-	AttrPhone    = "phone_number"
+	AttrTenantID    = "tenant_id"
+	AttrOrgRef      = "org_ref"
+	AttrPhone       = "phone_number"
+	AttrCreationRef = "htx_creation_ref"
 )
 
 // User là tài khoản đọc từ Keycloak. Các trường định danh chỉ đi qua bộ nhớ tới
 // quản trị viên, không lưu ở pf, không vào log (R-14).
 type User struct {
+	CreationRef     uuid.UUID // server-owned provisioning correlation, not profile PII
 	ID              uuid.UUID
 	Username        string `pii:"true"`
 	Email           string `pii:"true"`
@@ -34,11 +36,12 @@ type User struct {
 
 // NewUser là dữ liệu tạo tài khoản.
 type NewUser struct {
-	Username        string `pii:"true"`
-	Email           string `pii:"true"`
-	FirstName       string `pii:"true"`
-	LastName        string `pii:"true"`
-	Phone           string `pii:"true"` // rỗng = không đặt
+	CreationRef     uuid.UUID // optional, server-owned FN-07 operation ID
+	Username        string    `pii:"true"`
+	Email           string    `pii:"true"`
+	FirstName       string    `pii:"true"`
+	LastName        string    `pii:"true"`
+	Phone           string    `pii:"true"` // rỗng = không đặt
 	TenantID        uuid.UUID
 	OrgRef          uuid.UUID
 	RequiredActions []string
@@ -60,9 +63,12 @@ type Query struct {
 var (
 	ErrUserNotFound = errors.New("accounts: không có người dùng trong Keycloak")
 	ErrUserExists   = errors.New("accounts: tên đăng nhập hoặc email đã có trong Keycloak")
-	ErrRoleNotFound = errors.New("accounts: vai không có trong realm")
-	ErrEmailFailed  = errors.New("accounts: Keycloak không gửi được email hành động")
-	ErrUnavailable  = errors.New("accounts: Keycloak không phản hồi")
+	// CreationRejected proves IAM rejected creation, unlike a timeout with an unknown outcome.
+	ErrCreationRejected = errors.New("accounts: IAM đã từ chối tạo người dùng")
+	ErrInvalidProfile   = errors.New("accounts: IAM từ chối thông tin hồ sơ")
+	ErrRoleNotFound     = errors.New("accounts: vai không có trong realm")
+	ErrEmailFailed      = errors.New("accounts: Keycloak không gửi được email hành động")
+	ErrUnavailable      = errors.New("accounts: Keycloak không phản hồi")
 )
 
 // ProfileUpdate là thông tin tài khoản sau khi sửa (KN v7.7 FN-AD-04.04). Mọi trường ghi đè; Phone rỗng

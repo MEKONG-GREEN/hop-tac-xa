@@ -215,6 +215,7 @@ class HttpSyncApi implements SyncApi {
     this.pushPath = defaultPushPath,
     this.pullPath = defaultPullPath,
     this.contextId,
+    this.workingRole,
     this.onContextRejected,
   }) : _client = client ?? http.Client();
 
@@ -247,6 +248,9 @@ class HttpSyncApi implements SyncApi {
   /// sau khi tạo (app hiện trường nối sau khi mở CSDL).
   ContextIdProvider? contextId;
 
+  /// HTX authorization subset; the server validates it against the signed token.
+  String? Function()? workingRole;
+
   /// Tự chọn lại ngữ cảnh khi máy chủ báo hết hạn/thu hồi rồi thử lại một lần.
   ContextRecovery? onContextRejected;
 
@@ -266,6 +270,7 @@ class HttpSyncApi implements SyncApi {
         : await contextId?.call();
     return {
       if (token != null) 'Authorization': 'Bearer $token',
+      'X-HTX-Role': ?workingRole?.call(),
       'Idempotency-Key': ?idem,
       'X-Device-Id': ?deviceId,
       if (ctx != null && ctx.isNotEmpty) contextHeader: ctx,

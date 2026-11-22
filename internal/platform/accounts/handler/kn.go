@@ -89,6 +89,9 @@ func (h Handler) Middleware() gin.HandlerFunc {
 		if !h.accountActiveGuard(c) {
 			return
 		}
+		if !h.nativeRoleGuard(c) {
+			return
+		}
 		// AH-23: chặn route nhận ảnh/GPS khi chưa đồng ý thu thập dữ liệu — trước nhánh KN, áp cho mọi request.
 		if !h.dataConsentGuard(c) {
 			return

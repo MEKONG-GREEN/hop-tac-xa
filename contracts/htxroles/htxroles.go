@@ -22,10 +22,19 @@ var raw []byte
 
 // Ba vai cố định của App HTX (FN-05/BR-01) và tên vai realm tương ứng.
 const (
-	Admin          = "platform_admin" // Admin
-	Representative = "coop_manager"   // Đại diện HTX
-	Member         = "htx_member"     // Thành viên HTX
+	WorkingRoleHeader = "X-HTX-Role"
+	Admin             = "platform_admin" // Admin
+	Representative    = "coop_manager"   // Đại diện HTX
+	Member            = "htx_member"     // Thành viên HTX
 )
+
+// ValidAccountRoles is the FN-07 single-role/Representative+Member rule.
+func ValidAccountRoles(roles []string) bool {
+	if len(roles) == 1 {
+		return roles[0] == Admin || roles[0] == Representative || roles[0] == Member
+	}
+	return len(roles) == 2 && roles[0] != roles[1] && slices.Contains(roles, Representative) && slices.Contains(roles, Member)
+}
 
 // Action là một ký hiệu quyền của ma trận.
 type Action byte

@@ -1,0 +1,97 @@
+paths:
+# @ag-order: 27801
+  /v1/htx-sharing:
+    get:
+      summary: Yêu cầu chia sẻ gửi đến và đã gửi của Đại diện HTX
+      responses:
+        '200':
+          description: Lịch sử yêu cầu theo chiều HTX yêu cầu xem HTX nhận
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/NativeSharing'}}
+    post:
+      summary: Gửi yêu cầu xem toàn bộ dữ liệu HTX khác chỉ đọc
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [owner_cooperative_ref]
+              properties:
+                owner_cooperative_ref: {type: string, format: uuid}
+      responses:
+        '201':
+          description: Yêu cầu đang chờ, chưa cấp quyền đọc
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/NativeSharing'}
+# @ag-order: 27802
+  /v1/htx-sharing/candidates:
+    get:
+      summary: Danh mục HTX còn được gửi yêu cầu, chỉ mã và tên
+      responses:
+        '200':
+          description: Không bao gồm chính HTX mình hoặc cặp đang chờ/đã duyệt
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [ref, code, name]
+                      properties:
+                        ref: {type: string, format: uuid}
+                        code: {type: string}
+                        name: {type: string}
+# @ag-order: 27803
+  /v1/htx-sharing/{ref}/transitions:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      summary: Duyệt, từ chối, thu hồi theo đúng bên và phiên bản
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [action, expected_revision]
+              properties:
+                action: {type: string, enum: [approve, reject, revoke]}
+                expected_revision: {type: integer, minimum: 1}
+      responses:
+        '200':
+          description: Đã chuyển trạng thái và ghi lịch sử; quyền đọc đổi ngay
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/NativeSharing'}
+components:
+  schemas:
+# @ag-order: 27804
+    NativeSharing:
+      type: object
+      required: [ref, requester_cooperative_ref, owner_cooperative_ref, state, revision, requested_at, processed_at, actor_ref]
+      properties:
+        ref: {type: string, format: uuid}
+        requester_cooperative_ref: {type: string, format: uuid}
+        owner_cooperative_ref: {type: string, format: uuid}
+        requester_name: {type: string}
+        owner_name: {type: string}
+        state: {type: string, enum: [requested, approved, rejected, revoked]}
+        revision: {type: integer, minimum: 1}
+        requested_at: {type: string, format: date-time}
+        processed_at: {type: [string, 'null'], format: date-time}
+        actor_ref: {type: string, format: uuid}

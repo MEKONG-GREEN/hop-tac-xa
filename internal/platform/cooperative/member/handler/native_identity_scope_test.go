@@ -55,7 +55,7 @@ func TestAH285NativeIdentityScopeEnforcesOwnerAndMatrix(t *testing.T) {
 			if r.hdr.Get("Cache-Control") != "no-store" {
 				t.Fatal("scope metadata must not be cached")
 			}
-			if tc.status == http.StatusOK && (len(r.body) != 5 || r.body["ref"] != tc.ref || r.body["cooperative_ref"] != tc.coop || r.body["contact_access"] != tc.access || r.body["can_write"] != tc.write) {
+			if tc.status == http.StatusOK && (len(r.body) != 6 || r.body["shared"] != false || r.body["ref"] != tc.ref || r.body["cooperative_ref"] != tc.coop || r.body["contact_access"] != tc.access || r.body["can_write"] != tc.write) {
 				t.Fatalf("metadata projection: %v", r.body)
 			}
 		})
@@ -86,7 +86,7 @@ func TestAH285NativeRegistrationScopeCannotWidenOrUseMissingProjection(t *testin
 		if r.status != tc.status {
 			t.Fatalf("registration scope: %d %v", r.status, r.body)
 		}
-		if r.status == http.StatusOK && (len(r.body) != 5 || r.body["can_write"] != true || r.body["contact_access"] != "full") {
+		if r.status == http.StatusOK && (len(r.body) != 6 || r.body["shared"] != false || r.body["can_write"] != true || r.body["contact_access"] != "full") {
 			t.Fatalf("registration proof: %v", r.body)
 		}
 	}

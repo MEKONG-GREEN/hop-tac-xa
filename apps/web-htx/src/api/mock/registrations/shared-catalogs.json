@@ -1,0 +1,5 @@
+{
+  "id": "shared-catalogs",
+  "source": "./shared-catalogs",
+  "app": [{ "export": "sharedCatalogRoutes", "order": 27402 }]
+}

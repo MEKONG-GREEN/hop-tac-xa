@@ -4561,6 +4561,132 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/accounts/htx-users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Danh sách tài khoản FN-07 trong tenant (Admin, realm HTX)
+         * @description Chỉ Admin đã qua MFA. Snapshot đầy đủ tối đa 2000 tài khoản IAM; vượt giới hạn trả lỗi. Cache-Control no-store.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Danh sách đầy đủ cho bộ lọc, số đếm và phân trang UX-01 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: components["schemas"]["AccountsUser"][];
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Tạo tài khoản FN-07 trong realm HTX (Admin)
+         * @description Một HTX, tối đa hai vai Đại diện/Thành viên; Admin không HTX. Mật khẩu tạm 8 ký tự chỉ trả một lần, bắt đổi lần đầu; replay không trả mật khẩu.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        username: string;
+                        full_name: string;
+                        phone: string;
+                        /** @description Bắt buộc với Admin để nhận OTP email */
+                        email?: string;
+                        /** Format: uuid */
+                        cooperative_ref?: string | null;
+                        roles: ("platform_admin" | "coop_manager" | "htx_member")[];
+                    };
+                };
+            };
+            responses: {
+                /** @description Phát lại, mật khẩu null */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NativeHTXAccountCreated"];
+                    };
+                };
+                /** @description Đã tạo, mật khẩu chỉ trong phản hồi này; Cache-Control no-store */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NativeHTXAccountCreated"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/accounts/htx-users/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Chi tiết tài khoản FN-07 (Admin, realm HTX) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Tài khoản trong tenant hiện tại, không có mật khẩu */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AccountsUser"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/masterdata/catalogs/{catalog}/items/{code}/delete": {
         parameters: {
             query?: never;
@@ -7100,6 +7226,11 @@ export interface components {
             commune_count: number;
             /** @description null khi chưa nối nguồn số HTX; không giả là 0 */
             cooperative_count: number | null;
+        };
+        NativeHTXAccountCreated: {
+            user: components["schemas"]["AccountsUser"];
+            /** @description Chỉ phản hồi đầu tiên; không ghi log hoặc lưu cache */
+            temporary_password: string | null;
         };
         CatalogDeleteResult: {
             /** @enum {string} */

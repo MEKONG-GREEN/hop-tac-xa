@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { assignPlot, cooperativePlotsPage, coopPlace, draftPlotsInCommune, getCooperative } from "@/api/adapters/cooperatives";
 import { newIdempotencyKey } from "@/api/idempotency";
 import { usePagedList } from "@/api/pagination";
@@ -13,7 +13,7 @@ import { useAuth } from "@/auth/AuthProvider";
 import { hasRole, ROLES } from "@/auth/principal";
 import { Icon } from "@/components/Icon";
 import { ReasonDialog } from "@/htx/common";
-import { useExitOnNotFound } from "@/shell/notice";
+import { useExitOnNotFound, useExitOnSharingStopped } from "@/shell/notice";
 import { HouseholdsPanel } from "@/htx/HouseholdsPanel";
 import { Dialog } from "@/components/Dialog";
 import { normalizePhone } from "@/htx/rules";
@@ -154,20 +154,25 @@ function DraftPlots({ coop, onAssigned }: { coop: Cooperative; onAssigned: () =>
   );
 }
 
-function PlotsTab({ coop }: { coop: Cooperative }) {
+function PlotsTab({ coop, shared, onScopeLost }: { coop: Cooperative; shared: boolean; onScopeLost: (p: ApiProblem) => void }) {
   const [version, setVersion] = useState(0);
   return (
     <>
-      <Plots key={version} id={coop.ref} />
-      {coop.active ? <DraftPlots coop={coop} onAssigned={() => setVersion((v) => v + 1)} /> : null}
+      <Plots key={version} id={coop.ref} onScopeLost={shared ? onScopeLost : undefined} />
+      {/* HTX được chia sẻ chỉ xem: không gán thửa nháp. */}
+      {coop.active && !shared ? <DraftPlots coop={coop} onAssigned={() => setVersion((v) => v + 1)} /> : null}
     </>
   );
 }
 
 /** Thửa của HTX — GET /v1/cooperatives/{ref}/plots (pf/geo). */
-function Plots({ id }: { id: string }) {
+function Plots({ id, onScopeLost }: { id: string; onScopeLost?: (p: ApiProblem) => void }) {
   const { api } = useAuth();
   const list = usePagedList((cursor) => cooperativePlotsPage(api, id, cursor, 20), [api, id]);
+  const lost = list.error;
+  useEffect(() => {
+    if (lost && (lost.status === 404 || lost.status === 403)) onScopeLost?.(lost);
+  }, [lost, onScopeLost]);
   return (
     <>
       {list.error ? <ProblemAlert problem={list.error} onRetry={list.reload} /> : null}
@@ -342,10 +347,23 @@ export default function CooperativeDetailPage() {
   const [copying, setCopying] = useState(false);
   const identity = `${principal?.subject}:${principal?.tenantId}:${principal?.orgRef}:${principal?.roles.join("|")}`;
   const coop = useAsync(() => getCooperative(api, id), [api, id, identity]);
-  const profileAudience = hasRole(principal, ROLES.platformAdmin, ROLES.coopManager, ROLES.htxMember);
+  // FN-06/FN-09 (AH-274): Đại diện HTX xem HTX khác đã duyệt chia sẻ — chỉ xem. Ghi nhận khi đã tải được để lần
+  // tải kế tiếp bị từ chối (thu hồi) được báo "ngừng chia sẻ" và về danh sách HTX; mở thẳng HTX chưa từng chia sẻ
+  // vẫn nhận câu ngoài phạm vi chung.
+  const sharedView = hasRole(principal, ROLES.coopManager) &&
+    !hasRole(principal, ROLES.platformAdmin, ROLES.registryAdmin, ROLES.knOfficer, ROLES.knProvinceAdmin) && !!principal?.orgRef && principal.orgRef !== id;
+  // Hồ sơ HTX (liên hệ người đại diện) chỉ của HTX mình; HTX được chia sẻ dùng thông tin chung của HTX.
+  const profileAudience = hasRole(principal, ROLES.platformAdmin, ROLES.coopManager, ROLES.htxMember) && !sharedView;
   const currentTab = !profileAudience && tab === "machines" ? "overview" : tab;
+  const [sharedSeen, setSharedSeen] = useState<string | null>(null);
+  if (sharedView && coop.data?.ref === id && sharedSeen !== id) setSharedSeen(id);
+  const wasShared = sharedView && sharedSeen === id;
+  const [lostProblem, setLostProblem] = useState<ApiProblem | null>(null);
+  const onScopeLost = useCallback((p: ApiProblem) => setLostProblem(p), []);
+  const stopped = useExitOnSharingStopped(lostProblem ?? coop.error, wasShared);
   // FN-06/EX-01, AC-N2: HTX ngoài phạm vi (404) → về trang đầu tiên được xem kèm thông báo.
-  const leaving = useExitOnNotFound(coop.error);
+  const leavingScope = useExitOnNotFound(wasShared ? null : coop.error);
+  const leaving = stopped || leavingScope;
   const canDeactivate = hasRole(principal, ROLES.registryAdmin, ROLES.platformAdmin);
   const canCopy = hasRole(principal, ROLES.registryAdmin, ROLES.platformAdmin, ROLES.knProvinceAdmin);
 
@@ -356,7 +374,7 @@ export default function CooperativeDetailPage() {
       </p>
       {leaving ? <Loading /> : coop.error ? <ProblemAlert problem={coop.error} onRetry={coop.reload} /> : null}
       {coop.loading && !coop.data ? <Loading /> : null}
-      {coop.data ? (
+      {coop.data && !leaving ? (
         <>
           <PageHead
             title={coop.data.name}
@@ -364,8 +382,9 @@ export default function CooperativeDetailPage() {
             actions={
               <>
                 {coop.data.active ? <span className="chip c-ok">Đang hoạt động</span> : <span className="chip c-mute">Đã vô hiệu hoá</span>}
+                {sharedView ? <span className="chip c-info">Được chia sẻ · chỉ xem</span> : null}
                 {coop.data.active && canEditHTXProfile(principal, id) ? <Link className="btn btn-p btn-sm" href={`/htx/${encodeURIComponent(id)}/chinh-sua`}>Sửa hồ sơ</Link> : null}
-                <HTXDeleteButton cooperativeRef={id} />
+                {!sharedView ? <HTXDeleteButton cooperativeRef={id} /> : null}
                 {canCopy ? (
                   <button type="button" className="btn btn-o btn-sm" onClick={() => setCopying(true)}>
                     Sao chép hồ sơ
@@ -403,8 +422,8 @@ export default function CooperativeDetailPage() {
               ]}
             >
               {currentTab === "overview" ? profileAudience ? <HTXProfileOverview cooperativeRef={id} /> : <Overview c={coop.data} /> : null}
-              {currentTab === "households" ? <HouseholdsPanel coop={coop.data} /> : null}
-              {currentTab === "plots" ? <PlotsTab coop={coop.data} /> : null}
+              {currentTab === "households" ? <HouseholdsPanel coop={coop.data} shared={sharedView} onScopeLost={sharedView ? onScopeLost : undefined} /> : null}
+              {currentTab === "plots" ? <PlotsTab coop={coop.data} shared={sharedView} onScopeLost={onScopeLost} /> : null}
               {currentTab === "machines" && profileAudience ? <HTXProfileOverview cooperativeRef={id} machinesOnly /> : null}
             </Tabs>
           </div>

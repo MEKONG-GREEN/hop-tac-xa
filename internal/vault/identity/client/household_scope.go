@@ -19,6 +19,7 @@ import (
 // HouseholdIdentityScope is owner metadata, never an identity payload. The
 // owner verifies the original user's membership for every request.
 type HouseholdIdentityScope struct {
+	Shared         bool      `json:"shared"`
 	Ref            uuid.UUID `json:"ref"`
 	CooperativeRef uuid.UUID `json:"cooperative_ref"`
 	Active         bool      `json:"active"`
@@ -105,6 +106,7 @@ func (c *householdScopeHTTP) readObject(ctx context.Context, path string, out an
 		return ProblemHouseholdScopeUnavailable
 	}
 	req.Header.Set("Authorization", "Bearer "+raw)
+	forwardWorkingRole(ctx, req)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Cache-Control", "no-store")
 	resp, err := c.hc.Do(req)

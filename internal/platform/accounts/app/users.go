@@ -29,6 +29,9 @@ type CreateInput struct {
 // cấp vai, required actions VERIFY_EMAIL + UPDATE_PASSWORD (+ CONFIGURE_TOTP với
 // vai [MFA]) và gửi liên kết kích hoạt một lần — không có mật khẩu tạm (ADR-0010).
 func (s *Service) Create(ctx context.Context, in CreateInput) (Result, error) {
+	if len(s.NativeHTXKey) > 0 {
+		return Result{}, ErrNotGrantable.WithDetail("Dùng luồng tạo tài khoản FN-07")
+	}
 	a, err := s.caller(ctx)
 	if err != nil {
 		return Result{}, err
@@ -94,6 +97,9 @@ func (s *Service) checkUnique(ctx context.Context, a *actor, prof domain.Profile
 }
 
 func (s *Service) create(ctx context.Context, a *actor, in CreateInput) (Result, error) {
+	if len(s.NativeHTXKey) > 0 {
+		return Result{}, ErrNotGrantable.WithDetail("Dùng luồng tạo tài khoản FN-07")
+	}
 	if err := requireKey(in.IdemKey); err != nil {
 		return Result{}, err
 	}
@@ -331,6 +337,9 @@ func (s *Service) Resend(ctx context.Context, in ResendInput) (Result, error) {
 }
 
 func (s *Service) resend(ctx context.Context, a *actor, in ResendInput) (Result, error) {
+	if len(s.NativeHTXKey) > 0 {
+		return Result{}, ErrNotGrantable.WithDetail("FN-07 đặt lại mật khẩu qua OTP, Admin không gửi liên kết đổi mật khẩu")
+	}
 	if err := requireKey(in.IdemKey); err != nil {
 		return Result{}, err
 	}
@@ -375,6 +384,9 @@ type AssignInput struct {
 
 // Assign đổi đơn vị và vai (HTX US-ACC-01 AC-2: áp dụng ngay, không bắt đăng nhập lại).
 func (s *Service) Assign(ctx context.Context, in AssignInput) (Result, error) {
+	if len(s.NativeHTXKey) > 0 {
+		return Result{}, ErrNotGrantable.WithDetail("FN-07 không cho đổi vai hoặc HTX qua luồng gán đơn vị")
+	}
 	a, err := s.caller(ctx)
 	if err != nil {
 		return Result{}, err
