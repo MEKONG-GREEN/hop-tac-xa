@@ -169,6 +169,32 @@ export const htxGapAppRoutes: Route[] = [
     },
   },
   {
+    // FN-04 (AH-285, AH-286): chi tiết hộ. Che ở "máy chủ": Thành viên HTX và hộ của HTX được chia sẻ chỉ nhận
+    // SĐT 4 đầu/3 cuối, CCCD 3 đầu/3 cuối (QTPQ-Q-61); hộ HTX mình với Đại diện HTX, Admin: đầy đủ.
+    method: "GET",
+    pattern: /^\/v1\/households\/([\w-]+)\/profile$/,
+    handler: ({ params, persona }) => {
+      if (!hasRole(persona, "platform_admin", "coop_manager", "htx_member")) return problem(403, "forbidden", "Forbidden");
+      const at = locate(params[0] ?? "");
+      if (!at) return problem(404, "party.household_not_found", "Không tìm thấy nông hộ");
+      const shared = nativeSharedRead(persona, at.coop.api.ref);
+      const admin = hasRole(persona, "platform_admin");
+      if (!admin && !shared && persona.me.org?.ref !== at.coop.api.ref) return problem(404, "party.household_not_found", "Không tìm thấy nông hộ");
+      const row = householdMockRows(at.coop).find((h) => h.household_ref === params[0])!;
+      const masked = shared || (!admin && !hasRole(persona, "coop_manager"));
+      const phone = syntheticPhone(at.coop, at.index);
+      const nid = `0791234${String(at.index).padStart(5, "0")}`;
+      const mask = (v: string, head: number, tail: number) => v.slice(0, head) + "*".repeat(Math.max(0, v.length - head - tail)) + v.slice(-tail);
+      return json({
+        household: { household_ref: row.household_ref, cooperative_ref: row.cooperative_ref, commune_code: row.commune_code, cultivated_area_ha: row.cultivated_area_ha, livestock_area_ha: null, member_since: row.member_since, active: row.active },
+        code: `HO-${String(at.index + 1).padStart(5, "0")}`,
+        revision: 1,
+        contact_access: masked ? "masked" : "full",
+        identity: { full_name: row.label, phone: masked ? mask(phone, 4, 3) : phone, national_id: masked ? mask(nid, 3, 3) : nid, address: "" },
+      }, 200, { "Cache-Control": "no-store" });
+    },
+  },
+  {
     // HTX US-HH-03: SĐT đọc lúc bấm gọi, không lưu đệm.
     method: "GET",
     pattern: /^\/v1\/households\/([\w-]+)\/contact$/,
