@@ -28,7 +28,9 @@ provides:
     - PasswordSetter
     - ProfileUpdater
     - RecipientDirectory
+    - RequiredActionRemover
     - RoleHolders
+    - SMSSender
     - ScopedDutyHolders
     - SessionReader
     - StaffContacts

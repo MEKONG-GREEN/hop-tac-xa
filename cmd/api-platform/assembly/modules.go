@@ -258,6 +258,19 @@ func Build(ctx context.Context, open PoolOpener, clk clock.Clock, ext External) 
 			slog.Default().Warn("chưa cấu hình SMTP — Admin không đăng nhập được (mã OTP gửi qua email, ADR-0061)",
 				"event", "startup", "outcome", "skipped")
 		}
+		// AH-280 (ADR-0063): kênh SMS của mã OTP đặt lại mật khẩu. Mặc định tắt (fail-closed); mailhog chỉ ở môi trường thử.
+		var smsMailer accounts.SMSMailer
+		if ok {
+			smsMailer = mailer
+		}
+		sms, err := accounts.SMSFromEnv(nil, smsMailer)
+		if err != nil {
+			return Modules{}, pools, err
+		}
+		acc.UseSMS(sms)
+		if sms == nil {
+			slog.Default().Warn("kênh SMS tắt — quên mật khẩu báo liên hệ người cấp tài khoản (AG_SMS)", "event", "startup", "outcome", "skipped")
+		}
 	}
 	// KN v7.7 P1 ↔ P2: menu theo ngữ cảnh phiên, số tài khoản theo phòng ban (mở khóa "xóa" phòng ban),
 	// dòng tài khoản của bảng Ảnh hưởng, tên người thao tác trong Log (Keycloak, dự phòng danh bạ cán bộ).

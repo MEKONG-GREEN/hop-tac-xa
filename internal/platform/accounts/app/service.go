@@ -113,6 +113,9 @@ type Service struct {
 	// LoginOTPMailer (ADR-0061): kênh email gửi mã OTP đăng nhập của vai trong port.EmailOTPRoles (Admin). Nil (thiếu
 	// SMTP) → vai đó không đăng nhập được: bước 1 trả 503 accounts.login_otp_unavailable, không báo "đã gửi" giả.
 	LoginOTPMailer ResetMailer
+	// SMS (AH-280, ADR-0063): kênh gửi mã OTP đặt lại mật khẩu. Nil = tắt (AG_SMS trống hoặc disabled): không tạo mã,
+	// báo liên hệ người cấp tài khoản, không báo "đã gửi" giả.
+	SMS port.SMSSender
 	// Log: nhật ký vận hành (không PII, không mã/mật khẩu). Nil → slog.Default().
 	Log *slog.Logger
 }

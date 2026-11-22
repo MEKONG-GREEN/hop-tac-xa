@@ -7,6 +7,10 @@ import { Icon } from "@/components/Icon";
 import { config } from "@/config";
 import { BrandMark } from "@/shell/BrandMark";
 import { BRAND } from "@/shell/brand";
+import { OtpForgotPassword } from "@/shell/OtpForgotPassword";
+
+/** Realm HTX (AH-280): quên mật khẩu bằng mã OTP qua SMS; realm KN giữ liên kết email (#255). */
+const nativeHTXRealm = config.oidc.issuer.replace(/\/$/, "").endsWith("/realms/agrigreen-htx");
 
 /**
  * "Quên mật khẩu?" (BRD 2.0 FN-CH-00.01, #255): nhập email, nhận liên kết đặt lại (hiệu lực 30 phút, dùng một lần, tối đa
@@ -50,7 +54,9 @@ export default function ForgotPasswordPage() {
             {BRAND.productName}
           </div>
           <h1>Quên mật khẩu</h1>
-          {sent ? (
+          {nativeHTXRealm ? (
+            <OtpForgotPassword />
+          ) : sent ? (
             <>
               <p role="status">
                 Nếu email này thuộc một tài khoản đang hoạt động, hệ thống đã gửi liên kết đặt lại mật khẩu. Liên kết có hiệu lực
