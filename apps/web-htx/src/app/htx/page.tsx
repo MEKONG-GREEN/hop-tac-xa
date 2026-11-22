@@ -29,12 +29,14 @@ export default function CooperativesPage() {
   const [q, setQ] = useState("");
   const [unit, setUnit] = useState("");
   const [includeInactive, setIncludeInactive] = useState(false);
+  const [relation, setRelation] = useState<"" | "own" | "shared">("");
   const [importing, setImporting] = useState(false);
   const [version, setVersion] = useState(0);
   const canImport = hasRole(principal, ROLES.registryAdmin, ROLES.platformAdmin, ROLES.knProvinceAdmin);
   const profileAudience = hasRole(principal, ROLES.platformAdmin, ROLES.coopManager, ROLES.htxMember);
   // FN-06 (AH-274): Đại diện HTX thấy thêm HTX đã duyệt chia sẻ cho HTX mình — chỉ xem.
-  const sharedRow = (ref: string) => hasRole(principal, ROLES.coopManager) && !hasRole(principal, ROLES.platformAdmin) && !!principal?.orgRef && principal.orgRef !== ref;
+  const sharingReader = hasRole(principal, ROLES.coopManager) && !hasRole(principal, ROLES.platformAdmin) && !!principal?.orgRef;
+  const sharedRow = (ref: string) => sharingReader && principal?.orgRef !== ref;
   const dq = useDebounced(q);
 
   // Bộ lọc địa bàn: TW chọn tỉnh; tỉnh chọn xã trực thuộc; xã không cần lọc.
@@ -44,8 +46,8 @@ export default function CooperativesPage() {
 
   const list = usePagedList(
     (cursor) =>
-      cooperativesPage(api, { q: dq || undefined, admin_unit: unit || undefined, include_inactive: includeInactive || undefined, cursor, limit: 20 }),
-    [api, dq, unit, includeInactive, version],
+      cooperativesPage(api, { q: dq || undefined, admin_unit: unit || undefined, include_inactive: includeInactive || undefined, relation: (sharingReader && relation) || undefined, cursor, limit: 20 }),
+    [api, dq, unit, includeInactive, relation, sharingReader, version],
   );
 
   return (
@@ -82,6 +84,16 @@ export default function CooperativesPage() {
                     {u.name}
                   </option>
                 ))}
+              </select>
+            </div>
+          ) : null}
+          {sharingReader ? (
+            <div className="field">
+              <label htmlFor="htx-relation">Hiển thị</label>
+              <select id="htx-relation" className="select" value={relation} onChange={(e) => setRelation(e.target.value as "" | "own" | "shared")}>
+                <option value="">Tất cả</option>
+                <option value="own">HTX của tôi</option>
+                <option value="shared">Được chia sẻ</option>
               </select>
             </div>
           ) : null}

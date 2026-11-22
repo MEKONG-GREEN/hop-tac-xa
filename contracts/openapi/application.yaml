@@ -586,6 +586,7 @@ paths:
         - {name: admin_unit, in: query, description: "G-03: mã tỉnh hoặc xã hiện hành — chỉ HTX thuộc đơn vị này (và con cháu) giao với phạm vi người gọi; mã không có hiệu lực → 422 validation_failed (trường admin_unit)", schema: {type: string}}
         - {name: include_inactive, in: query, schema: {type: boolean, default: false}}
         - {name: confirmation, in: query, description: "D2: lọc theo trạng thái xác nhận; vắng = mọi HTX (gồm HTX tạm Chưa xác nhận)", schema: {$ref: "#/components/schemas/HTXConfirmationStatus"}}
+        - {name: relation, in: query, description: "FN-03/AC-01 (phạm vi theo HTX): own = HTX của tôi, shared = HTX được chia sẻ (chỉ xem); vắng = tất cả, HTX của người gọi đứng đầu trang đầu. Giá trị khác → 422 (trường relation)", schema: {type: string, enum: [own, shared]}}
         - {name: cursor, in: query, schema: {type: string}}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
       responses:
@@ -17316,6 +17317,26 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/NativeSharing'}
+  /v1/cooperatives/{ref}/htx-sharing:
+    get:
+      summary: Tab "Liên kết chia sẻ dữ liệu" của một HTX, chỉ đọc
+      description: |
+        FN-03, QTPQ-Q-55: Đại diện HTX chỉ trên HTX của mình (HTX khác, kể cả HTX được chia sẻ → 404); Admin trên mọi
+        HTX của tenant ở chế độ chỉ xem (không thao tác, FN-09/BR-03). Thành viên HTX → 403.
+      parameters:
+        - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Yêu cầu chia sẻ HTX này gửi đi và nhận được
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/NativeSharing'}}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
   /v1/extension/cnts/weekly-plan/schedule:
     post:
       summary: "Kế hoạch tuần BM-05 Phần II đã đăng ký → gửi duyệt Lịch công tác tuần của người gọi (BF-CN-WEEKLY, PRD UP-06). Mục sinh từ kế hoạch có mã ổn định theo xã và ngày — chỉ thay mục của kế hoạch xã này; mục của kế hoạch xã khác và mục tự thêm ở Lịch công tác giữ nguyên (trùng giờ chỉ cảnh báo, xem schedule.conflict_count)"

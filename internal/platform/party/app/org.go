@@ -734,7 +734,15 @@ type ListQuery struct {
 	AdminUnit string
 	// Confirmation (D2, chỉ danh sách HTX): confirmed | unconfirmed | rỗng = không lọc.
 	Confirmation string
+	// Relation (FN-03/AC-01, chỉ danh sách HTX): own = HTX của tôi, shared = được chia sẻ, rỗng = tất cả.
+	Relation string
 }
+
+// Bộ lọc quan hệ của danh sách HTX (FN-03/AC-01).
+const (
+	RelationOwn    = "own"
+	RelationShared = "shared"
+)
 
 func (q *ListQuery) normalize() {
 	if q.Limit <= 0 || q.Limit > 200 {
@@ -811,16 +819,38 @@ func (r *Registry) ListCooperatives(ctx context.Context, q ListQuery) (CoopPage,
 	if err != nil || sc.Empty() {
 		return CoopPage{Items: []Cooperative{}}, err
 	}
+	if q.Relation != "" && q.Relation != RelationOwn && q.Relation != RelationShared {
+		return CoopPage{}, problem.Validation.WithField("relation", "chỉ nhận own hoặc shared")
+	}
 	qRefs, only, err := r.coopFilterRefs(ctx, p.TenantID, q.Q, nil, nil, q.Confirmation)
 	if err != nil {
 		return CoopPage{}, err
 	}
-	if ownCoopOnly(p) { // FN-06: chỉ HTX gắn với tài khoản
+	// FN-03/AC-01: HTX của Đại diện đứng đầu danh sách; các trang sau chỉ gồm HTX được chia sẻ nên HTX mình
+	// không lặp lại. Lọc Tất cả / HTX của tôi / Được chia sẻ chỉ có nghĩa với phạm vi theo HTX.
+	var ownOnly []uuid.UUID
+	if ownCoopOnly(p) { // FN-06: chỉ HTX gắn với tài khoản và HTX đã duyệt chia sẻ
 		refs, err := r.nativeCooperativeRefs(ctx, p)
 		if err != nil {
 			return CoopPage{}, err
 		}
-		only = intersectRefs(only, refs)
+		own := []uuid.UUID{p.OrgRef}
+		shared := slices.DeleteFunc(slices.Clone(refs), func(x uuid.UUID) bool { return x == p.OrgRef })
+		switch {
+		case q.Relation == RelationOwn:
+			only = intersectRefs(only, own)
+		case q.Relation == RelationShared:
+			only = intersectRefs(only, shared)
+		case len(shared) > 0:
+			if q.After == uuid.Nil {
+				ownOnly = intersectRefs(only, own)
+			}
+			only = intersectRefs(only, shared)
+		default:
+			only = intersectRefs(only, refs)
+		}
+	} else if q.Relation == RelationShared {
+		return CoopPage{Items: []Cooperative{}}, nil
 	}
 	all, units := sc.All, sc.Units
 	if ownCoopOnly(p) {
@@ -830,10 +860,19 @@ func (r *Registry) ListCooperatives(ctx context.Context, q ListQuery) (CoopPage,
 	}
 	var orgs []store.CoopOrg
 	err = tenant.WithTenantTx(ctx, r.DB, p.TenantID, func(tx pgx.Tx) error {
-		var e error
-		orgs, e = store.ListCooperativeOrgs(ctx, tx, store.CoopOrgFilter{
-			All: all, Units: units, Q: q.Q, QRefs: qRefs, Only: only, IncludeInactive: q.IncludeInactive, After: q.After, Limit: q.Limit + 1,
-		})
+		f := store.CoopOrgFilter{All: all, Units: units, Q: q.Q, QRefs: qRefs, IncludeInactive: q.IncludeInactive}
+		if ownOnly != nil {
+			head := f
+			head.Only, head.Limit = ownOnly, 1
+			first, e := store.ListCooperativeOrgs(ctx, tx, head)
+			if e != nil {
+				return e
+			}
+			orgs = first
+		}
+		f.Only, f.After, f.Limit = only, q.After, q.Limit-len(orgs)+1
+		rest, e := store.ListCooperativeOrgs(ctx, tx, f)
+		orgs = append(orgs, rest...)
 		return e
 	})
 	if err != nil {

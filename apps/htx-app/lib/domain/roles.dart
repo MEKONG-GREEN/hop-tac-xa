@@ -72,6 +72,7 @@ enum HtxScreen {
   review,
   collection,
   dashboard,
+  cooperativeInfo,
 }
 
 /// Quy tắc ẩn/hiện của app theo chế độ — cùng ma trận quyền với máy chủ.
@@ -108,6 +109,8 @@ extension HtxModeAccess on HtxMode {
       HtxScreen.support ||
       HtxScreen.staff => farmer,
       HtxScreen.households => _matrix(HtxFn.households, HtxAction.read),
+      // FN-03 (AH-284): app chỉ có màn xem thông tin HTX của mình, chỉ đọc.
+      HtxScreen.cooperativeInfo => _matrix(HtxFn.cooperative, HtxAction.read),
       HtxScreen.seasonCalendars =>
         this == HtxMode.member && _matrix(HtxFn.calendar, HtxAction.read),
       HtxScreen.plotMap => _matrix(HtxFn.plotsAndArea, HtxAction.read),

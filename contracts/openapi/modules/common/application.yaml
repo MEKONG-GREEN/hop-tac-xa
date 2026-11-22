@@ -112,6 +112,7 @@ paths:
         - {name: admin_unit, in: query, description: "G-03: mã tỉnh hoặc xã hiện hành — chỉ HTX thuộc đơn vị này (và con cháu) giao với phạm vi người gọi; mã không có hiệu lực → 422 validation_failed (trường admin_unit)", schema: {type: string}}
         - {name: include_inactive, in: query, schema: {type: boolean, default: false}}
         - {name: confirmation, in: query, description: "D2: lọc theo trạng thái xác nhận; vắng = mọi HTX (gồm HTX tạm Chưa xác nhận)", schema: {$ref: "#/components/schemas/HTXConfirmationStatus"}}
+        - {name: relation, in: query, description: "FN-03/AC-01 (phạm vi theo HTX): own = HTX của tôi, shared = HTX được chia sẻ (chỉ xem); vắng = tất cả, HTX của người gọi đứng đầu trang đầu. Giá trị khác → 422 (trường relation)", schema: {type: string, enum: [own, shared]}}
         - {name: cursor, in: query, schema: {type: string}}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
       responses:

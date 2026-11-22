@@ -47,13 +47,20 @@ export const appRoutes35: Route[] = [{
       const inactive = url.searchParams.get("include_inactive") === "true";
       // G-03: admin_unit = mã tỉnh hoặc xã; ngoài phạm vi → danh sách rỗng (không lỗi).
       const unit = url.searchParams.get("admin_unit");
+      // FN-03/AC-01: relation = own | shared (phạm vi theo HTX); HTX của người gọi đứng đầu danh sách.
+      const relation = url.searchParams.get("relation");
+      if (relation && relation !== "own" && relation !== "shared") return problem(422, "validation_failed", "relation chỉ nhận own hoặc shared");
+      const own = ownCoopOnly(persona) ? persona.me.org?.ref : undefined;
+      if (relation === "shared" && !own) return json({ items: [], next_cursor: null });
       const list = COOPERATIVES.filter(
         (c) =>
           visibleCoop(persona, c) &&
+          (!own || relation !== "own" || c.api.ref === own) &&
+          (!own || relation !== "shared" || c.api.ref !== own) &&
           (!unit || c.province_code === unit || c.api.admin_unit_code === unit) &&
           (inactive || c.api.active) &&
           (!q || norm(`${c.api.name} ${c.api.code} ${c.api.tax_code ?? ""}`).includes(q)),
-      ).map(withHTXSummary);
+      ).sort((a, b) => Number(b.api.ref === own) - Number(a.api.ref === own)).map(withHTXSummary);
       return json(paginate(list, url));
     },
   }];

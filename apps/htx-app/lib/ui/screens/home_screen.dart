@@ -13,6 +13,7 @@ import 'dashboard_screen.dart';
 import 'farm_log_screen.dart';
 import 'harvest_screen.dart';
 import 'households_screen.dart';
+import 'cooperative_info_screen.dart';
 import 'bulk_open_screen.dart';
 import 'collection_screen.dart';
 import 'news_screen.dart';
@@ -181,6 +182,14 @@ class HomeScreen extends ConsumerWidget {
               icon: Icons.bar_chart,
               label: 'Tổng quan',
               onTap: () => open(const DashboardScreen()),
+            ),
+          ),
+          (
+            HtxScreen.cooperativeInfo,
+            BigTile(
+              icon: Icons.apartment,
+              label: 'Thông tin HTX',
+              onTap: () => open(const CooperativeInfoScreen()),
             ),
           ),
           (

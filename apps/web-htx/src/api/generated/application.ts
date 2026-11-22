@@ -12568,6 +12568,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/cooperatives/{ref}/htx-sharing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Tab "Liên kết chia sẻ dữ liệu" của một HTX, chỉ đọc
+         * @description FN-03, QTPQ-Q-55: Đại diện HTX chỉ trên HTX của mình (HTX khác, kể cả HTX được chia sẻ → 404); Admin trên mọi
+         *     HTX của tenant ở chế độ chỉ xem (không thao tác, FN-09/BR-03). Thành viên HTX → 403.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    ref: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Yêu cầu chia sẻ HTX này gửi đi và nhận được */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items: components["schemas"]["NativeSharing"][];
+                        };
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/extension/cnts/weekly-plan/schedule": {
         parameters: {
             query?: never;
@@ -29201,6 +29247,8 @@ export interface operations {
                 include_inactive?: boolean;
                 /** @description D2: lọc theo trạng thái xác nhận; vắng = mọi HTX (gồm HTX tạm Chưa xác nhận) */
                 confirmation?: components["schemas"]["HTXConfirmationStatus"];
+                /** @description FN-03/AC-01 (phạm vi theo HTX): own = HTX của tôi, shared = HTX được chia sẻ (chỉ xem); vắng = tất cả, HTX của người gọi đứng đầu trang đầu. Giá trị khác → 422 (trường relation) */
+                relation?: "own" | "shared";
                 cursor?: string;
                 limit?: number;
             };

@@ -27,6 +27,7 @@ import { useAsync } from "@/lib/useAsync";
 import { HTXProfileOverview } from "@/htx/HTXProfileOverview";
 import { HTXDeleteButton } from "@/htx/HTXDeleteButton";
 import { canEditHTXProfile } from "@/htx/profiles";
+import { CoopSharingTab, sharingTabAudience } from "@/htx/CoopSharingTab";
 
 const PLOT_STATUS: Record<PlotStatus, { cls: string; text: string }> = {
   active: { cls: "c-ok", text: "Đang dùng" },
@@ -354,7 +355,9 @@ export default function CooperativeDetailPage() {
     !hasRole(principal, ROLES.platformAdmin, ROLES.registryAdmin, ROLES.knOfficer, ROLES.knProvinceAdmin) && !!principal?.orgRef && principal.orgRef !== id;
   // Hồ sơ HTX (liên hệ người đại diện) chỉ của HTX mình; HTX được chia sẻ dùng thông tin chung của HTX.
   const profileAudience = hasRole(principal, ROLES.platformAdmin, ROLES.coopManager, ROLES.htxMember) && !sharedView;
-  const currentTab = !profileAudience && tab === "machines" ? "overview" : tab;
+  // QTPQ-Q-55: Đại diện HTX trên HTX của mình, Admin mọi HTX (chỉ xem); Thành viên HTX, HTX được chia sẻ: không có.
+  const sharingTab = sharedView ? null : sharingTabAudience(principal, id);
+  const currentTab = (!profileAudience && tab === "machines") || (!sharingTab && tab === "sharing") ? "overview" : tab;
   const [sharedSeen, setSharedSeen] = useState<string | null>(null);
   if (sharedView && coop.data?.ref === id && sharedSeen !== id) setSharedSeen(id);
   const wasShared = sharedView && sharedSeen === id;
@@ -419,12 +422,14 @@ export default function CooperativeDetailPage() {
                 { id: "households", label: "Nông hộ" },
                 { id: "plots", label: "Thửa ruộng" },
                 ...(profileAudience ? [{ id: "machines", label: "Máy móc hiện có" }] : []),
+                ...(sharingTab ? [{ id: "sharing", label: "Liên kết chia sẻ dữ liệu" }] : []),
               ]}
             >
               {currentTab === "overview" ? profileAudience ? <HTXProfileOverview cooperativeRef={id} /> : <Overview c={coop.data} /> : null}
               {currentTab === "households" ? <HouseholdsPanel coop={coop.data} shared={sharedView} onScopeLost={sharedView ? onScopeLost : undefined} /> : null}
               {currentTab === "plots" ? <PlotsTab coop={coop.data} shared={sharedView} onScopeLost={onScopeLost} /> : null}
               {currentTab === "machines" && profileAudience ? <HTXProfileOverview cooperativeRef={id} machinesOnly /> : null}
+              {currentTab === "sharing" && sharingTab ? <CoopSharingTab coopRef={id} manage={sharingTab === "manage"} /> : null}
             </Tabs>
           </div>
         </>

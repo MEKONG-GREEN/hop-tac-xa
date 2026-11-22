@@ -99,6 +99,7 @@ void main() {
       HtxMode.manager: {
         ...common,
         HtxScreen.households,
+        HtxScreen.cooperativeInfo,
         HtxScreen.plotMap,
         HtxScreen.householdLogs,
         HtxScreen.plotDetail,
@@ -111,6 +112,7 @@ void main() {
         ...common,
         HtxScreen.seasonCalendars,
         HtxScreen.households,
+        HtxScreen.cooperativeInfo,
         HtxScreen.plotMap,
         HtxScreen.bulkOpen,
         HtxScreen.householdLogs,

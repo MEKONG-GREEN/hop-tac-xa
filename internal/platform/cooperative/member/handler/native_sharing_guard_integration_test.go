@@ -238,3 +238,59 @@ func TestNativeSharedReadRLSNeverOpensWrites(t *testing.T) {
 		t.Fatal("revoked grant: shared row hidden at the next transaction")
 	}
 }
+
+// FN-03, QTPQ-Q-55/AC-N1/AC-N2: tab "Liên kết chia sẻ dữ liệu" — Đại diện HTX trên HTX của mình, Admin trên mọi
+// HTX (chỉ đọc), Thành viên HTX không có; Đại diện không xem quan hệ của HTX khác, kể cả HTX đã chia sẻ cho mình.
+func TestCooperativeSharingTabAudience(t *testing.T) {
+	f := newFixture(t)
+	tr := f.seedTree(f.root())
+	a := f.as(f.tenant, tr.c1, htxroles.Representative)
+	b := f.as(f.tenant, tr.c2, htxroles.Representative)
+	r := a.appDo(http.MethodPost, "/v1/htx-sharing", map[string]any{"owner_cooperative_ref": tr.c2})
+	if r.status != http.StatusCreated {
+		t.Fatalf("request: %+v", r)
+	}
+	if got := b.appDo(http.MethodPost, "/v1/htx-sharing/"+str(r.body, "ref")+"/transitions", map[string]any{"action": "approve", "expected_revision": 1}); got.status != http.StatusOK {
+		t.Fatalf("approve: %+v", got)
+	}
+	tab := func(c caller, coop uuid.UUID) resp {
+		t.Helper()
+		got := c.appDo(http.MethodGet, "/v1/cooperatives/"+coop.String()+"/htx-sharing", nil)
+		if got.hdr.Get("Cache-Control") != "no-store" {
+			t.Fatal("sharing tab must not be cached")
+		}
+		return got
+	}
+	one := func(got resp, who string) {
+		t.Helper()
+		items, _ := got.body["items"].([]any)
+		if got.status != http.StatusOK || len(items) != 1 {
+			t.Fatalf("%s: %d %v", who, got.status, got.body)
+		}
+		g, _ := items[0].(map[string]any)
+		if g["state"] != "approved" || g["requester_cooperative_ref"] != tr.c1.String() || g["owner_cooperative_ref"] != tr.c2.String() {
+			t.Fatalf("%s: %v", who, g)
+		}
+	}
+	one(tab(a, tr.c1), "Đại diện HTX yêu cầu")
+	one(tab(b, tr.c2), "Đại diện HTX nhận")
+	admin := f.as(f.tenant, uuid.Nil, htxroles.Admin)
+	one(tab(admin, tr.c1), "Admin trên HTX A")
+	one(tab(admin, tr.c2), "Admin trên HTX B")
+	if got := tab(a, tr.c2); got.status != http.StatusNotFound {
+		t.Fatalf("Đại diện HTX trên HTX được chia sẻ: %d %v", got.status, got.body)
+	}
+	if got := tab(f.as(f.tenant, tr.c1, htxroles.Member), tr.c1); got.status != http.StatusForbidden {
+		t.Fatalf("Thành viên HTX: %d %v", got.status, got.body)
+	}
+	if got := tab(admin, uuid.New()); got.status != http.StatusNotFound {
+		t.Fatalf("Admin, HTX không tồn tại: %d %v", got.status, got.body)
+	}
+	if got := tab(f.as(ids.New(), uuid.Nil, htxroles.Admin), tr.c1); got.status == http.StatusOK {
+		t.Fatalf("Admin tenant khác: %d %v", got.status, got.body)
+	}
+	// Admin chỉ xem: không gửi, duyệt hay thu hồi.
+	if got := admin.appDo(http.MethodPost, "/v1/htx-sharing", map[string]any{"owner_cooperative_ref": tr.c1}); got.status != http.StatusForbidden {
+		t.Fatalf("Admin gửi yêu cầu: %d %v", got.status, got.body)
+	}
+}
