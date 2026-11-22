@@ -96,3 +96,61 @@ func TestFN06_SharedCooperativesFollowLiveGrant(t *testing.T) {
 	}
 	wantOutOfScope(t, rep.appDo(http.MethodGet, "/v1/cooperatives/"+tr.c2.String(), nil), "đã thu hồi")
 }
+
+// FN-03/AC-01: HTX của Đại diện đứng đầu danh sách, bộ lọc Tất cả / HTX của tôi / Được chia sẻ, phân trang không
+// lặp HTX mình; Thành viên HTX lọc "Được chia sẻ" thì rỗng.
+func TestFN03_RelationFilterOwnFirst(t *testing.T) {
+	f := newFixture(t)
+	sharing := &liveSharing{}
+	f.mod.UseNativeSharing(sharing)
+	tr := f.seedFN06(f.root())
+	sharing.set(tr.c2, tr.c3)
+	rep := f.as(f.tenant, tr.c1, port.RoleCoopManager)
+	page := func(c caller, query string) ([]string, string) {
+		t.Helper()
+		r := c.appDo(http.MethodGet, "/v1/cooperatives"+query, nil)
+		if r.status != http.StatusOK {
+			t.Fatalf("list %s: %d %v", query, r.status, r.body)
+		}
+		next, _ := r.body["next_cursor"].(string)
+		return refs(r, "ref"), next
+	}
+	shared := []string{tr.c2.String(), tr.c3.String()}
+	slices.Sort(shared)
+	if got, _ := page(rep, ""); len(got) != 3 || got[0] != tr.c1.String() || !slices.Equal(slices.Sorted(slices.Values(got[1:])), shared) {
+		t.Fatalf("Tất cả, HTX mình đứng đầu: %v", got)
+	}
+	var all []string
+	cursor := ""
+	for i := 0; i < 5; i++ {
+		q := "?limit=1"
+		if cursor != "" {
+			q += "&cursor=" + cursor
+		}
+		got, next := page(rep, q)
+		all = append(all, got...)
+		if next == "" {
+			break
+		}
+		cursor = next
+	}
+	if len(all) != 3 || all[0] != tr.c1.String() || !slices.Equal(slices.Sorted(slices.Values(all[1:])), shared) {
+		t.Fatalf("phân trang từng HTX: %v", all)
+	}
+	if got, _ := page(rep, "?relation=own"); !slices.Equal(got, []string{tr.c1.String()}) {
+		t.Fatalf("HTX của tôi: %v", got)
+	}
+	if got, _ := page(rep, "?relation=shared"); !slices.Equal(slices.Sorted(slices.Values(got)), shared) {
+		t.Fatalf("Được chia sẻ: %v", got)
+	}
+	if r := rep.appDo(http.MethodGet, "/v1/cooperatives?relation=partner", nil); r.status != http.StatusUnprocessableEntity {
+		t.Fatalf("relation sai: %d %v", r.status, r.body)
+	}
+	member := f.as(f.tenant, tr.c1, port.RoleHTXMember)
+	if got, _ := page(member, "?relation=shared"); len(got) != 0 {
+		t.Fatalf("Thành viên HTX không có HTX được chia sẻ: %v", got)
+	}
+	if got, _ := page(member, ""); !slices.Equal(got, []string{tr.c1.String()}) {
+		t.Fatalf("Thành viên HTX: %v", got)
+	}
+}

@@ -47,6 +47,7 @@ void main() {
       tester,
       const ['coop_manager'],
       const [
+        'Thông tin HTX',
         'Nông hộ',
         'Bản đồ lô ruộng',
         'Xem vụ và nhật ký hộ',
@@ -66,6 +67,7 @@ void main() {
       tester,
       const ['htx_member'],
       const [
+        'Thông tin HTX',
         'Nông hộ',
         'Bản đồ lô ruộng',
         'Mở vụ hàng loạt',

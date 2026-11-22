@@ -55,8 +55,51 @@ func (s *Service) NativeSharingList(ctx context.Context) ([]domain.NativeSharing
 	if err != nil {
 		return nil, err
 	}
+	return s.sharingListOf(ctx, p.TenantID, p.OrgRef)
+}
+
+// NativeCooperativeSharingList là tab "Liên kết chia sẻ dữ liệu" trên trang một HTX (FN-03, QTPQ-Q-55): Đại diện
+// HTX chỉ trên HTX của mình; Admin trên mọi HTX của tenant ở chế độ chỉ xem (không có thao tác nào, FN-09/BR-03).
+// Thành viên HTX không có tab này.
+func (s *Service) NativeCooperativeSharingList(ctx context.Context, coop uuid.UUID) ([]domain.NativeSharing, error) {
+	p, err := authz.Require(ctx, htxroles.Admin, htxroles.Representative)
+	if err != nil {
+		return nil, err
+	}
+	if p.KN != nil || p.SelectedSession != nil {
+		return nil, problem.Forbidden
+	}
+	if tid, err := tenant.FromContext(ctx); err != nil || tid != p.TenantID {
+		return nil, problem.Unauthenticated
+	}
+	if coop == uuid.Nil {
+		return nil, problem.NotFound
+	}
+	if !p.Has(htxroles.Admin) {
+		if p.OrgRef == uuid.Nil {
+			return nil, problem.NodeScopeRequired
+		}
+		if coop != p.OrgRef { // HTX khác, kể cả HTX được chia sẻ: không lộ quan hệ của HTX đó
+			return nil, problem.NotFound
+		}
+	} else {
+		if s.Dir == nil {
+			return nil, ErrDependency
+		}
+		orgs, err := s.Dir.OrgsByRefs(ctx, []uuid.UUID{coop})
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := orgs[coop]; !ok {
+			return nil, problem.NotFound
+		}
+	}
+	return s.sharingListOf(ctx, p.TenantID, coop)
+}
+
+func (s *Service) sharingListOf(ctx context.Context, tid, coop uuid.UUID) ([]domain.NativeSharing, error) {
 	var out []domain.NativeSharing
-	err = tenant.WithTenantTx(ctx, s.DB, p.TenantID, func(tx pgx.Tx) error { var e error; out, e = store.SharingList(ctx, tx, p.OrgRef); return e })
+	err := tenant.WithTenantTx(ctx, s.DB, tid, func(tx pgx.Tx) error { var e error; out, e = store.SharingList(ctx, tx, coop); return e })
 	if err != nil {
 		return nil, err
 	}

@@ -320,7 +320,7 @@ func (h Registry) listCooperatives(c *gin.Context) {
 	}
 	page, err := h.Reg.ListCooperatives(c.Request.Context(), app.ListQuery{
 		Q: c.Query("q"), IncludeInactive: c.Query("include_inactive") == "true", After: after, Limit: queryLimit(c),
-		AdminUnit: c.Query("admin_unit"), Confirmation: c.Query("confirmation"),
+		AdminUnit: c.Query("admin_unit"), Confirmation: c.Query("confirmation"), Relation: c.Query("relation"),
 	})
 	if err != nil {
 		httpx.Fail(c, err)

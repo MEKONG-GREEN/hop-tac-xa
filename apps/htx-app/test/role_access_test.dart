@@ -11,6 +11,7 @@ import 'support/test_env.dart';
 
 /// Ô trên trang chủ: Thành viên HTX (ma trận KHMV, quyết định 17/11/2026).
 const _memberTiles = [
+  'Thông tin HTX',
   'Nông hộ',
   'Bản đồ lô ruộng',
   'Lịch thời vụ',
@@ -25,6 +26,7 @@ const _memberTiles = [
 /// Ô trên trang chủ: Đại diện HTX (chỉ xem dữ liệu ma trận, giữ chức năng
 /// ngoài ma trận).
 const _managerTiles = [
+  'Thông tin HTX',
   'Nông hộ',
   'Bản đồ lô ruộng',
   'Xem vụ và nhật ký hộ',

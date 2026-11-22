@@ -13,6 +13,7 @@ import 'dashboard_screen.dart';
 import 'farm_log_screen.dart';
 import 'harvest_screen.dart';
 import 'households_screen.dart';
+import 'cooperative_info_screen.dart';
 import 'bulk_open_screen.dart';
 import 'collection_screen.dart';
 import 'news_screen.dart';
@@ -100,6 +101,14 @@ class HomeScreen extends ConsumerWidget {
       // ma trận quyền (FN-05) — không rải điều kiện theo vai.
       HtxMode.manager || HtxMode.member => [
         for (final (screen, tile) in <(HtxScreen, Widget)>[
+          (
+            HtxScreen.cooperativeInfo,
+            BigTile(
+              icon: Icons.apartment,
+              label: 'Thông tin HTX',
+              onTap: () => open(const CooperativeInfoScreen()),
+            ),
+          ),
           (
             HtxScreen.households,
             BigTile(

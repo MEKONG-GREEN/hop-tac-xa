@@ -78,6 +78,27 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/NativeSharing'}
+# @ag-order: 27805
+  /v1/cooperatives/{ref}/htx-sharing:
+    get:
+      summary: Tab "Liên kết chia sẻ dữ liệu" của một HTX, chỉ đọc
+      description: |
+        FN-03, QTPQ-Q-55: Đại diện HTX chỉ trên HTX của mình (HTX khác, kể cả HTX được chia sẻ → 404); Admin trên mọi
+        HTX của tenant ở chế độ chỉ xem (không thao tác, FN-09/BR-03). Thành viên HTX → 403.
+      parameters:
+        - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Yêu cầu chia sẻ HTX này gửi đi và nhận được
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/NativeSharing'}}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
 components:
   schemas:
 # @ag-order: 27804
