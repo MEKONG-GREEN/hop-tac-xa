@@ -67,8 +67,93 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AccountsUser' }
+# @ag-order: 27503
+  /v1/accounts/htx-users/{id}/revisions:
+    post:
+      summary: Sửa tài khoản FN-07 (Admin, realm HTX)
+      description: |
+        AH-276: sửa họ tên, SĐT, email, HTX; tên đăng nhập và vai chính không sửa được (FN-07/AC-06, BR-03).
+        also_member chỉ áp cho Đại diện HTX (kiêm Thành viên HTX, QTPQ-Q-23), vắng = giữ nguyên. Đổi HTX: cả hai vai
+        cùng chuyển, mọi phiên đang mở bị thu hồi (QTPQ-Q-21, Q-22). Không tự đổi HTX hoặc vai của chính mình.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [full_name, phone]
+              properties:
+                full_name: { type: string, minLength: 1, maxLength: 100 }
+                phone: { type: string, pattern: '^0[0-9]{9}$' }
+                email: { type: string, description: Bắt buộc với Admin để nhận OTP email }
+                cooperative_ref: { type: [string, 'null'], format: uuid }
+                also_member: { type: boolean, description: Chỉ với Đại diện HTX; vắng = giữ nguyên }
+      responses:
+        '200':
+          description: Tài khoản sau khi sửa (replayed = true khi phát lại cùng khóa); Cache-Control no-store
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NativeHTXAccountChanged' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+# @ag-order: 27504
+  /v1/accounts/htx-users/{id}/lock:
+    post:
+      summary: Khóa tài khoản FN-07 (Admin)
+      description: AH-276, FN-07/AC-07, BR-06, BR-07 — đăng nhập bị chặn, mọi phiên bị thu hồi, dữ liệu giữ nguyên; không tự khóa chính mình.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Đã khóa
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NativeHTXAccountChanged' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+# @ag-order: 27505
+  /v1/accounts/htx-users/{id}/unlock:
+    post:
+      summary: Mở khóa tài khoản FN-07 (Admin)
+      description: AH-276, FN-07/AC-07 — đăng nhập lại được; không tự mở khóa chính mình.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Đã mở khóa
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NativeHTXAccountChanged' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
 components:
   schemas:
+# @ag-order: 27506
+    NativeHTXAccountChanged:
+      type: object
+      required: [user, replayed]
+      properties:
+        user: { $ref: '#/components/schemas/AccountsUser' }
+        replayed: { type: boolean }
 # @ag-order: 27502
     NativeHTXAccountCreated:
       type: object
