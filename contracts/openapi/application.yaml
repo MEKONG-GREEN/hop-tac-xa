@@ -17434,6 +17434,50 @@ paths:
         '403': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
         '409': {$ref: '#/components/responses/Problem'}
+  /v1/htx-accounts/{id}/password-reset:
+    post:
+      summary: "FN-10 Đặt lại mật khẩu (Đại diện HTX, Thành viên HTX của HTX mình)"
+      description: |
+        AH-281. Kênh SMS bật → gửi mã OTP tới số đã lưu (mode otp_sent, phone_hint); kênh tắt → cấp mật khẩu tạm 08 ký tự chỉ
+        trong phản hồi đầu (mode temporary_password), mật khẩu cũ hết hiệu lực, phiên bị thu hồi, phải đổi ở lần đăng nhập
+        kế tiếp. Không cho chính mình (403), tài khoản đã khóa (409); ngoài phạm vi → 404. Phát lại không trả mật khẩu.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Đã gửi mã OTP hoặc đã cấp mật khẩu tạm; Cache-Control no-store
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HTXPasswordReset'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '429': {$ref: '#/components/responses/Problem'}
+  /v1/me/password:
+    put:
+      summary: "FN-10 Tự đổi mật khẩu (người dùng đã đăng nhập, realm HTX)"
+      description: |
+        AH-281 (AC-N4, AC-N5). PUT, không Idempotency-Key: thân chứa mật khẩu không vào kho idempotency. Mật khẩu hiện tại
+        kiểm bằng Keycloak (sai → 422 current_password "Mật khẩu hiện tại không đúng"); mật khẩu mới tối thiểu 06 ký tự, khác
+        mật khẩu hiện tại, nhập lại khớp. Thành viên HTX gọi được.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [current_password, new_password, confirm_password]
+              properties:
+                current_password: {type: string, maxLength: 256}
+                new_password: {type: string, maxLength: 256}
+                confirm_password: {type: string, maxLength: 256}
+      responses:
+        '204': {description: Đã đổi mật khẩu}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/htx-sharing:
     get:
       summary: Yêu cầu chia sẻ gửi đến và đã gửi của Đại diện HTX
@@ -29116,6 +29160,14 @@ components:
       required: [user, replayed]
       properties:
         user: {$ref: '#/components/schemas/HTXAccount'}
+        replayed: {type: boolean}
+    HTXPasswordReset:
+      type: object
+      required: [mode, temporary_password, phone_hint, replayed]
+      properties:
+        mode: {type: string, enum: [temporary_password, otp_sent]}
+        temporary_password: {type: [string, 'null'], description: Chỉ phản hồi đầu; không ghi log hoặc lưu cache}
+        phone_hint: {type: string, description: SĐT đã che khi mode otp_sent}
         replayed: {type: boolean}
     NativeSharing:
       type: object

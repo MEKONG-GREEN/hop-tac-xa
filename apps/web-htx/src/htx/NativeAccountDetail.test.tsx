@@ -82,3 +82,24 @@ it("[AC-08, BR-07] own account shows (bạn) and has no lock button", () => {
   expect(screen.queryByRole("button", { name: "Khóa" })).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Sửa" })).toBeInTheDocument();
 });
+
+it("[AH-281, FN-10/AC-05] resets the password after confirmation and shows the temporary password once", async () => {
+  const account = await createRep();
+  const user = userEvent.setup();
+  render(<NativeAccountDetail user={account} coops={coops} onChanged={() => {}} onClose={() => {}} />);
+  await user.click(screen.getByRole("button", { name: "Đặt lại mật khẩu" }));
+  const dialog = screen.getByRole("dialog", { name: "Đặt lại mật khẩu" });
+  await user.click(within(dialog).getByRole("button", { name: "Đặt lại" }));
+  const status = await screen.findByRole("status");
+  expect(within(status).getByLabelText("Mật khẩu tạm").textContent).toMatch(/^[0-9a-f]{8}$/);
+  expect(status).toHaveTextContent("phải đổi mật khẩu ở lần đăng nhập kế tiếp");
+});
+
+it("[AH-281, BR-03] hides the reset button on the own row and on locked accounts", async () => {
+  const account = await createRep();
+  const { unmount } = render(<NativeAccountDetail user={{ ...account, id: setter.me.actor_ref }} coops={coops} onChanged={() => {}} onClose={() => {}} />);
+  expect(screen.queryByRole("button", { name: "Đặt lại mật khẩu" })).toBeNull();
+  unmount();
+  render(<NativeAccountDetail user={{ ...account, enabled: false }} coops={coops} onChanged={() => {}} onClose={() => {}} />);
+  expect(screen.queryByRole("button", { name: "Đặt lại mật khẩu" })).toBeNull();
+});

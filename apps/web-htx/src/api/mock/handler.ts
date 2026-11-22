@@ -63,20 +63,21 @@ import { metricsRoutes as route50 } from "./metrics";
 import { mrvAppRoutes as route51 } from "./mrv";
 import { mrvAdminRoutes as route52 } from "./mrv";
 import { coopAccountRoutes as route53 } from "./native-accounts";
-import { nativeAccountRoutes as route54 } from "./native-accounts";
-import { nativeSharingRoutes as route55 } from "./native-sharing";
-import { notifyHealthAdminRoutes as route56 } from "./notify-health";
-import { opsRoutes as route57 } from "./ops";
-import { orgCreateRoutes as route58 } from "./orgs-create";
-import { rosterRoutes as route59 } from "./roster";
-import { seasonCalendarRoutes as route60 } from "./season-calendars";
-import { seasonCatalogAdminRoutes as route61 } from "./season-catalog";
-import { sharedCatalogRoutes as route62 } from "./shared-catalogs";
-import { simulationRoutes as route63 } from "./simulation";
-import { strawFactorRoutes as route64 } from "./straw-factors";
-import { syncMonitorRoutes as route65 } from "./syncmonitor";
-import { waterwayAppRoutes as route66 } from "./waterway";
-import { waterwayAdminRoutes as route67 } from "./waterway";
+import { mePasswordRoutes as route54 } from "./native-accounts";
+import { nativeAccountRoutes as route55 } from "./native-accounts";
+import { nativeSharingRoutes as route56 } from "./native-sharing";
+import { notifyHealthAdminRoutes as route57 } from "./notify-health";
+import { opsRoutes as route58 } from "./ops";
+import { orgCreateRoutes as route59 } from "./orgs-create";
+import { rosterRoutes as route60 } from "./roster";
+import { seasonCalendarRoutes as route61 } from "./season-calendars";
+import { seasonCatalogAdminRoutes as route62 } from "./season-catalog";
+import { sharedCatalogRoutes as route63 } from "./shared-catalogs";
+import { simulationRoutes as route64 } from "./simulation";
+import { strawFactorRoutes as route65 } from "./straw-factors";
+import { syncMonitorRoutes as route66 } from "./syncmonitor";
+import { waterwayAppRoutes as route67 } from "./waterway";
+import { waterwayAdminRoutes as route68 } from "./waterway";
 
 export const commonRouteRegistrations: RouteRegistration[] = [
   { surface: "admin", order: 13, routes: route0 },
@@ -133,20 +134,21 @@ export const commonRouteRegistrations: RouteRegistration[] = [
   { surface: "app", order: 56, routes: route51 },
   { surface: "admin", order: 21, routes: route52 },
   { surface: "app", order: 277, routes: route53 },
-  { surface: "admin", order: 275, routes: route54 },
-  { surface: "app", order: 278, routes: route55 },
-  { surface: "admin", order: 24, routes: route56 },
-  { surface: "app", order: 48, routes: route57 },
-  { surface: "admin", order: 14, routes: route58 },
-  { surface: "app", order: 49, routes: route59 },
-  { surface: "app", order: 176, routes: route60 },
-  { surface: "admin", order: 121, routes: route61 },
-  { surface: "app", order: 27402, routes: route62 },
-  { surface: "app", order: 52, routes: route63 },
-  { surface: "admin", order: 282100, routes: route64 },
-  { surface: "admin", order: 15, routes: route65 },
-  { surface: "app", order: 51, routes: route66 },
-  { surface: "admin", order: 18, routes: route67 },
+  { surface: "app", order: 281, routes: route54 },
+  { surface: "admin", order: 275, routes: route55 },
+  { surface: "app", order: 278, routes: route56 },
+  { surface: "admin", order: 24, routes: route57 },
+  { surface: "app", order: 48, routes: route58 },
+  { surface: "admin", order: 14, routes: route59 },
+  { surface: "app", order: 49, routes: route60 },
+  { surface: "app", order: 176, routes: route61 },
+  { surface: "admin", order: 121, routes: route62 },
+  { surface: "app", order: 27402, routes: route63 },
+  { surface: "app", order: 52, routes: route64 },
+  { surface: "admin", order: 282100, routes: route65 },
+  { surface: "admin", order: 15, routes: route66 },
+  { surface: "app", order: 51, routes: route67 },
+  { surface: "admin", order: 18, routes: route68 },
 ];
 
 const registrations = [...commonRouteRegistrations, ...registeredKnRoutes()];

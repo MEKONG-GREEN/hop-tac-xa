@@ -12688,6 +12688,105 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/htx-accounts/{id}/password-reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * FN-10 Đặt lại mật khẩu (Đại diện HTX, Thành viên HTX của HTX mình)
+         * @description AH-281. Kênh SMS bật → gửi mã OTP tới số đã lưu (mode otp_sent, phone_hint); kênh tắt → cấp mật khẩu tạm 08 ký tự chỉ
+         *     trong phản hồi đầu (mode temporary_password), mật khẩu cũ hết hiệu lực, phiên bị thu hồi, phải đổi ở lần đăng nhập
+         *     kế tiếp. Không cho chính mình (403), tài khoản đã khóa (409); ngoài phạm vi → 404. Phát lại không trả mật khẩu.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Đã gửi mã OTP hoặc đã cấp mật khẩu tạm; Cache-Control no-store */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HTXPasswordReset"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                429: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * FN-10 Tự đổi mật khẩu (người dùng đã đăng nhập, realm HTX)
+         * @description AH-281 (AC-N4, AC-N5). PUT, không Idempotency-Key: thân chứa mật khẩu không vào kho idempotency. Mật khẩu hiện tại
+         *     kiểm bằng Keycloak (sai → 422 current_password "Mật khẩu hiện tại không đúng"); mật khẩu mới tối thiểu 06 ký tự, khác
+         *     mật khẩu hiện tại, nhập lại khớp. Thành viên HTX gọi được.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        current_password: string;
+                        new_password: string;
+                        confirm_password: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Đã đổi mật khẩu */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                403: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+                503: components["responses"]["Problem"];
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/htx-sharing": {
         parameters: {
             query?: never;
@@ -25271,6 +25370,15 @@ export interface components {
         };
         HTXAccountChanged: {
             user: components["schemas"]["HTXAccount"];
+            replayed: boolean;
+        };
+        HTXPasswordReset: {
+            /** @enum {string} */
+            mode: "temporary_password" | "otp_sent";
+            /** @description Chỉ phản hồi đầu; không ghi log hoặc lưu cache */
+            temporary_password: string | null;
+            /** @description SĐT đã che khi mode otp_sent */
+            phone_hint: string;
             replayed: boolean;
         };
         NativeSharing: {
