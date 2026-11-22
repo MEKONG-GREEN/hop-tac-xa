@@ -57,6 +57,13 @@ func (s *Service) NativeCreate(ctx context.Context, input domain.NativeAccountIn
 	if err != nil {
 		return NativeCreateResult{}, err
 	}
+	return s.nativeCreate(ctx, a, input, key)
+}
+
+func (s *Service) nativeCreate(ctx context.Context, a *actor, input domain.NativeAccountInput, key string) (NativeCreateResult, error) {
+	if err := coopCreateAllowed(a, input); err != nil {
+		return NativeCreateResult{}, err
+	}
 	if err := requireKey(key); err != nil {
 		return NativeCreateResult{}, err
 	}

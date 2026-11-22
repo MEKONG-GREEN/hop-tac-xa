@@ -1,5 +1,16 @@
 {
   "id": "native-accounts",
   "source": "./native-accounts",
-  "admin": [{ "export": "nativeAccountRoutes", "order": 275 }]
+  "admin": [
+    {
+      "export": "nativeAccountRoutes",
+      "order": 275
+    }
+  ],
+  "app": [
+    {
+      "export": "coopAccountRoutes",
+      "order": 277
+    }
+  ]
 }

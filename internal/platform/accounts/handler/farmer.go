@@ -34,6 +34,7 @@ func (h Handler) RegisterApp(rg *gin.RouterGroup) {
 	rg.GET("/farmer/households", h.myHouseholds)
 	rg.GET("/farmer/coop-staff", h.coopStaff)
 	rg.GET("/farmer/coop-staff/:id/contact", h.coopStaffContact)
+	h.registerCoopAccounts(rg)
 }
 
 func timeStr(t *time.Time) *string {

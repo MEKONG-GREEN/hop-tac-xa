@@ -22,6 +22,12 @@ func (s *Service) NativeUsers(ctx context.Context) ([]UserView, error) {
 	if err != nil {
 		return nil, err
 	}
+	return s.nativeUsers(ctx, a)
+}
+
+// nativeUsers: Admin thấy mọi tài khoản realm HTX của tenant; Đại diện HTX (a.coop) chỉ thấy Thành viên HTX của HTX mình
+// và dòng của chính mình (FN-08/AC-01, BR-01).
+func (s *Service) nativeUsers(ctx context.Context, a *actor) ([]UserView, error) {
 	const maximum = 2000
 	items := make([]UserView, 0)
 	for offset := 0; offset <= maximum; offset += 100 {
@@ -81,6 +87,9 @@ func (s *Service) NativeUsers(ctx context.Context) ([]UserView, error) {
 			items[i].LockCause = account.LockCause
 			items[i].User.Enabled = items[i].User.Enabled && account.Enabled
 		}
+	}
+	if a.coop != uuid.Nil {
+		items = slices.DeleteFunc(items, func(u UserView) bool { return !coopVisible(a, u) })
 	}
 	slices.SortStableFunc(items, func(a, b UserView) int { return strings.Compare(a.User.Username, b.User.Username) })
 	return items, nil
