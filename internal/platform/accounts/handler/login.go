@@ -27,6 +27,59 @@ func (h Handler) registerLogin(rg *gin.RouterGroup) {
 	rg.POST("/auth/login", httpx.RateLimitByIP(h.Svc.Clock, loginPerMinute, loginBurst), h.login)
 	rg.POST("/auth/refresh", h.refresh)
 	rg.POST("/auth/logout", h.logout)
+	// AH-280 (FN-10): quên mật khẩu — gửi mã OTP qua SMS, đặt mật khẩu mới bằng mã. Giới hạn theo IP như đăng nhập
+	// (bù cho EX-01 báo rõ không tìm thấy tài khoản).
+	rg.POST("/auth/password-otp", httpx.RateLimitByIP(h.Svc.Clock, loginPerMinute, loginBurst), h.passwordOTP)
+	rg.POST("/auth/password-otp/reset", httpx.RateLimitByIP(h.Svc.Clock, loginPerMinute, loginBurst), h.passwordOTPReset)
+}
+
+type passwordOTPReq struct {
+	Identifier string `json:"identifier" pii:"true"`
+}
+
+type passwordOTPResetReq struct {
+	Identifier      string `json:"identifier" pii:"true"`
+	ChallengeID     string `json:"challenge_id"`
+	OTP             string `json:"otp" pii:"true"`
+	NewPassword     string `json:"new_password" pii:"true"`
+	ConfirmPassword string `json:"confirm_password" pii:"true"`
+}
+
+func (h Handler) passwordOTP(c *gin.Context) {
+	noStore(c)
+	var req passwordOTPReq
+	if !bindJSON(c, &req) {
+		return
+	}
+	res, err := h.Svc.RequestPasswordOTP(c.Request.Context(), req.Identifier)
+	if err != nil {
+		httpx.Fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "otp_sent", "challenge_id": res.ChallengeID, "phone_hint": res.PhoneHint,
+		"expires_in": res.ExpiresIn, "resend_after": res.ResendAfter})
+}
+
+func (h Handler) passwordOTPReset(c *gin.Context) {
+	noStore(c)
+	var req passwordOTPResetReq
+	if !bindJSON(c, &req) {
+		return
+	}
+	in := app.PasswordOTPReset{Identifier: req.Identifier, OTP: req.OTP, NewPassword: req.NewPassword, ConfirmPassword: req.ConfirmPassword}
+	if req.ChallengeID != "" {
+		id, err := uuid.Parse(req.ChallengeID)
+		if err != nil {
+			httpx.Fail(c, problem.Validation.WithField("challenge_id", "Mã thử thách không hợp lệ"))
+			return
+		}
+		in.ChallengeID = id
+	}
+	if err := h.Svc.ResetPasswordWithOTP(c.Request.Context(), in); err != nil {
+		httpx.Fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "password_reset"})
 }
 
 type loginReq struct {

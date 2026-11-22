@@ -61,6 +61,10 @@ x-smtp-env: &smtp-env
   AG_SMTP_USERNAME: ${AG_SMTP_USERNAME:-}
   AG_SMTP_PASSWORD: ${AG_SMTP_PASSWORD:-}
   AG_SMTP_ALLOW_PLAIN: ${AG_SMTP_ALLOW_PLAIN:-false}
+  # AH-280 (ADR-0063): kênh SMS của mã OTP quên mật khẩu. Trống/disabled = tắt. mailhog = tin SMS thành email vào
+  # hộp thư giả (chỉ AG_ENV=development|dev|local|test): chạy kèm --profile mailhog, đặt AG_SMTP_HOST=mailhog,
+  # AG_SMTP_PORT=1025, AG_SMTP_ALLOW_PLAIN=true, AG_SMTP_FROM=no-reply@htx.test; xem mã ở http://127.0.0.1:8025.
+  AG_SMS: ${AG_SMS:-}
 
 x-s3-env: &s3-env
   AG_S3_ENDPOINT: seaweedfs:9000

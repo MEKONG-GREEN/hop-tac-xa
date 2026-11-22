@@ -5042,6 +5042,44 @@ paths:
                   items: {type: array, items: {$ref: "#/components/schemas/ReportTemplate"}}
         "401": {$ref: "#/components/responses/Problem"}
         "403": {$ref: "#/components/responses/Problem"}
+  /v1/public/auth/password-otp:
+    post:
+      summary: "FN-10 Quên mật khẩu: gửi mã OTP qua SMS tới số điện thoại của tài khoản — KHÔNG Idempotency-Key"
+      description: >-
+        AH-280, ADR-0063 (realm HTX). Mã 06 chữ số, dùng một lần, hiệu lực 05 phút; gửi lại sau 60 giây (trong 60 giây trả lại
+        thử thách cũ, không gửi tin mới); tối đa 05 mã / tài khoản / 24 giờ. Chỉ gửi tới số đã lưu trong IAM. Phản hồi không
+        bao giờ chứa mã. Giới hạn theo IP như đăng nhập. Cache-Control no-store.
+      operationId: requestPasswordOTP
+      tags: [accounts]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [identifier]
+              properties:
+                identifier: {type: string, maxLength: 254, description: "Tên đăng nhập hoặc số điện thoại"}
+      responses:
+        "200":
+          description: Đã gửi (hoặc còn trong thời gian chờ gửi lại)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, challenge_id, phone_hint, expires_in, resend_after]
+                properties:
+                  status: {type: string, enum: [otp_sent]}
+                  challenge_id: {type: string, format: uuid}
+                  phone_hint: {type: string, description: "SĐT đã che 4 đầu / 3 cuối, vd 0913***222"}
+                  expires_in: {type: integer, description: Giây}
+                  resend_after: {type: integer, description: Giây}
+        "403": {description: "accounts.password_otp_blocked (EX-02: tài khoản đã khóa hoặc chưa có số điện thoại)", $ref: "#/components/responses/Problem"}
+        "404": {description: "accounts.password_otp_account_not_found (EX-01)", $ref: "#/components/responses/Problem"}
+        "422": {description: "validation_failed (thiếu identifier)", $ref: "#/components/responses/Problem"}
+        "429": {description: "accounts.password_otp_daily_limit (EX-05) | giới hạn theo IP", $ref: "#/components/responses/Problem"}
+        "503": {description: "accounts.password_otp_unavailable (kênh SMS tắt hoặc gửi lỗi — liên hệ người cấp tài khoản) | accounts.login_unavailable", $ref: "#/components/responses/Problem"}
   /v1/reports/exports:
     get:
       summary: Lịch sử xuất của CHÍNH người gọi (kể cả việc của lịch gửi họ sở hữu), mới nhất trước
@@ -5107,6 +5145,45 @@ paths:
         "422": {$ref: "#/components/responses/Problem"}
         "429": {$ref: "#/components/responses/Problem"}
         "503": {$ref: "#/components/responses/Problem"}
+  /v1/public/auth/password-otp/reset:
+    post:
+      summary: "FN-10 Quên mật khẩu: đặt mật khẩu mới bằng mã OTP — KHÔNG Idempotency-Key"
+      description: >-
+        AH-280. Sai mã → 401 kèm remaining_attempts; sai 05 lần → mã bị hủy (410); quá 05 phút → 410. Mật khẩu mới tối thiểu
+        06 ký tự, nhập lại phải khớp. Đúng → mật khẩu mới có hiệu lực, không phải đổi mật khẩu lần đầu, phiên cũ bị thu hồi.
+        Cache-Control no-store.
+      operationId: resetPasswordWithOTP
+      tags: [accounts]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [identifier, challenge_id, otp, new_password, confirm_password]
+              properties:
+                identifier: {type: string, maxLength: 254}
+                challenge_id: {type: string, format: uuid}
+                otp: {type: string, pattern: "^[0-9]{6}$"}
+                new_password: {type: string, maxLength: 256}
+                confirm_password: {type: string, maxLength: 256}
+      responses:
+        "200":
+          description: Đã đặt mật khẩu mới
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: {type: string, enum: [password_reset]}
+        "401": {description: "accounts.password_otp_invalid (EX-03, kèm remaining_attempts)", $ref: "#/components/responses/Problem"}
+        "403": {description: "accounts.password_otp_blocked", $ref: "#/components/responses/Problem"}
+        "404": {description: "accounts.password_otp_account_not_found", $ref: "#/components/responses/Problem"}
+        "410": {description: "accounts.password_otp_expired (EX-04, hoặc đã hủy sau 05 lần sai)", $ref: "#/components/responses/Problem"}
+        "422": {description: "validation_failed (EX-06: otp, new_password, confirm_password)", $ref: "#/components/responses/Problem"}
+        "503": {description: "accounts.login_unavailable | accounts.dependency_unavailable", $ref: "#/components/responses/Problem"}
   /v1/reports/exports/{id}:
     get:
       summary: Trạng thái việc xuất (người yêu cầu, hoặc người có phạm vi bao trọn)

@@ -30,6 +30,7 @@ provides:
     - RecipientDirectory
     - RequiredActionRemover
     - RoleHolders
+    - SMSSender
     - ScopedDutyHolders
     - SessionReader
     - StaffContacts

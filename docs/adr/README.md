@@ -55,6 +55,7 @@
 | 0060 | [Màn đăng nhập riêng của App HTX (mật khẩu đi qua máy chủ tới Keycloak, một client direct grant có OTP, đăng nhập một bước, bộ đếm lần sai chỉ của Keycloak + bộ đếm HMAC cho mã không tồn tại, token chỉ trong bộ nhớ tab)](0060-man-dang-nhap-rieng-app-htx.md) | Chấp nhận — AH-268 (FN-01); quyết định người phụ trách dự án 16/11/2026; yếu tố thứ hai của Admin thay bởi ADR-0061 |
 | 0061 | [Admin đăng nhập bằng mật khẩu và mã OTP gửi qua email (hai bước ở màn riêng, mã 6 số 5 phút/5 lần sai/gửi lại sau 60 giây, máy chủ ghi phiên đã qua mã cho Admin API và Application API, email chỉ quản trị sửa)](0061-admin-dang-nhap-otp-email.md) | Chấp nhận — AH-311; quyết định người phụ trách dự án 17/11/2026 |
 | 0062 | [Realm HTX riêng cho FN-07](0062-realm-htx-fn07.md) | Chấp nhận — AH-275; quyết định người dùng 20/11/2026 |
+| 0063 | [Kênh SMS cho mã OTP đặt lại mật khẩu](0063-kenh-sms-otp-dat-lai-mat-khau.md) | Chấp nhận — AH-280; trả lời PO 15/11/2026 |
 
 ADR 0006, 0007, 0009, 0010, 0011 được chủ sản phẩm chấp nhận ngày 30/09/2026 trong phiên làm việc. Bảng đối chiếu cam kết → mã → kiểm thử ở [trien-khai-g1.md](trien-khai-g1.md).
 

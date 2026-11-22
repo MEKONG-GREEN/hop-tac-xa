@@ -3563,6 +3563,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/public/auth/password-otp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * FN-10 Quên mật khẩu: gửi mã OTP qua SMS tới số điện thoại của tài khoản — KHÔNG Idempotency-Key
+         * @description AH-280, ADR-0063 (realm HTX). Mã 06 chữ số, dùng một lần, hiệu lực 05 phút; gửi lại sau 60 giây (trong 60 giây trả lại thử thách cũ, không gửi tin mới); tối đa 05 mã / tài khoản / 24 giờ. Chỉ gửi tới số đã lưu trong IAM. Phản hồi không bao giờ chứa mã. Giới hạn theo IP như đăng nhập. Cache-Control no-store.
+         */
+        post: operations["requestPasswordOTP"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/reports/exports": {
         parameters: {
             query?: never;
@@ -3581,6 +3601,26 @@ export interface paths {
          * @description Mẫu htx.production (nguồn cropcycle.production — HTX US-DASH-02): sản lượng dự kiến – thực tế, diện tích, số nông hộ, tiến độ SOP theo HTX × vụ × giống, cùng số liệu bảng điều hành GET /v1/cropcycle/dashboard. Quản lý HTX chỉ xuất HTX của mình (params.cooperative_ref được gán); cán bộ KN theo phạm vi xã/tỉnh; platform_admin toàn bộ.
          */
         post: operations["requestReportExport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/public/auth/password-otp/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * FN-10 Quên mật khẩu: đặt mật khẩu mới bằng mã OTP — KHÔNG Idempotency-Key
+         * @description AH-280. Sai mã → 401 kèm remaining_attempts; sai 05 lần → mã bị hủy (410); quá 05 phút → 410. Mật khẩu mới tối thiểu 06 ký tự, nhập lại phải khớp. Đúng → mật khẩu mới có hiệu lực, không phải đổi mật khẩu lần đầu, phiên cũ bị thu hồi. Cache-Control no-store.
+         */
+        post: operations["resetPasswordWithOTP"];
         delete?: never;
         options?: never;
         head?: never;
@@ -35719,6 +35759,54 @@ export interface operations {
             403: components["responses"]["Problem"];
         };
     };
+    requestPasswordOTP: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Tên đăng nhập hoặc số điện thoại */
+                    identifier: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Đã gửi (hoặc còn trong thời gian chờ gửi lại) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        status: "otp_sent";
+                        /** Format: uuid */
+                        challenge_id: string;
+                        /** @description SĐT đã che 4 đầu / 3 cuối, vd 0913***222 */
+                        phone_hint: string;
+                        /** @description Giây */
+                        expires_in: number;
+                        /** @description Giây */
+                        resend_after: number;
+                    };
+                };
+            };
+            /** @description accounts.password_otp_blocked (EX-02: tài khoản đã khóa hoặc chưa có số điện thoại) */
+            403: components["responses"]["Problem"];
+            /** @description accounts.password_otp_account_not_found (EX-01) */
+            404: components["responses"]["Problem"];
+            /** @description validation_failed (thiếu identifier) */
+            422: components["responses"]["Problem"];
+            /** @description accounts.password_otp_daily_limit (EX-05) | giới hạn theo IP */
+            429: components["responses"]["Problem"];
+            /** @description accounts.password_otp_unavailable (kênh SMS tắt hoặc gửi lỗi — liên hệ người cấp tài khoản) | accounts.login_unavailable */
+            503: components["responses"]["Problem"];
+        };
+    };
     listMyReportExports: {
         parameters: {
             query?: {
@@ -35788,6 +35876,52 @@ export interface operations {
             409: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
             429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    resetPasswordWithOTP: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    identifier: string;
+                    /** Format: uuid */
+                    challenge_id: string;
+                    otp: string;
+                    new_password: string;
+                    confirm_password: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Đã đặt mật khẩu mới */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        status: "password_reset";
+                    };
+                };
+            };
+            /** @description accounts.password_otp_invalid (EX-03, kèm remaining_attempts) */
+            401: components["responses"]["Problem"];
+            /** @description accounts.password_otp_blocked */
+            403: components["responses"]["Problem"];
+            /** @description accounts.password_otp_account_not_found */
+            404: components["responses"]["Problem"];
+            /** @description accounts.password_otp_expired (EX-04, hoặc đã hủy sau 05 lần sai) */
+            410: components["responses"]["Problem"];
+            /** @description validation_failed (EX-06: otp, new_password, confirm_password) */
+            422: components["responses"]["Problem"];
+            /** @description accounts.login_unavailable | accounts.dependency_unavailable */
             503: components["responses"]["Problem"];
         };
     };
