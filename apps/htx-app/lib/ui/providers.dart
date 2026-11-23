@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:agrigreen_mobile/application/auth_flow.dart';
 import 'package:agrigreen_mobile/application/push_coordinator.dart';
 import 'package:agrigreen_mobile/data/auth/oidc_client.dart';
+import 'package:agrigreen_mobile/data/auth/password_login.dart';
 import 'package:agrigreen_mobile/data/auth/pin_service.dart';
 import 'package:agrigreen_mobile/data/auth/session_service.dart';
 import 'package:agrigreen_mobile/data/outbox/outbox_repository.dart';
@@ -25,12 +26,22 @@ final oidcProvider = Provider<OidcClient>(
   (ref) => throw UnimplementedError('oidcProvider'),
 );
 
+/// AH-300 (FN-01): API đăng nhập riêng của realm HTX. null → realm cũ, đăng
+/// nhập qua trang Keycloak (AppAuth).
+final passwordLoginProvider = Provider<PasswordLoginApi?>((ref) {
+  final pf = ref.watch(platformProvider);
+  return isNativeHtxRealm(pf.config.oidcIssuer)
+      ? HttpPasswordLoginApi(baseUrl: pf.config.apiBaseUrl, clock: pf.clock)
+      : null;
+});
+
 final sessionServiceProvider = Provider<SessionService>((ref) {
   final pf = ref.watch(platformProvider);
   return SessionService(
     store: pf.store,
     clock: pf.clock,
     oidc: ref.watch(oidcProvider),
+    passwordLogin: ref.watch(passwordLoginProvider),
     offlineMax: pf.config.offlineSessionMax,
   );
 });
@@ -214,6 +225,10 @@ class AppController extends Notifier<AppState> {
   }
 
   Future<void> loginOnline() => _busy(_flow.loginOnline);
+
+  /// AH-300: màn đăng nhập riêng đã nhận token (mật khẩu, mã OTP không qua đây).
+  Future<void> completePasswordLogin(OidcTokens tokens) =>
+      _busy(() => _flow.loginWithPasswordTokens(tokens));
   Future<void> setPin(String pin, String confirm) =>
       _busy(() => _flow.setPin(pin, confirm));
   Future<void> unlock(String pin) => _busy(() => _flow.unlock(pin));

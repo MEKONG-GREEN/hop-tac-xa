@@ -4841,6 +4841,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/accounts/htx-users/{id}/password-reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * FN-10 Đặt lại mật khẩu (Admin)
+         * @description AH-281. Kênh SMS bật → gửi mã OTP tới số đã lưu (mode otp_sent, phone_hint); kênh tắt → cấp mật khẩu tạm 08 ký tự chỉ
+         *     trong phản hồi đầu (mode temporary_password), mật khẩu cũ hết hiệu lực, phiên bị thu hồi, phải đổi ở lần đăng nhập
+         *     kế tiếp. Không cho chính mình (403), tài khoản đã khóa (409); ngoài phạm vi → 404. Phát lại không trả mật khẩu.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Đã gửi mã OTP hoặc đã cấp mật khẩu tạm; Cache-Control no-store */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NativeHTXPasswordReset"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                429: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/masterdata/catalogs/{catalog}/items/{code}/delete": {
         parameters: {
             query?: never;
@@ -7388,6 +7437,15 @@ export interface components {
         };
         NativeHTXAccountChanged: {
             user: components["schemas"]["AccountsUser"];
+            replayed: boolean;
+        };
+        NativeHTXPasswordReset: {
+            /** @enum {string} */
+            mode: "temporary_password" | "otp_sent";
+            /** @description Chỉ phản hồi đầu; không ghi log hoặc lưu cache */
+            temporary_password: string | null;
+            /** @description SĐT đã che khi mode otp_sent */
+            phone_hint: string;
             replayed: boolean;
         };
         CatalogDeleteResult: {

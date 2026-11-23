@@ -11,6 +11,10 @@
     {
       "export": "coopAccountRoutes",
       "order": 277
+    },
+    {
+      "export": "mePasswordRoutes",
+      "order": 281
     }
   ]
 }

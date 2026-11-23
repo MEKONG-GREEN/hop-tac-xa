@@ -5,10 +5,11 @@ import { newIdempotencyKey } from "@/api/idempotency";
 import { fieldErrorMap, type ApiProblem } from "@/api/problem";
 import type { AccountsUser, Cooperative } from "@/api/types";
 import { useAuth } from "@/auth/AuthProvider";
+import { Dialog } from "@/components/Dialog";
 import { ProblemAlert } from "@/components/ProblemAlert";
 import { toApiProblem } from "@/lib/useAsync";
 
-import { accountsClient, type AccountRevision as Revision, type AccountsScope } from "./accountsClient";
+import { accountsClient, type AccountRevision as Revision, type AccountsScope, type PasswordReset } from "./accountsClient";
 const ROLE_LABELS: Record<string, string> = { platform_admin: "Admin", coop_manager: "Đại diện HTX", htx_member: "Thành viên HTX" };
 const fullName = (u: AccountsUser) => `${u.last_name} ${u.first_name}`.trim();
 
@@ -31,6 +32,8 @@ export function NativeAccountDetail({ user, coops, onChanged, onClose, scope = "
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<ApiProblem | null>(null);
   const [notice, setNotice] = useState("");
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [reset, setReset] = useState<PasswordReset | null>(null);
   const change = (patch: Partial<Revision>) => { setForm((f) => ({ ...f, ...patch })); setEditKey(newIdempotencyKey()); };
   const errors = problem ? fieldErrorMap(problem) : {};
   const coopName = coops.find((c) => c.ref === user.org_ref)?.name ?? "—";
@@ -57,12 +60,35 @@ export function NativeAccountDetail({ user, coops, onChanged, onClose, scope = "
     } catch (err) { setProblem(toApiProblem(err)); } finally { setBusy(false); }
   };
 
+  // AH-281 (FN-10/AC-05): không cho chính mình, không cho tài khoản đã khóa; mật khẩu tạm chỉ hiển thị một lần.
+  const resetPassword = async () => {
+    if (busy) return;
+    setConfirmReset(false); setBusy(true); setProblem(null); setNotice(""); setReset(null);
+    try {
+      setReset(await client.resetPassword(user.id, newIdempotencyKey()));
+    } catch (err) { setProblem(toApiProblem(err)); } finally { setBusy(false); }
+  };
+
   return (
     <section className="card stack" aria-label="Chi tiết tài khoản">
       <strong>{fullName(user)}{self ? " (bạn)" : ""}</strong>
       <p>{user.username} · {user.phone ?? "—"} · {coopName}</p>
       <p>{roles.map((r) => ROLE_LABELS[r] ?? r).join(", ")} · {user.enabled ? "Đang hoạt động" : "Đã khóa"}</p>
       {notice ? <p role="status">{notice}</p> : null}
+      {reset ? (
+        <div role="status" className="stack">
+          {reset.mode === "otp_sent" ? (
+            <p>Đã gửi mã OTP tới số {reset.phone_hint}. Người dùng nhập mã ở màn Quên mật khẩu để đặt mật khẩu mới.</p>
+          ) : reset.temporary_password ? (
+            <>
+              <p>Mật khẩu tạm (chỉ hiển thị một lần): <code aria-label="Mật khẩu tạm">{reset.temporary_password}</code></p>
+              <p>Mật khẩu cũ đã hết hiệu lực. Người dùng phải đổi mật khẩu ở lần đăng nhập kế tiếp.</p>
+            </>
+          ) : (
+            <p>Đã đặt lại mật khẩu. Mật khẩu tạm chỉ hiển thị ở lần bấm trước.</p>
+          )}
+        </div>
+      ) : null}
       {problem && !editing ? <ProblemAlert problem={problem} /> : null}
       {editing ? (
         <form className="stack" onSubmit={(e) => void save(e)} noValidate aria-label="Sửa tài khoản HTX">
@@ -100,9 +126,22 @@ export function NativeAccountDetail({ user, coops, onChanged, onClose, scope = "
               ? <button type="button" className="btn" disabled={busy} onClick={() => void setLocked(true)}>Khóa</button>
               : <button type="button" className="btn" disabled={busy} onClick={() => void setLocked(false)}>Mở khóa</button>
           ) : null}
+          {!self && user.enabled ? <button type="button" className="btn" disabled={busy} onClick={() => setConfirmReset(true)}>Đặt lại mật khẩu</button> : null}
           <button type="button" className="btn" onClick={onClose}>Đóng</button>
         </div>
       )}
+      {confirmReset ? (
+        <Dialog
+          title="Đặt lại mật khẩu"
+          onClose={() => setConfirmReset(false)}
+          actions={<>
+            <button type="button" className="btn" onClick={() => setConfirmReset(false)}>Hủy</button>
+            <button type="button" className="btn btn-p" onClick={() => void resetPassword()}>Đặt lại</button>
+          </>}
+        >
+          <p>Đặt lại mật khẩu cho {fullName(user)}? Mật khẩu hiện tại sẽ hết hiệu lực và các phiên đăng nhập bị thu hồi.</p>
+        </Dialog>
+      ) : null}
     </section>
   );
 }

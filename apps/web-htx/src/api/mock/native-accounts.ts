@@ -74,6 +74,15 @@ export const nativeAccountRoutes: Route[] = [
     users.set(next.id, { tenant: found.tenant, user: next });
     return json({ user: next, replayed: false }, 200, headers);
   } },
+  { method: "POST", pattern: /^\/v1\/accounts\/htx-users\/([\w-]+)\/password-reset$/, handler: (ctx) => {
+    const denied = guard(ctx); if (denied) return denied;
+    const found = (() => { const f = users.get(ctx.params[0] ?? ""); return f?.tenant === ctx.persona.me.tenant_id ? f : null; })();
+    if (!found) return problem(404, "not_found", "Không tìm thấy tài khoản");
+    if (found.user.id === ctx.persona.me.actor_ref) return problem(403, "accounts.self_action", "Không được tự đặt lại mật khẩu của chính mình");
+    if (!found.user.enabled) return problem(409, "accounts.state_conflict", "Tài khoản đã khóa, không đặt lại mật khẩu.");
+    users.set(found.user.id, { tenant: found.tenant, user: { ...found.user, required_actions: ["UPDATE_PASSWORD"] } });
+    return json({ mode: "temporary_password", temporary_password: uuidv7().replaceAll("-", "").slice(-8), phone_hint: "", replayed: false }, 200, headers);
+  } },
 ];
 
 /** Thêm tài khoản vào mock (kiểm thử). */
@@ -133,5 +142,33 @@ export const coopAccountRoutes: Route[] = [
     const next: AccountsUser = { ...found.user, enabled: !lock, lock_cause: lock ? "manual" : null };
     users.set(next.id, { tenant: found.tenant, user: next });
     return json({ user: next, replayed: false }, 200, headers);
+  } },
+  { method: "POST", pattern: /^\/v1\/htx-accounts\/([\w-]+)\/password-reset$/, handler: (ctx) => {
+    const denied = coopGuard(ctx); if (denied) return denied;
+    const found = coopFind(ctx);
+    if (!found) return problem(404, "not_found", "Không tìm thấy tài khoản");
+    if (found.user.id === ctx.persona.me.actor_ref) return problem(403, "accounts.self_action", "Không được tự đặt lại mật khẩu của chính mình");
+    if (!found.user.enabled) return problem(409, "accounts.state_conflict", "Tài khoản đã khóa, không đặt lại mật khẩu.");
+    users.set(found.user.id, { tenant: found.tenant, user: { ...found.user, required_actions: ["UPDATE_PASSWORD"] } });
+    return json({ mode: "temporary_password", temporary_password: uuidv7().replaceAll("-", "").slice(-8), phone_hint: "", replayed: false }, 200, headers);
+  } },
+];
+
+// AH-281 (FN-10/AC-N4, AC-N5): tự đổi mật khẩu. Giả lập không giữ mật khẩu: "sai-mat-khau" là mật khẩu hiện tại sai.
+export const MOCK_WRONG_CURRENT_PASSWORD = "sai-mat-khau";
+export const mePasswordRoutes: Route[] = [
+  { method: "PUT", pattern: /^\/v1\/me\/password$/, handler: (ctx) => {
+    const input = (ctx.body ?? {}) as Record<string, unknown>;
+    const cur = typeof input.current_password === "string" ? input.current_password : "";
+    const next = typeof input.new_password === "string" ? input.new_password : "";
+    const confirm = typeof input.confirm_password === "string" ? input.confirm_password : "";
+    const errors: { field: string; reason: string }[] = [];
+    if (!cur) errors.push({ field: "current_password", reason: "Nhập mật khẩu hiện tại" });
+    if ([...next].length < 6) errors.push({ field: "new_password", reason: "Mật khẩu tối thiểu 06 ký tự" });
+    else if (cur && next === cur) errors.push({ field: "new_password", reason: "Mật khẩu mới phải khác mật khẩu hiện tại" });
+    if (confirm !== next) errors.push({ field: "confirm_password", reason: "Mật khẩu nhập lại không khớp" });
+    if (errors.length) return validation(errors);
+    if (cur === MOCK_WRONG_CURRENT_PASSWORD) return validation([{ field: "current_password", reason: "Mật khẩu hiện tại không đúng" }]);
+    return new Response(null, { status: 204, headers });
   } },
 ];

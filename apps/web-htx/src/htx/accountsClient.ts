@@ -14,7 +14,10 @@ export interface AccountsClient {
   create(body: AccountInput, key: string): Promise<{ user: AccountsUser; temporary_password: string | null }>;
   update(id: string, body: AccountRevision, key: string): Promise<{ user: AccountsUser }>;
   setLocked(id: string, lock: boolean, key: string): Promise<{ user: AccountsUser }>;
+  /** AH-281: kênh SMS bật → gửi mã OTP (phone_hint); tắt → mật khẩu tạm hiển thị đúng một lần. */
+  resetPassword(id: string, key: string): Promise<PasswordReset>;
 }
+export interface PasswordReset { mode: "temporary_password" | "otp_sent"; temporary_password: string | null; phone_hint: string }
 
 export function accountsClient(scope: AccountsScope, api: ApiClient, adminApi: AdminApiClient): AccountsClient {
   if (scope === "admin") {
@@ -24,6 +27,7 @@ export function accountsClient(scope: AccountsScope, api: ApiClient, adminApi: A
       update: (id, body, key) => unwrap(adminApi.POST("/v1/accounts/htx-users/{id}/revisions", { params: { path: { id }, header: { "Idempotency-Key": key } }, body })),
       setLocked: (id, lock, key) =>
         unwrap(adminApi.POST(lock ? "/v1/accounts/htx-users/{id}/lock" : "/v1/accounts/htx-users/{id}/unlock", { params: { path: { id }, header: { "Idempotency-Key": key } } })),
+      resetPassword: (id, key) => unwrap(adminApi.POST("/v1/accounts/htx-users/{id}/password-reset", { params: { path: { id }, header: { "Idempotency-Key": key } } })),
     };
   }
   return {
@@ -38,5 +42,6 @@ export function accountsClient(scope: AccountsScope, api: ApiClient, adminApi: A
     update: async (id, body, key) => ({ user: (await unwrap(api.POST("/v1/htx-accounts/{id}/revisions", { params: { path: { id }, header: { "Idempotency-Key": key } }, body }))).user as AccountsUser }),
     setLocked: async (id, lock, key) =>
       ({ user: (await unwrap(api.POST(lock ? "/v1/htx-accounts/{id}/lock" : "/v1/htx-accounts/{id}/unlock", { params: { path: { id }, header: { "Idempotency-Key": key } } }))).user as AccountsUser }),
+    resetPassword: (id, key) => unwrap(api.POST("/v1/htx-accounts/{id}/password-reset", { params: { path: { id }, header: { "Idempotency-Key": key } } })),
   };
 }
