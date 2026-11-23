@@ -28921,6 +28921,7 @@ components:
         gps: {$ref: "#/components/schemas/CropGPS"}
         channel: {type: string, enum: [app, web], default: app}
         plan_changes: {type: array, maxItems: 200, description: "Tùy chỉnh quy trình trước khi lưu vụ (AH-113), áp theo thứ tự; SOP chuẩn không đổi", items: {$ref: "#/components/schemas/HouseholdPlanChange"}}
+        copy_from_season_ref: {type: [string, "null"], format: uuid, description: "AH-139: sao chép giống và quy trình (kèm tùy chỉnh) từ vụ trước của chính hộ này (kể cả vụ đang canh tác). Loại cây, giống, SOP lấy theo vụ nguồn; nếu gửi thì phải khớp (422). Vụ nguồn ngoài phạm vi → 404 cropcycle.season_not_found. Vẫn kiểm diện tích còn lại và mốc gốc."}
     HouseholdSeasonSOPSnapshot:
       type: object
       required: [template_ref, version_id, version_no, crop_code, anchor_name, stages, steps]
@@ -28963,6 +28964,7 @@ components:
         status: {type: string, enum: [open, completed, cancelled]}
         current_event_id: {type: string, format: uuid}
         version: {type: integer, minimum: 1}
+        copied_from: {type: [string, "null"], format: uuid, description: "Vụ nguồn khi mở bằng sao chép (AH-139)"}
         gps_missing: {type: boolean, description: "Thiếu hoặc từ chối GPS, không suy diễn tọa độ thành xác minh ranh đất"}
         gps: {$ref: "#/components/schemas/CropGPS"}
         opened_by: {type: string, format: uuid}

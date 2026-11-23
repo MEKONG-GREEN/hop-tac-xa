@@ -50,6 +50,8 @@ export function HouseholdSeasonsDialog({ coopRef, household, calendarPrefill, on
   const [hasCapacity, setHasCapacity] = useState(household.can_open_season);
   const [detail, setDetail] = useState<S["HouseholdSeason"] | null>(null);
   const [revision, setRevision] = useState(0);
+  // AH-139: sao chép giống và quy trình (kèm tùy chỉnh) từ một vụ trước của hộ.
+  const [copyFrom, setCopyFrom] = useState<S["HouseholdSeason"] | null>(null);
   // AH-113 AC1: tùy chỉnh quy trình trước khi lưu vụ — gom lại, gửi kèm xem trước và mở vụ.
   const [planChanges, setPlanChanges] = useState<PlanChange[]>([]);
   const [customInfo, setCustomInfo] = useState<{ skipped: number[]; steps: Record<number, { window?: S["CropSOPWindow"] | null; materials?: S["CropSOPMaterial"][] | null }> }>({ skipped: [], steps: {} });
@@ -59,7 +61,7 @@ export function HouseholdSeasonsDialog({ coopRef, household, calendarPrefill, on
   const metadata = useSeasonMetadata(api);
   const choices = useSopChoices(api, metadata.data, coopRef, crop, variety);
   const selected = version || (choices.data?.length === 1 ? choices.data[0]?.id ?? "" : "");
-  const planReady = opening && canCreate && matrixAllows(principal, "KHMV-FN-04", "C") && !choices.loading &&
+  const planReady = !copyFrom && opening && canCreate && matrixAllows(principal, "KHMV-FN-04", "C") && !choices.loading &&
     !!crop && !!variety && !!selected && !householdAreaError(area) && /^\d{4}-\d{2}-\d{2}$/.test(anchor);
   const preview = useAsync(async () => planReady ? unwrap(api.POST("/v1/cooperatives/{ref}/households/{household_ref}/season-plan-preview", {
     params: { path, header: { "Idempotency-Key": newIdempotencyKey() } },
@@ -109,9 +111,9 @@ export function HouseholdSeasonsDialog({ coopRef, household, calendarPrefill, on
       setGPS(point);
       const result = await unwrap(api.POST("/v1/cooperatives/{ref}/households/{household_ref}/seasons", {
         params: { path, header: { "Idempotency-Key": key } },
-        body: { crop_code: crop, season_code: seasonCode, season_year: Number(year), variety_code: variety, area_ha: area, anchor_date: anchor, sop_version_id: selected, gps: point, channel: "web", plan_changes: planChanges },
+        body: { crop_code: crop, season_code: seasonCode, season_year: Number(year), variety_code: variety, area_ha: area, anchor_date: anchor, sop_version_id: selected, gps: point, channel: "web", plan_changes: planChanges, copy_from_season_ref: copyFrom?.season_ref ?? null },
       }));
-      setDetail(result.season); setOpening(false); setRevision((v) => v + 1); onSaved(); resetPlan();
+      setDetail(result.season); setOpening(false); setRevision((v) => v + 1); onSaved(); resetPlan(); setCopyFrom(null);
       setArea(""); setKey(newIdempotencyKey()); setGPS(null);
       try {
         const households = await collectPages((cursor) => unwrap(api.GET("/v1/cooperatives/{ref}/households", { params: { path: { ref: coopRef }, query: { cursor, limit: 200 } } })));
@@ -130,15 +132,22 @@ export function HouseholdSeasonsDialog({ coopRef, household, calendarPrefill, on
     {canCreate && !hasCapacity ? <p role="status">{household.open_season_blocked_reason || "Không còn diện tích hoặc chưa tải lại được số liệu. Đóng và mở lại danh sách hộ để cập nhật."}</p> : null}
     {opening ? <form onSubmit={(e) => void submit(e)} className="stack">
       <fieldset disabled={busy} className="stack" style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+        {copyFrom ? <section aria-label="Sao chép từ vụ trước" className="alert alert-info">
+          <p>Sao chép từ vụ {copyFrom.season_code} {copyFrom.season_year}: loại cây {copyFrom.crop_code}, giống {copyFrom.variety_code}, quy trình {copyFrom.sop_snapshot.name} bản {copyFrom.sop_snapshot.version_no}{copyFrom.sop_snapshot.custom ? " (kèm tùy chỉnh của vụ)" : ""}. Ngày dự kiến tính theo mốc gốc mới khi lưu.</p>
+          <button type="button" className="btn btn-o btn-sm" onClick={() => { setCopyFrom(null); setCrop(""); setVariety(""); setVersion(""); resetPlan(); edit(); }}>Bỏ sao chép</button>
+        </section> : <>
         <label className="field">Loại cây<select className="select" required value={crop} onChange={(e) => { setCrop(e.target.value); setVariety(""); setVersion(""); resetPlan(); edit(); }}><option value="">Chọn loại cây</option>{metadata.data?.crops.filter((c) => !c.attrs.parent_code).map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}</select></label>
         <label className="field">Giống<select className="select" required value={variety} onChange={(e) => { setVariety(e.target.value); setVersion(""); resetPlan(); edit(); }}><option value="">Chọn giống</option>{metadata.data?.varieties.filter((v) => v.attrs.crop_code === crop).map((v) => <option key={v.code} value={v.code}>{v.name}</option>)}</select></label>
+        </>}
         <label className="field">Mùa vụ<select className="select" required value={seasonCode} onChange={(e) => { setSeasonCode(e.target.value); edit(); }}><option value="">Chọn mùa vụ</option>{metadata.data?.seasons.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}</select></label>
         <label className="field">Năm<input className="input" required type="number" min={2000} max={2100} value={year} onChange={(e) => { setYear(e.target.value); edit(); }} /></label>
         <label className="field">Diện tích vụ (ha)<input className="input" required inputMode="decimal" value={area} onChange={(e) => { setArea(e.target.value); edit(); }} placeholder="Ví dụ: 0.25" /></label>
+        {!copyFrom ? <>
         <label className="field">SOP đang áp dụng<select className="select" required value={selected} onChange={(e) => { setVersion(e.target.value); resetPlan(); edit(); }}><option value="">Chọn SOP</option>{choices.data?.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}</select></label>
         <button type="button" className="btn btn-o btn-sm" onClick={() => { choices.reload(); setVersion(""); resetPlan(); edit(); }}>Tải lại SOP</button>
-        <label className="field">{choices.data?.find((v) => v.id === selected)?.anchor || "Mốc gốc"}<input className="input" required type="date" value={anchor} onChange={(e) => { setAnchor(e.target.value); edit(); }} /></label>
-        {!planReady ? <p>Chọn giống, SOP, diện tích và mốc gốc để xem kế hoạch.</p> : preview.loading ? <Loading label="Đang tính kế hoạch…" /> : preview.error ? <ProblemAlert problem={preview.error} onRetry={preview.reload} /> : preview.data ? <SeasonPlan plan={preview.data} /> : null}
+        </> : null}
+        <label className="field">{copyFrom?.sop_snapshot.anchor_name || choices.data?.find((v) => v.id === selected)?.anchor || "Mốc gốc"}<input className="input" required type="date" value={anchor} onChange={(e) => { setAnchor(e.target.value); edit(); }} /></label>
+        {copyFrom ? null : !planReady ? <p>Chọn giống, SOP, diện tích và mốc gốc để xem kế hoạch.</p> : preview.loading ? <Loading label="Đang tính kế hoạch…" /> : preview.error ? <ProblemAlert problem={preview.error} onRetry={preview.reload} /> : preview.data ? <SeasonPlan plan={preview.data} /> : null}
         <p className="small">Bạn tự chọn mốc gốc. Khi lưu, trình duyệt hỏi quyền vị trí; từ chối vẫn mở vụ được và ghi “Thiếu GPS”.</p>
         <button className="btn btn-p" disabled={metadata.loading || choices.loading || !selected || (planReady && (preview.loading || !!preview.error))} type="submit">{busy ? "Đang lưu…" : "Lưu vụ"}</button>
       </fieldset>
@@ -151,7 +160,8 @@ export function HouseholdSeasonsDialog({ coopRef, household, calendarPrefill, on
     {opening && planReady && preview.data ? <SeasonPlanEditor stages={openStages} lookup={openLookup} onChange={changeOpening} disabled={busy} /> : null}
     {list.error ? <ProblemAlert problem={list.error} onRetry={list.reload} /> : null}
     {list.loading ? <Loading /> : null}
-    <ul>{list.items.map((s) => <li key={s.season_ref}><button className="btn btn-o" onClick={() => setDetail(s)}>{s.season_code} {s.season_year} · {s.crop_code} · {formatDecimal(s.area_ha, 2)} ha · {s.status === "open" ? "Đang canh tác" : s.status}</button></li>)}</ul>
+    <ul>{list.items.map((s) => <li key={s.season_ref}><button className="btn btn-o" onClick={() => setDetail(s)}>{s.season_code} {s.season_year} · {s.crop_code} · {formatDecimal(s.area_ha, 2)} ha · {s.status === "open" ? "Đang canh tác" : s.status}</button>
+      {canCreate && hasCapacity && s.status !== "cancelled" ? <button type="button" className="btn btn-o btn-sm" disabled={busy} onClick={() => { setCopyFrom(s); setCrop(s.crop_code); setVariety(s.variety_code); setVersion(s.sop_snapshot.version_id); resetPlan(); setOpening(true); edit(); }}>Sao chép vụ này</button> : null}</li>)}</ul>
     {!list.loading && !list.items.length ? <p>Chưa có vụ theo hộ.</p> : null}
     <LoadMore hasMore={list.hasMore} loading={list.loading} onClick={list.loadMore} />
     {detail ? <section aria-label="Chi tiết vụ">

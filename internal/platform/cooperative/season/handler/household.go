@@ -26,6 +26,8 @@ type householdSeasonRequest struct {
 	Channel      string  `json:"channel"`
 	// PlanChanges: tùy chỉnh quy trình trước khi lưu vụ (AH-113).
 	PlanChanges []domain.PlanChange `json:"plan_changes"`
+	// CopyFromSeasonRef: AH-139 — sao chép giống và quy trình (kèm tùy chỉnh) từ vụ trước của hộ.
+	CopyFromSeasonRef *string `json:"copy_from_season_ref"`
 }
 
 func householdPath(c *gin.Context) (uuid.UUID, uuid.UUID, bool) {
@@ -67,9 +69,16 @@ func (h Handler) openHouseholdSeason(c *gin.Context) {
 			return
 		}
 	}
+	var copyFrom uuid.UUID
+	if req.CopyFromSeasonRef != nil {
+		if copyFrom, err = uuid.Parse(*req.CopyFromSeasonRef); err != nil || copyFrom == uuid.Nil {
+			httpx.Fail(c, problem.Validation.WithField("copy_from_season_ref", "mã vụ nguồn không hợp lệ"))
+			return
+		}
+	}
 	r, err := h.Svc.OpenHouseholdSeason(c.Request.Context(), app.HouseholdOpenInput{CooperativeRef: coop, HouseholdRef: hh,
 		CropCode: req.CropCode, SeasonCode: req.SeasonCode, SeasonYear: req.SeasonYear, VarietyCode: req.VarietyCode,
-		AreaHa: req.AreaHa, AnchorDate: anchor, SOPVersionID: version, GPS: req.GPS.gps(), Channel: req.Channel, IdemKey: idem(c), PlanChanges: req.PlanChanges})
+		AreaHa: req.AreaHa, AnchorDate: anchor, SOPVersionID: version, GPS: req.GPS.gps(), Channel: req.Channel, IdemKey: idem(c), PlanChanges: req.PlanChanges, CopyFrom: copyFrom})
 	if err != nil {
 		httpx.Fail(c, err)
 		return
@@ -136,5 +145,12 @@ func householdSeasonOut(r app.SeasonResult) gin.H {
 		"season_code": s.SeasonCode, "season_year": s.SeasonYear, "variety_code": s.VarietyCode, "area_ha": s.AreaHa.String(),
 		"anchor_date": domain.FormatDay(s.SowingDate), "expected_harvest_date": forecast, "harvest_open_date": harvest,
 		"sop_snapshot": s.SOPSnapshot, "status": s.Status, "current_event_id": s.CurrentEventID, "version": s.Version,
-		"gps_missing": !r.Event.GPS.HasPoint(), "gps": gpsOut(r.Event.GPS), "opened_by": s.OpenedBy, "opened_at": ts(s.OpenedAt)}
+		"gps_missing": !r.Event.GPS.HasPoint(), "gps": gpsOut(r.Event.GPS), "opened_by": s.OpenedBy, "opened_at": ts(s.OpenedAt), "copied_from": uuidOrNil(s.CopiedFrom)}
+}
+
+func uuidOrNil(u uuid.UUID) *uuid.UUID {
+	if u == uuid.Nil {
+		return nil
+	}
+	return &u
 }
