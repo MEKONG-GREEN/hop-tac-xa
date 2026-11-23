@@ -44,6 +44,11 @@ import '../domain/roles.dart';
 
 /// Client OIDC công khai của App HTX (deploy/compose/keycloak/agrigreen-realm.json).
 const htxOidcClientId = 'agrigreen-htx-app';
+
+/// Realm HTX riêng (`agrigreen-htx`, ADR-0062): đăng nhập bằng màn riêng của
+/// app (FN-01, AH-300) và chọn vai làm việc.
+bool isNativeHtxRealm(String issuer) =>
+    issuer.replaceFirst(RegExp(r'/$'), '').endsWith('/realms/agrigreen-htx');
 const htxOidcRedirect = 'vn.agrigreen.htx:/oauth2redirect';
 
 /// Phụ thuộc nền tảng, thay được trong kiểm thử.
@@ -233,9 +238,7 @@ class HtxServices {
       onWiped: onWiped,
     );
     final workingRole = HtxWorkingRole(
-      enabled: pf.config.oidcIssuer
-          .replaceFirst(RegExp(r'/$'), '')
-          .endsWith('/realms/agrigreen-htx'),
+      enabled: isNativeHtxRealm(pf.config.oidcIssuer),
       roles: rolesFromJwt(await pf.store.read(SecureKeys.accessToken)),
     );
     final profile = ProfileService(
