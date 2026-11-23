@@ -13,6 +13,7 @@ import { contextLabel, contextShortLabel, optionLabel, otherOptions } from "@/kn
 import { canSee, disabledModules, findNavItem, homeFor, visibleNav, type DisabledModules } from "@/nav/nav";
 import { AccountMenu } from "@/shell/AccountMenu";
 import { HtxRolePicker } from "@/shell/HtxRolePicker";
+import { WeatherCard } from "@/weather/WeatherCard";
 import { SelfChangePassword } from "@/shell/SelfChangePassword";
 import { Dialog } from "./Dialog";
 import { Breadcrumb, BreadcrumbTailProvider, useBreadcrumbTailValue, type Crumb } from "@/shell/Breadcrumb";
@@ -277,6 +278,8 @@ export function AppShell({ children, SidebarComponent = Sidebar }: {
                 <span>{scopeWarning}</span>
               </div>
             ) : null}
+            {/* FN-TT-01 (AH-225): thẻ Thời tiết hôm nay ở đầu Trang chủ (trang đầu tiên được xem) của ba vai App HTX. */}
+            {isHtxAppUser(principal) && pathname === home && !disabled.has("pf/weather") ? <WeatherCard /> : null}
             {htxRoles?.notice && !needsHtxRole ? (
               // FN-TK-01/EX-03 (AH-222): vai vừa bị ngừng, tài khoản còn một vai nên dùng luôn vai đó (AC-01). Giữ câu báo
               // qua lần chuyển trang do mất quyền, tới khi người dùng đóng.

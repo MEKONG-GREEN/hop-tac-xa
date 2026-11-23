@@ -1,0 +1,6 @@
+{
+  "id": "weather",
+  "source": "./weather",
+  "app": [{ "export": "weatherAppRoutes", "order": 28100 }],
+  "admin": [{ "export": "weatherAdminRoutes", "order": 28110 }]
+}
