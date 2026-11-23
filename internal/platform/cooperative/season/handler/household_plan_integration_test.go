@@ -156,7 +156,8 @@ func TestAH113_PlanChangesAtOpen(t *testing.T) {
 	}
 	// SOP chuẩn không đổi.
 	v := f.memberA().get("/v1/cropcycle/sop-versions/" + version)
-	if v.status == http.StatusOK && len(list(v.body, "steps")) != 5 {
+	expect(t, v, http.StatusOK, "đọc phiên bản SOP")
+	if len(list(v.body, "version", "steps")) != 5 {
 		t.Fatalf("SOP chuẩn bị đổi: %v", v.body)
 	}
 }
