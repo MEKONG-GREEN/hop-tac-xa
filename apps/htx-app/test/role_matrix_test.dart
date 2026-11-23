@@ -107,6 +107,9 @@ void main() {
         HtxScreen.review,
         HtxScreen.collection,
         HtxScreen.dashboard,
+        // AH-225, AH-226: TTPP-FN-TT-01/02 = R cho Đại diện HTX.
+        HtxScreen.weatherToday,
+        HtxScreen.weatherCalendar,
       },
       HtxMode.member: {
         ...common,
@@ -120,6 +123,8 @@ void main() {
         HtxScreen.harvest,
         HtxScreen.plotDetail,
         HtxScreen.farmLogDetail,
+        HtxScreen.weatherToday,
+        HtxScreen.weatherCalendar,
       },
       HtxMode.admin: const {},
       HtxMode.none: const {},
