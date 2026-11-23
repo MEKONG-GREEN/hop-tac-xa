@@ -47,6 +47,8 @@ String recordSummary(OutboxRecord r) {
       '${p['point_count'] ?? '?'} điểm · ≈ ${'${p['area_ha_client'] ?? ''}'.replaceAll('.', ',')} ha',
     PushEntity.htxCollectionResponse =>
       '${p['outcome'] == 'confirmed' ? 'Xác nhận' : 'Tranh chấp'} bảng kê · bản ${p['revision']}',
+    PushEntity.householdTaskRecord =>
+      'Việc ${p['step_seq']} · ${p['done_on']} · ${p['state'] == 'partial' ? 'Làm tiếp' : 'Hoàn tất'}',
     PushEntity.supportRequest =>
       supportCategories[p['category']] ?? '${p['category']}',
     _ => '',
@@ -186,6 +188,30 @@ class _RecordCard extends ConsumerWidget {
                 child: Text(
                   rejectMessage(r.errorCode),
                   style: const TextStyle(color: AgColors.red, fontSize: 15),
+                ),
+              ),
+            if (r.status == OutboxStatus.rejected &&
+                r.replacedBy == null &&
+                !canConfirmYield &&
+                !canConfirmBoundary)
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: () async {
+                    final ok = await confirmDialog(
+                      context,
+                      title: 'Xóa bản ghi chưa đồng bộ',
+                      message:
+                          'Bản ghi này đã bị máy chủ từ chối và chỉ còn trên máy. '
+                          'Xóa thì không khôi phục được.',
+                      ok: 'Xóa',
+                    );
+                    if (!ok) return;
+                    await ref.services.outbox.discardRejected(r.id);
+                    ref.invalidate(_queueProvider);
+                  },
+                  icon: const Icon(Icons.delete_outline),
+                  label: const Text('Xóa bản ghi'),
                 ),
               ),
             if (r.replacedBy != null)

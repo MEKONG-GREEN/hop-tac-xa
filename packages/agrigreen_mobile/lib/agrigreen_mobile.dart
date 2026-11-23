@@ -32,6 +32,7 @@ export 'data/catalog/catalog_cache.dart';
 export 'data/crypto/envelope.dart';
 export 'data/db/local_db.dart';
 export 'data/db/schema.dart';
+export 'data/db/storage_errors.dart';
 export 'data/db/sqlcipher_opener.dart';
 export 'data/dial/dialer.dart';
 export 'data/files/blob_store.dart';

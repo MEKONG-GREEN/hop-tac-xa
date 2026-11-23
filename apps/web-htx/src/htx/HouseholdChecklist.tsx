@@ -12,7 +12,11 @@ import { formatDate } from "@/lib/format";
 import { toApiProblem, useAsync } from "@/lib/useAsync";
 import type { ApiProblem } from "@/api/problem";
 import { HouseholdTaskDetail } from "./HouseholdTaskDetail";
-import { cachedTaskRead, queuedTasks, flushTasks } from "./taskJournalQueue";
+import { cachedTaskRead, queuedTasks, flushTasks, enqueueTask, discardTask, taskRejectMessage } from "./taskJournalQueue";
+import { snapshotLookup } from "./SeasonPlanEditor";
+
+/** AH-114: chu kỳ tự thử lại đồng bộ khi còn nhật ký chờ gửi. */
+export const TASK_RETRY_MS = 120_000;
 
 type S = components["schemas"];
 const LABEL: Record<string, string> = { upcoming: "Chưa đến hạn", due: "Đến hạn", overdue: "Trễ hạn", waiting_anchor: "Chờ mốc", done: "Đã xong", done_early: "Xong sớm", done_on_time: "Xong đúng hạn", done_late: "Xong trễ", skipped: "Bỏ qua", not_started: "Chưa thực hiện", in_progress: "Đang thực hiện" };
@@ -57,10 +61,24 @@ export function HouseholdChecklist({ coopRef, householdRef, seasonRef, season }:
   };
   const syncLatest = useRef(syncQueued);
   useEffect(() => { syncLatest.current = syncQueued; });
+  const [online, setOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine !== false);
   useEffect(() => {
-    const onOnline = () => { void syncLatest.current(); };
-    window.addEventListener("online", onOnline); return () => window.removeEventListener("online", onOnline);
+    const onOnline = () => { setOnline(true); void syncLatest.current(); };
+    const onOffline = () => setOnline(false);
+    window.addEventListener("online", onOnline); window.addEventListener("offline", onOffline);
+    return () => { window.removeEventListener("online", onOnline); window.removeEventListener("offline", onOffline); };
   }, []);
+  // AH-114 AC3: còn bản chờ gửi thì tự thử lại theo chu kỳ; bản lỗi giữ nguyên trên máy.
+  const waiting = (queue.data ?? []).some((r) => !r.error);
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = setInterval(() => { if (navigator.onLine !== false) void syncLatest.current(); }, TASK_RETRY_MS);
+    return () => clearInterval(timer);
+  }, [waiting]);
+  const discard = async (id: string) => {
+    if (!principal || !window.confirm("Xóa bản ghi chưa đồng bộ? Bản ghi chỉ còn trên máy và không khôi phục được.")) return;
+    try { await discardTask(principal, id); } catch (e) { setError(toApiProblem(e)); } finally { setQueueRevision((r) => r + 1); }
+  };
   const data = !load.loading && !load.error && load.data ? load.data : updated ?? undefined;
   const refresh = () => { setUpdated(null); load.reload(); };
   const confirm = async () => {
@@ -74,16 +92,32 @@ export function HouseholdChecklist({ coopRef, householdRef, seasonRef, season }:
       }));
       setUpdated(result.checklist); setPending(null); load.reload();
     } catch (e) {
-      const problem = toApiProblem(e); setError(problem);
+      const problem = toApiProblem(e);
+      // AH-114 AC1: mất mạng khi tích nhanh → lưu trên máy "Chờ đồng bộ" như bản ghi việc "Hoàn tất" hôm nay.
+      if (problem.status === 0 && principal && season && typeof indexedDB !== "undefined") {
+        try {
+          const recommended = snapshotLookup(season.sop_snapshot)(pending.seq)?.materials ?? [];
+          await enqueueTask(principal, { id: pending.key, coop: coopRef, household: householdRef, season: seasonRef, photos: [], input: {
+            expected_season_event_id: pending.event, step_seq: pending.seq, state: "done",
+            done_on: new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(new Date()),
+            materials: recommended.map((m) => ({ material_code: m.material_code ?? "", name: m.name, unit: m.unit, dose_per_ha: m.dose_per_ha })),
+            file_refs: [], note: "", backfill_reason: "", zero_confirmed: false, gps: await pending.gps, channel: "web",
+          } });
+          setOnline(false); setPending(null); setQueueRevision((r) => r + 1);
+          return;
+        } catch (queued) { setError(toApiProblem(queued)); return; }
+      }
+      setError(problem);
       if ((problem.status === 409 && problem.code !== "idempotency_in_progress") || problem.code === "cropcycle.task_season_state" || problem.code === "cropcycle.task_stage_locked") { setPending(null); refresh(); }
     } finally { setBusy(false); }
   };
   return <section aria-label="Checklist công việc">
     <h3>Checklist công việc</h3>
+    {!online ? <div role="status" className="alert alert-warn">Đang ngoại tuyến — dữ liệu sẽ đồng bộ khi có mạng</div> : null}
     {load.loading && !updated ? <Loading /> : null}
     {load.error ? <ProblemAlert problem={load.error} onRetry={refresh} /> : null}
     {error ? <ProblemAlert problem={error} /> : null}
-    {!queue.loading && queue.data?.length ? <section aria-label="Nhật ký chờ đồng bộ"><p>{queue.data.length} bản ghi lưu trên máy, chưa đánh dấu xong trên máy chủ.</p><ul>{queue.data.map((r) => <li key={r.id}>Việc {r.input.step_seq} · {r.input.done_on} · {r.input.state === "partial" ? "Làm tiếp" : "Hoàn tất"}{r.error ? ` · ${r.error}` : " · Chờ đồng bộ"}</li>)}</ul><button type="button" disabled={busy} onClick={() => void syncQueued()}>Đồng bộ nhật ký</button></section> : null}
+    {!queue.loading && queue.data?.length ? <section aria-label="Nhật ký chờ đồng bộ"><p>{queue.data.length} bản ghi lưu trên máy, chưa đánh dấu xong trên máy chủ.</p><ul>{queue.data.map((r) => <li key={r.id}>Việc {r.input.step_seq} · {r.input.done_on} · {r.input.state === "partial" ? "Làm tiếp" : "Hoàn tất"}{r.error ? <> · {taskRejectMessage(r.error)} <button type="button" className="btn btn-o btn-sm" disabled={busy} onClick={() => void discard(r.id)}>Xóa</button></> : " · Chờ đồng bộ"}</li>)}</ul><button type="button" disabled={busy} onClick={() => void syncQueued()}>Đồng bộ nhật ký</button></section> : null}
     {queue.error ? <ProblemAlert problem={queue.error} onRetry={queue.reload} /> : null}
     {data ? <>
       <p>Tiến độ: <strong>{data.progress.percent == null ? "—" : `${data.progress.percent}%`}</strong> · {data.progress.done}/{data.progress.total - data.progress.skipped} việc</p>

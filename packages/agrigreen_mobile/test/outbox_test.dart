@@ -1,4 +1,5 @@
 import 'package:agrigreen_mobile/core/ids.dart';
+import 'package:agrigreen_mobile/data/db/storage_errors.dart';
 import 'package:agrigreen_mobile/data/outbox/outbox_repository.dart';
 import 'package:agrigreen_mobile/data/secure/secure_store.dart';
 import 'package:agrigreen_mobile/domain/outbox_record.dart';
@@ -150,6 +151,51 @@ void main() {
         ),
         throwsA(isA<OutboxException>()),
       );
+    });
+  });
+
+  group('AH-114: xóa bản ghi bị từ chối, lỗi hết dung lượng', () {
+    test(
+      'chỉ xóa được bản ghi rejected; chờ gửi và đã gửi giữ nguyên',
+      () async {
+        final a = await add('a');
+        final b = await add('b');
+        final c = await add('c');
+        final batch = await h.outbox.claimBatch(10);
+        await h.outbox.applyResults(batch!.batchKey, [
+          PushResult(
+            id: a.id,
+            status: 'rejected',
+            code: 'cropcycle.task_season_state',
+          ),
+          PushResult(id: b.id, status: 'accepted'),
+        ]);
+        expect(await h.outbox.discardRejected(b.id), isFalse);
+        expect(await h.outbox.discardRejected(c.id), isFalse);
+        expect(await h.outbox.discardRejected(a.id), isTrue);
+        expect(await h.outbox.discardRejected(a.id), isFalse);
+        final left = {for (final r in await h.outbox.list()) r.id: r.status};
+        expect(left.containsKey(a.id), isFalse);
+        expect(left[b.id], OutboxStatus.sent);
+        expect(left[c.id], OutboxStatus.pending);
+      },
+    );
+
+    test('nhận biết lỗi hết dung lượng của SQLite và hệ thống tệp', () {
+      for (final e in [
+        'DatabaseException(database or disk is full (code 13 SQLITE_FULL))',
+        'FileSystemException: Cannot write, path = x (OS Error: No space left on device, errno = 28)',
+        'ENOSPC',
+      ]) {
+        expect(isStorageFull(e), isTrue, reason: e);
+      }
+      for (final e in [
+        'SocketException: Failed host lookup',
+        'errno = 2',
+        'code 1',
+      ]) {
+        expect(isStorageFull(e), isFalse, reason: e);
+      }
     });
   });
 }
