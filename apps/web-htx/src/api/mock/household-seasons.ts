@@ -6,6 +6,7 @@ import { householdMockSOPs } from "./cropcycle";
 import { householdMockRows } from "./htx-gaps";
 import { allocateHouseholdMock, scaledArea } from "./household-season-state";
 import { hasRole, json, nowIso, paginate, problem, problemOf, validation, type Route } from "./http";
+import { applyPlanChange, applyPlanChanges, effectiveSteps, skippedSeqs, type PlanError } from "./season-plan-custom";
 
 type Season = components["schemas"]["HouseholdSeason"];
 type TaskRecord = components["schemas"]["HouseholdTaskRecord"];
@@ -13,6 +14,9 @@ const seasons: Season[] = [];
 const taskRecords = new Map<string, TaskRecord[]>();
 const journalDevices = new Map<string, string>();
 const nativeJournalReceipts = new Map<string, string>();
+const planHistory = new Map<string, { event_id: string; actor_ref: string; event_time: string; summary: string }[]>();
+const planReceipts = new Map<string, { season: Season; summary: string }>();
+const planProblem = (e: PlanError) => e.field ? validation([{ field: e.field, reason: e.reason }]) : problem(e.status, e.code, e.reason);
 
 const journalWriter = (p: MockPersona) => hasRole(p, "platform_admin") || (hasRole(p, "htx_member") && !hasRole(p, "coop_manager"));
 
@@ -34,7 +38,7 @@ function mockTaskDetail(p: MockPersona, coop: string, household: string, season:
   const backfilled = !task.undated && b.done_on < new Date(Date.parse(`${createdDay}T00:00:00Z`) - 3 * 86400000).toISOString().slice(0, 10);
   if (backfilled && !b.backfill_reason?.trim()) return validation([{ field: "backfill_reason", reason: "Nhập lý do ghi bù quá 3 ngày" }]);
   if (b.file_refs?.length) return problem(503, "sync.dependency_unavailable", "Chế độ giả lập chưa nối kho ảnh mã hóa");
-  const step = s.sop_snapshot.steps.find((t) => t.seq === b.step_seq)!;
+  const step = effectiveSteps(s.sop_snapshot).find((t) => t.seq === b.step_seq)!;
   if ((step.materials?.length && !b.materials?.length) && !b.zero_confirmed) return problem(409, "cropcycle.task_zero_confirmation_required", "Xác nhận không dùng vật tư khuyến cáo");
   const actual: components["schemas"]["HouseholdTaskDetails"]["actual_materials"] = [];
   for (const m of b.materials ?? []) {
@@ -55,7 +59,8 @@ function mockTaskDetail(p: MockPersona, coop: string, household: string, season:
 function mockChecklist(s: Season, write: boolean): components["schemas"]["HouseholdChecklist"] {
   const plan = mockPlan(s.sop_snapshot, s.anchor_date, s.current_event_id);
   const records = taskRecords.get(s.season_ref) ?? [];
-  let total = 0, done = 0;
+  let total = 0, done = 0, skippedCount = 0;
+  const skipped = skippedSeqs(s.sop_snapshot);
   const last = Math.max(...plan.stages.map((s) => s.seq));
   const stages = plan.stages.map((stage) => {
     let resolved = 0;
@@ -63,14 +68,16 @@ function mockChecklist(s: Season, write: boolean): components["schemas"]["Househ
       total++;
       const record = records.find((r) => r.step_seq === task.seq && r.state === "done");
       let status: components["schemas"]["HouseholdTaskProgress"]["completion_status"] = task.status;
+      if (!record && skipped.includes(task.seq)) { skippedCount++; resolved++; return { ...task, completion_status: "skipped" as const, done_on: null, can_complete: false }; }
       if (record) { done++; resolved++; status = task.undated ? "done_on_time" : !task.from_date ? "done" : record.done_on < task.from_date ? "done_early" : task.to_date && record.done_on > task.to_date ? "done_late" : "done_on_time"; }
       return { ...task, completion_status: status, done_on: record?.done_on ?? null, can_complete: write && !record && (s.status === "open" || (s.status === "completed" && stage.seq === last)) };
     });
     const status: "done" | "in_progress" | "not_started" = tasks.length && resolved === tasks.length ? "done" : resolved || records.some((r) => tasks.some((t) => t.seq === r.step_seq)) ? "in_progress" : "not_started";
     return { seq: stage.seq, name: stage.name, status, tasks };
   });
-  const scaled = total ? (BigInt(done) * 10000n + BigInt(total) / 2n) / BigInt(total) : null;
-  return { season_ref: s.season_ref, current_event_id: s.current_event_id, records, progress: { as_of_date: plan.as_of_date, total, done, skipped: 0, percent: scaled == null ? null : `${scaled / 100n}.${(scaled % 100n).toString().padStart(2, "0")}`, stages } };
+  const denominator = total - skippedCount;
+  const scaled = denominator ? (BigInt(done) * 10000n + BigInt(denominator) / 2n) / BigInt(denominator) : null;
+  return { season_ref: s.season_ref, current_event_id: s.current_event_id, records, progress: { as_of_date: plan.as_of_date, total, done, skipped: skippedCount, percent: scaled == null ? null : `${scaled / 100n}.${(scaled % 100n).toString().padStart(2, "0")}`, stages } };
 }
 
 function mockPlan(snapshot: Season["sop_snapshot"], anchor: string, event: string | null): components["schemas"]["SeasonSchedule"] {
@@ -90,15 +97,16 @@ function mockPlan(snapshot: Season["sop_snapshot"], anchor: string, event: strin
     const base = w.anchor === "nxg" ? anchor : w.anchor === "nth" ? harvest : null;
     return [add(base, w.from), w.kind === "open" ? null : add(base, w.to)];
   };
-  const lastHarvest = snapshot.steps.filter((s) => s.activity_code === "thu_hoach").sort((a, b) => b.seq - a.seq)[0];
+  const effective = effectiveSteps(snapshot);
+  const lastHarvest = effective.filter((s) => s.activity_code === "thu_hoach").sort((a, b) => b.seq - a.seq)[0];
   const harvest = lastHarvest ? dates(lastHarvest, null)[0] : null;
   return { anchor_date: anchor, as_of_date: today, expected_harvest_date: harvest,
     sop_version_id: snapshot.version_id, current_event_id: event,
     stages: snapshot.stages.map((stage) => ({ seq: stage.seq, name: stage.name, from_date: add(anchor, stage.from_day), to_date: add(anchor, stage.to_day),
-      steps: snapshot.steps.filter((s) => s.stage_seq === stage.seq).map((s) => {
+      steps: effective.filter((s) => s.stage_seq === stage.seq).map((s) => {
         const [from, to] = dates(s, harvest);
         const undated = s.window?.kind === "none";
-        return { seq: s.seq, stage_seq: stage.seq, task_seq: s.task_seq ?? s.seq, name: s.name, activity_code: s.activity_code,
+        return { seq: s.seq, stage_seq: stage.seq, task_seq: s.task_seq ?? s.seq, name: s.name, activity_code: s.activity_code, ...(s.custom ? { custom: true } : {}),
           window_kind: s.window?.kind ?? "none", from_date: from, to_date: to, expected_date: from, undated,
           status: undated ? "due" : !from ? "waiting_anchor" : today < from ? "upcoming" : to && today > to ? "overdue" : "due" };
       }),
@@ -107,6 +115,33 @@ function mockPlan(snapshot: Season["sop_snapshot"], anchor: string, event: strin
 }
 
 export const householdSeasonRoutes: Route[] = [{
+  method: "POST", pattern: /^\/v1\/cooperatives\/([\w-]+)\/households\/([\w-]+)\/seasons\/([\w-]+)\/plan-changes$/,
+  handler: ({ params, persona, body, request }) => {
+    if (!journalWriter(persona)) return problem(403, "cropcycle.read_only", "Vai của bạn chỉ được xem");
+    const s = seasons.find((s) => s.cooperative_ref === params[0] && s.household_ref === params[1] && s.season_ref === params[2]);
+    if (!s || (!hasRole(persona, "platform_admin") && persona.me.org?.ref !== s.cooperative_ref)) return problem(404, "cropcycle.season_not_found", "Không tìm thấy vụ");
+    const receipt = `${persona.me.actor_ref}:${request.headers.get("Idempotency-Key")}`;
+    const old = planReceipts.get(receipt);
+    if (old) return json({ season: old.season, checklist: mockChecklist(old.season, true), summary: old.summary });
+    const b = body as { expected_season_event_id: string; change: components["schemas"]["HouseholdPlanChange"] };
+    if (s.status !== "open") return problem(409, "cropcycle.plan_season_closed", "Chỉ tùy chỉnh quy trình của vụ đang canh tác");
+    if (b.expected_season_event_id !== s.current_event_id) return problem(409, "cropcycle.task_season_changed", "Vụ đã thay đổi");
+    const records = taskRecords.get(s.season_ref) ?? [];
+    const r = applyPlanChange(s.sop_snapshot, b.change, new Set(records.filter((x) => x.state === "done").map((x) => x.step_seq)), new Set(records.map((x) => x.step_seq)));
+    if ("status" in r) return planProblem(r);
+    s.sop_snapshot = r.snapshot; s.current_event_id = uuidv7(); s.version += 1;
+    planHistory.set(s.season_ref, [{ event_id: s.current_event_id, actor_ref: persona.me.actor_ref, event_time: nowIso(), summary: r.summary }, ...(planHistory.get(s.season_ref) ?? [])]);
+    planReceipts.set(receipt, { season: structuredClone(s), summary: r.summary });
+    return json({ season: s, checklist: mockChecklist(s, true), summary: r.summary });
+  },
+}, {
+  method: "GET", pattern: /^\/v1\/cooperatives\/([\w-]+)\/households\/([\w-]+)\/seasons\/([\w-]+)\/plan-history$/,
+  handler: ({ params, persona }) => {
+    const s = seasons.find((s) => s.cooperative_ref === params[0] && s.household_ref === params[1] && s.season_ref === params[2]);
+    if (!s || !hasRole(persona, "platform_admin", "htx_member", "coop_manager") || (!hasRole(persona, "platform_admin") && persona.me.org?.ref !== s.cooperative_ref)) return problem(404, "cropcycle.season_not_found", "Không tìm thấy vụ");
+    return json({ items: planHistory.get(s.season_ref) ?? [] });
+  },
+}, {
   method: "POST", pattern: /^\/v1\/devices$/,
   handler: ({ persona, body }) => {
     if (!journalWriter(persona)) return problem(403, "forbidden", "Không được đăng ký thiết bị nhật ký Web");
@@ -164,7 +199,7 @@ export const householdSeasonRoutes: Route[] = [{
     if (!task) return validation([{ field: "step_seq", reason: "Việc không thuộc snapshot" }]);
     if (task.done_on) return problem(409, "cropcycle.task_already_resolved", "Việc đã xong");
     if (!task.can_complete) return problem(422, "cropcycle.task_season_state", "Vụ hoặc giai đoạn không cho ghi");
-    const step = s.sop_snapshot.steps.find((t) => t.seq === b.step_seq)!;
+    const step = effectiveSteps(s.sop_snapshot).find((t) => t.seq === b.step_seq)!;
     const inputs = (step.materials ?? []).map((m) => {
       const value = scaledArea(m.dose_per_ha) * scaledArea(s.area_ha);
       const qty = `${value / 100000000n}.${(value % 100000000n).toString().padStart(8, "0")}`.replace(/\.?0+$/, "");
@@ -184,7 +219,8 @@ export const householdSeasonRoutes: Route[] = [{
     const b = body as components["schemas"]["SeasonSchedulePreviewInput"];
     const chosen = householdMockSOPs(coop.api.ref, b.crop_code, b.variety_code).find((s) => s.version.id === b.sop_version_id);
     if (!chosen || !b.variety_code || typeof b.area_ha !== "string" || !/^(0|[1-9][0-9]{0,9})(\.[0-9]{1,2})?$/.test(b.area_ha) || scaledArea(b.area_ha) <= 0n || !/^\d{4}-\d{2}-\d{2}$/.test(b.anchor_date) || !Number.isFinite(Date.parse(b.anchor_date))) return validation([{ field: "sop_version_id", reason: "Chọn giống, SOP, diện tích và mốc gốc hợp lệ" }]);
-    return json(mockPlan({ template_ref: chosen.template.ref, version_id: chosen.version.id, version_no: chosen.version.version_no, crop_code: b.crop_code, anchor_name: chosen.template.anchor_name, stages: chosen.version.stages, steps: chosen.version.steps }, b.anchor_date, null));
+    const snapshot = applyPlanChanges({ template_ref: chosen.template.ref, version_id: chosen.version.id, version_no: chosen.version.version_no, crop_code: b.crop_code, anchor_name: chosen.template.anchor_name, stages: chosen.version.stages, steps: chosen.version.steps }, b.plan_changes);
+    return "status" in snapshot ? planProblem(snapshot) : json(mockPlan(snapshot, b.anchor_date, null));
   },
 }, {
   method: "GET", pattern: /^\/v1\/cooperatives\/([\w-]+)\/households\/([\w-]+)\/seasons\/([\w-]+)\/plan$/,
@@ -218,12 +254,14 @@ export const householdSeasonRoutes: Route[] = [{
     if (!choices.length) return problem(422, "cropcycle.no_active_sop_for_crop", "Chưa có SOP đang áp dụng; liên hệ Admin");
     const chosen = b.sop_version_id ? choices.find((s) => s.version.id === b.sop_version_id) : choices.length === 1 ? choices[0] : undefined;
     if (!chosen) return validation([{ field: "sop_version_id", reason: "Chọn SOP đang áp dụng phù hợp" }]);
+    const snapshot = applyPlanChanges(structuredClone({ template_ref: chosen.template.ref, version_id: chosen.version.id, version_no: chosen.version.version_no, crop_code: b.crop_code, name: chosen.template.name, anchor_name: chosen.template.anchor_name, stages: chosen.version.stages, steps: chosen.version.steps }), b.plan_changes);
+    if ("status" in snapshot) return planProblem(snapshot);
     const s: Season = {
       season_ref: uuidv7(), entry_kind: "household", household_ref: household.household_ref, cooperative_ref: coop.api.ref, commune_code: household.commune_code,
       crop_code: b.crop_code, season_code: b.season_code, season_year: b.season_year, variety_code: b.variety_code, area_ha: b.area_ha, anchor_date: b.anchor_date,
       expected_harvest_date: null, harvest_open_date: null, status: "open", current_event_id: uuidv7(), version: 1, opened_by: persona.me.actor_ref, opened_at: nowIso(),
       gps: b.gps ?? { source: "denied" }, gps_missing: b.gps?.lon == null || b.gps?.lat == null,
-      sop_snapshot: structuredClone({ template_ref: chosen.template.ref, version_id: chosen.version.id, version_no: chosen.version.version_no, crop_code: b.crop_code, name: chosen.template.name, anchor_name: chosen.template.anchor_name, stages: chosen.version.stages, steps: chosen.version.steps }),
+      sop_snapshot: snapshot,
     };
     seasons.push(s); allocateHouseholdMock(coop.api.ref, household.household_ref, b.area_ha);
     return json({ season: s }, 201);

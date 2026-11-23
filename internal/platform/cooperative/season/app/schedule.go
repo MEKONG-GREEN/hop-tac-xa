@@ -19,6 +19,8 @@ type SchedulePreviewInput struct {
 	CropCode, VarietyCode, AreaHa string
 	SOPVersionID                  uuid.UUID
 	AnchorDate                    time.Time
+	// PlanChanges: tùy chỉnh quy trình trước khi lưu vụ (AH-113 AC1), áp theo thứ tự.
+	PlanChanges []domain.PlanChange
 }
 
 type ScheduleResult struct {
@@ -68,7 +70,11 @@ func (s *Service) PreviewHouseholdSchedule(ctx context.Context, in SchedulePrevi
 		if err != nil {
 			return err
 		}
-		plan, err := domain.CalculateSchedule(domain.Content{Stages: v.Stages, Steps: v.Steps}, in.AnchorDate, s.today(), nil)
+		snap, err := applyPlanChanges(domain.SeasonSnapshot{Stages: v.Stages, Steps: v.Steps}, in.PlanChanges)
+		if err != nil {
+			return err
+		}
+		plan, err := snap.Schedule(in.AnchorDate, s.today(), nil)
 		if err != nil {
 			return fieldProblem(err)
 		}
@@ -91,14 +97,11 @@ func (s *Service) HouseholdSchedule(ctx context.Context, coop, hh, season uuid.U
 	if r.Season.VarietyCode == "" {
 		return ScheduleResult{}, problem.Validation.WithField("variety_code", "chưa chọn giống")
 	}
-	var snapshot struct {
-		Stages []domain.Stage `json:"stages"`
-		Steps  []domain.Step  `json:"steps"`
-	}
+	var snapshot domain.SeasonSnapshot
 	if err := json.Unmarshal(r.Season.SOPSnapshot, &snapshot); err != nil {
 		return ScheduleResult{}, problem.Internal.WithCause(err)
 	}
-	plan, err := domain.CalculateSchedule(domain.Content{Stages: snapshot.Stages, Steps: snapshot.Steps}, r.Season.SowingDate, s.today(), nil)
+	plan, err := snapshot.Schedule(r.Season.SowingDate, s.today(), nil)
 	if err != nil {
 		return ScheduleResult{}, fieldProblem(err)
 	}

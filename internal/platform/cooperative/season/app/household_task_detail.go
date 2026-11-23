@@ -60,7 +60,7 @@ func normalizeDetailedTask(in DetailedTaskInput, now time.Time) (DetailedTaskInp
 	if in.IdemKey == "" {
 		return in, "", problem.IdempotencyRequired
 	}
-	if in.StepSeq < 1 || in.StepSeq > domain.MaxSteps || in.ExpectedEventID == uuid.Nil {
+	if in.StepSeq < 1 || in.StepSeq > domain.MaxPlanStepSeq || in.ExpectedEventID == uuid.Nil {
 		return bad("step_seq", "Chọn việc và phiên bản vụ hợp lệ")
 	}
 	if in.State != "done" && in.State != "partial" {
@@ -264,13 +264,11 @@ func (s *Service) detailedTaskState(ctx context.Context, tx pgx.Tx, cur store.Se
 	if !selected.CanComplete {
 		return domain.Step{}, false, ErrTaskLocked
 	}
-	var content struct {
-		Steps []domain.Step `json:"steps"`
-	}
+	var content domain.SeasonSnapshot
 	if err := json.Unmarshal(cur.SOPSnapshot, &content); err != nil {
 		return domain.Step{}, false, err
 	}
-	step, ok := domain.StepBySeq(content.Steps, in.StepSeq)
+	step, ok := content.Step(in.StepSeq)
 	if !ok {
 		return domain.Step{}, false, ErrDependency
 	}

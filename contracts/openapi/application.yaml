@@ -14527,6 +14527,79 @@ paths:
                         actor_ref: {type: string, format: uuid}
                         label: {type: string, description: "Tên hiển thị nếu có, không thay bằng SĐT/tên đăng nhập"}
         default: {$ref: "#/components/responses/Problem"}
+  /v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/plan-changes:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: household_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: season_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: changeHouseholdPlan
+      summary: Tùy chỉnh quy trình của vụ đang canh tác (AH-113)
+      description: Thành viên HTX/Admin (KHMV-FN-04 U); Đại diện chỉ xem. Một thay đổi mỗi yêu cầu — thêm việc, sửa ngày/vật tư, đổi chỗ (chỉ đổi thứ tự hiển thị trong giai đoạn), bỏ việc (việc SOP chuyển Bỏ qua, việc tự thêm bị xóa). Chỉ đổi bản chụp của vụ, SOP chuẩn không đổi. Việc đã xong không sửa, đổi chỗ, bỏ được (409 cropcycle.plan_step_resolved); việc tự thêm đã có nhật ký không xóa được. Khóa vụ rồi so expected_season_event_id (409 cropcycle.task_season_changed). Mỗi thay đổi ghi một sự kiện corrected chỉ ghi thêm (người, thời điểm, nội dung). Kiểm cửa sổ và vật tư theo luật của SOP.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_season_event_id, change]
+              properties:
+                expected_season_event_id: {type: string, format: uuid}
+                change: {$ref: "#/components/schemas/HouseholdPlanChange"}
+      responses:
+        "200":
+          description: Vụ sau thay đổi, checklist tính lại và câu mô tả đã ghi lịch sử; replay trả kết quả cũ
+          headers:
+            Idempotent-Replayed: {schema: {type: string}}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [season, checklist, summary]
+                properties:
+                  season: {$ref: "#/components/schemas/HouseholdSeason"}
+                  checklist: {$ref: "#/components/schemas/HouseholdChecklist"}
+                  summary: {type: string}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/plan-history:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: household_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: season_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: getHouseholdPlanHistory
+      summary: Lịch sử tùy chỉnh quy trình của vụ (AH-113)
+      description: Người xem được vụ (kể cả Đại diện HTX cùng HTX) xem được. Mới nhất trước.
+      responses:
+        "200":
+          description: Các thay đổi đã ghi
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [event_id, actor_ref, event_time, summary]
+                      properties:
+                        event_id: {type: string, format: uuid}
+                        actor_ref: {type: string, format: uuid}
+                        event_time: {type: string, format: date-time}
+                        summary: {type: string}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
   /v1/extension/khtc/periods/{id}/report:
     get:
       summary: "Bản soạn Mẫu 1–5, ô số chỉ đọc và mốc dữ liệu"
@@ -28723,6 +28796,7 @@ components:
           description: Phiên bản đang áp dụng trong nhóm SOP phù hợp. Bỏ trống để server tự chọn nếu chỉ có một SOP phù hợp.
         gps: {$ref: "#/components/schemas/CropGPS"}
         channel: {type: string, enum: [app, web], default: app}
+        plan_changes: {type: array, maxItems: 200, description: "Tùy chỉnh quy trình trước khi lưu vụ (AH-113), áp theo thứ tự; SOP chuẩn không đổi", items: {$ref: "#/components/schemas/HouseholdPlanChange"}}
     HouseholdSeasonSOPSnapshot:
       type: object
       required: [template_ref, version_id, version_no, crop_code, anchor_name, stages, steps]
@@ -28735,6 +28809,15 @@ components:
         anchor_name: {type: string}
         stages: {type: array, items: {$ref: "#/components/schemas/CropSOPStage"}}
         steps: {type: array, items: {$ref: "#/components/schemas/CropSOPStep"}}
+        custom:
+          type: object
+          description: "Lớp tùy chỉnh của riêng vụ (AH-113): việc tự thêm, sửa ngày/vật tư, việc bỏ qua, thứ tự hiển thị. Lịch và checklist đã áp lớp này."
+          properties:
+            added: {type: array, items: {$ref: "#/components/schemas/CropSOPStep"}}
+            edits: {type: array, items: {type: object, properties: {seq: {type: integer}, window: {$ref: "#/components/schemas/CropSOPWindow"}, materials: {type: array, items: {$ref: "#/components/schemas/CropSOPMaterial"}}}}}
+            skipped: {type: array, items: {type: integer}}
+            order: {type: array, items: {type: object, properties: {stage_seq: {type: integer}, steps: {type: array, items: {type: integer}}}}}
+            last_seq: {type: integer}
     HouseholdSeason:
       type: object
       required: [season_ref, entry_kind, household_ref, cooperative_ref, commune_code, crop_code, season_code, season_year, variety_code, area_ha, anchor_date, expected_harvest_date, harvest_open_date, sop_snapshot, status, current_event_id, version, gps_missing, gps, opened_by, opened_at]
@@ -28781,6 +28864,7 @@ components:
         sop_version_id: {type: string, format: uuid}
         area_ha: {$ref: "#/components/schemas/HouseholdSeasonAreaInput"}
         anchor_date: {type: string, format: date}
+        plan_changes: {type: array, maxItems: 200, description: "Tùy chỉnh quy trình đang soạn (AH-113)", items: {$ref: "#/components/schemas/HouseholdPlanChange"}}
     SeasonSchedule:
       type: object
       required: [anchor_date, as_of_date, expected_harvest_date, sop_version_id, current_event_id, stages]
@@ -28818,13 +28902,14 @@ components:
         expected_date: {type: [string, "null"], format: date, description: "Ngày Từ; không lấy Đến"}
         status: {type: string, enum: [upcoming, due, overdue, waiting_anchor]}
         undated: {type: boolean, description: "Chỉ true cho Không ngày; luôn due, không overdue"}
+        custom: {type: boolean, description: "Việc tự thêm vào quy trình của riêng vụ (AH-113); vắng mặt = việc của SOP"}
 
     HouseholdTaskCompleteInput:
       type: object
       additionalProperties: false
       required: [step_seq, expected_season_event_id]
       properties:
-        step_seq: {type: integer, minimum: 1, maximum: 100}
+        step_seq: {type: integer, minimum: 1, maximum: 1000}
         expected_season_event_id: {type: string, format: uuid}
         gps: {$ref: "#/components/schemas/CropGPS"}
         channel: {type: string, enum: [app, web], default: app}
@@ -28833,7 +28918,7 @@ components:
       additionalProperties: false
       required: [step_seq, expected_season_event_id, state, done_on, materials, file_refs]
       properties:
-        step_seq: {type: integer, minimum: 1, maximum: 100}
+        step_seq: {type: integer, minimum: 1, maximum: 1000}
         expected_season_event_id: {type: string, format: uuid}
         state: {type: string, enum: [partial, done]}
         done_on: {type: string, format: date}
@@ -28976,6 +29061,28 @@ components:
         can_manage: {type: boolean}
         recipients: {type: array, description: "Chỉ có khi can_manage=true", items: {type: string, format: uuid}}
         updated_at: {type: string, format: date-time}
+    HouseholdPlanChange:
+      type: object
+      additionalProperties: false
+      required: [kind]
+      description: "Một thay đổi quy trình của vụ (AH-113): add cần step; edit cần step_seq, window, materials; move cần step_seq, direction; remove cần step_seq"
+      properties:
+        kind: {type: string, enum: [add, edit, move, remove]}
+        step_seq: {type: integer, minimum: 1, maximum: 1000}
+        direction: {type: string, enum: [up, down]}
+        step:
+          type: object
+          additionalProperties: false
+          required: [name, stage_seq, activity_code, window]
+          properties:
+            name: {type: string, minLength: 1, maxLength: 200}
+            stage_seq: {type: integer, minimum: 1}
+            activity_code: {type: string, enum: [lam_dat, gieo_sa, tuoi_nuoc, bon_phan, phun_thuoc, kiem_tra, thu_hoach, cat_tia, khac]}
+            window: {$ref: "#/components/schemas/CropSOPWindow"}
+            materials: {type: array, items: {$ref: "#/components/schemas/CropSOPMaterial"}}
+            instruction: {type: string, maxLength: 2000}
+        window: {$ref: "#/components/schemas/CropSOPWindow"}
+        materials: {type: array, items: {$ref: "#/components/schemas/CropSOPMaterial"}}
     KHTCReportSupplement:
       type: object
       required: [id, department, instruction, state, due_at, native_submission_ref, return_applied]

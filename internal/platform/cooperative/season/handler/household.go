@@ -24,6 +24,8 @@ type householdSeasonRequest struct {
 	SOPVersionID *string `json:"sop_version_id"`
 	GPS          *gpsReq `json:"gps"`
 	Channel      string  `json:"channel"`
+	// PlanChanges: tùy chỉnh quy trình trước khi lưu vụ (AH-113).
+	PlanChanges []domain.PlanChange `json:"plan_changes"`
 }
 
 func householdPath(c *gin.Context) (uuid.UUID, uuid.UUID, bool) {
@@ -67,7 +69,7 @@ func (h Handler) openHouseholdSeason(c *gin.Context) {
 	}
 	r, err := h.Svc.OpenHouseholdSeason(c.Request.Context(), app.HouseholdOpenInput{CooperativeRef: coop, HouseholdRef: hh,
 		CropCode: req.CropCode, SeasonCode: req.SeasonCode, SeasonYear: req.SeasonYear, VarietyCode: req.VarietyCode,
-		AreaHa: req.AreaHa, AnchorDate: anchor, SOPVersionID: version, GPS: req.GPS.gps(), Channel: req.Channel, IdemKey: idem(c)})
+		AreaHa: req.AreaHa, AnchorDate: anchor, SOPVersionID: version, GPS: req.GPS.gps(), Channel: req.Channel, IdemKey: idem(c), PlanChanges: req.PlanChanges})
 	if err != nil {
 		httpx.Fail(c, err)
 		return

@@ -43,6 +43,12 @@ type Checklist struct {
 // BuildChecklist is a pure derivation from the pinned schedule and current logs.
 // completed is the existing harvested state; unknown/closed/cancelled fail closed.
 func BuildChecklist(plan SchedulePlan, records []TaskRecord, seasonStatus string) (Checklist, error) {
+	return BuildSeasonChecklist(plan, records, seasonStatus, nil)
+}
+
+// BuildSeasonChecklist như BuildChecklist; skipped là việc gốc đã bỏ khỏi quy trình của vụ (AH-113) — hiện "Bỏ qua",
+// không tích được, không tính vào mẫu số tiến độ. Việc đã xong trước khi bỏ vẫn là đã xong.
+func BuildSeasonChecklist(plan SchedulePlan, records []TaskRecord, seasonStatus string, skipped map[int]bool) (Checklist, error) {
 	byStep := map[int]TaskRecord{}
 	for _, r := range records {
 		day, err := ParseDay(r.DoneOn)
@@ -89,12 +95,12 @@ func BuildChecklist(plan SchedulePlan, records []TaskRecord, seasonStatus string
 						task.CompletionStatus = "done_late"
 					}
 				}
-			} else if ok && r.State == "skipped" {
+			} else if (ok && r.State == "skipped") || skipped[w.Seq] {
 				out.Skipped++
 				resolved++
 				task.CompletionStatus = "skipped"
 			}
-			task.CanComplete = (!ok || r.State == "partial") && (seasonStatus == "open" || (seasonStatus == "completed" && s.Seq == lastStage))
+			task.CanComplete = !skipped[w.Seq] && (!ok || r.State == "partial") && (seasonStatus == "open" || (seasonStatus == "completed" && s.Seq == lastStage))
 			out.Total++
 			stage.Tasks = append(stage.Tasks, task)
 		}

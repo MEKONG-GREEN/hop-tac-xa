@@ -29,7 +29,7 @@ export function useSopChoices(api: ApiClient, metadata: SeasonMetadata | null | 
     return Promise.all((specific.length ? specific : eligible).map(async (t) => {
       const d = await unwrap(api.GET("/v1/cropcycle/sops/{ref}", { params: { path: { ref: t.ref } } }));
       const v = d.versions.find((v) => v.state === "active" && v.version_no === t.published_version);
-      return v ? { id: v.id, label: `${t.name} · bản ${v.version_no}`, anchor: t.anchor_name } : null;
+      return v ? { id: v.id, label: `${t.name} · bản ${v.version_no}`, anchor: t.anchor_name, steps: v.steps } : null;
     })).then((rows) => rows.filter((r) => r !== null));
   }, [api, metadata, coopRef, crop, variety]);
 }
