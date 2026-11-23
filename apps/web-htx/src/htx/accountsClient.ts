@@ -10,7 +10,10 @@ export type AccountInput = AdminPaths["/v1/accounts/htx-users"]["post"]["request
 export type AccountRevision = AdminPaths["/v1/accounts/htx-users/{id}/revisions"]["post"]["requestBody"]["content"]["application/json"];
 
 export interface AccountsClient {
-  list(): Promise<AccountsUser[]>;
+  /** SĐT trong danh sách đã che (FN-TK-02/BR-04); `phone` = tìm đúng SĐT ở máy chủ. */
+  list(phone?: string): Promise<AccountsUser[]>;
+  /** Chi tiết kèm SĐT đầy đủ; máy chủ ghi nhật ký truy cập mỗi lần gọi (FN-TK-02/BR-04, AH-223). */
+  get(id: string): Promise<AccountsUser>;
   create(body: AccountInput, key: string): Promise<{ user: AccountsUser; temporary_password: string | null }>;
   /** `confirmNoRepresentative`: đã xác nhận FN-TK-02/EX-04 (chỉ Admin — Đại diện HTX không khóa/chuyển Đại diện HTX). */
   update(id: string, body: AccountRevision, key: string, confirmNoRepresentative?: boolean): Promise<{ user: AccountsUser }>;
@@ -23,7 +26,8 @@ export interface PasswordReset { mode: "temporary_password" | "otp_sent"; tempor
 export function accountsClient(scope: AccountsScope, api: ApiClient, adminApi: AdminApiClient): AccountsClient {
   if (scope === "admin") {
     return {
-      list: async () => (await unwrap(adminApi.GET("/v1/accounts/htx-users"))).items,
+      list: async (phone) => (await unwrap(adminApi.GET("/v1/accounts/htx-users", phone ? { params: { query: { phone } } } : {}))).items,
+      get: (id) => unwrap(adminApi.GET("/v1/accounts/htx-users/{id}", { params: { path: { id } } })),
       create: (body, key) => unwrap(adminApi.POST("/v1/accounts/htx-users", { params: { header: { "Idempotency-Key": key } }, body })),
       update: (id, body, key, confirm) =>
         unwrap(adminApi.POST("/v1/accounts/htx-users/{id}/revisions", { params: { path: { id }, header: { "Idempotency-Key": key }, ...(confirm ? { query: { confirm_no_representative: true } } : {}) }, body })),
@@ -35,7 +39,8 @@ export function accountsClient(scope: AccountsScope, api: ApiClient, adminApi: A
     };
   }
   return {
-    list: async () => (await unwrap(api.GET("/v1/htx-accounts"))).items as AccountsUser[],
+    list: async (phone) => (await unwrap(api.GET("/v1/htx-accounts", phone ? { params: { query: { phone } } } : {}))).items as AccountsUser[],
+    get: async (id) => (await unwrap(api.GET("/v1/htx-accounts/{id}", { params: { path: { id } } }))) as AccountsUser,
     create: async (body, key) => {
       const res = await unwrap(api.POST("/v1/htx-accounts", {
         params: { header: { "Idempotency-Key": key } },

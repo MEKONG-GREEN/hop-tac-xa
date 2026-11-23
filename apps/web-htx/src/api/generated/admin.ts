@@ -4571,10 +4571,14 @@ export interface paths {
         /**
          * Danh sách tài khoản FN-07 trong tenant (Admin, realm HTX)
          * @description Chỉ Admin đã qua MFA. Snapshot đầy đủ tối đa 2000 tài khoản IAM; vượt giới hạn trả lỗi. Cache-Control no-store.
+         *     FN-TK-02/BR-04 (AH-223): phone trong danh sách đã che (09•• ••• 678); SĐT đầy đủ chỉ ở GET /v1/accounts/htx-users/{id}.
          */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description FN-07/AC-02 — tìm đúng SĐT (10 chữ số, bắt đầu bằng 0); máy chủ so trên SĐT đầy đủ rồi mới che. Sai định dạng → 422. */
+                    phone?: string;
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
@@ -4656,7 +4660,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Chi tiết tài khoản FN-07 (Admin, realm HTX) */
+        /**
+         * Chi tiết tài khoản FN-07 (Admin, realm HTX)
+         * @description FN-TK-02/BR-04 (AH-223) — trả SĐT đầy đủ; mỗi lượt xem ghi sổ truy cập pf_accounts.pii_view (người xem, tài khoản, thời điểm). Ghi sổ lỗi thì không trả. Cache-Control no-store.
+         */
         get: {
             parameters: {
                 query?: never;

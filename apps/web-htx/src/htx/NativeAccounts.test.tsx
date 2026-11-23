@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
 import { createAdminApiClient, createApiClient, unwrap } from "@/api/client";
@@ -45,6 +45,9 @@ it("uses exact phone search, role counts and ten-row pagination", async () => {
   expect(await screen.findByText("Không có bản ghi phù hợp")).toBeInTheDocument();
   await user.clear(screen.getByPlaceholderText("Tên, tên đăng nhập hoặc đúng SĐT"));
   await user.type(screen.getByPlaceholderText("Tên, tên đăng nhập hoặc đúng SĐT"), "0900000001");
+  // FN-TK-02/BR-04 (AH-223): tìm SĐT nhờ máy chủ; danh sách vẫn chỉ hiện SĐT đã che.
+  await waitFor(() => expect(within(screen.getByRole("table", { name: "Tài khoản HTX" })).getAllByRole("row")).toHaveLength(2));
   expect(screen.getByText("Người thử 1")).toBeInTheDocument();
-  expect(within(screen.getByRole("table", { name: "Tài khoản HTX" })).getAllByRole("row")).toHaveLength(2);
+  expect(screen.getByText(/09•• ••• 001/)).toBeInTheDocument();
+  expect(screen.queryByText(/0900000001/)).not.toBeInTheDocument();
 });

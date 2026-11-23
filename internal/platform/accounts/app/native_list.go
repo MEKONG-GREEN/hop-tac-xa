@@ -11,6 +11,7 @@ import (
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/domain"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/port"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/store"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/ids"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/problem"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/tenant"
 )
@@ -95,15 +96,44 @@ func (s *Service) nativeUsers(ctx context.Context, a *actor) ([]UserView, error)
 	return items, nil
 }
 
+// NativeUser là màn chi tiết tài khoản của Admin: SĐT đầy đủ, mỗi lần xem ghi sổ truy cập (FN-TK-02/BR-04, AH-223).
 func (s *Service) NativeUser(ctx context.Context, id string) (UserView, error) {
-	users, err := s.NativeUsers(ctx)
+	a, err := s.nativeAccountCaller(ctx)
 	if err != nil {
 		return UserView{}, err
 	}
-	for _, u := range users {
-		if u.User.ID.String() == id {
-			return u, nil
-		}
+	return s.nativeUserDetail(ctx, a, id)
+}
+
+// CoopNativeUser là màn chi tiết của Đại diện HTX (FN-08): chỉ tài khoản trong phạm vi coopVisible.
+func (s *Service) CoopNativeUser(ctx context.Context, id string) (UserView, error) {
+	a, err := s.coopAccountCaller(ctx)
+	if err != nil {
+		return UserView{}, err
 	}
-	return UserView{}, problem.NotFound
+	return s.nativeUserDetail(ctx, a, id)
+}
+
+// nativeUserDetail trả tài khoản kèm SĐT đầy đủ sau khi đã ghi pf_accounts.pii_view. Ghi sổ lỗi → không trả (đóng khi
+// lỗi): không có lượt xem SĐT đầy đủ nào không để lại dấu.
+func (s *Service) nativeUserDetail(ctx context.Context, a *actor, id string) (UserView, error) {
+	users, err := s.nativeUsers(ctx, a)
+	if err != nil {
+		return UserView{}, err
+	}
+	idx := slices.IndexFunc(users, func(u UserView) bool { return u.User.ID.String() == id })
+	if idx < 0 {
+		return UserView{}, problem.NotFound
+	}
+	u := users[idx]
+	if u.User.Phone == "" {
+		return u, nil
+	}
+	view := domain.PIIView{ID: ids.New(), TenantID: a.p.TenantID, UserRef: u.User.ID, Field: domain.PIIFieldPhone,
+		EventTime: s.now(), ActorRef: a.p.ActorRef}
+	view.IdemKey = "piiview:" + view.ID.String()
+	if err := tenant.WithTenantTx(ctx, s.DB, a.p.TenantID, func(tx pgx.Tx) error { return store.InsertPIIView(ctx, tx, &view) }); err != nil {
+		return UserView{}, err
+	}
+	return u, nil
 }

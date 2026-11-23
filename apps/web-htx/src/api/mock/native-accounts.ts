@@ -12,6 +12,13 @@ function guard({ persona }: Ctx) {
   return null;
 }
 const headers = { "Cache-Control": "no-store" };
+// FN-TK-02/BR-04 (AH-223): khớp handler.nativeUsersWith — danh sách che SĐT (09•• ••• 678), tìm đúng SĐT bằng ?phone.
+export const maskPhoneList = (phone: string | null | undefined) => (!phone ? phone ?? null : /^0[0-9]{9}$/.test(phone) ? `${phone.slice(0, 2)}•• ••• ${phone.slice(7)}` : "••••");
+function listed(ctx: Ctx, items: AccountsUser[]) {
+  const q = ctx.url.searchParams.get("phone");
+  if (q !== null && !/^0[0-9]{9}$/.test(q.trim())) return validation([{ field: "phone", reason: "SĐT gồm 10 chữ số, bắt đầu bằng 0" }]);
+  return json({ items: items.filter((u) => q === null || u.phone === q.trim()).map((u) => ({ ...u, phone: maskPhoneList(u.phone) })) }, 200, headers);
+}
 // FN-TK-02/EX-04 (AH-223): khớp accounts/app.guardLastRepresentative — thao tác làm HTX không còn Đại diện HTX đang
 // hoạt động cần confirm_no_representative=true.
 function lastRepresentative(ctx: Ctx, tenant: string, u: AccountsUser) {
@@ -21,7 +28,7 @@ function lastRepresentative(ctx: Ctx, tenant: string, u: AccountsUser) {
   return problem(409, "accounts.last_representative", "HTX sẽ không còn người duyệt kết quả lô");
 }
 export const nativeAccountRoutes: Route[] = [
-  { method: "GET", pattern: /^\/v1\/accounts\/htx-users$/, handler: (ctx) => guard(ctx) ?? json({ items: [...users.values()].filter((v) => v.tenant === ctx.persona.me.tenant_id).map((v) => v.user) }, 200, headers) },
+  { method: "GET", pattern: /^\/v1\/accounts\/htx-users$/, handler: (ctx) => guard(ctx) ?? listed(ctx, [...users.values()].filter((v) => v.tenant === ctx.persona.me.tenant_id).map((v) => v.user)) },
   { method: "GET", pattern: /^\/v1\/accounts\/htx-users\/([\w-]+)$/, handler: (ctx) => {
     const denied = guard(ctx); if (denied) return denied;
     const found = users.get(ctx.params[0] ?? "");
@@ -111,7 +118,12 @@ function coopFind(ctx: Ctx) {
   return found && found.tenant === ctx.persona.me.tenant_id && coopVisible(ctx, found.user) ? found : null;
 }
 export const coopAccountRoutes: Route[] = [
-  { method: "GET", pattern: /^\/v1\/htx-accounts$/, handler: (ctx) => coopGuard(ctx) ?? json({ items: [...users.values()].filter((v) => v.tenant === ctx.persona.me.tenant_id && coopVisible(ctx, v.user)).map((v) => v.user) }, 200, headers) },
+  { method: "GET", pattern: /^\/v1\/htx-accounts$/, handler: (ctx) => coopGuard(ctx) ?? listed(ctx, [...users.values()].filter((v) => v.tenant === ctx.persona.me.tenant_id && coopVisible(ctx, v.user)).map((v) => v.user)) },
+  { method: "GET", pattern: /^\/v1\/htx-accounts\/([\w-]+)$/, handler: (ctx) => {
+    const denied = coopGuard(ctx); if (denied) return denied;
+    const found = coopFind(ctx);
+    return found ? json(found.user, 200, headers) : problem(404, "not_found", "Không tìm thấy tài khoản");
+  } },
   { method: "POST", pattern: /^\/v1\/htx-accounts$/, handler: (ctx) => {
     const denied = coopGuard(ctx); if (denied) return denied;
     const input = (ctx.body ?? {}) as Record<string, unknown>;

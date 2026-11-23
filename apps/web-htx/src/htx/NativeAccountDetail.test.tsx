@@ -139,3 +139,13 @@ it("[AH-223 FN-TK-02/EX-04] còn Đại diện HTX khác đang hoạt động �
   expect(await screen.findByRole("status")).toHaveTextContent("Đã khóa.");
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
+
+it("[AH-223 FN-TK-02/BR-04] chi tiết lấy SĐT đầy đủ từ máy chủ dù danh sách đã che; form sửa dùng SĐT đầy đủ", async () => {
+  const created = await createRep();
+  const listed = { ...created, phone: "09•• ••• 001" };
+  const user = userEvent.setup();
+  render(<NativeAccountDetail user={listed} coops={coops} onChanged={() => {}} onClose={() => {}} />);
+  expect(await screen.findByText(/0912000001/)).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Sửa" }));
+  expect(within(screen.getByRole("form", { name: "Sửa tài khoản HTX" })).getByLabelText("Số điện thoại")).toHaveValue("0912000001");
+});

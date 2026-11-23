@@ -7,7 +7,7 @@ import type { AccountsUser, Cooperative } from "@/api/types";
 import { useAuth } from "@/auth/AuthProvider";
 import { Dialog } from "@/components/Dialog";
 import { ProblemAlert } from "@/components/ProblemAlert";
-import { toApiProblem } from "@/lib/useAsync";
+import { toApiProblem, useAsync } from "@/lib/useAsync";
 
 import { accountsClient, type AccountRevision as Revision, type AccountsScope, type PasswordReset } from "./accountsClient";
 const ROLE_LABELS: Record<string, string> = { platform_admin: "Admin", coop_manager: "Đại diện HTX", htx_member: "Thành viên HTX" };
@@ -28,7 +28,11 @@ export function NativeAccountDetail({ user, coops, onChanged, onClose, scope = "
   const roles = user.roles ?? [];
   const main = roles[0] ?? "";
   const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState<Revision>({ full_name: fullName(user), phone: user.phone ?? "", email: user.email ?? "", cooperative_ref: user.org_ref, also_member: roles.includes("htx_member") });
+  // FN-TK-02/BR-04 (AH-223): danh sách chỉ có SĐT đã che; chi tiết lấy SĐT đầy đủ (máy chủ ghi nhật ký truy cập).
+  const detail = useAsync(() => client.get(user.id), [user.id, scope]);
+  const full = detail.data?.id === user.id ? { ...user, phone: detail.data.phone } : null;
+  const toForm = (u: AccountsUser): Revision => ({ full_name: fullName(u), phone: u.phone ?? "", email: u.email ?? "", cooperative_ref: u.org_ref, also_member: (u.roles ?? []).includes("htx_member") });
+  const [form, setForm] = useState<Revision>(() => toForm(user));
   const [editKey, setEditKey] = useState(newIdempotencyKey);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<ApiProblem | null>(null);
@@ -82,7 +86,8 @@ export function NativeAccountDetail({ user, coops, onChanged, onClose, scope = "
   return (
     <section className="card stack" aria-label="Chi tiết tài khoản">
       <strong>{fullName(user)}{self ? " (bạn)" : ""}</strong>
-      <p>{user.username} · {user.phone ?? "—"} · {coopName}</p>
+      <p>{user.username} · {(full ?? user).phone ?? "—"} · {coopName}</p>
+      {detail.error ? <ProblemAlert problem={detail.error} /> : null}
       <p>{roles.map((r) => ROLE_LABELS[r] ?? r).join(", ")} · {user.enabled ? "Đang hoạt động" : "Đã khóa"}</p>
       {notice ? <p role="status">{notice}</p> : null}
       {reset ? (
@@ -130,7 +135,7 @@ export function NativeAccountDetail({ user, coops, onChanged, onClose, scope = "
         </form>
       ) : (
         <div className="row">
-          <button type="button" className="btn" onClick={() => { setEditing(true); setProblem(null); setNotice(""); }}>Sửa</button>
+          <button type="button" className="btn" disabled={!full} onClick={() => { if (full) setForm(toForm(full)); setEditing(true); setProblem(null); setNotice(""); }}>Sửa</button>
           {!self ? (
             user.enabled
               ? <button type="button" className="btn" disabled={busy} onClick={() => void setLocked(true)}>Khóa</button>

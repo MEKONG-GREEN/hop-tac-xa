@@ -43,13 +43,19 @@ export function NativeAccounts({ scope = "admin" }: { scope?: AccountsScope } = 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiProblem | null>(null);
   const [credential, setCredential] = useState<{ username: string; password: string | null } | null>(null);
+  // FN-07/AC-02 với FN-TK-02/BR-04 (AH-223): danh sách chỉ có SĐT đã che nên tìm đúng SĐT nhờ máy chủ.
+  const phoneQuery = /^\+?[0-9]{10,11}$/.test(search.trim()) ? search.trim() : null;
+  const phoneHits = useAsync(async () => {
+    if (!phoneQuery) return null;
+    try { return new Set((await client.list(phoneQuery)).map((u) => u.id)); } catch { return new Set<string>(); }
+  }, [phoneQuery, adminApi, api, scope]);
   const coops = list.data?.coops ?? [];
   const coopName = (ref: string | null) => coops.find((c) => c.ref === ref)?.name ?? "—";
   const filtered = clientList(list.data?.users ?? [], {
     tabs: [{ id: "all", label: "Tất cả", match: () => true }, ...Object.entries(roleLabels).map(([id, label]) => ({ id, label, match: (u: AccountsUser) => (u.roles ?? []).includes(id) }))],
     tab, page, sort,
     // Phone searches are exact, including when a name contains the same digits.
-    filter: (u) => (!search.trim() || (/^[0-9+]+$/.test(search.trim()) ? u.phone === search.trim() : `${u.username} ${name(u)}`.toLocaleLowerCase("vi").includes(search.trim().toLocaleLowerCase("vi")))) && (!status || state(u) === status) && (!coop || u.org_ref === coop),
+    filter: (u) => (!search.trim() || (/^[0-9+]+$/.test(search.trim()) ? !!phoneHits.data?.has(u.id) : `${u.username} ${name(u)}`.toLocaleLowerCase("vi").includes(search.trim().toLocaleLowerCase("vi")))) && (!status || state(u) === status) && (!coop || u.org_ref === coop),
     sortValue: (u, key) => key === "name" ? name(u) : key === "status" ? stateLabels[state(u)] : key === "coop" ? coopName(u.org_ref) : u.username,
   });
   const change = (patch: Partial<Input>) => { setInput((v) => ({ ...v, ...patch })); setIdem(newIdempotencyKey()); };
