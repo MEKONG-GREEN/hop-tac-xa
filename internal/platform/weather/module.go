@@ -37,7 +37,7 @@ import (
 
 // Biến môi trường (docs/runbooks/thoi-tiet.md).
 const (
-	EnvSecretKey     = "AG_WEATHER_SECRET_KEY"     // base64 32 byte: khóa AES-256 mã hóa khóa API nhà cung cấp
+	EnvSecretKey     = "AG_WEATHER_SECRET_KEY"     //nolint:gosec // G101: tên biến môi trường; giá trị là base64 32 byte, khóa AES-256 mã hóa khóa API nhà cung cấp
 	EnvOpenMeteoURL  = "AG_WEATHER_OPEN_METEO_URL" // endpoint Open-Meteo; bắt buộc ở production (guard RB-7 kiểm máy chủ)
 	EnvSourceADR     = "AG_WEATHER_SOURCE_ADR"     // ADR của nguồn ngoài lãnh thổ; bắt buộc ở production
 	EnvFakeAllowed   = "AG_WEATHER_FAKE"           // "true": cho chọn nhà cung cấp giả (bị bỏ qua ở production)

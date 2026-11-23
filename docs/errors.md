@@ -480,6 +480,16 @@ Nhãn vị trí (HTX US-GPS-01/02): `location_status` = `match` (≤ `cropcycle.
 | 422 | `notify.recipient_not_member` | pf/notify: cổng `MemberNotifier` (AH-22) có người nhận không phải Thành viên HTX đang hoạt động của HTX; cả lần gọi bị từ chối, không tạo thông báo nào |
 
 Consumer `pf.notify.egress_anomaly` (G5, ADR-0024) không trả mã HTTP: payload `pf.metering.egress.anomaly_detected` hỏng → lỗi consumer, giao lại rồi vào `pf.notify.egress_anomaly.dlq` (R-62); giao lặp → inbox bỏ qua (R-61).
+### pf/weather
+
+| HTTP | code | Ý nghĩa |
+|---|---|---|
+| 422 | `weather.connection_failed` | pf/weather: "Kiểm tra kết nối" hoặc "Lưu" cấu hình thời tiết không gọi được nhà cung cấp; `detail` nêu lý do (khóa API sai, vượt hạn mức, nhà cung cấp không phản hồi, dữ liệu trả về sai) — cấu hình không được lưu. Cũng trả khi nguồn chưa được phép ở môi trường này (production thiếu `AG_WEATHER_OPEN_METEO_URL`/`AG_WEATHER_SOURCE_ADR`, ADR-0065) |
+| 503 | `weather.secret_unavailable` | pf/weather: lưu khóa API khi máy chủ chưa đặt `AG_WEATHER_SECRET_KEY` (hoặc khóa đã lưu không giải mã được bằng khóa hiện tại) |
+| 503 | `weather.dependency_unavailable` | pf/weather: chưa nối danh sách HTX có tọa độ của pf/cooperative |
+
+Phạm vi theo vai dùng mã chung: Admin gọi `GET /v1/weather/today|calendar` thiếu `cooperative_ref` → 422 `validation_failed` (trường `cooperative_ref`, "Chọn HTX"); Đại diện HTX, Thành viên HTX hỏi HTX khác → 403 `forbidden`; tài khoản chưa gắn HTX → 403 `node_scope_required`; vai khác → 403.
+
 ### pf/accounts
 
 Tài khoản cán bộ quản lý trong Keycloak qua Admin REST (KN US-ADM-01..03, HTX US-ACC-01/02, US-HTXSTATUS-01..03, CGH FN-01). Lỗi không bao giờ chứa họ tên, email, SĐT hay thân phản hồi của Keycloak (R-14).

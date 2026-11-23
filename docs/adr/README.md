@@ -57,6 +57,7 @@
 | 0062 | [Realm HTX riêng cho FN-07](0062-realm-htx-fn07.md) | Chấp nhận — AH-275; quyết định người dùng 20/11/2026 |
 | 0063 | [Kênh SMS cho mã OTP đặt lại mật khẩu](0063-kenh-sms-otp-dat-lai-mat-khau.md) | Chấp nhận — AH-280; trả lời PO 15/11/2026 |
 | 0064 | [Bù FN-TK-01, FN-TK-02 trên nền FN-01, FN-07](0064-bu-fn-tk-tren-fn-07.md) | Chấp nhận — AH-222, AH-223; chủ repo chọn bù phần thiếu 23/11/2026 |
+| 0065 | [Nguồn thời tiết Open-Meteo qua module `pf/weather` (port trung lập, lưới 0,01° dùng chung trong 1 km, khóa production fail-closed)](0065-nguon-thoi-tiet-open-meteo.md) | Đề xuất — AH-224, AH-225, AH-226; production chờ duyệt lệch lưới ADR-0007 |
 
 ADR 0006, 0007, 0009, 0010, 0011 được chủ sản phẩm chấp nhận ngày 30/09/2026 trong phiên làm việc. Bảng đối chiếu cam kết → mã → kiểm thử ở [trien-khai-g1.md](trien-khai-g1.md).
 

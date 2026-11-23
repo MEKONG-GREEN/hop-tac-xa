@@ -70,7 +70,7 @@ const (
 	MsgProvider     = "Chọn nhà cung cấp được hỗ trợ"
 	MsgRefresh      = "Tần suất cập nhật không hợp lệ"
 	MsgForecastDays = "Số ngày dự báo từ 1 đến 14"
-	MsgAPIKey       = "Khóa API không hợp lệ"
+	MsgAPIKey       = "Khóa API không hợp lệ" //nolint:gosec // G101: câu thông báo, không phải khóa
 )
 
 // Normalize kiểm và chuẩn hóa dữ liệu cấu hình. allowFake: chỉ ngoài production.
