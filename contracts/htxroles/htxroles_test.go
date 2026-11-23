@@ -36,6 +36,7 @@ func TestMatrix(t *testing.T) {
 		"KHMV-FN-01": {"CRUD", "R", "R"}, "KHMV-FN-02": {"R", "R", "R"}, "KHMV-FN-03": {"CRUD", "R", "CRUD"},
 		"KHMV-FN-03-LICH": {"CRUD", "CRUD", "R"}, "KHMV-FN-03-XEM": {"R", "R", "R"}, "KHMV-FN-04": {"CRUD", "R", "CRUD"},
 		"KHMV-FN-05": {"CRUD", "R", "CRUD"}, "KHMV-FN-06": {"CRUD", "R", "CRUD"}, "KHMV-NTF": {"", "", "R"},
+		"TTPP-FN-TT-01": {"R", "R", "R"}, "TTPP-FN-TT-02": {"R", "R", "R"}, "TTPP-FN-TT-03": {"CRU", "", ""},
 	}
 	if len(m.Functions) != len(want) {
 		t.Fatalf("ma trận có %d dòng, cần %d", len(m.Functions), len(want))

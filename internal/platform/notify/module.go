@@ -35,6 +35,7 @@ import (
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/notify/store"
 	partyport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/party/port"
 	syncport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/sync/port"
+	weatherport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/weather/port"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/clock"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/db"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/inbox"
@@ -242,6 +243,7 @@ func (m *Module) nativeConsumers() []orderedConsumer {
 		{order: 9, consumer: Consumer{Name: port.ConsumerMRV, Events: []string{mrvport.EventAlertRaised}, Handler: ev}},
 		{order: 11, consumer: Consumer{Name: port.ConsumerEgressAnomaly, Events: []string{meteringport.EventEgressAnomaly}, Handler: ev}},
 		{order: 14, consumer: Consumer{Name: port.ConsumerAccounts, Events: []string{accport.EventUserDormantWarning}, Handler: ev}},
+		{order: 17, consumer: Consumer{Name: port.ConsumerWeather, Events: []string{weatherport.EventFetchFailing}, Handler: ev}},
 		{order: 15, consumer: Consumer{Name: port.ConsumerPush, Events: []string{port.EventPushRequested}, Handler: m.svc.HandlePush}},
 		{order: 16, consumer: Consumer{Name: port.ConsumerEmail, Events: []string{port.EventEmailRequested}, Handler: m.svc.HandleEmail}},
 	}

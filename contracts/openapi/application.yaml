@@ -17601,6 +17601,47 @@ paths:
                   items: {type: array, items: {$ref: '#/components/schemas/NativeSharing'}}
         '403': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
+  /v1/weather/today:
+    get:
+      summary: Thời tiết hôm nay trên Trang chủ (FN-TT-01)
+      description: |
+        AH-225. Ba vai App HTX. Ngày dương, ngày âm (lịch Việt Nam GMT+7) và số liệu từ bộ đệm máy chủ (không gọi nhà
+        cung cấp). Đại diện HTX, Thành viên HTX: HTX của mình (cooperative_ref khác → 403). Admin: bắt buộc cooperative_ref
+        (bộ lọc HTX, AC-06). HTX chưa có tọa độ → status no_location (EX-02); chưa có số liệu → no_data (EX-03). Nhà cung
+        cấp lỗi → vẫn trả số liệu gần nhất, source.stale = true kèm updated_at (EX-01). Không có lời khuyên hay cảnh báo.
+        Cache-Control no-store.
+      parameters:
+        - {name: cooperative_ref, in: query, required: false, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Thẻ thời tiết hôm nay
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WeatherToday'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+  /v1/weather/calendar:
+    get:
+      summary: Lịch thời tiết tháng — dương lịch và âm lịch (FN-TT-02)
+      description: |
+        AH-226. Mọi ngày của tháng kèm ngày âm (mùng 1, rằm, tháng nhuận). Từ hôm nay đến hết phạm vi dự báo (cấu hình,
+        tối đa 14 ngày) có dự báo; ngày đã qua có số liệu đã lưu kèm nhãn "Thực đo" hoặc "Dự báo cuối ngày"; ngày ngoài phạm
+        vi hoặc chưa lưu thì weather = null. Buổi (Đêm, Sáng, Chiều, Tối — 6 giờ) tổng hợp từ số liệu theo giờ: nhiệt độ
+        trung bình làm tròn số nguyên, mưa cộng dồn 1 chữ số thập phân, khả năng mưa và gió lấy lớn nhất. Không có số liệu
+        theo giờ → hourly_available = false, periods rỗng. Phạm vi HTX như /v1/weather/today. Cache-Control no-store.
+      parameters:
+        - {name: month, in: query, required: false, description: YYYY-MM; vắng = tháng hiện tại (giờ Việt Nam), schema: {type: string, pattern: '^[0-9]{4}-[0-9]{2}$'}}
+        - {name: cooperative_ref, in: query, required: false, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Lịch tháng
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WeatherCalendar'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
   /v1/extension/cnts/weekly-plan/schedule:
     post:
       summary: "Kế hoạch tuần BM-05 Phần II đã đăng ký → gửi duyệt Lịch công tác tuần của người gọi (BF-CN-WEEKLY, PRD UP-06). Mục sinh từ kế hoạch có mã ổn định theo xã và ngày — chỉ thay mục của kế hoạch xã này; mục của kế hoạch xã khác và mục tự thêm ở Lịch công tác giữ nguyên (trùng giờ chỉ cảnh báo, xem schedule.conflict_count)"
@@ -29210,6 +29251,103 @@ components:
         requested_at: {type: string, format: date-time}
         processed_at: {type: [string, 'null'], format: date-time}
         actor_ref: {type: string, format: uuid}
+    WeatherLunar:
+      type: object
+      required: [day, month, year, leap, label, first_day, full_moon]
+      properties:
+        day: {type: integer}
+        month: {type: integer}
+        year: {type: integer}
+        leap: {type: boolean}
+        label: {type: string, description: 'dd/mm, tháng nhuận thêm " nhuận" (UX-TP-04)'}
+        first_day: {type: boolean, description: mùng 1}
+        full_moon: {type: boolean, description: rằm}
+    WeatherSource:
+      type: object
+      required: [provider, label, updated_at, stale]
+      properties:
+        provider: {type: string}
+        label: {type: string, description: Nhãn nguồn hiển thị (LEGAL-TP-02)}
+        updated_at: {type: [string, 'null'], format: date-time}
+        stale: {type: boolean, description: Lần lấy gần nhất lỗi hoặc số liệu cũ — hiện "Cập nhật lúc hh:mm dd/mm"}
+    WeatherReading:
+      type: object
+      required: [time, temperature_c, condition, weather_code, precipitation_mm, precipitation_probability, wind_speed_kmh, wind_direction, humidity_pct]
+      properties:
+        time: {type: string, format: date-time}
+        temperature_c: {type: [integer, 'null']}
+        condition: {type: string}
+        weather_code: {type: [integer, 'null']}
+        precipitation_mm: {type: [number, 'null']}
+        precipitation_probability: {type: [integer, 'null']}
+        wind_speed_kmh: {type: [integer, 'null']}
+        wind_direction: {type: string, description: 'B, ĐB, Đ, ĐN, N, TN, T, TB'}
+        humidity_pct: {type: [integer, 'null']}
+    WeatherSummary:
+      type: object
+      required: [condition, weather_code, temperature_min_c, temperature_max_c, precipitation_mm, precipitation_probability_max, wind_speed_max_kmh, wind_direction, humidity_pct]
+      properties:
+        condition: {type: string}
+        weather_code: {type: [integer, 'null']}
+        temperature_min_c: {type: [integer, 'null']}
+        temperature_max_c: {type: [integer, 'null']}
+        precipitation_mm: {type: [number, 'null']}
+        precipitation_probability_max: {type: [integer, 'null']}
+        wind_speed_max_kmh: {type: [integer, 'null']}
+        wind_direction: {type: string}
+        humidity_pct: {type: [integer, 'null']}
+    WeatherToday:
+      type: object
+      required: [cooperative_ref, date, lunar, status, current, today, source]
+      properties:
+        cooperative_ref: {type: string, format: uuid}
+        date: {type: string, format: date}
+        lunar: {$ref: '#/components/schemas/WeatherLunar'}
+        status: {type: string, enum: [ok, no_location, no_data]}
+        message: {type: string}
+        current: {oneOf: [{$ref: '#/components/schemas/WeatherReading'}, {type: 'null'}]}
+        today: {oneOf: [{$ref: '#/components/schemas/WeatherSummary'}, {type: 'null'}]}
+        source: {$ref: '#/components/schemas/WeatherSource'}
+    WeatherPeriod:
+      type: object
+      required: [name, condition, weather_code, temperature_c, precipitation_mm, precipitation_probability_max, wind_speed_max_kmh]
+      properties:
+        name: {type: string, enum: [Đêm, Sáng, Chiều, Tối]}
+        condition: {type: string}
+        weather_code: {type: [integer, 'null']}
+        temperature_c: {type: [integer, 'null']}
+        precipitation_mm: {type: [number, 'null']}
+        precipitation_probability_max: {type: [integer, 'null']}
+        wind_speed_max_kmh: {type: [integer, 'null']}
+    WeatherDay:
+      allOf:
+        - $ref: '#/components/schemas/WeatherSummary'
+        - type: object
+          required: [kind, label, hourly_available, periods]
+          properties:
+            kind: {type: string, enum: [forecast, observed, final_forecast]}
+            label: {type: string, description: 'Thực đo | Dự báo cuối ngày | rỗng (dự báo)'}
+            hourly_available: {type: boolean}
+            periods: {type: array, items: {$ref: '#/components/schemas/WeatherPeriod'}}
+    WeatherCalendar:
+      type: object
+      required: [cooperative_ref, month, status, forecast_days, days, source]
+      properties:
+        cooperative_ref: {type: string, format: uuid}
+        month: {type: string}
+        status: {type: string, enum: [ok, no_location, no_data]}
+        message: {type: string}
+        forecast_days: {type: integer}
+        source: {$ref: '#/components/schemas/WeatherSource'}
+        days:
+          type: array
+          items:
+            type: object
+            required: [date, lunar, weather]
+            properties:
+              date: {type: string, format: date}
+              lunar: {$ref: '#/components/schemas/WeatherLunar'}
+              weather: {oneOf: [{$ref: '#/components/schemas/WeatherDay'}, {type: 'null'}]}
     KHTCReportPeriod: {"type":"object","properties":{"id":{"type":"string","format":"uuid"},"type":{"type":"string","enum":["week","month","quarter","year","program","adhoc"]},"year":{"type":"integer"},"name":{"type":"string"},"from":{"type":"string","format":"date-time"},"to":{"type":"string","format":"date-time"},"cutoff":{"type":"string","format":"date-time"},"departments":{"type":"array","items":{"type":"string"}},"no":{"type":["integer","null"]},"scope":{"type":["string","null"]}},"required":["id","type","year","name","from","to","cutoff","departments","no","scope"],"additionalProperties":false}
     KHTCReportPlan: {"type":"object","properties":{"VersionID":{"type":"string","format":"uuid"},"Year":{"type":"integer"},"Version":{"type":"integer"},"DecisionNo":{"type":"string"},"Entries":{"type":["array","null"],"items":{"type":"object","additionalProperties":true}}},"required":["VersionID","Year","Version","DecisionNo","Entries"],"additionalProperties":true}
     KHTCReportSourceRef: {"type":"object","properties":{"id":{"type":"string","format":"uuid"},"version":{"type":"integer"},"plan_version_id":{"type":["string","null"],"format":"uuid"},"figures_hash":{"type":"string"},"status_hash":{"type":"string"},"closed":{"type":"boolean"},"at":{"type":"string","format":"date-time"}},"required":["id","version","plan_version_id","figures_hash","status_hash","closed","at"],"additionalProperties":false}
