@@ -78,6 +78,8 @@ import { strawFactorRoutes as route65 } from "./straw-factors";
 import { syncMonitorRoutes as route66 } from "./syncmonitor";
 import { waterwayAppRoutes as route67 } from "./waterway";
 import { waterwayAdminRoutes as route68 } from "./waterway";
+import { weatherAppRoutes as route69 } from "./weather";
+import { weatherAdminRoutes as route70 } from "./weather";
 
 export const commonRouteRegistrations: RouteRegistration[] = [
   { surface: "admin", order: 13, routes: route0 },
@@ -149,6 +151,8 @@ export const commonRouteRegistrations: RouteRegistration[] = [
   { surface: "admin", order: 15, routes: route66 },
   { surface: "app", order: 51, routes: route67 },
   { surface: "admin", order: 18, routes: route68 },
+  { surface: "app", order: 28100, routes: route69 },
+  { surface: "admin", order: 28110, routes: route70 },
 ];
 
 const registrations = [...commonRouteRegistrations, ...registeredKnRoutes()];

@@ -55,7 +55,9 @@ var endpointSuffixes = []string{"_URL", "_URLS", "_ENDPOINT", "_HOST", "_ISSUER"
 // liệu ngoài (thời tiết, độ mặn, tile) CHỈ đi qua proxy khử định danh pf/extdata
 // (ADR-0007: không định danh, tọa độ làm thô theo lưới); pf/extdata còn đòi mỗi
 // nguồn ngoài lãnh thổ có mã ADR riêng (AG_EXTDATA_<ID>_ADR).
-var nonPIIPrefixes = []string{"AG_FCM_", "AG_APNS_", "AG_PUSH_", "AG_EXTDATA_"}
+// AG_WEATHER_*: nguồn thời tiết của pf/weather (ADR-0065) — máy chủ chỉ gửi tọa độ đã làm thô theo lưới 0,01°, không
+// định danh; ở production pf/weather còn đòi AG_WEATHER_SOURCE_ADR.
+var nonPIIPrefixes = []string{"AG_FCM_", "AG_APNS_", "AG_PUSH_", "AG_EXTDATA_", "AG_WEATHER_"}
 
 // ErrViolation là lỗi gốc của mọi vi phạm RB-7.
 var ErrViolation = errors.New("RB-7: đích ngoài danh mục nhà cung cấp trong lãnh thổ")

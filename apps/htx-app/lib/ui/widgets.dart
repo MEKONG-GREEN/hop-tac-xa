@@ -158,24 +158,6 @@ class _Count extends StatelessWidget {
   );
 }
 
-/// Thẻ thời tiết (HTX US-WEATHER-01): nhà cung cấp chưa chốt (RB-7) → nói rõ,
-/// không để trống màn hình, không chặn thẻ lời khuyên.
-class WeatherCard extends StatelessWidget {
-  const WeatherCard({super.key});
-
-  @override
-  Widget build(BuildContext context) => const Card(
-    child: ListTile(
-      leading: Icon(Icons.cloud_off_outlined, size: 36, color: AgColors.mute),
-      title: Text('Thời tiết'),
-      subtitle: Text(
-        'Chưa có nguồn thời tiết — đang chờ chốt nhà cung cấp dữ liệu. '
-        'Theo dõi bản tin khuyến nông để biết cảnh báo mưa, triều cường, độ mặn.',
-      ),
-    ),
-  );
-}
-
 /// Thẻ lời khuyên nông vụ theo bước SOP hiện tại (HTX US-WEATHER-02).
 class AdviceCard extends StatelessWidget {
   const AdviceCard({

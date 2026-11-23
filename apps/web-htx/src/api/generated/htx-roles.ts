@@ -2,7 +2,7 @@
 // Ma trận quyền Mục V (FN-05): docs/conventions/vai-tro-app-htx.md.
 export const HTX_ROLE_MATRIX = {
   "version": 1,
-  "source": "BRD_App_HTX_QuanTriPhanQuyen_HoSoHTX_ThongKeBaoCao_v3.0 — Mục V (FN-05, ADM-01); quyết định nhóm dự án 17/11/2026 (AH-272); BRD Kế hoạch mùa vụ v3.9 Mục VI — dòng KHMV-* (AH-39, KH-02, KH-28)",
+  "source": "BRD_App_HTX_QuanTriPhanQuyen_HoSoHTX_ThongKeBaoCao_v3.0 — Mục V (FN-05, ADM-01); quyết định nhóm dự án 17/11/2026 (AH-272); BRD Kế hoạch mùa vụ v3.9 Mục VI — dòng KHMV-* (AH-39, KH-02, KH-28); BRD Thời tiết & Thu gom phụ phẩm — dòng TTPP-FN-TT-* (AH-224..AH-226)",
   "actions": {
     "C": "tạo",
     "R": "xem",
@@ -232,6 +232,33 @@ export const HTX_ROLE_MATRIX = {
         "platform_admin": "",
         "coop_manager": "",
         "htx_member": "R"
+      }
+    },
+    {
+      "key": "TTPP-FN-TT-01",
+      "name": "Thời tiết hôm nay trên Trang chủ",
+      "grants": {
+        "platform_admin": "R",
+        "coop_manager": "R",
+        "htx_member": "R"
+      }
+    },
+    {
+      "key": "TTPP-FN-TT-02",
+      "name": "Lịch thời tiết (dương lịch và âm lịch)",
+      "grants": {
+        "platform_admin": "R",
+        "coop_manager": "R",
+        "htx_member": "R"
+      }
+    },
+    {
+      "key": "TTPP-FN-TT-03",
+      "name": "Kết nối API thời tiết",
+      "grants": {
+        "platform_admin": "CRU",
+        "coop_manager": "",
+        "htx_member": ""
       }
     }
   ],

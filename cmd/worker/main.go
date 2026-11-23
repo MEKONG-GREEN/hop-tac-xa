@@ -135,6 +135,8 @@ import (
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/party/port"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/reports"
 	syncmod "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/sync"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/weather"
+	weatherport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/weather/port"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/clock"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/db"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/dbadmin"
@@ -589,6 +591,24 @@ func buildSchedule(ctx context.Context, log *slog.Logger, jobs string) (*opsSche
 		}
 		js = append(js, wjs...)
 	}
+	if selected(jobs, weatherport.JobFetch) {
+		// FN-TT-03 (ADR-0065): lấy số liệu thời tiết theo tần suất cấu hình của từng tenant, lưu đệm và số liệu ngày.
+		// Dựng module pf qua assembly.Build (tọa độ trụ sở HTX đọc qua port pf/cooperative); tìm tenant bằng ag_ops_jobs,
+		// ghi bằng r_weather. Tenant chưa cấu hình kết nối thì không gọi nhà cung cấp (fail-closed).
+		mods, wpools, err := buildPlatform(ctx, direct)
+		prevClose := closeFn
+		closeFn = func() {
+			for _, p := range wpools {
+				p.Close()
+			}
+			prevClose()
+		}
+		if err != nil {
+			closeFn()
+			return nil, func() {}, err
+		}
+		js = append(js, mods.Weather.Jobs(weather.Tenants(out.pools[migrations.PF]), log)...)
+	}
 	if selected(jobs, accport.JobDormant) && os.Getenv("AG_KC_ADMIN_URL") != "" {
 		// D24 (W10.05): báo trước ngày 38, khóa ngày 45 tài khoản không hoạt động. Tìm tenant bằng ag_ops_jobs (cột
 		// tenant_id, enabled của pf_accounts.account), ghi bằng r_accounts; lần đăng nhập đọc ở Keycloak (AG_KC_*,
@@ -616,7 +636,7 @@ func buildSchedule(ctx context.Context, log *slog.Logger, jobs string) (*opsSche
 		closeFn()
 		return nil, func() {}, errors.New("-jobs không chọn job hợp lệ nào (anchor, idempotency, " + accport.JobDormant + ", " +
 			reports.JobSchedules + ", " + mechport.JobAreaFeedCheck + ", " + metricsport.JobMetricsSnapshot + ", " + mrvport.JobReviewEscalator +
-			", " + apiclientport.JobKeyExpiry + ", " + apiclientport.JobFeedBuild + ", " + apiclientport.JobFeedRetention + ", " + apiclientport.JobWebhookDispatch + ")")
+			", " + apiclientport.JobKeyExpiry + ", " + apiclientport.JobFeedBuild + ", " + apiclientport.JobFeedRetention + ", " + apiclientport.JobWebhookDispatch + ", " + weatherport.JobFetch + ")")
 	}
 	out.s = &schedule.Scheduler{Clock: clk, Log: log, Jobs: js}
 	return out, closeFn, nil

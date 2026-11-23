@@ -22,6 +22,7 @@ import (
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/notify/store"
 	partyport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/party/port"
 	syncport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/sync/port"
+	weatherport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/weather/port"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/authz"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/ids"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/outbox"
@@ -41,6 +42,7 @@ var HandledEvents = []string{
 	ccport.EventCollectionScheduleReceived, ccport.EventCollectionStatementReceived,
 	syncport.EventIntegrationDeadLettered, mechport.EventAreaFeedStale, mrvport.EventAlertRaised,
 	meteringport.EventEgressAnomaly,
+	weatherport.EventFetchFailing,
 }
 
 // HandleEvent là inbox.Handler cho các sự kiện nguồn: dựng thông báo, xếp lần gửi
@@ -191,6 +193,15 @@ func (s *Service) HandleEvent(ctx context.Context, tx pgx.Tx, env outbox.Envelop
 		}
 		a := domain.Audience{National: true, Roles: []string{mechport.RoleCGHAdmin}}
 		return s.deliver(ctx, tx, env, []domain.Notification{domain.AreaFeedStaleTemplate(p, env.OccurredAt).ForAudience(a)})
+	case weatherport.EventFetchFailing:
+		// FN-TT-03/EX-02, NTF-TP-07 (ADR-0065): Admin của tenant, thông báo trên Web (không đẩy về app — Admin chỉ dùng
+		// Web). Idempotent: inbox + (sự kiện, người nhận).
+		var p weatherport.FetchFailingV1
+		if err := decode(env, &p); err != nil {
+			return err
+		}
+		a := domain.Audience{National: true, Roles: []string{authz.RolePlatformAdmin}}
+		return s.deliver(ctx, tx, env, []domain.Notification{domain.WeatherFetchFailingTemplate(p, env.OccurredAt).ForAudience(a)})
 	case meteringport.EventEgressAnomaly:
 		// G5 (ADR-0024, mục 18 DLP): tenant phong bì = CHỦ DỮ LIỆU → chủ đề toàn tenant theo vai người
 		// nhận DLP (port.EgressAnomalyRoles — tạm, chờ khách Q5-5). Idempotent: inbox + (sự kiện, người nhận).

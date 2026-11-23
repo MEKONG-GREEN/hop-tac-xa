@@ -13041,6 +13041,104 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/weather/today": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Thời tiết hôm nay trên Trang chủ (FN-TT-01)
+         * @description AH-225. Ba vai App HTX. Ngày dương, ngày âm (lịch Việt Nam GMT+7) và số liệu từ bộ đệm máy chủ (không gọi nhà
+         *     cung cấp). Đại diện HTX, Thành viên HTX: HTX của mình (cooperative_ref khác → 403). Admin: bắt buộc cooperative_ref
+         *     (bộ lọc HTX, AC-06). HTX chưa có tọa độ → status no_location (EX-02); chưa có số liệu → no_data (EX-03). Nhà cung
+         *     cấp lỗi → vẫn trả số liệu gần nhất, source.stale = true kèm updated_at (EX-01). Không có lời khuyên hay cảnh báo.
+         *     Cache-Control no-store.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    cooperative_ref?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Thẻ thời tiết hôm nay */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["WeatherToday"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/weather/calendar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lịch thời tiết tháng — dương lịch và âm lịch (FN-TT-02)
+         * @description AH-226. Mọi ngày của tháng kèm ngày âm (mùng 1, rằm, tháng nhuận). Từ hôm nay đến hết phạm vi dự báo (cấu hình,
+         *     tối đa 14 ngày) có dự báo; ngày đã qua có số liệu đã lưu kèm nhãn "Thực đo" hoặc "Dự báo cuối ngày"; ngày ngoài phạm
+         *     vi hoặc chưa lưu thì weather = null. Buổi (Đêm, Sáng, Chiều, Tối — 6 giờ) tổng hợp từ số liệu theo giờ: nhiệt độ
+         *     trung bình làm tròn số nguyên, mưa cộng dồn 1 chữ số thập phân, khả năng mưa và gió lấy lớn nhất. Không có số liệu
+         *     theo giờ → hourly_available = false, periods rỗng. Phạm vi HTX như /v1/weather/today. Cache-Control no-store.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description YYYY-MM; vắng = tháng hiện tại (giờ Việt Nam) */
+                    month?: string;
+                    cooperative_ref?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Lịch tháng */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["WeatherCalendar"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/extension/cnts/weekly-plan/schedule": {
         parameters: {
             query?: never;
@@ -25447,6 +25545,98 @@ export interface components {
             processed_at: string | null;
             /** Format: uuid */
             actor_ref: string;
+        };
+        WeatherLunar: {
+            day: number;
+            month: number;
+            year: number;
+            leap: boolean;
+            /** @description dd/mm, tháng nhuận thêm " nhuận" (UX-TP-04) */
+            label: string;
+            /** @description mùng 1 */
+            first_day: boolean;
+            /** @description rằm */
+            full_moon: boolean;
+        };
+        WeatherSource: {
+            provider: string;
+            /** @description Nhãn nguồn hiển thị (LEGAL-TP-02) */
+            label: string;
+            /** Format: date-time */
+            updated_at: string | null;
+            /** @description Lần lấy gần nhất lỗi hoặc số liệu cũ — hiện "Cập nhật lúc hh:mm dd/mm" */
+            stale: boolean;
+        };
+        WeatherReading: {
+            /** Format: date-time */
+            time: string;
+            temperature_c: number | null;
+            condition: string;
+            weather_code: number | null;
+            precipitation_mm: number | null;
+            precipitation_probability: number | null;
+            wind_speed_kmh: number | null;
+            /** @description B, ĐB, Đ, ĐN, N, TN, T, TB */
+            wind_direction: string;
+            humidity_pct: number | null;
+        };
+        WeatherSummary: {
+            condition: string;
+            weather_code: number | null;
+            temperature_min_c: number | null;
+            temperature_max_c: number | null;
+            precipitation_mm: number | null;
+            precipitation_probability_max: number | null;
+            wind_speed_max_kmh: number | null;
+            wind_direction: string;
+            humidity_pct: number | null;
+        };
+        WeatherToday: {
+            /** Format: uuid */
+            cooperative_ref: string;
+            /** Format: date */
+            date: string;
+            lunar: components["schemas"]["WeatherLunar"];
+            /** @enum {string} */
+            status: "ok" | "no_location" | "no_data";
+            message?: string;
+            current: components["schemas"]["WeatherReading"] | null;
+            today: components["schemas"]["WeatherSummary"] | null;
+            source: components["schemas"]["WeatherSource"];
+        };
+        WeatherPeriod: {
+            /** @enum {string} */
+            name: "Đêm" | "Sáng" | "Chiều" | "Tối";
+            condition: string;
+            weather_code: number | null;
+            temperature_c: number | null;
+            precipitation_mm: number | null;
+            precipitation_probability_max: number | null;
+            wind_speed_max_kmh: number | null;
+        };
+        WeatherDay: components["schemas"]["WeatherSummary"] & {
+            /** @enum {string} */
+            kind: "forecast" | "observed" | "final_forecast";
+            /** @description Thực đo | Dự báo cuối ngày | rỗng (dự báo) */
+            label: string;
+            hourly_available: boolean;
+            periods: components["schemas"]["WeatherPeriod"][];
+        };
+        WeatherCalendar: {
+            /** Format: uuid */
+            cooperative_ref: string;
+            month: string;
+            /** @enum {string} */
+            status: "ok" | "no_location" | "no_data";
+            message?: string;
+            forecast_days: number;
+            source: components["schemas"]["WeatherSource"];
+            days: {
+                /** Format: date */
+                date: string;
+                lunar: components["schemas"]["WeatherLunar"];
+                weather: components["schemas"]["WeatherDay"] | null;
+            }[];
         };
         KHTCReportPeriod: {
             /** Format: uuid */

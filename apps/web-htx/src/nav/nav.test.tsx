@@ -112,6 +112,7 @@ describe("menu App HTX theo vai", () => {
   const HTX_PAGES = [
     "/htx/dashboard",
     "/htx/nong-ho",
+    "/thoi-tiet", // AH-226: Lịch thời tiết cho Đại diện HTX
     "/htx/danh-muc-vat-tu",
     "/htx/chia-se",
     "/htx/lo-ruong",
@@ -127,7 +128,8 @@ describe("menu App HTX theo vai", () => {
   ];
   const MANAGER_ONLY = ["/htx/phe-duyet", "/htx/lich-bao-cao", "/htx/thu-gom"];
   // AH-274/AH-278: danh mục vật tư, máy móc và Liên kết & chia sẻ chỉ cho vai App HTX, cán bộ KN không có.
-  const HTX_APP_ONLY = ["/htx/danh-muc-vat-tu", "/htx/chia-se"];
+  // AH-226: Lịch thời tiết chỉ cho ba vai App HTX (BRD TTPP), cán bộ KN không có.
+  const HTX_APP_ONLY = ["/htx/danh-muc-vat-tu", "/htx/chia-se", "/thoi-tiet"];
 
   it("Quản lý HTX chỉ thấy màn hình HTX của mình, vào thẳng bảng điều hành sản xuất", () => {
     const p = persona("htx");
@@ -170,6 +172,7 @@ describe("FN-05: menu theo ma trận ba vai App HTX", () => {
   const HTX_PAGES = [
     "/htx/dashboard",
     "/htx/nong-ho",
+    "/thoi-tiet", // AH-226: Lịch thời tiết cho Đại diện HTX
     "/htx/danh-muc-vat-tu",
     "/htx/chia-se",
     "/htx/lo-ruong",
@@ -187,7 +190,7 @@ describe("FN-05: menu theo ma trận ba vai App HTX", () => {
 
   it("[FN-05/AC-01, AH-39] Thành viên HTX thấy Quản lý nông hộ, Vụ, Nhật ký, Sản lượng; không thấy Tài khoản cán bộ, Danh mục dùng chung", () => {
     const member = persona("htx-member");
-    expect(hrefs(member)).toEqual(["/htx/nong-ho", "/htx/danh-muc-vat-tu", "/htx/mua-vu", "/htx/lich-thoi-vu", "/htx/nhat-ky", "/htx/san-luong"]);
+    expect(hrefs(member)).toEqual(["/htx/nong-ho", "/thoi-tiet", "/htx/danh-muc-vat-tu", "/htx/mua-vu", "/htx/lich-thoi-vu", "/htx/nhat-ky", "/htx/san-luong"]);
     expect(hrefs(member)).not.toContain("/quan-tri/tai-khoan");
     expect(hrefs(member)).not.toContain("/quan-tri/danh-muc");
     // FN-09/AC-06: Thành viên HTX không có Liên kết & chia sẻ.

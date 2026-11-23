@@ -10,7 +10,7 @@ import (
 
 func TestConsumersRequireOwnerRegistration(t *testing.T) {
 	want := []string{port.ConsumerContent, port.ConsumerSync, port.ConsumerParty, port.ConsumerCropCycle,
-		port.ConsumerIntegration, port.ConsumerMRV, port.ConsumerEgressAnomaly, port.ConsumerAccounts, port.ConsumerPush, port.ConsumerEmail}
+		port.ConsumerIntegration, port.ConsumerMRV, port.ConsumerEgressAnomaly, port.ConsumerAccounts, port.ConsumerPush, port.ConsumerEmail, port.ConsumerWeather}
 	for _, tc := range []struct {
 		name string
 		regs []port.ConsumerRegistration

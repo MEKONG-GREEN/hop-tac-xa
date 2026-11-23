@@ -22,10 +22,11 @@ if ((Test-Path $target) -and -not $Force) {
         Write-Host "Đã bổ sung AG_KC_CLIENT_SECRET vào $target (giá trị không in ra). Tạo lại container keycloak để nhập lại realm."
     }
     # FN-01 (ADR-0060): bí mật client đăng nhập riêng và khóa HMAC bộ đếm mã định danh không tồn tại.
-    foreach ($v in 'AG_KC_LOGIN_CLIENT_SECRET', 'AG_LOGIN_ID_KEY') {
+    # AG_WEATHER_SECRET_KEY (ADR-0065): khóa AES-256 mã hóa khóa API nhà cung cấp thời tiết.
+    foreach ($v in 'AG_KC_LOGIN_CLIENT_SECRET', 'AG_LOGIN_ID_KEY', 'AG_WEATHER_SECRET_KEY') {
         $have = [System.IO.File]::ReadAllText($target)
         if ($have -notmatch "(?m)^$v=") {
-            $val = if ($v -eq 'AG_LOGIN_ID_KEY') { "'$(New-B64 32)'" } else { New-Hex 32 }
+            $val = if ($v -eq 'AG_LOGIN_ID_KEY' -or $v -eq 'AG_WEATHER_SECRET_KEY') { "'$(New-B64 32)'" } else { New-Hex 32 }
             $add = "$v=$val`n"
             if (-not $have.EndsWith("`n")) { $add = "`n" + $add }
             [System.IO.File]::AppendAllText($target, $add, (New-Object System.Text.UTF8Encoding $false))
@@ -67,6 +68,8 @@ $lines = @(
     '# FN-01 (ADR-0060): bí mật client đăng nhập riêng; khóa HMAC bộ đếm mã định danh không tồn tại (base64 32 byte).'
     "AG_KC_LOGIN_CLIENT_SECRET=$(New-Hex 32)"
     "AG_LOGIN_ID_KEY='$(New-B64 32)'"
+    '# pf/weather (ADR-0065): khóa AES-256 mã hóa khóa API nhà cung cấp thời tiết (base64 32 byte).'
+    "AG_WEATHER_SECRET_KEY='$(New-B64 32)'"
     '# Public API (G5, docker compose --profile phasek): pepper HMAC khóa API phiên bản 1 (ADR-0022 mục 4, ≥ 32 byte).'
     "AG_APIKEY_PEPPER_V1=$(New-Hex 32)"
     '# Sao lưu (docker-compose.backup.yml): mã hóa kho pgBackRest, kho S3 thứ hai với danh tính ghi/đọc tách biệt.'

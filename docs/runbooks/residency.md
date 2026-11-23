@@ -9,7 +9,7 @@ Khi `AG_ENV=production` (hoặc `prod`), tiến trình **dừng ngay** nếu m�
 | Biến | Ý nghĩa |
 |---|---|
 | `AG_RESIDENCY_ALLOWLIST` | **Bắt buộc** ở production. Danh sách phân tách bằng dấu phẩy: hậu tố tên miền (`agrigreen.vn` khớp `agrigreen.vn` và `*.agrigreen.vn`), IP, CIDR (`10.0.0.0/8`), từ khóa `single-label` (tên dịch vụ nội cụm một nhãn như `pgbouncer`). Không nhận `*`. |
-| `AG_NONPII_ALLOWLIST` | Tùy chọn. Đích ngoài lãnh thổ chỉ nhận dữ liệu **không định danh**, và chỉ áp cho biến `AG_FCM_*`, `AG_APNS_*`, `AG_PUSH_*`, `AG_EXTDATA_*` (proxy khử định danh, mục dưới) (vd FCM data-only: `fcm.googleapis.com`). Mỗi mục cần ADR (mục 21). Không mở được cho OTLP, DB, S3. |
+| `AG_NONPII_ALLOWLIST` | Tùy chọn. Đích ngoài lãnh thổ chỉ nhận dữ liệu **không định danh**, và chỉ áp cho biến `AG_FCM_*`, `AG_APNS_*`, `AG_PUSH_*`, `AG_EXTDATA_*` (proxy khử định danh, mục dưới), `AG_WEATHER_*` (pf/weather chỉ gửi tọa độ trụ sở HTX đã làm thô 0,01°, còn đòi `AG_WEATHER_SOURCE_ADR` — [thoi-tiet.md](thoi-tiet.md), ADR-0065) (vd FCM data-only: `fcm.googleapis.com`). Mỗi mục cần ADR (mục 21). Không mở được cho OTLP, DB, S3. |
 
 Thông báo lỗi chỉ nêu tên biến và máy chủ (`RB-7: … AG_S3_ENDPOINT → s3.ap-southeast-1.amazonaws.com`), không in URL (có thể chứa mật khẩu).
 

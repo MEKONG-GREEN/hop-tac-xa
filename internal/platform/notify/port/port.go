@@ -55,6 +55,9 @@ const (
 	// KindAccountDormant: tài khoản sắp bị khóa vì không hoạt động (pf.accounts.user.dormant_warning, D24) → chính
 	// tài khoản đó, trong ứng dụng + email (migration pf 20261013142347 mở rộng CHECK kind).
 	KindAccountDormant = "account_dormant"
+	// KindWeatherFetchFailing: gọi API thời tiết lỗi 3 lần liên tiếp (pf.weather.fetch.failing, FN-TT-03/EX-02,
+	// NTF-TP-07) → Admin của tenant, thông báo trên Web.
+	KindWeatherFetchFailing = "weather_fetch_failing"
 	// KindSyncNow là thông điệp dữ liệu "đồng bộ ngay" (US-SYNC-02) — không tạo thông báo.
 	KindSyncNow = "sync_now"
 )
@@ -103,6 +106,8 @@ const (
 	ConsumerEgressAnomaly = "pf.notify.egress_anomaly"
 	// ConsumerAccounts: báo trước khóa tài khoản không hoạt động (pf.accounts.user.dormant_warning, D24).
 	ConsumerAccounts = "pf.notify.accounts"
+	// ConsumerWeather: API thời tiết lỗi 3 lần liên tiếp (pf.weather.fetch.failing, ADR-0065).
+	ConsumerWeather = "pf.notify.weather"
 )
 
 // EgressAnomalyRoles là người nhận cảnh báo xuất dữ liệu bất thường trong tenant chủ dữ liệu: người

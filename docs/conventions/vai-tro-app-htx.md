@@ -106,6 +106,20 @@ Nguồn: BRD App HTX — Kế hoạch vụ mùa và Nhật ký sản xuất v3.9
 - **Đồng bộ từ app:** máy chủ chưa mở cho Thành viên HTX (phần máy chủ thuộc AH-310; app đã nhận vai ở AH-303): chiều xuống không trả entity, chiều lên bị từ chối. Đại diện HTX và tài khoản kiêm hai vai bị từ chối ghi qua đồng bộ (chỉ xem); nông dân giữ nguyên.
 - **Web:** mục "Vụ canh tác", "Nhật ký canh tác", "Sản lượng thu hoạch" gắn `KHMV-FN-03-XEM`, `KHMV-FN-05`, `KHMV-FN-06`; nút thao tác ẩn/hiện theo `HtxScope.can(dòng, hành động)`.
 
+## Ma trận BRD Thời tiết & Thu gom phụ phẩm (dòng `TTPP-FN-TT-*`)
+
+| Khóa | Chức năng | Admin | Đại diện HTX | Thành viên HTX |
+|---|---|---|---|---|
+| `TTPP-FN-TT-01` | Thời tiết hôm nay trên Trang chủ | R (mọi HTX, chọn HTX ở bộ lọc) | R (HTX của mình) | R (HTX của mình) |
+| `TTPP-FN-TT-02` | Lịch thời tiết (dương lịch và âm lịch) | R (mọi HTX) | R (HTX của mình) | R (HTX của mình) |
+| `TTPP-FN-TT-03` | Kết nối API thời tiết | CRU | - | - |
+
+- **Kênh:** Admin chỉ dùng web (thẻ thời tiết có bộ lọc HTX, màn "Kết nối thời tiết"); Đại diện HTX và Thành viên HTX dùng
+  web và app (thẻ Thời tiết hôm nay, Lịch thời tiết). Nông dân ngoài BRD: máy chủ trả 403, app ẩn thẻ.
+- **API:** `GET /v1/weather/today`, `GET /v1/weather/calendar` (`TTPP-FN-TT-01`, `-02` R; Application API);
+  `GET /v1/weather/config`, `POST /v1/weather/config/revisions`, `POST /v1/weather/config/test` (`TTPP-FN-TT-03`; Admin API).
+  Nguồn và cấu hình: [ADR-0065](../adr/0065-nguon-thoi-tiet-open-meteo.md).
+
 ## Kiêm hai vai
 
 Một tài khoản có thể kiêm Đại diện HTX và Thành viên HTX (FN-05/BR-02); Admin không kiêm vai khác. Việc chọn vai làm việc khi đăng nhập thuộc AH-270. Tới khi có, quyền **không cộng gộp** (BRD mục V): tài khoản dùng quyền của vai đang có hiệu lực, theo thứ tự Admin, rồi Đại diện HTX, rồi Thành viên HTX.

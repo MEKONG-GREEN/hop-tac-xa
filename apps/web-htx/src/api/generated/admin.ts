@@ -4912,6 +4912,160 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/weather/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cấu hình kết nối API thời tiết (FN-TT-03, Admin)
+         * @description AH-224. Chưa cấu hình → giá trị mặc định, configured = false. Khóa API chỉ trả dạng che (••••1234 — AC-03). Cache-Control no-store.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Cấu hình hiện hành */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["WeatherConfig"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/weather/config/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Lưu cấu hình kết nối API thời tiết (FN-TT-03, Admin)
+         * @description AH-224. Máy chủ kiểm tra kết nối trước; lỗi → 422 weather.connection_failed, không lưu (EX-01, AC-04). Mỗi lần lưu là
+         *     một phiên bản mới, có hiệu lực từ lần lấy kế tiếp (AC-01). api_key: vắng = giữ khóa đang có; "" = bỏ khóa. Khóa lưu
+         *     mã hóa AES-256-GCM, chỉ trả 4 ký tự cuối (BR-03); có khóa mà máy chủ chưa cấu hình khóa mã hóa → 503
+         *     weather.secret_unavailable. Gọi lại cùng Idempotency-Key → 200 phiên bản đã ghi.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["WeatherConfigInput"];
+                };
+            };
+            responses: {
+                /** @description Phát lại cùng khóa */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["WeatherConfig"];
+                    };
+                };
+                /** @description Đã lưu */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["WeatherConfig"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+                503: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/weather/config/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Kiểm tra kết nối API thời tiết (FN-TT-03, Admin)
+         * @description AH-224. Gọi nhà cung cấp một lần với cấu hình định lưu, không lưu gì. Lỗi → 422 weather.connection_failed (detail nêu lý do, reason = unavailable | quota | auth | bad_response).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["WeatherConfigInput"];
+                };
+            };
+            responses: {
+                /** @description Kết nối được */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            ok: boolean;
+                            provider: string;
+                            temperature_c: number | null;
+                            condition: string;
+                            days: number;
+                        };
+                    };
+                };
+                403: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+                503: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/masterdata/catalogs/{catalog}/items/{code}/delete": {
         parameters: {
             query?: never;
@@ -7469,6 +7623,35 @@ export interface components {
             /** @description SĐT đã che khi mode otp_sent */
             phone_hint: string;
             replayed: boolean;
+        };
+        WeatherConfigInput: {
+            /**
+             * @description fake chỉ có ngoài production
+             * @enum {string}
+             */
+            provider: "open_meteo" | "fake";
+            /** @enum {integer} */
+            refresh_minutes: 30 | 60 | 120 | 180 | 360;
+            forecast_days: number;
+            /** @description Bí mật: vắng = giữ khóa đang có; "" = bỏ khóa */
+            api_key?: string;
+        };
+        WeatherConfig: {
+            configured: boolean;
+            provider: string;
+            providers: {
+                code: string;
+                label: string;
+            }[];
+            refresh_minutes: number;
+            refresh_options: number[];
+            forecast_days: number;
+            max_forecast_days: number;
+            api_key_set: boolean;
+            api_key_masked: string;
+            version: number;
+            /** Format: date-time */
+            updated_at: string | null;
         };
         CatalogDeleteResult: {
             /** @enum {string} */

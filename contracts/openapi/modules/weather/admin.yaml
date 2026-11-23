@@ -1,0 +1,107 @@
+paths:
+# @ag-order: 28110
+  /v1/weather/config:
+    get:
+      summary: Cấu hình kết nối API thời tiết (FN-TT-03, Admin)
+      description: AH-224. Chưa cấu hình → giá trị mặc định, configured = false. Khóa API chỉ trả dạng che (••••1234 — AC-03). Cache-Control no-store.
+      responses:
+        '200':
+          description: Cấu hình hiện hành
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WeatherConfig'}
+        '403': {$ref: '#/components/responses/Problem'}
+# @ag-order: 28111
+  /v1/weather/config/revisions:
+    post:
+      summary: Lưu cấu hình kết nối API thời tiết (FN-TT-03, Admin)
+      description: |
+        AH-224. Máy chủ kiểm tra kết nối trước; lỗi → 422 weather.connection_failed, không lưu (EX-01, AC-04). Mỗi lần lưu là
+        một phiên bản mới, có hiệu lực từ lần lấy kế tiếp (AC-01). api_key: vắng = giữ khóa đang có; "" = bỏ khóa. Khóa lưu
+        mã hóa AES-256-GCM, chỉ trả 4 ký tự cuối (BR-03); có khóa mà máy chủ chưa cấu hình khóa mã hóa → 503
+        weather.secret_unavailable. Gọi lại cùng Idempotency-Key → 200 phiên bản đã ghi.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/WeatherConfigInput'}
+      responses:
+        '201':
+          description: Đã lưu
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WeatherConfig'}
+        '200':
+          description: Phát lại cùng khóa
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WeatherConfig'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+# @ag-order: 28112
+  /v1/weather/config/test:
+    post:
+      summary: Kiểm tra kết nối API thời tiết (FN-TT-03, Admin)
+      description: AH-224. Gọi nhà cung cấp một lần với cấu hình định lưu, không lưu gì. Lỗi → 422 weather.connection_failed (detail nêu lý do, reason = unavailable | quota | auth | bad_response).
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/WeatherConfigInput'}
+      responses:
+        '200':
+          description: Kết nối được
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, provider, temperature_c, condition, days]
+                properties:
+                  ok: {type: boolean}
+                  provider: {type: string}
+                  temperature_c: {type: [integer, 'null']}
+                  condition: {type: string}
+                  days: {type: integer}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+components:
+  schemas:
+# @ag-order: 28113
+    WeatherConfigInput:
+      type: object
+      additionalProperties: false
+      required: [provider, refresh_minutes, forecast_days]
+      properties:
+        provider: {type: string, enum: [open_meteo, fake], description: fake chỉ có ngoài production}
+        refresh_minutes: {type: integer, enum: [30, 60, 120, 180, 360]}
+        forecast_days: {type: integer, minimum: 1, maximum: 14}
+        api_key: {type: string, maxLength: 200, description: 'Bí mật: vắng = giữ khóa đang có; "" = bỏ khóa'}
+# @ag-order: 28114
+    WeatherConfig:
+      type: object
+      required: [configured, provider, providers, refresh_minutes, refresh_options, forecast_days, max_forecast_days, api_key_set, api_key_masked, version, updated_at]
+      properties:
+        configured: {type: boolean}
+        provider: {type: string}
+        providers:
+          type: array
+          items:
+            type: object
+            required: [code, label]
+            properties:
+              code: {type: string}
+              label: {type: string}
+        refresh_minutes: {type: integer}
+        refresh_options: {type: array, items: {type: integer}}
+        forecast_days: {type: integer}
+        max_forecast_days: {type: integer}
+        api_key_set: {type: boolean}
+        api_key_masked: {type: string}
+        version: {type: integer}
+        updated_at: {type: [string, 'null'], format: date-time}

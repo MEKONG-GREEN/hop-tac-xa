@@ -37,6 +37,7 @@ consumes:
     - pf.sync.conflict.opened/v1
     - pf.sync.device.revoked/v1
     - pf.sync.integration.dead_lettered/v1
+    - pf.weather.fetch.failing/v1
 permissions: []
 shares: []
 owns_schema: [pf_notify, pf_notify_pub]

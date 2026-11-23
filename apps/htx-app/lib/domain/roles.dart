@@ -73,6 +73,8 @@ enum HtxScreen {
   collection,
   dashboard,
   cooperativeInfo,
+  weatherToday,
+  weatherCalendar,
 }
 
 /// Quy tắc ẩn/hiện của app theo chế độ — cùng ma trận quyền với máy chủ.
@@ -111,6 +113,13 @@ extension HtxModeAccess on HtxMode {
       HtxScreen.households => _matrix(HtxFn.households, HtxAction.read),
       // FN-03 (AH-284): app chỉ có màn xem thông tin HTX của mình, chỉ đọc.
       HtxScreen.cooperativeInfo => _matrix(HtxFn.cooperative, HtxAction.read),
+      // FN-TT-01, FN-TT-02 (AH-225, AH-226): Đại diện HTX và Thành viên HTX;
+      // nông dân ngoài BRD, máy chủ không trả thời tiết cho vai nông dân.
+      HtxScreen.weatherToday => _matrix(HtxFn.weatherToday, HtxAction.read),
+      HtxScreen.weatherCalendar => _matrix(
+        HtxFn.weatherCalendar,
+        HtxAction.read,
+      ),
       HtxScreen.seasonCalendars =>
         this == HtxMode.member && _matrix(HtxFn.calendar, HtxAction.read),
       HtxScreen.plotMap => _matrix(HtxFn.plotsAndArea, HtxAction.read),

@@ -25,6 +25,7 @@ import 'staff_screen.dart';
 import 'support_screen.dart';
 import 'season_calendars_screen.dart';
 import 'sync_queue_screen.dart';
+import 'weather_screen.dart';
 
 /// Trang chủ theo vai (HTX US-LOGIN-01 AC-1, FN-05): nông dân, Đại diện HTX
 /// hoặc Thành viên HTX.
@@ -196,6 +197,14 @@ class HomeScreen extends ConsumerWidget {
             ),
           ),
           (
+            HtxScreen.weatherCalendar,
+            BigTile(
+              icon: Icons.calendar_month,
+              label: 'Lịch thời tiết',
+              onTap: () => open(const WeatherCalendarScreen()),
+            ),
+          ),
+          (
             HtxScreen.news,
             BigTile(
               icon: Icons.newspaper,
@@ -282,6 +291,7 @@ class HomeScreen extends ConsumerWidget {
               ?.sync
               .syncOnce(force: true);
           ref.invalidate(homeSummaryProvider);
+          ref.invalidate(weatherTodayProvider);
         },
         child: ListView(
           padding: const EdgeInsets.all(12),
@@ -311,7 +321,12 @@ class HomeScreen extends ConsumerWidget {
               ),
               error: (e, _) => Card(child: ListTile(title: Text('Lỗi: $e'))),
             ),
-            const WeatherCard(),
+            if (mode.canView(HtxScreen.weatherToday))
+              WeatherCard(
+                onOpenCalendar: mode.canView(HtxScreen.weatherCalendar)
+                    ? () => open(const WeatherCalendarScreen())
+                    : null,
+              ),
             if (s?.advice != null && today != null)
               AdviceCard(
                 season: s!.advice!.$1,

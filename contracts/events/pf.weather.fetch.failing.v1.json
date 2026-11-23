@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.agrigreen.vn/events/pf.weather.fetch.failing/v1",
+  "title": "pf.weather.fetch.failing — payload",
+  "description": "FN-TT-03/EX-02, NTF-TP-07 (ADR-0065): gọi nhà cung cấp thời tiết lỗi 3 lần liên tiếp. Job weather_fetch phát đúng một lần cho mỗi chuỗi lỗi; lần lấy thành công kế tiếp mở lại. pf/notify gửi thông báo trên Web cho Admin của tenant. App vẫn dùng số liệu gần nhất. Không chứa dữ liệu cá nhân, khóa API hay tọa độ.",
+  "x-event-type": "pf.weather.fetch.failing",
+  "x-schema-version": 1,
+  "x-producer": "pf/weather",
+  "type": "object",
+  "required": ["provider", "failures", "last_error", "last_attempt", "last_success", "effective_day"],
+  "properties": {
+    "provider": {"type": "string", "enum": ["open_meteo", "fake"]},
+    "failures": {"type": "integer", "minimum": 3, "description": "Số lần lỗi liên tiếp lúc phát"},
+    "last_error": {"type": "string", "enum": ["unavailable", "quota", "auth", "bad_response"]},
+    "last_attempt": {"type": "string", "format": "date-time"},
+    "last_success": {"type": "string", "description": "RFC3339; chuỗi rỗng nếu chưa từng lấy thành công"},
+    "effective_day": {"type": "string", "format": "date", "description": "Ngày (giờ Việt Nam) của lần lỗi"}
+  }
+}
