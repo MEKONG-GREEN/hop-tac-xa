@@ -185,7 +185,7 @@ export function AppShell({ children, SidebarComponent = Sidebar }: {
   const note = noteState?.path === pathname ? noteState.text : null;
 
   if (bare) return <>{children}</>;
-  if (status==="authenticated" && needsHtxRole && htxRoles && dataConsent.status==="not_required") return <HtxRolePicker roles={htxRoles.roles} select={htxRoles.select} htxName={principal?.orgName} />;
+  if (status==="authenticated" && needsHtxRole && htxRoles && dataConsent.status==="not_required") return <HtxRolePicker roles={htxRoles.roles} select={htxRoles.select} htxName={principal?.orgName} lastUsed={htxRoles.lastUsed} notice={htxRoles.notice} />;
   if (status !== "authenticated" || !principal || kn.status === "choose" || dataConsent.status !== "not_required") {
     return (
       <main style={{ display: "grid", placeItems: "center", minHeight: "100vh" }}>
@@ -275,6 +275,15 @@ export function AppShell({ children, SidebarComponent = Sidebar }: {
               <div className="alert alert-warn" role="status" style={{ marginBottom: 16 }}>
                 <Icon name="info" />
                 <span>{scopeWarning}</span>
+              </div>
+            ) : null}
+            {htxRoles?.notice && !needsHtxRole ? (
+              // FN-TK-01/EX-03 (AH-222): vai vừa bị ngừng, tài khoản còn một vai nên dùng luôn vai đó (AC-01). Giữ câu báo
+              // qua lần chuyển trang do mất quyền, tới khi người dùng đóng.
+              <div className="alert alert-warn" role="status" style={{ marginBottom: 16 }}>
+                <Icon name="info" />
+                <span>{htxRoles.notice}</span>
+                <button type="button" className="btn btn-sm" onClick={() => htxRoles.clearNotice?.()}>Đóng</button>
               </div>
             ) : null}
             {notice ? (

@@ -30,6 +30,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/MEKONG-GREEN/hop-tac-xa/contracts/htxroles"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/domain"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/port"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/store"
@@ -142,8 +143,23 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (LoginResult, error)
 		return LoginResult{}, err
 	}
 	res, outcome, err := s.loginKnown(ctx, u, in)
+	if err == nil && res.Status == LoginAuthenticated && s.lacksHTXRole(res.Tokens.Roles) {
+		// FN-TK-01/EX-02 (AH-222): mật khẩu đúng nhưng tài khoản không còn vai App HTX → không trả token.
+		s.endSession(ctx, res.Tokens.RefreshToken)
+		res, outcome, err = LoginResult{}, "no_active_role", ErrNoActiveRole
+	}
 	s.loginLog(outcome, "user_ref", u.ID)
 	return res, err
+}
+
+// lacksHTXRole: chỉ realm HTX (FN-07) — token không mang vai nào trong ba vai của App HTX.
+func (s *Service) lacksHTXRole(roles []string) bool {
+	if len(s.NativeHTXKey) == 0 {
+		return false
+	}
+	return !slices.ContainsFunc(roles, func(r string) bool {
+		return r == htxroles.Admin || r == htxroles.Representative || r == htxroles.Member
+	})
 }
 
 func (s *Service) loginKey(canonical string) []byte {

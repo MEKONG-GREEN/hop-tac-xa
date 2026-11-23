@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/MEKONG-GREEN/hop-tac-xa/contracts/htxroles"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/app"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/domain"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/authz"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/httpx"
@@ -35,6 +36,11 @@ func (h Handler) nativeRoleGuard(c *gin.Context) bool {
 		if p.Has(role) {
 			roles = append(roles, role)
 		}
+	}
+	if len(roles) == 0 {
+		// FN-TK-01/EX-02 (AH-222): tài khoản realm HTX không còn vai nào.
+		httpx.Fail(c, app.ErrNoActiveRole)
+		return false
 	}
 	if !domain.NativeAccountRoles(roles) || (roles[0] != htxroles.Admin && p.OrgRef == uuid.Nil) {
 		httpx.Fail(c, problem.Forbidden)
@@ -65,7 +71,7 @@ func (h Handler) nativeRoleGuard(c *gin.Context) bool {
 		}
 	}
 	if !valid {
-		httpx.Fail(c, problem.Forbidden)
+		httpx.Fail(c, app.WorkingRoleRejected(selected))
 		return false
 	}
 	ctx := idempotency.WithAuthorizationScope(c.Request.Context(), []byte("htx-working-role/v1/"+selected))

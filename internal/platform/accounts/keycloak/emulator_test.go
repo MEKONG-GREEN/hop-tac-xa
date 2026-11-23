@@ -314,9 +314,17 @@ func (e *emulator) creds(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
 		fail(w, err)
 		return
 	}
-	out := []map[string]string{{"type": "password"}}
+	at, err := e.mem.PasswordSetAt(r.Context(), id)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	out := []map[string]any{{"type": "password", "createdDate": at.UnixMilli()}}
+	if at.IsZero() {
+		out = []map[string]any{{"type": "password"}}
+	}
 	if has {
-		out = append(out, map[string]string{"type": "otp"})
+		out = append(out, map[string]any{"type": "otp", "createdDate": int64(1)})
 	}
 	_ = json.NewEncoder(w).Encode(out)
 }

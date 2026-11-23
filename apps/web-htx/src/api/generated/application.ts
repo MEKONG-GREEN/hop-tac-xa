@@ -35683,7 +35683,7 @@ export interface operations {
             400: components["responses"]["Problem"];
             /** @description accounts.login_failed (EX-02) | accounts.login_otp_invalid: extension remaining_attempts */
             401: components["responses"]["Problem"];
-            /** @description accounts.account_locked (EX-03) | accounts.login_setup_required | accounts.login_otp_email_missing */
+            /** @description accounts.account_locked (EX-03) | accounts.login_setup_required | accounts.login_otp_email_missing | accounts.no_active_role (FN-TK-01/EX-02, realm HTX) | accounts.temporary_password_expired (mật khẩu tạm quá 72 giờ, FN-TK-02/AC-04) */
             403: components["responses"]["Problem"];
             /** @description accounts.login_otp_expired (mã OTP email hết hạn, đã dùng, đã hủy hoặc đã có mã mới) */
             410: components["responses"]["Problem"];

@@ -304,6 +304,33 @@ class AppController extends Notifier<AppState> {
     );
   }
 
+  /// FN-TK-01/EX-03, AC-06 (AH-222): vai đang chọn bị ngừng trong lúc đang dùng —
+  /// máy chủ từ chối lượt đồng bộ bằng 409 accounts.working_role_revoked. Đọc lại
+  /// vai từ token: còn hai vai → màn Chọn vai trò; còn một vai → dùng luôn vai đó.
+  /// Kèm câu báo; dữ liệu chờ gửi giữ nguyên ở máy.
+  Future<void> _onWorkingRoleRevoked(HtxServices s) async {
+    if (state.services != s || state.view.stage != AuthStage.unlocked) return;
+    _stopAutoSync();
+    _push.detach();
+    await s.reloadWorkingRoles();
+    s.workingRole.notice = WorkingRoleRevokedException.userMessage;
+    if (s.workingRole.needsSelection) {
+      state = state.copyWith();
+      return;
+    }
+    try {
+      await _enter(s, state.view);
+      s.workingRole.notice = WorkingRoleRevokedException.userMessage;
+      state = state.copyWith();
+    } on StateError catch (e) {
+      // Còn dữ liệu chờ gửi tạo dưới vai đã bị ngừng (FN-TK-01/EX-04 thuộc nền
+      // tảng offline AH-245): không gửi dưới vai khác, báo cho người dùng.
+      s.workingRole.notice =
+          '${WorkingRoleRevokedException.userMessage} ${e.message}';
+      state = state.copyWith();
+    }
+  }
+
   /// Khóa màn hình: đóng CSDL, về màn PIN.
   Future<void> lock() async {
     _stopAutoSync();
@@ -318,6 +345,13 @@ class AppController extends Notifier<AppState> {
     if (services == null) return;
     await services.bindWorkingRole(role);
     await _enter(services, state.view);
+  }
+
+  void dismissWorkingRoleNotice() {
+    final services = state.services;
+    if (services == null || services.workingRole.notice == null) return;
+    services.workingRole.notice = null;
+    state = state.copyWith();
   }
 
   void chooseWorkingRoleAgain() {
@@ -362,6 +396,9 @@ class AppController extends Notifier<AppState> {
       }
       if (st.lastError == AccountLockedException.accountLockedCode) {
         unawaited(_onAccountLocked());
+      }
+      if (st.lastError == WorkingRoleRevokedException.workingRoleRevokedCode) {
+        unawaited(_onWorkingRoleRevoked(s));
       }
     });
     final pf = s.platform;

@@ -35,6 +35,13 @@ enum LoginKind {
 
   /// accounts.login_setup_required: còn việc lần đầu — hoàn tất ở trang xác thực.
   setupRequired,
+
+  /// accounts.no_active_role (FN-TK-01/EX-02, AH-222): tài khoản không còn vai.
+  noActiveRole,
+
+  /// accounts.temporary_password_expired (FN-TK-02/AC-04, AH-223): mật khẩu
+  /// tạm đúng nhưng đã quá 72 giờ.
+  temporaryPasswordExpired,
   rateLimited,
   unavailable,
   network,
@@ -268,6 +275,9 @@ class HttpPasswordLoginApi implements PasswordLoginApi {
           'accounts.account_locked' => LoginKind.accountLocked,
           'accounts.login_otp_email_missing' => LoginKind.otpEmailMissing,
           'accounts.login_setup_required' => LoginKind.setupRequired,
+          'accounts.no_active_role' => LoginKind.noActiveRole,
+          'accounts.temporary_password_expired' =>
+            LoginKind.temporaryPasswordExpired,
           _ => LoginKind.unavailable,
         });
       case 422:

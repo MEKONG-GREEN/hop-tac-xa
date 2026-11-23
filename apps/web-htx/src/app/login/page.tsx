@@ -17,6 +17,10 @@ import { menuAllows } from "@/shell/menu";
 import { purgeLegacyIdentifier, rememberIdentifier, useRememberedIdentifier } from "@/lib/rememberLogin";
 
 const NETWORK_ERROR = "Không kết nối được máy chủ đăng nhập. Vui lòng thử lại sau.";
+/** FN-TK-01/EX-02 (AH-222), nguyên văn BRD. */
+const NO_ACTIVE_ROLE = "Tài khoản chưa được gán vai trò. Liên hệ quản trị viên.";
+/** FN-TK-02/AC-04 (AH-223): mật khẩu tạm quá 72 giờ. */
+const TEMPORARY_PASSWORD_EXPIRED = 'Mật khẩu tạm đã quá 72 giờ nên không còn dùng được. Dùng "Quên mật khẩu?" hoặc liên hệ người đã cấp tài khoản để được cấp lại.';
 
 /** Câu thông báo của kết quả không phải thành công, chờ mã hay lỗi riêng của màn mật khẩu. */
 function messageFor(r: SignInOutcome): string {
@@ -31,6 +35,10 @@ function messageFor(r: SignInOutcome): string {
       return "Chưa gửi được mã OTP qua email. Vui lòng thử lại sau hoặc liên hệ quản trị hệ thống.";
     case "otp_rate_limited":
       return `Đã gửi quá nhiều mã OTP. Thử lại sau ${r.minutes} phút.`;
+    case "no_active_role":
+      return NO_ACTIVE_ROLE;
+    case "temporary_password_expired":
+      return TEMPORARY_PASSWORD_EXPIRED;
     default:
       return "Đăng nhập tạm thời chưa dùng được. Vui lòng thử lại sau hoặc liên hệ quản trị viên.";
   }

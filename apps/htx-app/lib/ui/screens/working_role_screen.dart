@@ -18,6 +18,11 @@ final _htxNameProvider = FutureProvider.autoDispose<String?>((ref) async {
   return s.profile.cooperativeName();
 });
 
+/// UX-TP-09 (AH-222): vai dùng lần trước của tài khoản này trên máy.
+final _lastRoleProvider = FutureProvider.autoDispose<String?>(
+  (ref) => servicesOf(ref).lastWorkingRole(),
+);
+
 class WorkingRoleScreen extends ConsumerStatefulWidget {
   const WorkingRoleScreen({super.key});
   @override
@@ -51,6 +56,7 @@ class _WorkingRoleScreenState extends ConsumerState<WorkingRoleScreen> {
   Widget build(BuildContext context) {
     final selection = ref.watch(appControllerProvider).services!.workingRole;
     final htxName = ref.watch(_htxNameProvider).value;
+    final lastRole = ref.watch(_lastRoleProvider).value;
     return Scaffold(
       appBar: AppBar(title: const Text('Chọn vai trò và HTX làm việc')),
       body: Padding(
@@ -59,6 +65,7 @@ class _WorkingRoleScreenState extends ConsumerState<WorkingRoleScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Text('Mỗi lần chỉ dùng quyền của một vai trong HTX của bạn.'),
+            if (selection.notice != null) Text(selection.notice!),
             if (error != null) Text(error!),
             for (final role in selection.available)
               Padding(
@@ -74,6 +81,7 @@ class _WorkingRoleScreenState extends ConsumerState<WorkingRoleScreen> {
                             : 'Thành viên HTX',
                       ),
                       if (htxName != null) Text(htxName),
+                      if (lastRole == role) const Text('Dùng lần trước'),
                     ],
                   ),
                 ),

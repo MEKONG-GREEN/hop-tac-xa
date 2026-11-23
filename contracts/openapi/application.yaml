@@ -4896,7 +4896,7 @@ paths:
         "401":
           description: "accounts.login_failed (EX-02) | accounts.login_otp_invalid: extension remaining_attempts"
           $ref: "#/components/responses/Problem"
-        "403": {description: "accounts.account_locked (EX-03) | accounts.login_setup_required | accounts.login_otp_email_missing", $ref: "#/components/responses/Problem"}
+        "403": {description: "accounts.account_locked (EX-03) | accounts.login_setup_required | accounts.login_otp_email_missing | accounts.no_active_role (FN-TK-01/EX-02, realm HTX) | accounts.temporary_password_expired (mật khẩu tạm quá 72 giờ, FN-TK-02/AC-04)", $ref: "#/components/responses/Problem"}
         "410": {description: "accounts.login_otp_expired (mã OTP email hết hạn, đã dùng, đã hủy hoặc đã có mã mới)", $ref: "#/components/responses/Problem"}
         "422": {description: "validation_failed (EX-01: thiếu identifier hoặc password; có challenge_id mà thiếu otp; AH-269 EX-05: new_password dưới 06 ký tự hoặc trùng mật khẩu tạm, confirm_password không khớp)", $ref: "#/components/responses/Problem"}
         "423":

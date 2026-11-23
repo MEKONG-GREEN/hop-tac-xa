@@ -611,6 +611,27 @@ func (c *Client) HasOTP(ctx context.Context, id uuid.UUID) (bool, error) {
 	}), nil
 }
 
+// PasswordSetAt đọc createdDate (mili giây epoch) của thông tin xác thực "password" (GET /users/{id}/credentials).
+// Keycloak tạo thông tin xác thực mới mỗi lần reset-password nên đây là lúc đặt mật khẩu hiện tại (port.PasswordAgeReader).
+func (c *Client) PasswordSetAt(ctx context.Context, id uuid.UUID) (time.Time, error) {
+	var creds []struct {
+		Type        string `json:"type"`
+		CreatedDate int64  `json:"createdDate"`
+	}
+	if _, err := c.do(ctx, "đọc thông tin xác thực", http.MethodGet, userPath(id)+"/credentials", nil, nil, &creds); err != nil {
+		return time.Time{}, err
+	}
+	var at time.Time
+	for _, cr := range creds {
+		if cr.Type == "password" && cr.CreatedDate > 0 {
+			if t := time.UnixMilli(cr.CreatedDate).UTC(); t.After(at) {
+				at = t
+			}
+		}
+	}
+	return at, nil
+}
+
 // ExecuteActionsEmail gửi liên kết một lần (ADR-0010: không gửi mật khẩu tạm).
 func (c *Client) ExecuteActionsEmail(ctx context.Context, id uuid.UUID, actions []string, lifespan time.Duration) error {
 	v := url.Values{}

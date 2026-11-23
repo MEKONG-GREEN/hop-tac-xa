@@ -67,6 +67,17 @@ class AccountLockedException extends ApiException {
       'Tài khoản đã bị khóa. Liên hệ người đã cấp tài khoản để mở khóa.';
 }
 
+/// `409 accounts.working_role_revoked` (FN-TK-01/EX-03, AH-222): vai làm việc
+/// đang chọn đã bị ngừng (token làm mới không còn vai đó). Dữ liệu chờ gửi giữ
+/// nguyên ở máy; app đọc lại vai từ token và đưa về màn Chọn vai trò.
+class WorkingRoleRevokedException extends ApiException {
+  WorkingRoleRevokedException([String? detail])
+    : super(409, workingRoleRevokedCode, detail);
+  static const workingRoleRevokedCode = 'accounts.working_role_revoked';
+  static const userMessage =
+      'Vai trò đang dùng đã bị ngừng. Chọn lại vai trò làm việc.';
+}
+
 /// 401 — token hết hạn / bị thu hồi. Cần làm mới token hoặc đăng nhập lại.
 class UnauthenticatedException extends ApiException {
   UnauthenticatedException(String code) : super(401, code);
@@ -350,6 +361,10 @@ class HttpSyncApi implements SyncApi {
     if (res.statusCode == 403 &&
         code == AccountLockedException.accountLockedCode) {
       return AccountLockedException(detail);
+    }
+    if (res.statusCode == 409 &&
+        code == WorkingRoleRevokedException.workingRoleRevokedCode) {
+      return WorkingRoleRevokedException(detail);
     }
     if (res.statusCode == 401) return UnauthenticatedException(code);
     return ApiException(res.statusCode, code, detail, extensions);

@@ -214,6 +214,17 @@ class SyncService {
         ),
       );
       return null;
+    } on WorkingRoleRevokedException catch (e) {
+      // FN-TK-01/EX-03 (AH-222): vai đang chọn đã bị ngừng → app chọn lại vai;
+      // không lùi thử lại, không bỏ lệnh hay tệp chờ gửi.
+      await _save(
+        SyncStatus(
+          state: SyncState.error,
+          lastSuccessAt: prev.lastSuccessAt,
+          lastError: e.code,
+        ),
+      );
+      return null;
     } on UnauthenticatedException catch (e) {
       await _save(
         SyncStatus(
@@ -263,7 +274,8 @@ class SyncService {
         if (e is DeviceRevokedException ||
             e is UnauthenticatedException ||
             e is DataConsentRequiredException ||
-            e is AccountLockedException) {
+            e is AccountLockedException ||
+            e is WorkingRoleRevokedException) {
           rethrow;
         }
         if (e.retriable) rethrow;
@@ -334,7 +346,8 @@ class SyncService {
         if (e is DeviceRevokedException ||
             e is UnauthenticatedException ||
             e is DataConsentRequiredException ||
-            e is AccountLockedException) {
+            e is AccountLockedException ||
+            e is WorkingRoleRevokedException) {
           rethrow;
         }
         if (e.retriable) {
