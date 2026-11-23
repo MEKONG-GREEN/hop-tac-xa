@@ -24,6 +24,7 @@ export 'core/ids.dart';
 export 'data/actions/action_queue.dart';
 export 'data/auth/device_service.dart';
 export 'data/auth/oidc_client.dart';
+export 'data/auth/password_login.dart';
 export 'data/auth/pin_service.dart';
 export 'data/auth/session_service.dart';
 export 'data/auth/wipe_service.dart';

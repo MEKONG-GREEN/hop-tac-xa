@@ -4,4 +4,5 @@
 library;
 
 export 'testing/fake_oidc.dart';
+export 'testing/fake_password_login.dart';
 export 'testing/fake_server.dart';

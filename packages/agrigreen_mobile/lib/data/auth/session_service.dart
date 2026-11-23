@@ -1,6 +1,7 @@
 import '../../core/clock.dart';
 import '../secure/secure_store.dart';
 import 'oidc_client.dart';
+import 'password_login.dart';
 
 enum OfflineSessionState {
   /// Chưa từng đăng nhập trực tuyến trên máy — lần đầu bắt buộc có mạng.
@@ -23,15 +24,18 @@ class SessionService {
     required SecureStore store,
     required Clock clock,
     required OidcClient oidc,
+    PasswordLoginApi? passwordLogin,
     this.offlineMax = const Duration(hours: 72),
     this.clockSkewTolerance = const Duration(minutes: 10),
   }) : _store = store,
        _clock = clock,
-       _oidc = oidc;
+       _oidc = oidc,
+       _password = passwordLogin;
 
   final SecureStore _store;
   final Clock _clock;
   final OidcClient _oidc;
+  final PasswordLoginApi? _password;
   final Duration offlineMax;
   final Duration clockSkewTolerance;
 
@@ -49,6 +53,24 @@ class SessionService {
   /// Đăng nhập trực tuyến bằng OIDC PKCE.
   Future<void> signInOnline() async {
     final t = await _oidc.signIn();
+    await _store.delete(SecureKeys.tokenSource);
+    await _signedIn(t);
+  }
+
+  /// Đăng nhập bằng màn riêng (FN-01, AH-300): token do `/v1/public/auth/login`
+  /// cấp; làm mới và đăng xuất qua cùng API. Mật khẩu không qua đây.
+  Future<void> signInWithPasswordTokens(OidcTokens t) async {
+    await _store.write(SecureKeys.tokenSource, _passwordSource);
+    await _signedIn(t);
+  }
+
+  static const _passwordSource = 'password';
+
+  Future<bool> _fromPassword() async =>
+      _password != null &&
+      await _store.read(SecureKeys.tokenSource) == _passwordSource;
+
+  Future<void> _signedIn(OidcTokens t) async {
     await _saveTokens(t);
     final now = _clock.now();
     await _writeTime(SecureKeys.lastOnlineAuthAt, now);
@@ -71,7 +93,9 @@ class SessionService {
   Future<String?> refreshAccessToken() async {
     final rt = await _store.read(SecureKeys.refreshToken);
     if (rt == null) return null;
-    final t = await _oidc.refresh(rt);
+    final t = await _fromPassword()
+        ? await _password!.refresh(rt)
+        : await _oidc.refresh(rt);
     await _saveTokens(t);
     await _writeTime(SecureKeys.lastOnlineAuthAt, _clock.now());
     return t.accessToken;
@@ -123,6 +147,9 @@ class SessionService {
 
   /// Đăng xuất: xóa token và mốc xác thực trực tuyến (offlineState → never); giữ dữ liệu trên máy.
   Future<void> signOut() async {
+    // Phiên của API đăng nhập riêng: thu hồi ở máy chủ (lỗi bị bỏ qua).
+    final rt = await _store.read(SecureKeys.refreshToken);
+    if (rt != null && await _fromPassword()) await _password!.logout(rt);
     await lockTokens();
     await _store.delete(SecureKeys.lastOnlineAuthAt);
   }
@@ -133,5 +160,6 @@ class SessionService {
     await _store.delete(SecureKeys.refreshToken);
     await _store.delete(SecureKeys.idToken);
     await _store.delete(SecureKeys.accessExpiry);
+    await _store.delete(SecureKeys.tokenSource);
   }
 }

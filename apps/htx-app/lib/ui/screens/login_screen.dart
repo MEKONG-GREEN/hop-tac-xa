@@ -4,16 +4,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers.dart';
 import 'activation_screen.dart';
+import 'password_login_form.dart';
 
-/// Đăng nhập trực tuyến OIDC (Keycloak, PKCE; client `agrigreen-htx-app`).
-/// Tên đăng nhập là số điện thoại. Lần đầu bắt buộc có mạng (HTX US-LOGIN-02
-/// AC-2); không có tự đăng ký (US-LOGIN-01 AC-2).
+/// Đăng nhập trực tuyến. Realm HTX (`agrigreen-htx`): màn đăng nhập riêng của
+/// app (FN-01, AH-300) gọi API đăng nhập của máy chủ; realm cũ: trang Keycloak
+/// (OIDC PKCE, client `agrigreen-htx-app`). Lần đầu bắt buộc có mạng (HTX
+/// US-LOGIN-02 AC-2); không có tự đăng ký (US-LOGIN-01 AC-2).
 class LoginScreen extends ConsumerWidget {
   const LoginScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final st = ref.watch(appControllerProvider);
+    final password = ref.watch(passwordLoginProvider);
     return Scaffold(
       body: SafeArea(
         child: LayoutBuilder(
@@ -38,9 +41,12 @@ class LoginScreen extends ConsumerWidget {
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                     const SizedBox(height: 8),
-                    const Text(
-                      'Đăng nhập bằng số điện thoại và mật khẩu được cấp. '
-                      'Lần đăng nhập đầu tiên cần có mạng.',
+                    Text(
+                      password == null
+                          ? 'Đăng nhập bằng số điện thoại và mật khẩu được cấp. '
+                                'Lần đăng nhập đầu tiên cần có mạng.'
+                          : 'Nhập tên đăng nhập hoặc số điện thoại và mật khẩu '
+                                'được cấp. Lần đăng nhập đầu tiên cần có mạng.',
                       textAlign: TextAlign.center,
                       style: TextStyle(fontSize: 16, color: AgColors.mute),
                     ),
@@ -58,21 +64,26 @@ class LoginScreen extends ConsumerWidget {
                         ),
                       ),
                     const Spacer(),
-                    FilledButton.icon(
-                      onPressed: st.busy
-                          ? null
-                          : () => ref
-                                .read(appControllerProvider.notifier)
-                                .loginOnline(),
-                      icon: st.busy
-                          ? const SizedBox(
-                              width: 22,
-                              height: 22,
-                              child: CircularProgressIndicator(strokeWidth: 3),
-                            )
-                          : const Icon(Icons.login),
-                      label: const Text('Đăng nhập'),
-                    ),
+                    if (password != null)
+                      PasswordLoginForm(api: password)
+                    else
+                      FilledButton.icon(
+                        onPressed: st.busy
+                            ? null
+                            : () => ref
+                                  .read(appControllerProvider.notifier)
+                                  .loginOnline(),
+                        icon: st.busy
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 3,
+                                ),
+                              )
+                            : const Icon(Icons.login),
+                        label: const Text('Đăng nhập'),
+                      ),
                     const SizedBox(height: 12),
                     OutlinedButton.icon(
                       onPressed: () => Navigator.of(context).push(

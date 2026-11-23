@@ -195,6 +195,16 @@ class TestEnv {
   final List<String> copied = [];
   final JwtOidc oidc;
 
+  /// AH-300: API đăng nhập riêng giả của realm HTX — tài khoản mặc định
+  /// [testUsername]/[testPhone] với mật khẩu [testPassword].
+  late final FakePasswordLoginApi password = FakePasswordLoginApi(
+    issue: () => OidcTokens(
+      accessToken: fakeJwt(oidc.roles, native: true),
+      refreshToken: 'p-rt',
+      accessTokenExpiry: DateTime.utc(2100),
+    ),
+  )..addAccount(testUsername, testPhone, testPassword);
+
   /// Kênh đẩy giả (FCM) và thông báo cục bộ ghi lại — `notifier.tap(link)`
   /// mô phỏng người dùng chạm thông báo.
   final FakePushMessaging push = FakePushMessaging();
@@ -396,10 +406,18 @@ Future<void> settle(WidgetTester tester, [int frames = 20]) async {
   }
 }
 
+/// Tài khoản mặc định của API đăng nhập giả (realm HTX, AH-300).
+const testUsername = 'tanphu';
+const testPhone = '0912345678';
+const testPassword = 'matkhau1';
+
 Widget appUnderTest(TestEnv env) => ProviderScope(
   overrides: [
     platformProvider.overrideWithValue(env.platform),
     oidcProvider.overrideWithValue(env.oidc),
+    passwordLoginProvider.overrideWithValue(
+      env.nativeRealm ? env.password : null,
+    ),
     // PBKDF2 nhẹ cho kiểm thử (bản thật 60 000 vòng).
     pinServiceProvider.overrideWith(
       (ref) => PinService(store: env.store, clock: env.clock, iterations: 1000),
@@ -413,6 +431,17 @@ Widget appUnderTest(TestEnv env) => ProviderScope(
 Future<void> loginAndSetPin(WidgetTester tester, TestEnv env) async {
   await tester.pumpWidget(appUnderTest(env));
   await settle(tester);
+  if (env.nativeRealm) {
+    await tester.enterText(
+      find.byKey(const ValueKey('login-identifier')),
+      testUsername,
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('login-password')),
+      testPassword,
+    );
+  }
+  await tester.ensureVisible(find.text('Đăng nhập'));
   await tester.tap(find.text('Đăng nhập'));
   await settle(tester);
   for (var round = 0; round < 2; round++) {
