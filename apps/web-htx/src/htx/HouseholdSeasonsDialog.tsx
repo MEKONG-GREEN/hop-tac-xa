@@ -17,25 +17,14 @@ import { usePagedList } from "@/api/pagination";
 import { formatDecimal } from "@/lib/decimal";
 import { toApiProblem, useAsync } from "@/lib/useAsync";
 import { SeasonPlan } from "./SeasonPlan";
+import { householdAreaError, requestGPS, useSeasonMetadata, useSopChoices } from "./seasonOptions";
 import { HouseholdChecklist } from "./HouseholdChecklist";
 import type { CalendarPrefill } from "./seasonCalendarModel";
 
+export { householdAreaError } from "./seasonOptions";
+
 type S = components["schemas"];
 type GPS = S["CropGPS"];
-
-export function householdAreaError(raw: string): string | null {
-  if (!/^(0|[1-9][0-9]{0,9})(\.[0-9]{1,2})?$/.test(raw) || !/[1-9]/.test(raw)) return "Diện tích phải lớn hơn 0 và có tối đa hai chữ số thập phân.";
-  return null;
-}
-
-async function requestGPS(): Promise<GPS> {
-  if (!navigator.geolocation) return { source: "no_device" };
-  return new Promise((resolve) => { try { navigator.geolocation.getCurrentPosition(
-    (p) => resolve({ lon: p.coords.longitude.toFixed(7), lat: p.coords.latitude.toFixed(7), accuracy_m: p.coords.accuracy.toFixed(2), source: "device" }),
-    () => resolve({ source: "denied" }),
-    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
-  ); } catch { resolve({ source: "denied" }); } });
-}
 
 export function HouseholdSeasonsDialog({ coopRef, household, calendarPrefill, onClose, onSaved }: {
   coopRef: string; household: HouseholdListItem; calendarPrefill?: CalendarPrefill; onClose: () => void; onSaved: () => void;
@@ -61,25 +50,8 @@ export function HouseholdSeasonsDialog({ coopRef, household, calendarPrefill, on
   const [revision, setRevision] = useState(0);
   const path = { ref: coopRef, household_ref: household.household_ref };
   const list = usePagedList((cursor) => unwrap(api.GET("/v1/cooperatives/{ref}/households/{household_ref}/seasons", { params: { path, query: { cursor, limit: 20 } } })), [api, coopRef, household.household_ref, revision]);
-  const metadata = useAsync(async () => {
-    const catalog = (name: "crop" | "rice_variety" | "season") => collectPages((cursor) => unwrap(api.GET("/v1/masterdata/catalogs/{catalog}", { params: { path: { catalog: name }, query: { cursor, limit: 200 } } })));
-    const [crops, varieties, seasons, templates, bindings] = await Promise.all([
-      catalog("crop"), catalog("rice_variety"), catalog("season"),
-      collectPages((cursor) => unwrap(api.GET("/v1/cropcycle/sops", { params: { query: { status: "published", cursor, limit: 200 } } }))),
-      unwrap(api.GET("/v1/cropcycle/variety-bindings")),
-    ]);
-    return { crops, varieties, seasons, templates, bindings: bindings.items };
-  }, [api]);
-  const choices = useAsync(async () => {
-    const eligible = (metadata.data?.templates ?? []).filter((t) => t.crop === crop && (!t.variety_code || t.variety_code === variety) && (t.scope === "system" || t.cooperative_ref === coopRef));
-    const bound = metadata.data?.bindings.find((b) => b.variety_code === variety)?.template_ref;
-    const specific = eligible.filter((t) => t.variety_code === variety || t.ref === bound);
-    return Promise.all((specific.length ? specific : eligible).map(async (t) => {
-      const d = await unwrap(api.GET("/v1/cropcycle/sops/{ref}", { params: { path: { ref: t.ref } } }));
-      const v = d.versions.find((v) => v.state === "active" && v.version_no === t.published_version);
-      return v ? { id: v.id, label: `${t.name} · bản ${v.version_no}`, anchor: t.anchor_name } : null;
-    })).then((rows) => rows.filter((r) => r !== null));
-  }, [api, metadata.data, coopRef, crop, variety]);
+  const metadata = useSeasonMetadata(api);
+  const choices = useSopChoices(api, metadata.data, coopRef, crop, variety);
   const selected = version || (choices.data?.length === 1 ? choices.data[0]?.id ?? "" : "");
   const planReady = opening && canCreate && matrixAllows(principal, "KHMV-FN-04", "C") && !choices.loading &&
     !!crop && !!variety && !!selected && !householdAreaError(area) && /^\d{4}-\d{2}-\d{2}$/.test(anchor);
@@ -114,7 +86,7 @@ export function HouseholdSeasonsDialog({ coopRef, household, calendarPrefill, on
       } catch { setRemaining(null); setHasCapacity(false); }
     } catch (error) {
       const p = toApiProblem(error); setProblem(p);
-      const current = (p.problem as unknown as { remaining_area_ha?: unknown }).remaining_area_ha;
+      const current = p.problem.extensions?.remaining_area_ha;
       if (p.code === "cropcycle.household_area_exceeded" && typeof current === "string") setRemaining(current);
     } finally { setBusy(false); }
   };

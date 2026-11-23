@@ -19,7 +19,11 @@ export interface ProblemDetails {
   rows?: Record<string, unknown>[];
   /** 429: số giây phải chờ (thân `retry_after_s` hoặc header Retry-After). */
   retry_after_s?: number;
+  /** Trường mở rộng khác của problem (vd `remaining_area_ha` của cropcycle.household_area_exceeded). */
+  extensions?: Record<string, unknown>;
 }
+
+const PROBLEM_FIELDS: ReadonlySet<string> = new Set(["type", "title", "status", "code", "detail", "instance", "trace_id", "errors", "rows", "retry_after_s"]);
 
 /** Thông báo tiếng Việt theo mã lỗi (docs/errors.md). */
 export const PROBLEM_MESSAGES: Readonly<Record<string, string>> = {
@@ -644,6 +648,7 @@ export function toProblem(body: unknown, response?: Pick<Response, "status" | "h
         }))
       : undefined;
     const rows = Array.isArray(body.rows) ? body.rows.filter(isRecord) : undefined;
+    const extra = Object.entries(body).filter(([k]) => !PROBLEM_FIELDS.has(k));
     return {
       type: typeof body.type === "string" ? body.type : `https://errors.agrigreen.vn/${body.code}`,
       title: typeof body.title === "string" ? body.title : "",
@@ -655,6 +660,7 @@ export function toProblem(body: unknown, response?: Pick<Response, "status" | "h
       errors,
       ...(rows ? { rows } : {}),
       retry_after_s: retryAfter,
+      ...(extra.length ? { extensions: Object.fromEntries(extra) } : {}),
     };
   }
   const code = STATUS_FALLBACK[status] ?? (status >= 500 ? "internal_error" : "bad_request");
