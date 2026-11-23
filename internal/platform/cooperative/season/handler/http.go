@@ -39,6 +39,8 @@ func (h Handler) RegisterApp(rg *gin.RouterGroup) {
 	rg.POST("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/task-records", h.recordHouseholdTask)
 	rg.POST("/cooperatives/:ref/households/:household_ref/season-plan-preview", h.previewHouseholdSchedule)
 	rg.GET("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/plan", h.householdSchedule)
+	rg.POST("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/plan-changes", h.changeHouseholdPlan)
+	rg.GET("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/plan-history", h.householdPlanHistory)
 	rg.POST("/cooperatives/:ref/households/:household_ref/seasons", h.openHouseholdSeason)
 	rg.GET("/cooperatives/:ref/households/:household_ref/seasons", h.listHouseholdSeasons)
 	rg.GET("/cooperatives/:ref/households/:household_ref/seasons/:season_ref", h.getHouseholdSeason)

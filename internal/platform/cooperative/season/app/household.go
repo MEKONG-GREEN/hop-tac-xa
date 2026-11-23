@@ -36,6 +36,8 @@ type HouseholdOpenInput struct {
 	SOPVersionID                              uuid.UUID
 	GPS                                       domain.GPS
 	Channel, IdemKey                          string
+	// PlanChanges: tùy chỉnh quy trình trước khi lưu vụ (AH-113 AC1); bản chụp lưu đúng tùy chỉnh, SOP chuẩn không đổi.
+	PlanChanges []domain.PlanChange
 }
 
 func (s *Service) householdAccess(ctx context.Context, coop uuid.UUID, write bool) (access, error) {
@@ -147,8 +149,16 @@ func (s *Service) OpenHouseholdSeason(ctx context.Context, in HouseholdOpenInput
 		if steps == nil {
 			steps = []domain.Step{}
 		}
-		snapshot, err := json.Marshal(map[string]any{"template_ref": t.Ref, "version_id": v.ID, "version_no": v.VersionNo,
-			"crop_code": in.CropCode, "name": t.Name, "anchor_name": t.AnchorName, "stages": stages, "steps": steps})
+		custom, err := applyPlanChanges(domain.SeasonSnapshot{Stages: stages, Steps: steps}, in.PlanChanges)
+		if err != nil {
+			return SeasonResult{}, err
+		}
+		fields := map[string]any{"template_ref": t.Ref, "version_id": v.ID, "version_no": v.VersionNo,
+			"crop_code": in.CropCode, "name": t.Name, "anchor_name": t.AnchorName, "stages": stages, "steps": steps}
+		if custom.Custom != nil {
+			fields["custom"] = custom.Custom
+		}
+		snapshot, err := json.Marshal(fields)
 		if err != nil {
 			return SeasonResult{}, err
 		}

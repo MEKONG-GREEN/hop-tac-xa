@@ -433,6 +433,9 @@ Cổng `geo.GpsLog.RecordFix` (module khác gọi, không qua HTTP) trả lỗi 
 | 422 | `cropcycle.task_season_state` | AH-88: vụ đã dừng hoặc đóng, không cho thêm việc. |
 | 422 | `cropcycle.task_stage_locked` | AH-88: sau thu hoạch chỉ ghi việc chưa xong của giai đoạn cuối. |
 | 409 | `cropcycle.task_already_resolved` | AH-88: việc đã xong hoặc bỏ qua; tải lại checklist. |
+| 409 | `cropcycle.plan_step_resolved` | AH-113: tùy chỉnh quy trình của vụ — việc đã xong không sửa, đổi chỗ, bỏ được; việc tự thêm đã có nhật ký không xóa được. |
+| 409 | `cropcycle.plan_step_skipped` | AH-113: việc của SOP đã bỏ qua khỏi quy trình của vụ. |
+| 409 | `cropcycle.plan_season_closed` | AH-113: chỉ tùy chỉnh quy trình của vụ đang canh tác. |
 | 409 | `cropcycle.task_season_changed` | AH-88: expected_season_event_id không còn hiện hành; tải lại trước khi xác nhận. |
 | 409 | `cropcycle.task_zero_confirmation_required` | AH-99: xác nhận liều bằng 0 hoặc không sử dụng vật tư khuyến cáo trước khi lưu. |
 | 404 | `cropcycle.calendar_not_found` | AH-58: không có lịch trong tenant/HTX/phạm vi người nhận hiện tại; Member không đọc lịch đã hủy. |

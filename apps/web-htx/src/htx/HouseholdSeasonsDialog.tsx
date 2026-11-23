@@ -19,6 +19,8 @@ import { toApiProblem, useAsync } from "@/lib/useAsync";
 import { SeasonPlan } from "./SeasonPlan";
 import { householdAreaError, requestGPS, useSeasonMetadata, useSopChoices } from "./seasonOptions";
 import { HouseholdChecklist } from "./HouseholdChecklist";
+import { SeasonPlanEditor, type PlanChange, type PlanStage } from "./SeasonPlanEditor";
+import { RunningSeasonPlan } from "./SeasonPlanCustomizer";
 import type { CalendarPrefill } from "./seasonCalendarModel";
 
 export { householdAreaError } from "./seasonOptions";
@@ -48,6 +50,10 @@ export function HouseholdSeasonsDialog({ coopRef, household, calendarPrefill, on
   const [hasCapacity, setHasCapacity] = useState(household.can_open_season);
   const [detail, setDetail] = useState<S["HouseholdSeason"] | null>(null);
   const [revision, setRevision] = useState(0);
+  // AH-113 AC1: tùy chỉnh quy trình trước khi lưu vụ — gom lại, gửi kèm xem trước và mở vụ.
+  const [planChanges, setPlanChanges] = useState<PlanChange[]>([]);
+  const [customInfo, setCustomInfo] = useState<{ skipped: number[]; steps: Record<number, { window?: S["CropSOPWindow"] | null; materials?: S["CropSOPMaterial"][] | null }> }>({ skipped: [], steps: {} });
+  const resetPlan = () => { setPlanChanges([]); setCustomInfo({ skipped: [], steps: {} }); };
   const path = { ref: coopRef, household_ref: household.household_ref };
   const list = usePagedList((cursor) => unwrap(api.GET("/v1/cooperatives/{ref}/households/{household_ref}/seasons", { params: { path, query: { cursor, limit: 20 } } })), [api, coopRef, household.household_ref, revision]);
   const metadata = useSeasonMetadata(api);
@@ -57,8 +63,36 @@ export function HouseholdSeasonsDialog({ coopRef, household, calendarPrefill, on
     !!crop && !!variety && !!selected && !householdAreaError(area) && /^\d{4}-\d{2}-\d{2}$/.test(anchor);
   const preview = useAsync(async () => planReady ? unwrap(api.POST("/v1/cooperatives/{ref}/households/{household_ref}/season-plan-preview", {
     params: { path, header: { "Idempotency-Key": newIdempotencyKey() } },
-    body: { crop_code: crop, variety_code: variety, sop_version_id: selected, area_ha: area, anchor_date: anchor },
-  })) : null, [api, coopRef, household.household_ref, planReady, crop, variety, selected, area, anchor]);
+    body: { crop_code: crop, variety_code: variety, sop_version_id: selected, area_ha: area, anchor_date: anchor, plan_changes: planChanges },
+  })) : null, [api, coopRef, household.household_ref, planReady, crop, variety, selected, area, anchor, planChanges]);
+  const baseSteps = choices.data?.find((v) => v.id === selected)?.steps ?? [];
+  const openStages: PlanStage[] = (preview.data?.stages ?? []).map((s) => ({ seq: s.seq, name: s.name, tasks: s.steps.map((t) => ({
+    seq: t.seq, stage_seq: t.stage_seq, name: t.name, custom: t.custom, from_date: t.from_date, to_date: t.to_date, undated: t.undated,
+    skipped: customInfo.skipped.includes(t.seq),
+  })) }));
+  // Thử thay đổi bằng một lần xem trước; máy chủ chấp nhận thì mới giữ.
+  const changeOpening = async (change: PlanChange) => {
+    const next = [...planChanges, change];
+    const plan = await unwrap(api.POST("/v1/cooperatives/{ref}/households/{household_ref}/season-plan-preview", {
+      params: { path, header: { "Idempotency-Key": newIdempotencyKey() } },
+      body: { crop_code: crop, variety_code: variety, sop_version_id: selected, area_ha: area, anchor_date: anchor, plan_changes: next },
+    }));
+    setCustomInfo((info) => {
+      const steps = { ...info.steps };
+      let skipped = info.skipped;
+      if (change.kind === "edit" && change.step_seq) steps[change.step_seq] = { window: change.window, materials: change.materials };
+      if (change.kind === "add" && change.step) {
+        const known = new Set(Object.keys(steps).map(Number));
+        const seq = Math.max(0, ...plan.stages.flatMap((s) => s.steps).filter((t) => t.custom && !known.has(t.seq)).map((t) => t.seq));
+        if (seq) steps[seq] = { window: change.step.window, materials: change.step.materials };
+      }
+      if (change.kind === "remove" && change.step_seq && !steps[change.step_seq]) skipped = [...skipped, change.step_seq];
+      return { steps, skipped };
+    });
+    setPlanChanges(next);
+    edit();
+  };
+  const openLookup = (seq: number) => customInfo.steps[seq] ?? baseSteps.find((s) => s.seq === seq);
   const detailPlan = useAsync(async () => detail ? unwrap(api.GET("/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/plan", {
     params: { path: { ...path, season_ref: detail.season_ref } },
   })) : null, [api, coopRef, household.household_ref, detail?.season_ref, detail?.current_event_id]);
@@ -75,9 +109,9 @@ export function HouseholdSeasonsDialog({ coopRef, household, calendarPrefill, on
       setGPS(point);
       const result = await unwrap(api.POST("/v1/cooperatives/{ref}/households/{household_ref}/seasons", {
         params: { path, header: { "Idempotency-Key": key } },
-        body: { crop_code: crop, season_code: seasonCode, season_year: Number(year), variety_code: variety, area_ha: area, anchor_date: anchor, sop_version_id: selected, gps: point, channel: "web" },
+        body: { crop_code: crop, season_code: seasonCode, season_year: Number(year), variety_code: variety, area_ha: area, anchor_date: anchor, sop_version_id: selected, gps: point, channel: "web", plan_changes: planChanges },
       }));
-      setDetail(result.season); setOpening(false); setRevision((v) => v + 1); onSaved();
+      setDetail(result.season); setOpening(false); setRevision((v) => v + 1); onSaved(); resetPlan();
       setArea(""); setKey(newIdempotencyKey()); setGPS(null);
       try {
         const households = await collectPages((cursor) => unwrap(api.GET("/v1/cooperatives/{ref}/households", { params: { path: { ref: coopRef }, query: { cursor, limit: 200 } } })));
@@ -96,13 +130,13 @@ export function HouseholdSeasonsDialog({ coopRef, household, calendarPrefill, on
     {canCreate && !hasCapacity ? <p role="status">{household.open_season_blocked_reason || "Không còn diện tích hoặc chưa tải lại được số liệu. Đóng và mở lại danh sách hộ để cập nhật."}</p> : null}
     {opening ? <form onSubmit={(e) => void submit(e)} className="stack">
       <fieldset disabled={busy} className="stack" style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
-        <label className="field">Loại cây<select className="select" required value={crop} onChange={(e) => { setCrop(e.target.value); setVariety(""); setVersion(""); edit(); }}><option value="">Chọn loại cây</option>{metadata.data?.crops.filter((c) => !c.attrs.parent_code).map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}</select></label>
-        <label className="field">Giống<select className="select" required value={variety} onChange={(e) => { setVariety(e.target.value); setVersion(""); edit(); }}><option value="">Chọn giống</option>{metadata.data?.varieties.filter((v) => v.attrs.crop_code === crop).map((v) => <option key={v.code} value={v.code}>{v.name}</option>)}</select></label>
+        <label className="field">Loại cây<select className="select" required value={crop} onChange={(e) => { setCrop(e.target.value); setVariety(""); setVersion(""); resetPlan(); edit(); }}><option value="">Chọn loại cây</option>{metadata.data?.crops.filter((c) => !c.attrs.parent_code).map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}</select></label>
+        <label className="field">Giống<select className="select" required value={variety} onChange={(e) => { setVariety(e.target.value); setVersion(""); resetPlan(); edit(); }}><option value="">Chọn giống</option>{metadata.data?.varieties.filter((v) => v.attrs.crop_code === crop).map((v) => <option key={v.code} value={v.code}>{v.name}</option>)}</select></label>
         <label className="field">Mùa vụ<select className="select" required value={seasonCode} onChange={(e) => { setSeasonCode(e.target.value); edit(); }}><option value="">Chọn mùa vụ</option>{metadata.data?.seasons.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}</select></label>
         <label className="field">Năm<input className="input" required type="number" min={2000} max={2100} value={year} onChange={(e) => { setYear(e.target.value); edit(); }} /></label>
         <label className="field">Diện tích vụ (ha)<input className="input" required inputMode="decimal" value={area} onChange={(e) => { setArea(e.target.value); edit(); }} placeholder="Ví dụ: 0.25" /></label>
-        <label className="field">SOP đang áp dụng<select className="select" required value={selected} onChange={(e) => { setVersion(e.target.value); edit(); }}><option value="">Chọn SOP</option>{choices.data?.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}</select></label>
-        <button type="button" className="btn btn-o btn-sm" onClick={() => { choices.reload(); setVersion(""); edit(); }}>Tải lại SOP</button>
+        <label className="field">SOP đang áp dụng<select className="select" required value={selected} onChange={(e) => { setVersion(e.target.value); resetPlan(); edit(); }}><option value="">Chọn SOP</option>{choices.data?.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}</select></label>
+        <button type="button" className="btn btn-o btn-sm" onClick={() => { choices.reload(); setVersion(""); resetPlan(); edit(); }}>Tải lại SOP</button>
         <label className="field">{choices.data?.find((v) => v.id === selected)?.anchor || "Mốc gốc"}<input className="input" required type="date" value={anchor} onChange={(e) => { setAnchor(e.target.value); edit(); }} /></label>
         {!planReady ? <p>Chọn giống, SOP, diện tích và mốc gốc để xem kế hoạch.</p> : preview.loading ? <Loading label="Đang tính kế hoạch…" /> : preview.error ? <ProblemAlert problem={preview.error} onRetry={preview.reload} /> : preview.data ? <SeasonPlan plan={preview.data} /> : null}
         <p className="small">Bạn tự chọn mốc gốc. Khi lưu, trình duyệt hỏi quyền vị trí; từ chối vẫn mở vụ được và ghi “Thiếu GPS”.</p>
@@ -114,6 +148,7 @@ export function HouseholdSeasonsDialog({ coopRef, household, calendarPrefill, on
       {choices.error ? <ProblemAlert problem={choices.error} onRetry={choices.reload} /> : null}
       {!choices.loading && crop && variety && choices.data?.length === 0 ? <p role="status">Chưa có SOP đang áp dụng phù hợp. Vui lòng liên hệ Admin.</p> : null}
     </form> : null}
+    {opening && planReady && preview.data ? <SeasonPlanEditor stages={openStages} lookup={openLookup} onChange={changeOpening} disabled={busy} /> : null}
     {list.error ? <ProblemAlert problem={list.error} onRetry={list.reload} /> : null}
     {list.loading ? <Loading /> : null}
     <ul>{list.items.map((s) => <li key={s.season_ref}><button className="btn btn-o" onClick={() => setDetail(s)}>{s.season_code} {s.season_year} · {s.crop_code} · {formatDecimal(s.area_ha, 2)} ha · {s.status === "open" ? "Đang canh tác" : s.status}</button></li>)}</ul>
@@ -124,7 +159,8 @@ export function HouseholdSeasonsDialog({ coopRef, household, calendarPrefill, on
       <p>{detail.sop_snapshot.anchor_name}: {detail.anchor_date} · {detail.gps_missing ? "Thiếu GPS" : "Đã ghi nhận vị trí"}</p>
       <p>SOP bản {detail.sop_snapshot.version_no} · Diện tích {formatDecimal(detail.area_ha, 2)} ha</p>
       <ol>{detail.sop_snapshot.steps.map((step, i) => <li key={i}>{step.name}</li>)}</ol>
-      <HouseholdChecklist key={detail.season_ref} coopRef={coopRef} householdRef={household.household_ref} seasonRef={detail.season_ref} season={detail} />
+      <HouseholdChecklist key={`${detail.season_ref}:${detail.current_event_id}`} coopRef={coopRef} householdRef={household.household_ref} seasonRef={detail.season_ref} season={detail} />
+      <RunningSeasonPlan coopRef={coopRef} householdRef={household.household_ref} season={detail} onSeason={(s) => { setDetail(s); setRevision((v) => v + 1); }} />
       {detailPlan.loading ? <Loading label="Đang tải kế hoạch…" /> : detailPlan.error ? <ProblemAlert problem={detailPlan.error} onRetry={detailPlan.reload} /> : detailPlan.data ? <SeasonPlan plan={detailPlan.data} /> : null}
     </section> : null}
   </Dialog>;

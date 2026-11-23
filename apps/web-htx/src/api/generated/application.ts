@@ -10399,6 +10399,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/plan-changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Tùy chỉnh quy trình của vụ đang canh tác (AH-113)
+         * @description Thành viên HTX/Admin (KHMV-FN-04 U); Đại diện chỉ xem. Một thay đổi mỗi yêu cầu — thêm việc, sửa ngày/vật tư, đổi chỗ (chỉ đổi thứ tự hiển thị trong giai đoạn), bỏ việc (việc SOP chuyển Bỏ qua, việc tự thêm bị xóa). Chỉ đổi bản chụp của vụ, SOP chuẩn không đổi. Việc đã xong không sửa, đổi chỗ, bỏ được (409 cropcycle.plan_step_resolved); việc tự thêm đã có nhật ký không xóa được. Khóa vụ rồi so expected_season_event_id (409 cropcycle.task_season_changed). Mỗi thay đổi ghi một sự kiện corrected chỉ ghi thêm (người, thời điểm, nội dung). Kiểm cửa sổ và vật tư theo luật của SOP.
+         */
+        post: operations["changeHouseholdPlan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/plan-history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Lịch sử tùy chỉnh quy trình của vụ (AH-113)
+         * @description Người xem được vụ (kể cả Đại diện HTX cùng HTX) xem được. Mới nhất trước.
+         */
+        get: operations["getHouseholdPlanHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/extension/khtc/periods/{id}/report": {
         parameters: {
             query?: never;
@@ -24963,6 +25011,8 @@ export interface components {
              * @enum {string}
              */
             channel: "app" | "web";
+            /** @description Tùy chỉnh quy trình trước khi lưu vụ (AH-113), áp theo thứ tự; SOP chuẩn không đổi */
+            plan_changes?: components["schemas"]["HouseholdPlanChange"][];
         };
         HouseholdSeasonSOPSnapshot: {
             /** Format: uuid */
@@ -24975,6 +25025,21 @@ export interface components {
             anchor_name: string;
             stages: components["schemas"]["CropSOPStage"][];
             steps: components["schemas"]["CropSOPStep"][];
+            /** @description Lớp tùy chỉnh của riêng vụ (AH-113): việc tự thêm, sửa ngày/vật tư, việc bỏ qua, thứ tự hiển thị. Lịch và checklist đã áp lớp này. */
+            custom?: {
+                added?: components["schemas"]["CropSOPStep"][];
+                edits?: {
+                    seq?: number;
+                    window?: components["schemas"]["CropSOPWindow"];
+                    materials?: components["schemas"]["CropSOPMaterial"][];
+                }[];
+                skipped?: number[];
+                order?: {
+                    stage_seq?: number;
+                    steps?: number[];
+                }[];
+                last_seq?: number;
+            };
         };
         HouseholdSeason: {
             /** Format: uuid */
@@ -25026,6 +25091,8 @@ export interface components {
             area_ha: components["schemas"]["HouseholdSeasonAreaInput"];
             /** Format: date */
             anchor_date: string;
+            /** @description Tùy chỉnh quy trình đang soạn (AH-113) */
+            plan_changes?: components["schemas"]["HouseholdPlanChange"][];
         };
         SeasonSchedule: {
             /** Format: date */
@@ -25069,6 +25136,8 @@ export interface components {
             status: "upcoming" | "due" | "overdue" | "waiting_anchor";
             /** @description Chỉ true cho Không ngày; luôn due, không overdue */
             undated: boolean;
+            /** @description Việc tự thêm vào quy trình của riêng vụ (AH-113); vắng mặt = việc của SOP */
+            custom?: boolean;
         };
         HouseholdTaskCompleteInput: {
             step_seq: number;
@@ -25226,6 +25295,25 @@ export interface components {
             recipients?: string[];
             /** Format: date-time */
             updated_at: string;
+        };
+        /** @description Một thay đổi quy trình của vụ (AH-113): add cần step; edit cần step_seq, window, materials; move cần step_seq, direction; remove cần step_seq */
+        HouseholdPlanChange: {
+            /** @enum {string} */
+            kind: "add" | "edit" | "move" | "remove";
+            step_seq?: number;
+            /** @enum {string} */
+            direction?: "up" | "down";
+            step?: {
+                name: string;
+                stage_seq: number;
+                /** @enum {string} */
+                activity_code: "lam_dat" | "gieo_sa" | "tuoi_nuoc" | "bon_phan" | "phun_thuoc" | "kiem_tra" | "thu_hoach" | "cat_tia" | "khac";
+                window: components["schemas"]["CropSOPWindow"];
+                materials?: components["schemas"]["CropSOPMaterial"][];
+                instruction?: string;
+            };
+            window?: components["schemas"]["CropSOPWindow"];
+            materials?: components["schemas"]["CropSOPMaterial"][];
         };
         KHTCReportSupplement: {
             /** Format: uuid */
@@ -50432,6 +50520,88 @@ export interface operations {
                 };
             };
             default: components["responses"]["Problem"];
+        };
+    };
+    changeHouseholdPlan: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    expected_season_event_id: string;
+                    change: components["schemas"]["HouseholdPlanChange"];
+                };
+            };
+        };
+        responses: {
+            /** @description Vụ sau thay đổi, checklist tính lại và câu mô tả đã ghi lịch sử; replay trả kết quả cũ */
+            200: {
+                headers: {
+                    "Idempotent-Replayed"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        season: components["schemas"]["HouseholdSeason"];
+                        checklist: components["schemas"]["HouseholdChecklist"];
+                        summary: string;
+                    };
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    getHouseholdPlanHistory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Các thay đổi đã ghi */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: {
+                            /** Format: uuid */
+                            event_id: string;
+                            /** Format: uuid */
+                            actor_ref: string;
+                            /** Format: date-time */
+                            event_time: string;
+                            summary: string;
+                        }[];
+                    };
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
         };
     };
     extensionKhtcReportGet: {

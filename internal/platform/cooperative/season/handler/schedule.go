@@ -20,11 +20,12 @@ func (h Handler) previewHouseholdSchedule(c *gin.Context) {
 		return
 	}
 	var req struct {
-		CropCode     string `json:"crop_code"`
-		VarietyCode  string `json:"variety_code"`
-		AreaHa       string `json:"area_ha"`
-		SOPVersionID string `json:"sop_version_id"`
-		AnchorDate   string `json:"anchor_date"`
+		CropCode     string              `json:"crop_code"`
+		VarietyCode  string              `json:"variety_code"`
+		AreaHa       string              `json:"area_ha"`
+		SOPVersionID string              `json:"sop_version_id"`
+		AnchorDate   string              `json:"anchor_date"`
+		PlanChanges  []domain.PlanChange `json:"plan_changes"`
 	}
 	decoder := json.NewDecoder(c.Request.Body)
 	decoder.DisallowUnknownFields()
@@ -44,7 +45,7 @@ func (h Handler) previewHouseholdSchedule(c *gin.Context) {
 	}
 	plan, err := h.Svc.PreviewHouseholdSchedule(c.Request.Context(), app.SchedulePreviewInput{
 		CooperativeRef: coop, HouseholdRef: hh, CropCode: req.CropCode, VarietyCode: req.VarietyCode,
-		AreaHa: req.AreaHa, SOPVersionID: version, AnchorDate: anchor,
+		AreaHa: req.AreaHa, SOPVersionID: version, AnchorDate: anchor, PlanChanges: req.PlanChanges,
 	})
 	if err != nil {
 		httpx.Fail(c, err)

@@ -38,6 +38,8 @@ type ScheduleStep struct {
 	ExpectedDate *string `json:"expected_date"`
 	Status       string  `json:"status"`
 	Undated      bool    `json:"undated"`
+	// Custom: việc tự thêm vào quy trình của riêng vụ (AH-113).
+	Custom bool `json:"custom,omitempty"`
 }
 
 // CalculateSchedule is pure. The caller supplies the business day in GMT+7 as
