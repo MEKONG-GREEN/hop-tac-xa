@@ -330,8 +330,8 @@ func (SyncSink) Entities() []string {
 
 // GPSPayload là vị trí gửi lên (số thập phân dạng chuỗi).
 type GPSPayload struct {
-	Lon       *string `json:"lon"`
-	Lat       *string `json:"lat"`
+	Lon       *string `json:"lon" pii:"true"`
+	Lat       *string `json:"lat" pii:"true"`
 	AccuracyM *string `json:"accuracy_m"`
 	Source    string  `json:"source"`
 }

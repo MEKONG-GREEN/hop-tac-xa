@@ -155,7 +155,8 @@ func (s *Service) CoopStaffDirectory(ctx context.Context, q string) ([]CoopStaff
 }
 
 // CoopStaffPhone trả SĐT của một cán bộ HTX của nông dân lúc bấm gọi/copy (US-SUPPORT-02
-// AC-1). Đọc từ Keycloak, không lưu, không ghi log (R-14); handler đặt Cache-Control: no-store.
+// AC-1). Đọc từ Keycloak, không lưu SĐT, không ghi SĐT vào log (R-14); handler đặt Cache-Control: no-store. Mỗi lần trả
+// SĐT đầy đủ ghi một dòng nhật ký truy cập pf_accounts.pii_view (AH-9 AC3, NĐ 13/2023); ghi lỗi thì không trả.
 func (s *Service) CoopStaffPhone(ctx context.Context, user uuid.UUID) (string, error) {
 	p, coops, err := s.coopsOfFarmer(ctx)
 	if err != nil {
@@ -182,6 +183,9 @@ func (s *Service) CoopStaffPhone(ctx context.Context, user uuid.UUID) (string, e
 	phone := domain.NormalizePhone(u.Phone)
 	if !domain.ValidPhone(phone) {
 		return "", ErrNoContact
+	}
+	if err := s.recordPhoneView(ctx, p.TenantID, p.ActorRef, user); err != nil {
+		return "", err
 	}
 	return phone, nil
 }

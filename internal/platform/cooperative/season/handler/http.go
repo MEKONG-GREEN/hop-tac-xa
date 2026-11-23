@@ -241,8 +241,8 @@ func idem(c *gin.Context) string { return idempotency.KeyFromContext(c.Request.C
 
 // gpsReq là vị trí gửi lên; lon/lat là số thập phân (chuỗi hoặc số JSON).
 type gpsReq struct {
-	Lon       *decimal.Decimal `json:"lon"`
-	Lat       *decimal.Decimal `json:"lat"`
+	Lon       *decimal.Decimal `json:"lon" pii:"true"`
+	Lat       *decimal.Decimal `json:"lat" pii:"true"`
 	AccuracyM *decimal.Decimal `json:"accuracy_m"`
 	Source    string           `json:"source"`
 }

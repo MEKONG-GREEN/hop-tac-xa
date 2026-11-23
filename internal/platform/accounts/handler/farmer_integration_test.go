@@ -501,6 +501,18 @@ func TestCoopStaffDirectoryHTXUSSUPPORT02(t *testing.T) {
 	if c := farmer.get("/v1/farmer/coop-staff/" + otherCoop.String() + "/contact"); c.status != http.StatusNotFound || str(c.body, "code") != "accounts.staff_not_found" {
 		t.Fatalf("HTX khác: %d %v", c.status, c.body)
 	}
+	// AH-9 AC3 (NĐ 13/2023): mỗi lần trả SĐT đầy đủ có một dòng nhật ký truy cập; lượt bị từ chối thì không.
+	views := func(u uuid.UUID) (n int) {
+		t.Helper()
+		if err := f.env.AdminPool(t, migrations.PF).QueryRow(context.Background(),
+			`SELECT count(*) FROM pf_accounts.pii_view WHERE tenant_id = $1 AND user_ref = $2 AND actor_ref = $3 AND field = 'phone'`, f.tenant, u, user).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	if views(withPhone) != 1 || views(noPhone) != 0 || views(otherCoop) != 0 {
+		t.Fatalf("nhật ký truy cập SĐT: %d %d %d", views(withPhone), views(noPhone), views(otherCoop))
+	}
 	if mgr.get("/v1/farmer/coop-staff").status != http.StatusForbidden {
 		t.Fatal("chỉ vai farmer")
 	}
