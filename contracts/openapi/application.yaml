@@ -28921,6 +28921,8 @@ components:
         gps: {$ref: "#/components/schemas/CropGPS"}
         channel: {type: string, enum: [app, web], default: app}
         plan_changes: {type: array, maxItems: 200, description: "Tùy chỉnh quy trình trước khi lưu vụ (AH-113), áp theo thứ tự; SOP chuẩn không đổi", items: {$ref: "#/components/schemas/HouseholdPlanChange"}}
+        self_made_plan: {type: object, additionalProperties: false, required: [stages, steps], description: "AH-162: quy trình tự tạo (cùng cấu trúc SOP) khi loại cây/giống chưa có SOP đang áp dụng; chỉ gắn vụ này (KH-12). Kiểm như soạn SOP (thứ tự liên tục, Từ ≤ Đến). Đã có SOP → 409 cropcycle.sop_available. Không có việc Thu hoạch thì không có ngày thu hoạch dự kiến.", properties: {stages: {type: array, minItems: 1, items: {$ref: "#/components/schemas/CropSOPStage"}}, steps: {type: array, minItems: 1, items: {$ref: "#/components/schemas/CropSOPStep"}}}}
+        self_made_anchor: {type: string, maxLength: 100, description: "Tên mốc gốc của quy trình tự tạo; mặc định Ngày xuống giống"}
         copy_from_season_ref: {type: [string, "null"], format: uuid, description: "AH-139: sao chép giống và quy trình (kèm tùy chỉnh) từ vụ trước của chính hộ này (kể cả vụ đang canh tác). Loại cây, giống, SOP lấy theo vụ nguồn; nếu gửi thì phải khớp (422). Vụ nguồn ngoài phạm vi → 404 cropcycle.season_not_found. Vẫn kiểm diện tích còn lại và mốc gốc."}
     HouseholdSeasonSOPSnapshot:
       type: object
@@ -28934,6 +28936,7 @@ components:
         anchor_name: {type: string}
         stages: {type: array, items: {$ref: "#/components/schemas/CropSOPStage"}}
         steps: {type: array, items: {$ref: "#/components/schemas/CropSOPStep"}}
+        self_made: {type: boolean, description: "Quy trình tự tạo của riêng vụ (AH-162); template_ref/version_id là mã riêng của vụ, không có SOP master"}
         custom:
           type: object
           description: "Lớp tùy chỉnh của riêng vụ (AH-113): việc tự thêm, sửa ngày/vật tư, việc bỏ qua, thứ tự hiển thị. Lịch và checklist đã áp lớp này."
@@ -28983,11 +28986,13 @@ components:
     SeasonSchedulePreviewInput:
       type: object
       additionalProperties: false
-      required: [crop_code, variety_code, sop_version_id, area_ha, anchor_date]
+      required: [crop_code, variety_code, area_ha, anchor_date]
+      description: "Cần sop_version_id hoặc self_made_plan (AH-162)"
       properties:
         crop_code: {type: string}
         variety_code: {type: string, minLength: 1}
         sop_version_id: {type: string, format: uuid}
+        self_made_plan: {type: object, additionalProperties: false, required: [stages, steps], description: "AH-162: quy trình tự tạo (cùng cấu trúc SOP) khi loại cây/giống chưa có SOP đang áp dụng; chỉ gắn vụ này (KH-12). Kiểm như soạn SOP (thứ tự liên tục, Từ ≤ Đến). Đã có SOP → 409 cropcycle.sop_available. Không có việc Thu hoạch thì không có ngày thu hoạch dự kiến.", properties: {stages: {type: array, minItems: 1, items: {$ref: "#/components/schemas/CropSOPStage"}}, steps: {type: array, minItems: 1, items: {$ref: "#/components/schemas/CropSOPStep"}}}}
         area_ha: {$ref: "#/components/schemas/HouseholdSeasonAreaInput"}
         anchor_date: {type: string, format: date}
         plan_changes: {type: array, maxItems: 200, description: "Tùy chỉnh quy trình đang soạn (AH-113)", items: {$ref: "#/components/schemas/HouseholdPlanChange"}}

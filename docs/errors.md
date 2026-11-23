@@ -433,6 +433,7 @@ Cổng `geo.GpsLog.RecordFix` (module khác gọi, không qua HTTP) trả lỗi 
 | 422 | `cropcycle.task_season_state` | AH-88: vụ đã dừng hoặc đóng, không cho thêm việc. |
 | 422 | `cropcycle.task_stage_locked` | AH-88: sau thu hoạch chỉ ghi việc chưa xong của giai đoạn cuối. |
 | 409 | `cropcycle.task_already_resolved` | AH-88: việc đã xong hoặc bỏ qua; tải lại checklist. |
+| 409 | `cropcycle.sop_available` | AH-162: loại cây/giống đã có SOP đang áp dụng — chọn SOP thay vì tự tạo quy trình. |
 | 409 | `cropcycle.plan_step_resolved` | AH-113: tùy chỉnh quy trình của vụ — việc đã xong không sửa, đổi chỗ, bỏ được; việc tự thêm đã có nhật ký không xóa được. |
 | 409 | `cropcycle.plan_step_skipped` | AH-113: việc của SOP đã bỏ qua khỏi quy trình của vụ. |
 | 409 | `cropcycle.plan_season_closed` | AH-113: chỉ tùy chỉnh quy trình của vụ đang canh tác. |

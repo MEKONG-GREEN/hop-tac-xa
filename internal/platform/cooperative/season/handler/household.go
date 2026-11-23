@@ -28,6 +28,21 @@ type householdSeasonRequest struct {
 	PlanChanges []domain.PlanChange `json:"plan_changes"`
 	// CopyFromSeasonRef: AH-139 — sao chép giống và quy trình (kèm tùy chỉnh) từ vụ trước của hộ.
 	CopyFromSeasonRef *string `json:"copy_from_season_ref"`
+	// SelfMadePlan, SelfMadeAnchor: AH-162 — quy trình tự tạo khi loại cây chưa có SOP đang áp dụng.
+	SelfMadePlan   *selfMadePlanReq `json:"self_made_plan"`
+	SelfMadeAnchor string           `json:"self_made_anchor"`
+}
+
+type selfMadePlanReq struct {
+	Stages []domain.Stage `json:"stages"`
+	Steps  []domain.Step  `json:"steps"`
+}
+
+func (p *selfMadePlanReq) content() *domain.Content {
+	if p == nil {
+		return nil
+	}
+	return &domain.Content{Stages: p.Stages, Steps: p.Steps}
 }
 
 func householdPath(c *gin.Context) (uuid.UUID, uuid.UUID, bool) {
@@ -78,7 +93,8 @@ func (h Handler) openHouseholdSeason(c *gin.Context) {
 	}
 	r, err := h.Svc.OpenHouseholdSeason(c.Request.Context(), app.HouseholdOpenInput{CooperativeRef: coop, HouseholdRef: hh,
 		CropCode: req.CropCode, SeasonCode: req.SeasonCode, SeasonYear: req.SeasonYear, VarietyCode: req.VarietyCode,
-		AreaHa: req.AreaHa, AnchorDate: anchor, SOPVersionID: version, GPS: req.GPS.gps(), Channel: req.Channel, IdemKey: idem(c), PlanChanges: req.PlanChanges, CopyFrom: copyFrom})
+		AreaHa: req.AreaHa, AnchorDate: anchor, SOPVersionID: version, GPS: req.GPS.gps(), Channel: req.Channel, IdemKey: idem(c), PlanChanges: req.PlanChanges, CopyFrom: copyFrom,
+		SelfMade: req.SelfMadePlan.content(), SelfMadeAnchor: req.SelfMadeAnchor})
 	if err != nil {
 		httpx.Fail(c, err)
 		return

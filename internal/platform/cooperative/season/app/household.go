@@ -3,7 +3,9 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -41,6 +43,55 @@ type HouseholdOpenInput struct {
 	// CopyFrom: AH-139 — sao chép giống và quy trình (kèm tùy chỉnh) từ một vụ trước của chính hộ này, kể cả vụ đang
 	// canh tác. Loại cây, giống, SOP lấy theo vụ nguồn; người dùng chỉ nhập Vụ/Năm, mốc gốc, diện tích.
 	CopyFrom uuid.UUID
+	// SelfMade: AH-162 — quy trình tự tạo (giai đoạn, việc cùng cấu trúc SOP) khi loại cây/giống chưa có SOP đang áp
+	// dụng; chỉ gắn vụ này (KH-12). SelfMadeAnchor là tên mốc gốc (mặc định "Ngày xuống giống").
+	SelfMade       *domain.Content
+	SelfMadeAnchor string
+}
+
+// SelfMadePlanName là tên quy trình tự tạo trong bản chụp của vụ (AH-162).
+const SelfMadePlanName = "Quy trình tự tạo"
+
+// ErrSOPAvailable: loại cây/giống đã có SOP đang áp dụng — chọn SOP thay vì tự tạo (AH-162).
+var ErrSOPAvailable = problem.New(http.StatusConflict, "cropcycle.sop_available", "Loại cây đã có SOP đang áp dụng; chọn SOP thay vì tự tạo quy trình")
+
+// selfMadeSnapshot cho biết bản chụp là quy trình tự tạo (không có phiên bản SOP master).
+func selfMadeSnapshot(raw json.RawMessage) bool {
+	var m struct {
+		SelfMade bool `json:"self_made"`
+	}
+	return json.Unmarshal(raw, &m) == nil && m.SelfMade
+}
+
+// normalizeSelfMade kiểm quy trình tự tạo bằng đúng luật soạn SOP (thứ tự liên tục, Từ ≤ Đến...); lỗi theo trường
+// mang tiền tố "self_made_plan.".
+func normalizeSelfMade(in *HouseholdOpenInput) error {
+	if in.SelfMade == nil {
+		return nil
+	}
+	if in.CopyFrom != uuid.Nil || in.SOPVersionID != uuid.Nil {
+		return problem.Validation.WithField("self_made_plan", "Chọn SOP, sao chép vụ trước hoặc tự tạo quy trình — chỉ một cách")
+	}
+	if len(in.SelfMade.Stages) == 0 || len(in.SelfMade.Steps) == 0 {
+		return problem.Validation.WithField("self_made_plan", "Nhập ít nhất một giai đoạn và một việc")
+	}
+	c, errs := domain.CheckContent(*in.SelfMade)
+	if len(errs) > 0 {
+		out := make(domain.FieldErrors, len(errs))
+		for i, fe := range errs {
+			out[i] = domain.FieldError{Field: "self_made_plan." + fe.Field, Reason: fe.Reason}
+		}
+		return fieldProblem(out)
+	}
+	in.SelfMade = &c
+	in.SelfMadeAnchor = strings.TrimSpace(in.SelfMadeAnchor)
+	if in.SelfMadeAnchor == "" {
+		in.SelfMadeAnchor = "Ngày xuống giống"
+	}
+	if len([]rune(in.SelfMadeAnchor)) > 100 {
+		return problem.Validation.WithField("self_made_anchor", "Tên mốc gốc tối đa 100 ký tự")
+	}
+	return nil
 }
 
 // copySource đọc vụ nguồn để sao chép (AH-139): phải là vụ theo hộ của đúng hộ, đúng HTX trong phạm vi người gọi.
@@ -125,6 +176,9 @@ func (s *Service) OpenHouseholdSeason(ctx context.Context, in HouseholdOpenInput
 	if s.dependencyTxOpen(ctx) || s.Orgs == nil || s.Catalogs == nil {
 		return SeasonResult{}, ErrDependency
 	}
+	if err := normalizeSelfMade(&in); err != nil {
+		return SeasonResult{}, err
+	}
 	if in.CopyFrom != uuid.Nil {
 		if _, err := s.copySource(ctx, a.p.TenantID, &in); err != nil {
 			return SeasonResult{}, err
@@ -170,10 +224,23 @@ func (s *Service) OpenHouseholdSeason(ctx context.Context, in HouseholdOpenInput
 		if area.GreaterThan(remaining) {
 			return SeasonResult{}, ErrHouseholdArea.With("remaining_area_ha", remaining.String()).With("active_area_ha", used.String()).With("land_area_ha", h.CultivatedAreaHa.String())
 		}
-		var templateRef uuid.UUID
-		var v *store.Version
+		var templateRef, versionID uuid.UUID
+		var versionNo int
+		var harvestOffset, harvestWindow *int
 		var snapshot json.RawMessage
-		if in.CopyFrom != uuid.Nil {
+		fromVersion := func(v *store.Version) {
+			versionID, versionNo, harvestOffset, harvestWindow = v.ID, v.VersionNo, v.HarvestDayOffset, v.HarvestWindowDays
+		}
+		// selfMadeHarvest: quy trình tự tạo (AH-162, KH-12) tính ngày thu hoạch dự kiến từ việc Thu hoạch cuối;
+		// không có việc Thu hoạch thì không có ngày dự kiến.
+		selfMadeHarvest := func(steps []domain.Step) {
+			if h, ok := domain.HarvestStep(steps); ok {
+				offset, window := h.DayOffset, h.WindowDays
+				harvestOffset, harvestWindow = &offset, &window
+			}
+		}
+		switch {
+		case in.CopyFrom != uuid.Nil:
 			// AH-139: bản chụp của vụ nguồn (gồm lớp tùy chỉnh AH-113) dùng nguyên; ngày dự kiến tính theo mốc mới.
 			src, err := householdTaskSeason(ctx, tx, a.p.TenantID, in.CooperativeRef, in.HouseholdRef, in.CopyFrom, false)
 			if err != nil {
@@ -182,15 +249,22 @@ func (s *Service) OpenHouseholdSeason(ctx context.Context, in HouseholdOpenInput
 			if src.CropCode != in.CropCode || src.VarietyCode != in.VarietyCode || src.SOPVersionID != in.SOPVersionID {
 				return SeasonResult{}, ErrConcurrentEdit.WithDetail("Vụ nguồn vừa đổi; mở lại form sao chép")
 			}
-			if v, err = store.VersionByID(ctx, tx, src.SOPVersionID, false); err != nil {
-				return SeasonResult{}, err
-			}
-			if v == nil {
-				return SeasonResult{}, ErrHouseholdSOP
-			}
 			var base domain.SeasonSnapshot
 			if err := json.Unmarshal(src.SOPSnapshot, &base); err != nil {
 				return SeasonResult{}, err
+			}
+			v, err := store.VersionByID(ctx, tx, src.SOPVersionID, false)
+			if err != nil {
+				return SeasonResult{}, err
+			}
+			switch {
+			case v != nil:
+				fromVersion(v)
+			case selfMadeSnapshot(src.SOPSnapshot):
+				versionID, versionNo = src.SOPVersionID, src.SOPVersionNo
+				selfMadeHarvest(base.Steps)
+			default:
+				return SeasonResult{}, ErrHouseholdSOP
 			}
 			copied, err := applyPlanChanges(base, in.PlanChanges)
 			if err != nil {
@@ -200,12 +274,35 @@ func (s *Service) OpenHouseholdSeason(ctx context.Context, in HouseholdOpenInput
 				return SeasonResult{}, err
 			}
 			templateRef = src.SOPTemplateRef
-		} else {
-			t, version, err := householdSOP(ctx, tx, in.CooperativeRef, in.CropCode, in.VarietyCode, in.SOPVersionID)
+		case in.SelfMade != nil:
+			// AH-162 (FN-03-EX-03, KH-12): chỉ khi loại cây/giống chưa có SOP đang áp dụng; quy trình chỉ gắn vụ này.
+			if _, _, err := householdSOP(ctx, tx, in.CooperativeRef, in.CropCode, in.VarietyCode, uuid.Nil); err == nil {
+				return SeasonResult{}, ErrSOPAvailable
+			} else if !errors.Is(err, ErrHouseholdSOP) {
+				return SeasonResult{}, err
+			}
+			custom, err := applyPlanChanges(domain.SeasonSnapshot{Stages: in.SelfMade.Stages, Steps: in.SelfMade.Steps}, in.PlanChanges)
 			if err != nil {
 				return SeasonResult{}, err
 			}
-			v, templateRef = version, t.Ref
+			templateRef, versionID, versionNo = ids.New(), ids.New(), 1
+			selfMadeHarvest(in.SelfMade.Steps)
+			fields := map[string]any{"template_ref": templateRef, "version_id": versionID, "version_no": versionNo,
+				"crop_code": in.CropCode, "name": SelfMadePlanName, "anchor_name": in.SelfMadeAnchor, "self_made": true,
+				"stages": in.SelfMade.Stages, "steps": in.SelfMade.Steps}
+			if custom.Custom != nil {
+				fields["custom"] = custom.Custom
+			}
+			if snapshot, err = json.Marshal(fields); err != nil {
+				return SeasonResult{}, err
+			}
+		default:
+			t, v, err := householdSOP(ctx, tx, in.CooperativeRef, in.CropCode, in.VarietyCode, in.SOPVersionID)
+			if err != nil {
+				return SeasonResult{}, err
+			}
+			fromVersion(v)
+			templateRef = t.Ref
 			stages, steps := v.Stages, v.Steps
 			if stages == nil {
 				stages = []domain.Stage{}
@@ -234,12 +331,12 @@ func (s *Service) OpenHouseholdSeason(ctx context.Context, in HouseholdOpenInput
 			EntryKind: "household", CropCode: in.CropCode, SOPSnapshot: snapshot,
 			HouseholdRef: h.Ref, CooperativeRef: in.CooperativeRef, CommuneCode: h.CommuneCode,
 			SeasonCode: in.SeasonCode, SeasonYear: in.SeasonYear, VarietyCode: in.VarietyCode, AreaHa: area,
-			SowingDate: in.AnchorDate, SOPTemplateRef: templateRef, SOPVersionID: v.ID, SOPVersionNo: v.VersionNo, CopiedFrom: in.CopyFrom,
+			SowingDate: in.AnchorDate, SOPTemplateRef: templateRef, SOPVersionID: versionID, SOPVersionNo: versionNo, CopiedFrom: in.CopyFrom,
 			ExpectedYield: expectedYield(variety), GPS: in.GPS, LocationStatus: loc, Channel: in.Channel,
 			ActorRef: a.p.ActorRef, OnBehalf: a.onBehalf(), EventTime: now, IdemKey: key}
-		if v.HarvestDayOffset != nil && v.HarvestWindowDays != nil {
-			ev.ExpectedHarvestDate = in.AnchorDate.AddDate(0, 0, *v.HarvestDayOffset)
-			ev.HarvestOpenDate = ev.ExpectedHarvestDate.AddDate(0, 0, -*v.HarvestWindowDays)
+		if harvestOffset != nil && harvestWindow != nil {
+			ev.ExpectedHarvestDate = in.AnchorDate.AddDate(0, 0, *harvestOffset)
+			ev.HarvestOpenDate = ev.ExpectedHarvestDate.AddDate(0, 0, -*harvestWindow)
 			if ev.ExpectedHarvestDate.Year() < 1 || ev.ExpectedHarvestDate.Year() > 9999 || ev.HarvestOpenDate.Year() < 1 || ev.HarvestOpenDate.Year() > 9999 {
 				return SeasonResult{}, problem.Validation.WithField("anchor_date", "mốc gốc làm ngày dự kiến ngoài khoảng năm hợp lệ")
 			}
