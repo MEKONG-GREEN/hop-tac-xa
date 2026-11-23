@@ -128,8 +128,9 @@ func (s *Service) EditHouseholdTask(ctx context.Context, in TaskEditInput) (Comp
 	var actual []domain.ActualMaterial
 	var inputs []domain.Input
 	if !in.Void {
-		detail, _, err = normalizeDetailedTask(DetailedTaskInput{StepSeq: prev.TaskCompletion.StepSeq, ExpectedEventID: season.CurrentEventID,
-			State: in.State, DoneOn: in.DoneOn, Note: in.Note, Materials: in.Materials, ZeroConfirmed: in.ZeroConfirmed,
+		detail, _, err = normalizeDetailedTask(DetailedTaskInput{StepSeq: 1, // chỉ để qua kiểm chung; việc giữ nguyên (kể cả việc phát sinh AH-163)
+			ExpectedEventID: season.CurrentEventID,
+			State:           in.State, DoneOn: in.DoneOn, Note: in.Note, Materials: in.Materials, ZeroConfirmed: in.ZeroConfirmed,
 			GPS: domain.GPS{Source: domain.GPSNoDevice}, Channel: in.Channel, IdemKey: in.IdemKey}, s.now())
 		if err != nil {
 			return CompleteTaskResult{}, err

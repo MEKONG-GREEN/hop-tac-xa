@@ -10522,6 +10522,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/adhoc-records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ghi việc phát sinh ngoài quy trình của vụ (AH-163)
+         * @description Thành viên HTX/Admin (KHMV-FN-05 C); Đại diện chỉ xem. Nội dung, giai đoạn, loại việc, ngày bắt buộc; ngày không sau hôm nay; liều ≥ 0 (liều 0 cần xác nhận); ghi bù quá 3 ngày cần lý do. Bản ghi gắn nhãn "Ngoài SOP" (adhoc), mang số việc riêng của vụ (> 1000) và không tính vào % tiến độ. Vụ đã thu hoạch chỉ ghi vào giai đoạn cuối; vụ dừng/hủy không ghi. Sửa/xóa như nhật ký việc (AH-126).
+         */
+        post: operations["recordHouseholdAdhocTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/extension/khtc/periods/{id}/report": {
         parameters: {
             query?: never;
@@ -25311,6 +25335,14 @@ export interface components {
             version?: number;
             /** @description Lý do sửa/xóa của phiên bản bù (AH-126) */
             correction_reason?: string;
+            /** @description Việc phát sinh ngoài quy trình — nhãn Ngoài SOP, không tính tiến độ (AH-163) */
+            adhoc?: boolean;
+            /** @description Nội dung việc phát sinh (AH-163) */
+            adhoc_name?: string;
+            /** @description Giai đoạn của việc phát sinh (AH-163) */
+            stage_seq?: number;
+            /** @description Loại việc của việc phát sinh (AH-163) */
+            activity_code?: string;
             inputs: {
                 name: string;
                 qty: components["schemas"]["Decimal"];
@@ -50852,6 +50884,74 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+        };
+    };
+    recordHouseholdAdhocTask: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    expected_season_event_id: string;
+                    stage_seq: number;
+                    name: string;
+                    /** @enum {string} */
+                    activity_code: "lam_dat" | "gieo_sa" | "tuoi_nuoc" | "bon_phan" | "phun_thuoc" | "kiem_tra" | "thu_hoach" | "cat_tia" | "khac";
+                    /** @enum {string} */
+                    state: "partial" | "done";
+                    /** Format: date */
+                    done_on: string;
+                    note?: string;
+                    backfill_reason?: string;
+                    /** @default false */
+                    zero_confirmed?: boolean;
+                    gps: components["schemas"]["CropGPS"];
+                    /**
+                     * @default app
+                     * @enum {string}
+                     */
+                    channel?: "app" | "web";
+                    materials: {
+                        material_code?: string;
+                        name?: string;
+                        unit?: string;
+                        dose_per_ha: string;
+                    }[];
+                };
+            };
+        };
+        responses: {
+            /** @description Bản ghi việc phát sinh và checklist (tiến độ không đổi); replay trả bản ghi cũ */
+            201: {
+                headers: {
+                    "Idempotent-Replayed"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        record: components["schemas"]["HouseholdTaskRecord"];
+                        checklist: components["schemas"]["HouseholdChecklist"];
+                    };
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
         };
     };
     extensionKhtcReportGet: {

@@ -37,6 +37,7 @@ func (h Handler) RegisterApp(rg *gin.RouterGroup) {
 	rg.GET("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/checklist", h.householdChecklist)
 	rg.POST("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/task-completions", h.completeHouseholdTask)
 	rg.POST("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/task-records", h.recordHouseholdTask)
+	rg.POST("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/adhoc-records", h.recordAdhocTask)
 	rg.POST("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/task-records/:log_ref/corrections", h.editHouseholdTask(false))
 	rg.POST("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/task-records/:log_ref/void", h.editHouseholdTask(true))
 	rg.GET("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/task-records/:log_ref/history", h.householdTaskHistory)

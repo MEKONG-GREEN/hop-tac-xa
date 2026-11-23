@@ -14724,6 +14724,68 @@ paths:
         "401": {$ref: "#/components/responses/Problem"}
         "403": {$ref: "#/components/responses/Problem"}
         "404": {$ref: "#/components/responses/Problem"}
+  /v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/adhoc-records:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: household_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: season_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: recordHouseholdAdhocTask
+      summary: Ghi việc phát sinh ngoài quy trình của vụ (AH-163)
+      description: Thành viên HTX/Admin (KHMV-FN-05 C); Đại diện chỉ xem. Nội dung, giai đoạn, loại việc, ngày bắt buộc; ngày không sau hôm nay; liều ≥ 0 (liều 0 cần xác nhận); ghi bù quá 3 ngày cần lý do. Bản ghi gắn nhãn "Ngoài SOP" (adhoc), mang số việc riêng của vụ (> 1000) và không tính vào % tiến độ. Vụ đã thu hoạch chỉ ghi vào giai đoạn cuối; vụ dừng/hủy không ghi. Sửa/xóa như nhật ký việc (AH-126).
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_season_event_id, stage_seq, name, activity_code, state, done_on, materials, gps]
+              properties:
+                expected_season_event_id: {type: string, format: uuid}
+                stage_seq: {type: integer, minimum: 1}
+                name: {type: string, minLength: 1, maxLength: 200}
+                activity_code: {type: string, enum: [lam_dat, gieo_sa, tuoi_nuoc, bon_phan, phun_thuoc, kiem_tra, thu_hoach, cat_tia, khac]}
+                state: {type: string, enum: [partial, done]}
+                done_on: {type: string, format: date}
+                note: {type: string, maxLength: 2000}
+                backfill_reason: {type: string, maxLength: 500}
+                zero_confirmed: {type: boolean, default: false}
+                gps: {$ref: "#/components/schemas/CropGPS"}
+                channel: {type: string, enum: [app, web], default: app}
+                materials:
+                  type: array
+                  maxItems: 20
+                  items:
+                    type: object
+                    required: [dose_per_ha]
+                    properties:
+                      material_code: {type: string}
+                      name: {type: string}
+                      unit: {type: string}
+                      dose_per_ha: {type: string, pattern: '^(0|[1-9][0-9]{0,8})(\.[0-9]{1,4})?$'}
+      responses:
+        "201":
+          description: Bản ghi việc phát sinh và checklist (tiến độ không đổi); replay trả bản ghi cũ
+          headers:
+            Idempotent-Replayed: {schema: {type: string}}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [record, checklist]
+                properties:
+                  record: {$ref: "#/components/schemas/HouseholdTaskRecord"}
+                  checklist: {$ref: "#/components/schemas/HouseholdChecklist"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
   /v1/extension/khtc/periods/{id}/report:
     get:
       summary: "Bản soạn Mẫu 1–5, ô số chỉ đọc và mốc dữ liệu"
@@ -29102,6 +29164,10 @@ components:
         sop_version_id: {type: string, format: uuid}
         version: {type: integer, description: "Số phiên bản trong chuỗi của bản ghi (1 = bản đầu)"}
         correction_reason: {type: string, description: "Lý do sửa/xóa của phiên bản bù (AH-126)"}
+        adhoc: {type: boolean, description: "Việc phát sinh ngoài quy trình — nhãn Ngoài SOP, không tính tiến độ (AH-163)"}
+        adhoc_name: {type: string, description: "Nội dung việc phát sinh (AH-163)"}
+        stage_seq: {type: integer, description: "Giai đoạn của việc phát sinh (AH-163)"}
+        activity_code: {type: string, description: "Loại việc của việc phát sinh (AH-163)"}
         inputs:
           type: array
           items:
