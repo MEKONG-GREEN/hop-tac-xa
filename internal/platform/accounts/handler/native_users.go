@@ -129,7 +129,7 @@ func (h Handler) nativeUpdateWith(update func(context.Context, uuid.UUID, app.Na
 			httpx.Fail(c, problem.BadRequest.WithDetail("Chỉ nhận một đối tượng JSON"))
 			return
 		}
-		u, replayed, err := update(c.Request.Context(), id, in, key(c))
+		u, replayed, err := update(confirmNoRepresentative(c), id, in, key(c))
 		if err != nil {
 			httpx.Fail(c, err)
 			return
@@ -149,13 +149,22 @@ func (h Handler) nativeLockWith(set func(context.Context, uuid.UUID, bool, strin
 		if !ok {
 			return
 		}
-		u, replayed, err := set(c.Request.Context(), id, locked, key(c))
+		u, replayed, err := set(confirmNoRepresentative(c), id, locked, key(c))
 		if err != nil {
 			httpx.Fail(c, err)
 			return
 		}
 		nativeUserReply(c, u, replayed)
 	}
+}
+
+// confirmNoRepresentative: query confirm_no_representative=true là người dùng đã xác nhận để HTX không còn Đại diện
+// HTX đang hoạt động (FN-TK-02/EX-04, AH-223).
+func confirmNoRepresentative(c *gin.Context) context.Context {
+	if c.Query("confirm_no_representative") == "true" {
+		return app.WithLastRepresentativeConfirmed(c.Request.Context())
+	}
+	return c.Request.Context()
 }
 
 // registerCoopAccounts: FN-08 (AH-277) trên Application API — Đại diện HTX quản lý Thành viên HTX của HTX mình.

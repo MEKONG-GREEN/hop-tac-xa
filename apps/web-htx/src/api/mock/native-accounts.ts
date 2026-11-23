@@ -12,6 +12,14 @@ function guard({ persona }: Ctx) {
   return null;
 }
 const headers = { "Cache-Control": "no-store" };
+// FN-TK-02/EX-04 (AH-223): khớp accounts/app.guardLastRepresentative — thao tác làm HTX không còn Đại diện HTX đang
+// hoạt động cần confirm_no_representative=true.
+function lastRepresentative(ctx: Ctx, tenant: string, u: AccountsUser) {
+  if (ctx.url.searchParams.get("confirm_no_representative") === "true") return null;
+  const active = (x: AccountsUser) => x.enabled && !!x.org_ref && (x.roles ?? []).includes("coop_manager");
+  if (!active(u) || [...users.values()].some((v) => v.tenant === tenant && v.user.id !== u.id && v.user.org_ref === u.org_ref && active(v.user))) return null;
+  return problem(409, "accounts.last_representative", "HTX sẽ không còn người duyệt kết quả lô");
+}
 export const nativeAccountRoutes: Route[] = [
   { method: "GET", pattern: /^\/v1\/accounts\/htx-users$/, handler: (ctx) => guard(ctx) ?? json({ items: [...users.values()].filter((v) => v.tenant === ctx.persona.me.tenant_id).map((v) => v.user) }, 200, headers) },
   { method: "GET", pattern: /^\/v1\/accounts\/htx-users\/([\w-]+)$/, handler: (ctx) => {
@@ -57,6 +65,7 @@ export const nativeAccountRoutes: Route[] = [
     if ([...users.values()].some((v) => v.user.id !== u.id && v.user.phone === input.phone)) return problem(409, "accounts.phone_taken", "SĐT đã được dùng cho tài khoản khác");
     const orgChanged = main !== "platform_admin" && input.cooperative_ref !== u.org_ref;
     if (u.id === ctx.persona.me.actor_ref && orgChanged) return problem(403, "accounts.self_action", "Không tự đổi HTX của chính mình");
+    if (orgChanged) { const last = lastRepresentative(ctx, found.tenant, u); if (last) return last; }
     const member = main === "coop_manager" ? (typeof input.also_member === "boolean" ? input.also_member : (u.roles ?? []).includes("htx_member")) : false;
     const next: AccountsUser = { ...u, first_name: input.full_name.trim(), last_name: "", phone: input.phone.trim(), email: typeof input.email === "string" ? input.email : u.email,
       org_ref: main === "platform_admin" ? null : String(input.cooperative_ref), roles: main === "coop_manager" && member ? ["coop_manager", "htx_member"] : [main] };
@@ -70,6 +79,7 @@ export const nativeAccountRoutes: Route[] = [
     if (found.user.id === ctx.persona.me.actor_ref) return problem(403, "accounts.self_action", "Không được tự khóa, mở khóa tài khoản của chính mình");
     const lock = ctx.params[1] === "lock";
     if (found.user.enabled !== lock) return problem(409, "accounts.state_conflict", lock ? "Tài khoản đã bị khóa." : "Tài khoản đang hoạt động.");
+    if (lock) { const last = lastRepresentative(ctx, found.tenant, found.user); if (last) return last; }
     const next: AccountsUser = { ...found.user, enabled: !lock, lock_cause: lock ? "manual" : null };
     users.set(next.id, { tenant: found.tenant, user: next });
     return json({ user: next, replayed: false }, 200, headers);

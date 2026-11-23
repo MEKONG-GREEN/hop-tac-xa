@@ -12,8 +12,9 @@ export type AccountRevision = AdminPaths["/v1/accounts/htx-users/{id}/revisions"
 export interface AccountsClient {
   list(): Promise<AccountsUser[]>;
   create(body: AccountInput, key: string): Promise<{ user: AccountsUser; temporary_password: string | null }>;
-  update(id: string, body: AccountRevision, key: string): Promise<{ user: AccountsUser }>;
-  setLocked(id: string, lock: boolean, key: string): Promise<{ user: AccountsUser }>;
+  /** `confirmNoRepresentative`: đã xác nhận FN-TK-02/EX-04 (chỉ Admin — Đại diện HTX không khóa/chuyển Đại diện HTX). */
+  update(id: string, body: AccountRevision, key: string, confirmNoRepresentative?: boolean): Promise<{ user: AccountsUser }>;
+  setLocked(id: string, lock: boolean, key: string, confirmNoRepresentative?: boolean): Promise<{ user: AccountsUser }>;
   /** AH-281: kênh SMS bật → gửi mã OTP (phone_hint); tắt → mật khẩu tạm hiển thị đúng một lần. */
   resetPassword(id: string, key: string): Promise<PasswordReset>;
 }
@@ -24,9 +25,12 @@ export function accountsClient(scope: AccountsScope, api: ApiClient, adminApi: A
     return {
       list: async () => (await unwrap(adminApi.GET("/v1/accounts/htx-users"))).items,
       create: (body, key) => unwrap(adminApi.POST("/v1/accounts/htx-users", { params: { header: { "Idempotency-Key": key } }, body })),
-      update: (id, body, key) => unwrap(adminApi.POST("/v1/accounts/htx-users/{id}/revisions", { params: { path: { id }, header: { "Idempotency-Key": key } }, body })),
-      setLocked: (id, lock, key) =>
-        unwrap(adminApi.POST(lock ? "/v1/accounts/htx-users/{id}/lock" : "/v1/accounts/htx-users/{id}/unlock", { params: { path: { id }, header: { "Idempotency-Key": key } } })),
+      update: (id, body, key, confirm) =>
+        unwrap(adminApi.POST("/v1/accounts/htx-users/{id}/revisions", { params: { path: { id }, header: { "Idempotency-Key": key }, ...(confirm ? { query: { confirm_no_representative: true } } : {}) }, body })),
+      setLocked: (id, lock, key, confirm) =>
+        lock
+          ? unwrap(adminApi.POST("/v1/accounts/htx-users/{id}/lock", { params: { path: { id }, header: { "Idempotency-Key": key }, ...(confirm ? { query: { confirm_no_representative: true } } : {}) } }))
+          : unwrap(adminApi.POST("/v1/accounts/htx-users/{id}/unlock", { params: { path: { id }, header: { "Idempotency-Key": key } } })),
       resetPassword: (id, key) => unwrap(adminApi.POST("/v1/accounts/htx-users/{id}/password-reset", { params: { path: { id }, header: { "Idempotency-Key": key } } })),
     };
   }
