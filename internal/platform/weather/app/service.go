@@ -36,7 +36,7 @@ type Service struct {
 	// SecretKey: khóa AES-256 mã hóa khóa API (AG_WEATHER_SECRET_KEY). nil → không lưu được khóa API (fail-closed),
 	// vẫn dùng được nhà cung cấp không cần khóa.
 	SecretKey []byte `pii:"true"`
-	AllowFake bool // nhà cung cấp giả chỉ ngoài production
+	AllowFake bool   // nhà cung cấp giả chỉ ngoài production
 }
 
 func (s *Service) now() time.Time {

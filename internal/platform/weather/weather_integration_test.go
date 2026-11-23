@@ -38,8 +38,10 @@ func TestMain(m *testing.M) { os.Exit(pgtest.Run(m)) }
 
 type coops struct{ sites []coopport.CooperativeSite }
 
-func (c coops) ByUnit(context.Context, []string) ([]coopport.UnitCooperatives, error) { return nil, nil }
-func (c coops) Active(context.Context) ([]coopport.CooperativeSite, error)            { return c.sites, nil }
+func (c coops) ByUnit(context.Context, []string) ([]coopport.UnitCooperatives, error) {
+	return nil, nil
+}
+func (c coops) Active(context.Context) ([]coopport.CooperativeSite, error) { return c.sites, nil }
 func (c coops) Centroids(context.Context, []uuid.UUID) (map[uuid.UUID]coopport.CoopCentroid, error) {
 	return nil, nil
 }
@@ -292,7 +294,7 @@ func TestWeather_FNTT01_FNTT02_HomNayVaLich(t *testing.T) {
 	if r.status != 200 || r.body["status"] != "no_data" || r.body["message"] != "Chưa có số liệu thời tiết" || r.body["date"] != "2026-11-22" || lun["label"] != "14/10" {
 		t.Fatalf("chưa có số liệu: %d %s", r.status, r.raw)
 	}
-	f.run() // 22/11 10:00 → lưu số liệu ngày 22/11 (trước 23:30)
+	f.run()                                      // 22/11 10:00 → lưu số liệu ngày 22/11 (trước 23:30)
 	f.clk.Advance(13*time.Hour + 45*time.Minute) // 23:45 — lần lấy sau 23:30 không thay số liệu ngày 22/11
 	f.prov.Hourless = true
 	f.run()
