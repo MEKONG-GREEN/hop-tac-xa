@@ -259,6 +259,11 @@ export const householdSeasonRoutes: Route[] = [{
     const coop = findCoop(params[0]!);
     if (!coop || (!hasRole(persona, "platform_admin") && persona.me.org?.ref !== coop.api.ref) || !householdMockRows(coop).some((h) => h.household_ref === params[1])) return problem(404, "cropcycle.household_not_found", "Không tìm thấy nông hộ");
     const b = body as components["schemas"]["SeasonSchedulePreviewInput"];
+    if (b.self_made_plan) {
+      if (householdMockSOPs(coop.api.ref, b.crop_code, b.variety_code).length) return problem(409, "cropcycle.sop_available", "Loại cây đã có SOP đang áp dụng");
+      const own = applyPlanChanges({ template_ref: uuidv7(), version_id: uuidv7(), version_no: 1, crop_code: b.crop_code, anchor_name: "Ngày xuống giống", self_made: true, stages: b.self_made_plan.stages, steps: b.self_made_plan.steps }, b.plan_changes);
+      return "status" in own ? planProblem(own) : json(mockPlan(own, b.anchor_date, null));
+    }
     const chosen = householdMockSOPs(coop.api.ref, b.crop_code, b.variety_code).find((s) => s.version.id === b.sop_version_id);
     if (!chosen || !b.variety_code || typeof b.area_ha !== "string" || !/^(0|[1-9][0-9]{0,9})(\.[0-9]{1,2})?$/.test(b.area_ha) || scaledArea(b.area_ha) <= 0n || !/^\d{4}-\d{2}-\d{2}$/.test(b.anchor_date) || !Number.isFinite(Date.parse(b.anchor_date))) return validation([{ field: "sop_version_id", reason: "Chọn giống, SOP, diện tích và mốc gốc hợp lệ" }]);
     const snapshot = applyPlanChanges({ template_ref: chosen.template.ref, version_id: chosen.version.id, version_no: chosen.version.version_no, crop_code: b.crop_code, anchor_name: chosen.template.anchor_name, stages: chosen.version.stages, steps: chosen.version.steps }, b.plan_changes);
@@ -297,6 +302,18 @@ export const householdSeasonRoutes: Route[] = [{
     if (b.copy_from_season_ref && !source) return problem(404, "cropcycle.season_not_found", "Không tìm thấy vụ nguồn");
     if (source && (source.crop_code !== b.crop_code || source.variety_code !== b.variety_code)) return validation([{ field: "variety_code", reason: "Sao chép giữ giống của vụ trước" }]);
     const choices = source ? [] : householdMockSOPs(coop.api.ref, b.crop_code, b.variety_code);
+    // AH-162: quy trình tự tạo khi chưa có SOP đang áp dụng.
+    if (b.self_made_plan) {
+      if (choices.length) return problem(409, "cropcycle.sop_available", "Loại cây đã có SOP đang áp dụng");
+      const own = applyPlanChanges({ template_ref: uuidv7(), version_id: uuidv7(), version_no: 1, crop_code: b.crop_code, name: "Quy trình tự tạo", anchor_name: b.self_made_anchor || "Ngày xuống giống", self_made: true, stages: b.self_made_plan.stages, steps: b.self_made_plan.steps }, b.plan_changes);
+      if ("status" in own) return planProblem(own);
+      const made: Season = { season_ref: uuidv7(), entry_kind: "household", household_ref: household.household_ref, cooperative_ref: coop.api.ref, commune_code: household.commune_code,
+        crop_code: b.crop_code, season_code: b.season_code, season_year: b.season_year, variety_code: b.variety_code, area_ha: b.area_ha, anchor_date: b.anchor_date,
+        expected_harvest_date: null, harvest_open_date: null, status: "open", current_event_id: uuidv7(), version: 1, opened_by: persona.me.actor_ref, opened_at: nowIso(),
+        gps: b.gps ?? { source: "denied" }, gps_missing: b.gps?.lon == null || b.gps?.lat == null, sop_snapshot: own, copied_from: null };
+      seasons.push(made); allocateHouseholdMock(coop.api.ref, household.household_ref, b.area_ha);
+      return json({ season: made }, 201);
+    }
     if (!source && !choices.length) return problem(422, "cropcycle.no_active_sop_for_crop", "Chưa có SOP đang áp dụng; liên hệ Admin");
     const chosen = source ? undefined : b.sop_version_id ? choices.find((s) => s.version.id === b.sop_version_id) : choices.length === 1 ? choices[0] : undefined;
     if (!source && !chosen) return validation([{ field: "sop_version_id", reason: "Chọn SOP đang áp dụng phù hợp" }]);

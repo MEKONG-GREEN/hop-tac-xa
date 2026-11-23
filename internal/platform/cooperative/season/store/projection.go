@@ -94,7 +94,7 @@ func RefreshYield(ctx context.Context, tx pgx.Tx, season uuid.UUID) error {
 	         s.variety_code, s.status, s.area_ha, s.expected_yield_t_per_ha,
 	         CASE WHEN s.expected_yield_t_per_ha IS NULL THEN NULL ELSE round(s.area_ha * s.expected_yield_t_per_ha * 1000, 3) END,
 	         s.harvest_id, h.mass_kg, h.yield_t_per_ha, h.harvest_date,
-	         v.step_count,
+	         COALESCE(v.step_count, 0),
 	         (SELECT count(*) FROM jsonb_array_elements(v.steps) e WHERE (e->>'mandatory')::boolean),
 	         (SELECT count(DISTINCT (e->>'seq')::int) FROM jsonb_array_elements(v.steps) e
 	            WHERE EXISTS (SELECT 1 FROM pf_coop.farm_log_current l WHERE l.season_ref = s.season_ref
@@ -105,7 +105,8 @@ func RefreshYield(ctx context.Context, tx pgx.Tx, season uuid.UUID) error {
 	         (SELECT count(*) FROM pf_coop.farm_log_current l WHERE l.season_ref = s.season_ref AND l.status = 'approved'),
 	         (SELECT count(*) FROM pf_coop.farm_log_current l WHERE l.season_ref = s.season_ref AND l.status = 'pending')
 	  FROM pf_coop.season_current s
-	  JOIN pf_coop.sop_version v ON v.tenant_id = s.tenant_id AND v.id = s.sop_version_id
+	  -- Vụ theo hộ có quy trình tự tạo (AH-162) không có phiên bản SOP master: đếm việc từ bản chụp ở bước dưới.
+	  LEFT JOIN pf_coop.sop_version v ON v.tenant_id = s.tenant_id AND v.id = s.sop_version_id
 	  LEFT JOIN pf_coop.harvest_declaration h ON h.tenant_id = s.tenant_id AND h.id = s.harvest_id
 	  WHERE s.season_ref = $1::uuid
 	  ON CONFLICT (tenant_id, season_ref) DO UPDATE SET

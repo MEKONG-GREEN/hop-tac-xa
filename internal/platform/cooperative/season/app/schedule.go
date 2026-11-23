@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -21,6 +22,8 @@ type SchedulePreviewInput struct {
 	AnchorDate                    time.Time
 	// PlanChanges: tùy chỉnh quy trình trước khi lưu vụ (AH-113 AC1), áp theo thứ tự.
 	PlanChanges []domain.PlanChange
+	// SelfMade: quy trình tự tạo đang soạn (AH-162) thay cho SOP.
+	SelfMade *domain.Content
 }
 
 type ScheduleResult struct {
@@ -39,7 +42,14 @@ func (s *Service) PreviewHouseholdSchedule(ctx context.Context, in SchedulePrevi
 	if err != nil {
 		return ScheduleResult{}, err
 	}
-	if in.VarietyCode == "" || in.SOPVersionID == uuid.Nil {
+	if in.SelfMade != nil {
+		probe := HouseholdOpenInput{SelfMade: in.SelfMade, SOPVersionID: in.SOPVersionID}
+		if err := normalizeSelfMade(&probe); err != nil {
+			return ScheduleResult{}, err
+		}
+		in.SelfMade = probe.SelfMade
+	}
+	if in.VarietyCode == "" || (in.SOPVersionID == uuid.Nil && in.SelfMade == nil) {
 		return ScheduleResult{}, problem.Validation.WithField("sop_version_id", "chọn giống và SOP trước khi lập kế hoạch")
 	}
 	if _, err := domain.ParseHouseholdSeasonArea(in.AreaHa); err != nil {
@@ -66,11 +76,24 @@ func (s *Service) PreviewHouseholdSchedule(ctx context.Context, in SchedulePrevi
 		if !h.Active {
 			return ErrHouseholdInactive
 		}
-		_, v, err := householdSOP(ctx, tx, in.CooperativeRef, in.CropCode, in.VarietyCode, in.SOPVersionID)
-		if err != nil {
-			return err
+		base := domain.SeasonSnapshot{}
+		versionID := uuid.Nil
+		if in.SelfMade != nil {
+			// AH-162: chỉ khi chưa có SOP đang áp dụng cho loại cây/giống.
+			if _, _, err := householdSOP(ctx, tx, in.CooperativeRef, in.CropCode, in.VarietyCode, uuid.Nil); err == nil {
+				return ErrSOPAvailable
+			} else if !errors.Is(err, ErrHouseholdSOP) {
+				return err
+			}
+			base.Stages, base.Steps = in.SelfMade.Stages, in.SelfMade.Steps
+		} else {
+			_, v, err := householdSOP(ctx, tx, in.CooperativeRef, in.CropCode, in.VarietyCode, in.SOPVersionID)
+			if err != nil {
+				return err
+			}
+			base.Stages, base.Steps, versionID = v.Stages, v.Steps, v.ID
 		}
-		snap, err := applyPlanChanges(domain.SeasonSnapshot{Stages: v.Stages, Steps: v.Steps}, in.PlanChanges)
+		snap, err := applyPlanChanges(base, in.PlanChanges)
 		if err != nil {
 			return err
 		}
@@ -78,7 +101,7 @@ func (s *Service) PreviewHouseholdSchedule(ctx context.Context, in SchedulePrevi
 		if err != nil {
 			return fieldProblem(err)
 		}
-		result = ScheduleResult{SchedulePlan: plan, SOPVersionID: v.ID}
+		result = ScheduleResult{SchedulePlan: plan, SOPVersionID: versionID}
 		return nil
 	})
 	return result, err

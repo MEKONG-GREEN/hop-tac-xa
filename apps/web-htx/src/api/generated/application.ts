@@ -25088,6 +25088,13 @@ export interface components {
             channel: "app" | "web";
             /** @description Tùy chỉnh quy trình trước khi lưu vụ (AH-113), áp theo thứ tự; SOP chuẩn không đổi */
             plan_changes?: components["schemas"]["HouseholdPlanChange"][];
+            /** @description AH-162: quy trình tự tạo (cùng cấu trúc SOP) khi loại cây/giống chưa có SOP đang áp dụng; chỉ gắn vụ này (KH-12). Kiểm như soạn SOP (thứ tự liên tục, Từ ≤ Đến). Đã có SOP → 409 cropcycle.sop_available. Không có việc Thu hoạch thì không có ngày thu hoạch dự kiến. */
+            self_made_plan?: {
+                stages: components["schemas"]["CropSOPStage"][];
+                steps: components["schemas"]["CropSOPStep"][];
+            };
+            /** @description Tên mốc gốc của quy trình tự tạo; mặc định Ngày xuống giống */
+            self_made_anchor?: string;
             /**
              * Format: uuid
              * @description AH-139: sao chép giống và quy trình (kèm tùy chỉnh) từ vụ trước của chính hộ này (kể cả vụ đang canh tác). Loại cây, giống, SOP lấy theo vụ nguồn; nếu gửi thì phải khớp (422). Vụ nguồn ngoài phạm vi → 404 cropcycle.season_not_found. Vẫn kiểm diện tích còn lại và mốc gốc.
@@ -25105,6 +25112,8 @@ export interface components {
             anchor_name: string;
             stages: components["schemas"]["CropSOPStage"][];
             steps: components["schemas"]["CropSOPStep"][];
+            /** @description Quy trình tự tạo của riêng vụ (AH-162); template_ref/version_id là mã riêng của vụ, không có SOP master */
+            self_made?: boolean;
             /** @description Lớp tùy chỉnh của riêng vụ (AH-113): việc tự thêm, sửa ngày/vật tư, việc bỏ qua, thứ tự hiển thị. Lịch và checklist đã áp lớp này. */
             custom?: {
                 added?: components["schemas"]["CropSOPStep"][];
@@ -25168,11 +25177,17 @@ export interface components {
             active_area_ha?: components["schemas"]["Decimal"];
             land_area_ha?: components["schemas"]["Decimal"];
         };
+        /** @description Cần sop_version_id hoặc self_made_plan (AH-162) */
         SeasonSchedulePreviewInput: {
             crop_code: string;
             variety_code: string;
             /** Format: uuid */
-            sop_version_id: string;
+            sop_version_id?: string;
+            /** @description AH-162: quy trình tự tạo (cùng cấu trúc SOP) khi loại cây/giống chưa có SOP đang áp dụng; chỉ gắn vụ này (KH-12). Kiểm như soạn SOP (thứ tự liên tục, Từ ≤ Đến). Đã có SOP → 409 cropcycle.sop_available. Không có việc Thu hoạch thì không có ngày thu hoạch dự kiến. */
+            self_made_plan?: {
+                stages: components["schemas"]["CropSOPStage"][];
+                steps: components["schemas"]["CropSOPStep"][];
+            };
             area_ha: components["schemas"]["HouseholdSeasonAreaInput"];
             /** Format: date */
             anchor_date: string;

@@ -21,6 +21,7 @@ import { householdAreaError, requestGPS, useSeasonMetadata, useSopChoices } from
 import { HouseholdChecklist } from "./HouseholdChecklist";
 import { SeasonPlanEditor, type PlanChange, type PlanStage } from "./SeasonPlanEditor";
 import { RunningSeasonPlan } from "./SeasonPlanCustomizer";
+import { SelfMadePlanBuilder, type SelfMadePlan } from "./SelfMadePlanBuilder";
 import type { CalendarPrefill } from "./seasonCalendarModel";
 
 export { householdAreaError } from "./seasonOptions";
@@ -55,18 +56,21 @@ export function HouseholdSeasonsDialog({ coopRef, household, calendarPrefill, on
   // AH-113 AC1: tùy chỉnh quy trình trước khi lưu vụ — gom lại, gửi kèm xem trước và mở vụ.
   const [planChanges, setPlanChanges] = useState<PlanChange[]>([]);
   const [customInfo, setCustomInfo] = useState<{ skipped: number[]; steps: Record<number, { window?: S["CropSOPWindow"] | null; materials?: S["CropSOPMaterial"][] | null }> }>({ skipped: [], steps: {} });
-  const resetPlan = () => { setPlanChanges([]); setCustomInfo({ skipped: [], steps: {} }); };
+  // AH-162: quy trình tự tạo khi loại cây/giống chưa có SOP đang áp dụng.
+  const [selfMadeMode, setSelfMadeMode] = useState(false);
+  const [selfMade, setSelfMade] = useState<{ plan: SelfMadePlan; anchor: string } | null>(null);
+  const resetPlan = () => { setPlanChanges([]); setCustomInfo({ skipped: [], steps: {} }); setSelfMadeMode(false); setSelfMade(null); };
   const path = { ref: coopRef, household_ref: household.household_ref };
   const list = usePagedList((cursor) => unwrap(api.GET("/v1/cooperatives/{ref}/households/{household_ref}/seasons", { params: { path, query: { cursor, limit: 20 } } })), [api, coopRef, household.household_ref, revision]);
   const metadata = useSeasonMetadata(api);
   const choices = useSopChoices(api, metadata.data, coopRef, crop, variety);
   const selected = version || (choices.data?.length === 1 ? choices.data[0]?.id ?? "" : "");
   const planReady = !copyFrom && opening && canCreate && matrixAllows(principal, "KHMV-FN-04", "C") && !choices.loading &&
-    !!crop && !!variety && !!selected && !householdAreaError(area) && /^\d{4}-\d{2}-\d{2}$/.test(anchor);
+    !!crop && !!variety && (selfMadeMode ? !!selfMade : !!selected) && !householdAreaError(area) && /^\d{4}-\d{2}-\d{2}$/.test(anchor);
   const preview = useAsync(async () => planReady ? unwrap(api.POST("/v1/cooperatives/{ref}/households/{household_ref}/season-plan-preview", {
     params: { path, header: { "Idempotency-Key": newIdempotencyKey() } },
-    body: { crop_code: crop, variety_code: variety, sop_version_id: selected, area_ha: area, anchor_date: anchor, plan_changes: planChanges },
-  })) : null, [api, coopRef, household.household_ref, planReady, crop, variety, selected, area, anchor, planChanges]);
+    body: { crop_code: crop, variety_code: variety, ...(selfMade ? { self_made_plan: selfMade.plan } : { sop_version_id: selected }), area_ha: area, anchor_date: anchor, plan_changes: planChanges },
+  })) : null, [api, coopRef, household.household_ref, planReady, crop, variety, selected, area, anchor, planChanges, selfMade]);
   const baseSteps = choices.data?.find((v) => v.id === selected)?.steps ?? [];
   const openStages: PlanStage[] = (preview.data?.stages ?? []).map((s) => ({ seq: s.seq, name: s.name, tasks: s.steps.map((t) => ({
     seq: t.seq, stage_seq: t.stage_seq, name: t.name, custom: t.custom, from_date: t.from_date, to_date: t.to_date, undated: t.undated,
@@ -77,7 +81,7 @@ export function HouseholdSeasonsDialog({ coopRef, household, calendarPrefill, on
     const next = [...planChanges, change];
     const plan = await unwrap(api.POST("/v1/cooperatives/{ref}/households/{household_ref}/season-plan-preview", {
       params: { path, header: { "Idempotency-Key": newIdempotencyKey() } },
-      body: { crop_code: crop, variety_code: variety, sop_version_id: selected, area_ha: area, anchor_date: anchor, plan_changes: next },
+      body: { crop_code: crop, variety_code: variety, ...(selfMade ? { self_made_plan: selfMade.plan } : { sop_version_id: selected }), area_ha: area, anchor_date: anchor, plan_changes: next },
     }));
     setCustomInfo((info) => {
       const steps = { ...info.steps };
@@ -103,7 +107,8 @@ export function HouseholdSeasonsDialog({ coopRef, household, calendarPrefill, on
     event.preventDefault();
     const invalid = householdAreaError(area);
     if (invalid) { setInputError(invalid); return; }
-    if (!selected) { setInputError("Chọn SOP đang áp dụng. Nếu chưa có, vui lòng liên hệ Admin."); return; }
+    if (selfMadeMode && !selfMade) { setInputError("Hoàn tất quy trình tự tạo (giai đoạn, việc, ngày hợp lệ)."); return; }
+    if (!selfMadeMode && !selected) { setInputError("Chọn SOP đang áp dụng, hoặc tự tạo quy trình nếu loại cây chưa có SOP."); return; }
     if (typeof navigator !== "undefined" && navigator.onLine === false) { setInputError("Mở vụ cần mạng. Dữ liệu form được giữ lại để thử lại."); return; }
     setBusy(true); setProblem(null); setInputError(null);
     try {
@@ -111,7 +116,7 @@ export function HouseholdSeasonsDialog({ coopRef, household, calendarPrefill, on
       setGPS(point);
       const result = await unwrap(api.POST("/v1/cooperatives/{ref}/households/{household_ref}/seasons", {
         params: { path, header: { "Idempotency-Key": key } },
-        body: { crop_code: crop, season_code: seasonCode, season_year: Number(year), variety_code: variety, area_ha: area, anchor_date: anchor, sop_version_id: selected, gps: point, channel: "web", plan_changes: planChanges, copy_from_season_ref: copyFrom?.season_ref ?? null },
+        body: { crop_code: crop, season_code: seasonCode, season_year: Number(year), variety_code: variety, area_ha: area, anchor_date: anchor, ...(selfMade ? { self_made_plan: selfMade.plan, self_made_anchor: selfMade.anchor } : { sop_version_id: selected }), gps: point, channel: "web", plan_changes: planChanges, copy_from_season_ref: copyFrom?.season_ref ?? null },
       }));
       setDetail(result.season); setOpening(false); setRevision((v) => v + 1); onSaved(); resetPlan(); setCopyFrom(null);
       setArea(""); setKey(newIdempotencyKey()); setGPS(null);
@@ -142,20 +147,24 @@ export function HouseholdSeasonsDialog({ coopRef, household, calendarPrefill, on
         <label className="field">Mùa vụ<select className="select" required value={seasonCode} onChange={(e) => { setSeasonCode(e.target.value); edit(); }}><option value="">Chọn mùa vụ</option>{metadata.data?.seasons.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}</select></label>
         <label className="field">Năm<input className="input" required type="number" min={2000} max={2100} value={year} onChange={(e) => { setYear(e.target.value); edit(); }} /></label>
         <label className="field">Diện tích vụ (ha)<input className="input" required inputMode="decimal" value={area} onChange={(e) => { setArea(e.target.value); edit(); }} placeholder="Ví dụ: 0.25" /></label>
-        {!copyFrom ? <>
+        {!copyFrom && !selfMadeMode ? <>
         <label className="field">SOP đang áp dụng<select className="select" required value={selected} onChange={(e) => { setVersion(e.target.value); resetPlan(); edit(); }}><option value="">Chọn SOP</option>{choices.data?.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}</select></label>
         <button type="button" className="btn btn-o btn-sm" onClick={() => { choices.reload(); setVersion(""); resetPlan(); edit(); }}>Tải lại SOP</button>
         </> : null}
         <label className="field">{copyFrom?.sop_snapshot.anchor_name || choices.data?.find((v) => v.id === selected)?.anchor || "Mốc gốc"}<input className="input" required type="date" value={anchor} onChange={(e) => { setAnchor(e.target.value); edit(); }} /></label>
         {copyFrom ? null : !planReady ? <p>Chọn giống, SOP, diện tích và mốc gốc để xem kế hoạch.</p> : preview.loading ? <Loading label="Đang tính kế hoạch…" /> : preview.error ? <ProblemAlert problem={preview.error} onRetry={preview.reload} /> : preview.data ? <SeasonPlan plan={preview.data} /> : null}
         <p className="small">Bạn tự chọn mốc gốc. Khi lưu, trình duyệt hỏi quyền vị trí; từ chối vẫn mở vụ được và ghi “Thiếu GPS”.</p>
-        <button className="btn btn-p" disabled={metadata.loading || choices.loading || !selected || (planReady && (preview.loading || !!preview.error))} type="submit">{busy ? "Đang lưu…" : "Lưu vụ"}</button>
+        <button className="btn btn-p" disabled={metadata.loading || choices.loading || (selfMadeMode ? !selfMade : !selected) || (planReady && (preview.loading || !!preview.error))} type="submit">{busy ? "Đang lưu…" : "Lưu vụ"}</button>
       </fieldset>
       {inputError ? <p role="alert">{inputError}</p> : null}
       {problem ? <ProblemAlert problem={problem} /> : null}
       {metadata.error ? <ProblemAlert problem={metadata.error} onRetry={metadata.reload} /> : null}
       {choices.error ? <ProblemAlert problem={choices.error} onRetry={choices.reload} /> : null}
-      {!choices.loading && crop && variety && choices.data?.length === 0 ? <p role="status">Chưa có SOP đang áp dụng phù hợp. Vui lòng liên hệ Admin.</p> : null}
+      {!copyFrom && !choices.loading && crop && variety && choices.data?.length === 0 ? <div role="status" className="stack">
+        <p>Chưa có SOP đang áp dụng phù hợp. Bạn có thể tự tạo quy trình chỉ cho vụ này, hoặc liên hệ Admin để có SOP chung.</p>
+        {!selfMadeMode ? <button type="button" className="btn btn-o btn-sm" onClick={() => { setSelfMadeMode(true); edit(); }}>Tự tạo quy trình</button> : null}
+      </div> : null}
+      {selfMadeMode && !copyFrom ? <SelfMadePlanBuilder onChange={(plan, anchorName) => { setSelfMade(plan ? { plan, anchor: anchorName } : null); setPlanChanges([]); edit(); }} /> : null}
     </form> : null}
     {opening && planReady && preview.data ? <SeasonPlanEditor stages={openStages} lookup={openLookup} onChange={changeOpening} disabled={busy} /> : null}
     {list.error ? <ProblemAlert problem={list.error} onRetry={list.reload} /> : null}
