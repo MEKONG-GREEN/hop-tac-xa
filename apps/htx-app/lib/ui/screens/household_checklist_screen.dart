@@ -227,87 +227,40 @@ class _HouseholdChecklistScreenState extends State<HouseholdChecklistScreen> {
   Future<void> _void(HouseholdJson record) async {
     final untick = record['state'] == 'done';
     final key = _ids.newId();
-    final reason = TextEditingController();
-    String? error;
-    var busy = false;
     final ok = await showDialog<bool>(
       context: context,
-      builder: (c) => StatefulBuilder(
-        builder: (c, set) => AlertDialog(
-          title: Text(untick ? 'Bỏ tích việc đã xong' : 'Xóa bản ghi'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '${untick ? 'Nếu đây là bản ghi duy nhất, việc trở về chưa xong. ' : ''}Bản ghi bị ẩn, không xóa hẳn; lịch sử vẫn xem được.',
-              ),
-              TextField(
-                key: const ValueKey('void-reason'),
-                controller: reason,
-                maxLength: 500,
-                decoration: InputDecoration(
-                  labelText: 'Lý do (ít nhất 10 ký tự)',
-                  errorText: error,
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: busy ? null : () => Navigator.pop(c, false),
-              child: const Text('Hủy'),
-            ),
-            FilledButton(
-              onPressed: busy
-                  ? null
-                  : () async {
-                      if (reason.text.trim().length < 10) {
-                        set(() => error = 'Nhập lý do (ít nhất 10 ký tự).');
-                        return;
-                      }
-                      set(() {
-                        busy = true;
-                        error = null;
-                      });
-                      try {
-                        final res = await widget.service.voidTask(
-                          widget.coop,
-                          widget.household,
-                          _season,
-                          '${record['log_ref']}',
-                          '${record['id']}',
-                          reason.text.trim(),
-                          key,
-                        );
-                        if (!mounted) return;
-                        setState(() {
-                          _updated = Map<String, Object?>.from(
-                            res['checklist'] as Map,
-                          );
-                          _load = widget.service.checklist(
-                            widget.coop,
-                            widget.household,
-                            _season,
-                          );
-                        });
-                        if (c.mounted) Navigator.pop(c, true);
-                      } catch (e) {
-                        set(() {
-                          busy = false;
-                          error = e is ApiException
-                              ? (e.detail ?? 'Không lưu được. Tải lại rồi thử.')
-                              : 'Cần mạng để xóa hoặc bỏ tích. Thử lại khi có mạng.';
-                        });
-                      }
-                    },
-              child: Text(untick ? 'Bỏ tích' : 'Xóa'),
-            ),
-          ],
-        ),
+      builder: (_) => _VoidDialog(
+        untick: untick,
+        submit: (reason) async {
+          try {
+            final res = await widget.service.voidTask(
+              widget.coop,
+              widget.household,
+              _season,
+              '${record['log_ref']}',
+              '${record['id']}',
+              reason,
+              key,
+            );
+            if (mounted) {
+              setState(() {
+                _updated = Map<String, Object?>.from(res['checklist'] as Map);
+                _load = widget.service.checklist(
+                  widget.coop,
+                  widget.household,
+                  _season,
+                );
+              });
+            }
+            return null;
+          } catch (e) {
+            return e is ApiException
+                ? (e.detail ?? 'Không lưu được. Tải lại rồi thử.')
+                : 'Cần mạng để xóa hoặc bỏ tích. Thử lại khi có mạng.';
+          }
+        },
       ),
     );
-    reason.dispose();
     if (ok == true && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(untick ? 'Đã bỏ tích.' : 'Đã xóa bản ghi.')),
@@ -614,4 +567,85 @@ class _HouseholdChecklistScreenState extends State<HouseholdChecklistScreen> {
       ],
     );
   }
+}
+
+/// Hộp thoại lý do bỏ tích/xóa (AH-126). Tự giữ controller để không dùng sau khi
+/// đã hủy trong lúc hộp thoại đang đóng. [submit] trả câu lỗi, hoặc null khi xong.
+class _VoidDialog extends StatefulWidget {
+  const _VoidDialog({required this.untick, required this.submit});
+  final bool untick;
+  final Future<String?> Function(String reason) submit;
+  @override
+  State<_VoidDialog> createState() => _VoidDialogState();
+}
+
+class _VoidDialogState extends State<_VoidDialog> {
+  final _reason = TextEditingController();
+  String? _error;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _reason.dispose();
+    super.dispose();
+  }
+
+  Future<void> _confirm() async {
+    final reason = _reason.text.trim();
+    if (reason.length < 10) {
+      setState(() => _error = 'Nhập lý do (ít nhất 10 ký tự).');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final error = await widget.submit(reason);
+    if (!mounted) return;
+    if (error == null) {
+      Navigator.pop(context, true);
+      return;
+    }
+    setState(() {
+      _busy = false;
+      _error = error;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text(widget.untick ? 'Bỏ tích việc đã xong' : 'Xóa bản ghi'),
+    content: SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${widget.untick ? 'Nếu đây là bản ghi duy nhất, việc trở về chưa xong. ' : ''}Bản ghi bị ẩn, không xóa hẳn; lịch sử vẫn xem được.',
+          ),
+          TextField(
+            key: const ValueKey('void-reason'),
+            controller: _reason,
+            enabled: !_busy,
+            maxLength: 500,
+            decoration: InputDecoration(
+              labelText: 'Lý do (ít nhất 10 ký tự)',
+              errorText: _error,
+              errorMaxLines: 3,
+            ),
+          ),
+        ],
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: _busy ? null : () => Navigator.pop(context, false),
+        child: const Text('Hủy'),
+      ),
+      FilledButton(
+        onPressed: _busy ? null : _confirm,
+        child: Text(widget.untick ? 'Bỏ tích' : 'Xóa'),
+      ),
+    ],
+  );
 }
