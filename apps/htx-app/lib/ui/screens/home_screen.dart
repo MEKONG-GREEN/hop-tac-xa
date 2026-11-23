@@ -41,6 +41,9 @@ class HomeScreen extends ConsumerWidget {
             .then((_) => ref.invalidate(homeSummaryProvider));
     final s = summary.value;
     final today = ref.read(appControllerProvider).services?.crop.today();
+    final notice = ref.watch(
+      appControllerProvider.select((s) => s.services?.workingRole.notice),
+    );
     // Thông báo được chạm (kể cả trước khi mở khóa) → mở đúng màn hình.
     void consumeLink(String? link) {
       if (link == null) return;
@@ -283,6 +286,21 @@ class HomeScreen extends ConsumerWidget {
         child: ListView(
           padding: const EdgeInsets.all(12),
           children: [
+            if (notice != null)
+              // FN-TK-01/EX-03 (AH-222): vai vừa bị ngừng, còn một vai nên dùng
+              // luôn vai đó; giữ câu báo tới khi người dùng đóng.
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.info_outline),
+                  title: Text(notice),
+                  trailing: TextButton(
+                    onPressed: () => ref
+                        .read(appControllerProvider.notifier)
+                        .dismissWorkingRoleNotice(),
+                    child: const Text('Đóng'),
+                  ),
+                ),
+              ),
             summary.when(
               data: (s) => SyncCard(summary: s),
               loading: () => const Card(

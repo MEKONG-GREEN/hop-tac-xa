@@ -24,6 +24,7 @@ provides:
     - KNPeople
     - MailDirectory
     - OTPAdmin
+    - PasswordAgeReader
     - PasswordLogin
     - PasswordSetter
     - ProfileUpdater

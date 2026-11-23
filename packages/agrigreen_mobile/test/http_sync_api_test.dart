@@ -247,4 +247,31 @@ void main() {
       );
     },
   );
+
+  test('FN-TK-01/EX-03: 409 accounts.working_role_revoked → '
+      'WorkingRoleRevokedException', () async {
+    final api = HttpSyncApi(
+      baseUrl: 'https://api.test',
+      accessToken: () async => 'tok',
+      client: MockClient(
+        (_) async => http.Response.bytes(
+          utf8.encode(
+            jsonEncode({
+              'code': 'accounts.working_role_revoked',
+              'detail': WorkingRoleRevokedException.userMessage,
+            }),
+          ),
+          409,
+        ),
+      ),
+    );
+    await expectLater(
+      api.pull(limit: 1),
+      throwsA(
+        isA<WorkingRoleRevokedException>()
+            .having((e) => e.status, 'status', 409)
+            .having((e) => e.retriable, 'retriable', isFalse),
+      ),
+    );
+  });
 }

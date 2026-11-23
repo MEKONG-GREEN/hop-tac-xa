@@ -12,6 +12,8 @@ package app
 import (
 	"context"
 	"errors"
+	"net/http"
+	"time"
 	"unicode/utf8"
 
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/domain"
@@ -57,8 +59,39 @@ func validateFirstPassword(in LoginInput) error {
 	return nil
 }
 
+// Hạn của mật khẩu tạm (FN-TK-02/BR-03, AC-04 — AH-223): quá 72 giờ kể từ lúc cấp (tạo tài khoản hoặc đặt lại) mà
+// chưa đổi thì không đăng nhập được bằng mật khẩu đó. Người dùng lấy lại bằng "Quên mật khẩu?" (OTP qua SMS, FN-10)
+// hoặc nhờ người cấp tài khoản đặt lại (AH-281).
+const TemporaryPasswordLifespan = 72 * time.Hour
+
+// MsgTemporaryPasswordExpired là câu báo khi mật khẩu tạm đúng nhưng đã hết hạn.
+const MsgTemporaryPasswordExpired = `Mật khẩu tạm đã quá 72 giờ nên không còn dùng được. Dùng "Quên mật khẩu?" hoặc liên hệ người đã cấp tài khoản để được cấp lại.` //nolint:gosec // câu thông báo, không phải bí mật
+
+// ErrTemporaryPasswordExpired: mật khẩu tạm đúng nhưng quá hạn — không phát token, không đổi mật khẩu.
+var ErrTemporaryPasswordExpired = problem.New(http.StatusForbidden, "accounts.temporary_password_expired", "Mật khẩu tạm đã hết hạn")
+
+// temporaryPasswordExpired đọc lúc cấp mật khẩu tạm ở IAM. Không đọc được mốc (IAM không hỗ trợ hoặc không trả) thì coi
+// như đã hết hạn — đóng khi lỗi, không mở đường đăng nhập bằng mật khẩu tạm không rõ tuổi.
+func (s *Service) temporaryPasswordExpired(ctx context.Context, u port.User) (bool, error) {
+	reader, ok := s.Dir.(port.PasswordAgeReader)
+	if !ok {
+		return false, ErrDependency.WithDetail("Kho tài khoản không đọc được thời điểm cấp mật khẩu tạm")
+	}
+	at, err := reader.PasswordSetAt(ctx, u.ID)
+	if err != nil {
+		return false, dirErr(err)
+	}
+	return at.IsZero() || s.now().Sub(at) > TemporaryPasswordLifespan, nil
+}
+
 // firstPassword chạy khi mật khẩu tạm vừa được Keycloak xác nhận đúng (ErrAccountNotSetUp).
 func (s *Service) firstPassword(ctx context.Context, u port.User, in LoginInput) (LoginResult, string, error) {
+	// Kiểm hạn SAU khi mật khẩu tạm đã đúng: người không biết mật khẩu không dò được tài khoản nào có mật khẩu tạm.
+	if expired, err := s.temporaryPasswordExpired(ctx, u); err != nil {
+		return LoginResult{}, "dependency_error", err
+	} else if expired {
+		return LoginResult{}, "temporary_password_expired", ErrTemporaryPasswordExpired.WithDetail(MsgTemporaryPasswordExpired)
+	}
 	if in.NewPassword == "" && in.ConfirmPassword == "" {
 		return LoginResult{Status: LoginPasswordChangeRequired}, LoginPasswordChangeRequired, nil
 	}

@@ -7,11 +7,12 @@ import type { AccountsUser, Cooperative } from "@/api/types";
 import { useAuth } from "@/auth/AuthProvider";
 import { Dialog } from "@/components/Dialog";
 import { ProblemAlert } from "@/components/ProblemAlert";
-import { toApiProblem } from "@/lib/useAsync";
+import { toApiProblem, useAsync } from "@/lib/useAsync";
 
 import { accountsClient, type AccountRevision as Revision, type AccountsScope, type PasswordReset } from "./accountsClient";
 const ROLE_LABELS: Record<string, string> = { platform_admin: "Admin", coop_manager: "Đại diện HTX", htx_member: "Thành viên HTX" };
 const fullName = (u: AccountsUser) => `${u.last_name} ${u.first_name}`.trim();
+const LAST_REPRESENTATIVE = "accounts.last_representative";
 
 /**
  * AH-276 (FN-07): chi tiết, sửa, khóa / mở khóa tài khoản của Admin. Tên đăng nhập và vai chính chỉ đọc (AC-06);
@@ -27,37 +28,50 @@ export function NativeAccountDetail({ user, coops, onChanged, onClose, scope = "
   const roles = user.roles ?? [];
   const main = roles[0] ?? "";
   const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState<Revision>({ full_name: fullName(user), phone: user.phone ?? "", email: user.email ?? "", cooperative_ref: user.org_ref, also_member: roles.includes("htx_member") });
+  // FN-TK-02/BR-04 (AH-223): danh sách chỉ có SĐT đã che; chi tiết lấy SĐT đầy đủ (máy chủ ghi nhật ký truy cập).
+  const detail = useAsync(() => client.get(user.id), [user.id, scope]);
+  const full = detail.data?.id === user.id ? { ...user, phone: detail.data.phone } : null;
+  const toForm = (u: AccountsUser): Revision => ({ full_name: fullName(u), phone: u.phone ?? "", email: u.email ?? "", cooperative_ref: u.org_ref, also_member: (u.roles ?? []).includes("htx_member") });
+  const [form, setForm] = useState<Revision>(() => toForm(user));
   const [editKey, setEditKey] = useState(newIdempotencyKey);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<ApiProblem | null>(null);
   const [notice, setNotice] = useState("");
   const [confirmReset, setConfirmReset] = useState(false);
   const [reset, setReset] = useState<PasswordReset | null>(null);
+  // FN-TK-02/EX-04 (AH-223): máy chủ báo thao tác làm HTX không còn Đại diện HTX đang hoạt động → hỏi xác nhận.
+  const [confirmLast, setConfirmLast] = useState<"lock" | "save" | null>(null);
   const change = (patch: Partial<Revision>) => { setForm((f) => ({ ...f, ...patch })); setEditKey(newIdempotencyKey()); };
   const errors = problem ? fieldErrorMap(problem) : {};
   const coopName = coops.find((c) => c.ref === user.org_ref)?.name ?? "—";
 
-  const save = async (e: FormEvent) => {
-    e.preventDefault(); if (busy) return;
-    setBusy(true); setProblem(null); setNotice("");
+  // 409 accounts.last_representative → hộp xác nhận thay vì báo lỗi; bấm Tiếp tục gửi lại với khóa mới.
+  const failed = (err: unknown, retry: "lock" | "save") => {
+    const p = toApiProblem(err);
+    if (p.code === LAST_REPRESENTATIVE) setConfirmLast(retry);
+    else setProblem(p);
+  };
+  const save = async (e?: FormEvent, confirmed = false) => {
+    e?.preventDefault(); if (busy) return;
+    setBusy(true); setProblem(null); setNotice(""); setConfirmLast(null);
     try {
       const body: Revision = { full_name: form.full_name, phone: form.phone, email: form.email || undefined, cooperative_ref: main === "platform_admin" ? null : form.cooperative_ref };
       if (main === "coop_manager") body.also_member = form.also_member;
-      const res = await client.update(user.id, body, editKey);
+      // Lượt xác nhận là thao tác mới của người dùng: khóa Idempotency-Key mới.
+      const res = await client.update(user.id, body, confirmed ? newIdempotencyKey() : editKey, confirmed);
       setEditing(false); setEditKey(newIdempotencyKey());
       setNotice(res.user.org_ref !== user.org_ref ? "Đã lưu. Tài khoản phải đăng nhập lại và chỉ thấy dữ liệu HTX mới." : "Đã lưu.");
       onChanged(res.user);
-    } catch (err) { setProblem(toApiProblem(err)); } finally { setBusy(false); }
+    } catch (err) { failed(err, "save"); } finally { setBusy(false); }
   };
-  const setLocked = async (lock: boolean) => {
+  const setLocked = async (lock: boolean, confirmed = false) => {
     if (busy) return;
-    setBusy(true); setProblem(null); setNotice("");
+    setBusy(true); setProblem(null); setNotice(""); setConfirmLast(null);
     try {
-      const res = await client.setLocked(user.id, lock, newIdempotencyKey());
+      const res = await client.setLocked(user.id, lock, newIdempotencyKey(), confirmed);
       setNotice(lock ? "Đã khóa. Tài khoản không đăng nhập được." : "Đã mở khóa. Tài khoản đăng nhập lại được.");
       onChanged(res.user);
-    } catch (err) { setProblem(toApiProblem(err)); } finally { setBusy(false); }
+    } catch (err) { failed(err, "lock"); } finally { setBusy(false); }
   };
 
   // AH-281 (FN-10/AC-05): không cho chính mình, không cho tài khoản đã khóa; mật khẩu tạm chỉ hiển thị một lần.
@@ -72,7 +86,8 @@ export function NativeAccountDetail({ user, coops, onChanged, onClose, scope = "
   return (
     <section className="card stack" aria-label="Chi tiết tài khoản">
       <strong>{fullName(user)}{self ? " (bạn)" : ""}</strong>
-      <p>{user.username} · {user.phone ?? "—"} · {coopName}</p>
+      <p>{user.username} · {(full ?? user).phone ?? "—"} · {coopName}</p>
+      {detail.error ? <ProblemAlert problem={detail.error} /> : null}
       <p>{roles.map((r) => ROLE_LABELS[r] ?? r).join(", ")} · {user.enabled ? "Đang hoạt động" : "Đã khóa"}</p>
       {notice ? <p role="status">{notice}</p> : null}
       {reset ? (
@@ -120,7 +135,7 @@ export function NativeAccountDetail({ user, coops, onChanged, onClose, scope = "
         </form>
       ) : (
         <div className="row">
-          <button type="button" className="btn" onClick={() => { setEditing(true); setProblem(null); setNotice(""); }}>Sửa</button>
+          <button type="button" className="btn" disabled={!full} onClick={() => { if (full) setForm(toForm(full)); setEditing(true); setProblem(null); setNotice(""); }}>Sửa</button>
           {!self ? (
             user.enabled
               ? <button type="button" className="btn" disabled={busy} onClick={() => void setLocked(true)}>Khóa</button>
@@ -140,6 +155,18 @@ export function NativeAccountDetail({ user, coops, onChanged, onClose, scope = "
           </>}
         >
           <p>Đặt lại mật khẩu cho {fullName(user)}? Mật khẩu hiện tại sẽ hết hiệu lực và các phiên đăng nhập bị thu hồi.</p>
+        </Dialog>
+      ) : null}
+      {confirmLast ? (
+        <Dialog
+          title={confirmLast === "lock" ? "Khóa Đại diện HTX cuối cùng" : "Chuyển Đại diện HTX cuối cùng"}
+          onClose={() => setConfirmLast(null)}
+          actions={<>
+            <button type="button" className="btn" onClick={() => setConfirmLast(null)}>Hủy</button>
+            <button type="button" className="btn btn-p" onClick={() => void (confirmLast === "lock" ? setLocked(true, true) : save(undefined, true))}>Tiếp tục</button>
+          </>}
+        >
+          <p>HTX sẽ không còn người duyệt kết quả lô. Vẫn tiếp tục?</p>
         </Dialog>
       ) : null}
     </section>

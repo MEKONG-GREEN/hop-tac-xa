@@ -51,6 +51,10 @@ export type LoginOutcome =
   | { kind: "locked"; minutes: number }
   /** accounts.account_locked (EX-03): tài khoản đã bị khóa (FN-07). */
   | { kind: "account_locked" }
+  /** accounts.no_active_role (FN-TK-01/EX-02, AH-222): mật khẩu đúng nhưng tài khoản không còn vai App HTX. */
+  | { kind: "no_active_role" }
+  /** accounts.temporary_password_expired (FN-TK-02/AC-04, AH-223): mật khẩu tạm đúng nhưng đã quá 72 giờ. */
+  | { kind: "temporary_password_expired" }
   /** accounts.login_setup_required: còn việc lần đầu (đổi mật khẩu tạm, đăng ký OTP) — hoàn tất ở trang xác thực. */
   | { kind: "setup_required" }
   | { kind: "rate_limited" }
@@ -154,6 +158,8 @@ export function createPasswordLoginApi(opts: { baseUrl: string; fetch?: (input: 
         case 403:
           if (problem.code === "accounts.account_locked") return { kind: "account_locked" };
           if (problem.code === "accounts.login_otp_email_missing") return { kind: "otp_email_missing" };
+          if (problem.code === "accounts.no_active_role") return { kind: "no_active_role" };
+          if (problem.code === "accounts.temporary_password_expired") return { kind: "temporary_password_expired" };
           return problem.code === "accounts.login_setup_required" ? { kind: "setup_required" } : { kind: "unavailable" };
         case 422: {
           const errors = (res.error as { errors?: { field?: string; reason?: string }[] } | undefined)?.errors ?? [];

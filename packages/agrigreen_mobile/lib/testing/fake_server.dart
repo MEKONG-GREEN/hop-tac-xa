@@ -44,6 +44,10 @@ class FakeServer implements SyncApi {
   /// chối 403 `accounts.account_locked`.
   bool accountLocked = false;
 
+  /// Vai làm việc đang gửi đã bị ngừng (FN-TK-01/EX-03, AH-222): mọi API từ
+  /// chối 409 `accounts.working_role_revoked`.
+  bool workingRoleRevoked = false;
+
   /// Đồng ý thu thập dữ liệu (AH-23, REQ-011): true = tài khoản chưa đồng ý —
   /// `GET /v1/me/data-consent` trả `required`, `push`/`uploadFile` bị từ chối
   /// 403 `accounts.data_consent_required`. `POST` đúng phiên bản thì ghi nhận.
@@ -80,6 +84,7 @@ class FakeServer implements SyncApi {
     if (revoked) throw DeviceRevokedException();
     if (unauthenticated) throw UnauthenticatedException('unauthenticated');
     if (accountLocked) throw AccountLockedException();
+    if (workingRoleRevoked) throw WorkingRoleRevokedException();
   }
 
   @override

@@ -54,6 +54,8 @@ describe("passwordLogin.login", () => {
       [reply(423, { code: "accounts.login_temporarily_locked", retry_after_minutes: 15 }, { "Retry-After": "900" }), { kind: "locked", minutes: 15 }],
       [reply(403, { code: "accounts.account_locked" }), { kind: "account_locked" }],
       [reply(403, { code: "accounts.login_setup_required" }), { kind: "setup_required" }],
+      [reply(403, { code: "accounts.no_active_role" }), { kind: "no_active_role" }],
+      [reply(403, { code: "accounts.temporary_password_expired" }), { kind: "temporary_password_expired" }],
       [reply(429, { code: "rate_limited" }), { kind: "rate_limited" }],
       [reply(503, { code: "accounts.login_unavailable" }), { kind: "unavailable" }],
       [reply(503, { code: "accounts.dependency_unavailable" }), { kind: "unavailable" }],

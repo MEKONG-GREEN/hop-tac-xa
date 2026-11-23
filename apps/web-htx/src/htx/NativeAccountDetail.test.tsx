@@ -39,6 +39,11 @@ it("[AC-06, QTPQ-Q-21] edits name and cooperative; username and main role are re
   await user.type(within(form).getByLabelText("Họ tên"), "Đại diện mới");
   await user.selectOptions(within(form).getByLabelText("HTX"), coops[1]!.ref);
   await user.click(within(form).getByRole("button", { name: "Lưu" }));
+  // FN-TK-02/EX-04 (AH-223): Đại diện HTX duy nhất của HTX cũ → hỏi xác nhận trước khi chuyển.
+  const dialog = await screen.findByRole("dialog", { name: "Chuyển Đại diện HTX cuối cùng" });
+  expect(within(dialog).getByText("HTX sẽ không còn người duyệt kết quả lô. Vẫn tiếp tục?")).toBeInTheDocument();
+  expect(onChanged).not.toHaveBeenCalled();
+  await user.click(within(dialog).getByRole("button", { name: "Tiếp tục" }));
   expect(await screen.findByRole("status")).toHaveTextContent("Tài khoản phải đăng nhập lại và chỉ thấy dữ liệu HTX mới.");
   const saved = onChanged.mock.calls.at(-1)![0] as AccountsUser;
   expect(saved.org_ref).toBe(coops[1]!.ref);
@@ -65,6 +70,8 @@ it("[AC-07] locks and unlocks another account", async () => {
   const user = userEvent.setup();
   const { rerender } = render(<NativeAccountDetail user={account} coops={coops} onChanged={onChanged} onClose={() => {}} />);
   await user.click(screen.getByRole("button", { name: "Khóa" }));
+  // Đại diện HTX duy nhất của HTX → xác nhận FN-TK-02/EX-04 trước khi khóa.
+  await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Tiếp tục" }));
   expect(await screen.findByRole("status")).toHaveTextContent("Đã khóa");
   const locked = onChanged.mock.calls.at(-1)![0] as AccountsUser;
   expect(locked.enabled).toBe(false);
@@ -102,4 +109,43 @@ it("[AH-281, BR-03] hides the reset button on the own row and on locked accounts
   unmount();
   render(<NativeAccountDetail user={{ ...account, enabled: false }} coops={coops} onChanged={() => {}} onClose={() => {}} />);
   expect(screen.queryByRole("button", { name: "Đặt lại mật khẩu" })).toBeNull();
+});
+
+it("[AH-223 FN-TK-02/EX-04] khóa Đại diện HTX cuối cùng hỏi xác nhận; Hủy không khóa, Tiếp tục khóa", async () => {
+  const account = await createRep();
+  const onChanged = vi.fn();
+  const user = userEvent.setup();
+  render(<NativeAccountDetail user={account} coops={coops} onChanged={onChanged} onClose={() => {}} />);
+  await user.click(screen.getByRole("button", { name: "Khóa" }));
+  let dialog = await screen.findByRole("dialog", { name: "Khóa Đại diện HTX cuối cùng" });
+  expect(within(dialog).getByText("HTX sẽ không còn người duyệt kết quả lô. Vẫn tiếp tục?")).toBeInTheDocument();
+  await user.click(within(dialog).getByRole("button", { name: "Hủy" }));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(onChanged).not.toHaveBeenCalled();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Khóa" }));
+  dialog = await screen.findByRole("dialog", { name: "Khóa Đại diện HTX cuối cùng" });
+  await user.click(within(dialog).getByRole("button", { name: "Tiếp tục" }));
+  expect(await screen.findByRole("status")).toHaveTextContent("Đã khóa.");
+  expect((onChanged.mock.calls.at(-1)![0] as AccountsUser).enabled).toBe(false);
+});
+
+it("[AH-223 FN-TK-02/EX-04] còn Đại diện HTX khác đang hoạt động → khóa ngay, không hỏi", async () => {
+  const account = await createRep();
+  await unwrap(auth.adminApi.POST("/v1/accounts/htx-users", { params: { header: { "Idempotency-Key": newIdempotencyKey() } }, body: { username: "edit-rep-2", full_name: "Đại diện hai", phone: "0912000009", cooperative_ref: coops[0]!.ref, roles: ["coop_manager"] } }));
+  const user = userEvent.setup();
+  render(<NativeAccountDetail user={account} coops={coops} onChanged={() => {}} onClose={() => {}} />);
+  await user.click(screen.getByRole("button", { name: "Khóa" }));
+  expect(await screen.findByRole("status")).toHaveTextContent("Đã khóa.");
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+});
+
+it("[AH-223 FN-TK-02/BR-04] chi tiết lấy SĐT đầy đủ từ máy chủ dù danh sách đã che; form sửa dùng SĐT đầy đủ", async () => {
+  const created = await createRep();
+  const listed = { ...created, phone: "09•• ••• 001" };
+  const user = userEvent.setup();
+  render(<NativeAccountDetail user={listed} coops={coops} onChanged={() => {}} onClose={() => {}} />);
+  expect(await screen.findByText(/0912000001/)).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Sửa" }));
+  expect(within(screen.getByRole("form", { name: "Sửa tài khoản HTX" })).getByLabelText("Số điện thoại")).toHaveValue("0912000001");
 });

@@ -29,6 +29,10 @@ func vaultWorkingRole(enabled bool) gin.HandlerFunc {
 				roles = append(roles, role)
 			}
 		}
+		if len(roles) == 0 {
+			httpx.Fail(c, problem.New(http.StatusForbidden, htxroles.CodeNoActiveRole, htxroles.MsgNoActiveRole))
+			return
+		}
 		if !htxroles.ValidAccountRoles(roles) {
 			httpx.Fail(c, problem.Forbidden)
 			return
@@ -46,6 +50,11 @@ func vaultWorkingRole(enabled bool) gin.HandlerFunc {
 			if selected == r {
 				valid = true
 			}
+		}
+		if !valid && htxroles.Revocable(selected) {
+			// FN-TK-01/EX-03: vai đã bị ngừng sau khi token được làm mới — client chọn lại vai.
+			httpx.Fail(c, problem.New(http.StatusConflict, htxroles.CodeWorkingRoleRevoked, htxroles.MsgWorkingRoleRevoked))
+			return
 		}
 		if !valid {
 			httpx.Fail(c, problem.Forbidden)

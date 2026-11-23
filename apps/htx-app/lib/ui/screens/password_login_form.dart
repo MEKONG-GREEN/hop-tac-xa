@@ -21,6 +21,15 @@ abstract final class LoginMessages {
   static const setupRequired =
       'Tài khoản cần hoàn tất thiết lập lần đầu (đổi mật khẩu tạm hoặc đăng ký '
       'mã OTP) trên trang xác thực.';
+
+  /// FN-TK-01/EX-02 (AH-222), nguyên văn BRD.
+  static const noActiveRole =
+      'Tài khoản chưa được gán vai trò. Liên hệ quản trị viên.';
+
+  /// FN-TK-02/AC-04 (AH-223): mật khẩu tạm quá 72 giờ.
+  static const temporaryPasswordExpired =
+      'Mật khẩu tạm đã quá 72 giờ nên không còn dùng được. Dùng "Quên mật '
+      'khẩu?" hoặc liên hệ người đã cấp tài khoản để được cấp lại.';
   static const network =
       'Không kết nối được máy chủ đăng nhập. Vui lòng thử lại sau.';
   static const rateLimited =
@@ -54,6 +63,8 @@ abstract final class LoginMessages {
     LoginKind.locked => tempLocked(r.minutes),
     LoginKind.accountLocked => accountLocked,
     LoginKind.setupRequired => setupRequired,
+    LoginKind.noActiveRole => noActiveRole,
+    LoginKind.temporaryPasswordExpired => temporaryPasswordExpired,
     LoginKind.network => network,
     LoginKind.rateLimited => rateLimited,
     LoginKind.otpEmailMissing => otpEmailMissing,

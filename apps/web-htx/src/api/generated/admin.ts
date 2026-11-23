@@ -4571,10 +4571,14 @@ export interface paths {
         /**
          * Danh sách tài khoản FN-07 trong tenant (Admin, realm HTX)
          * @description Chỉ Admin đã qua MFA. Snapshot đầy đủ tối đa 2000 tài khoản IAM; vượt giới hạn trả lỗi. Cache-Control no-store.
+         *     FN-TK-02/BR-04 (AH-223): phone trong danh sách đã che (09•• ••• 678); SĐT đầy đủ chỉ ở GET /v1/accounts/htx-users/{id}.
          */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description FN-07/AC-02 — tìm đúng SĐT (10 chữ số, bắt đầu bằng 0); máy chủ so trên SĐT đầy đủ rồi mới che. Sai định dạng → 422. */
+                    phone?: string;
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
@@ -4656,7 +4660,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Chi tiết tài khoản FN-07 (Admin, realm HTX) */
+        /**
+         * Chi tiết tài khoản FN-07 (Admin, realm HTX)
+         * @description FN-TK-02/BR-04 (AH-223) — trả SĐT đầy đủ; mỗi lượt xem ghi sổ truy cập pf_accounts.pii_view (người xem, tài khoản, thời điểm). Ghi sổ lỗi thì không trả. Cache-Control no-store.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -4701,10 +4708,18 @@ export interface paths {
          * @description AH-276: sửa họ tên, SĐT, email, HTX; tên đăng nhập và vai chính không sửa được (FN-07/AC-06, BR-03).
          *     also_member chỉ áp cho Đại diện HTX (kiêm Thành viên HTX, QTPQ-Q-23), vắng = giữ nguyên. Đổi HTX: cả hai vai
          *     cùng chuyển, mọi phiên đang mở bị thu hồi (QTPQ-Q-21, Q-22). Không tự đổi HTX hoặc vai của chính mình.
+         *     Chuyển Đại diện HTX cuối cùng còn hoạt động sang HTX khác cần xác nhận (confirm_no_representative).
          */
         post: {
             parameters: {
-                query?: never;
+                query?: {
+                    /**
+                     * @description FN-TK-02/EX-04 (AH-223): true = người dùng đã xác nhận thao tác làm HTX không còn Đại diện HTX nào đang hoạt
+                     *     động. Thiếu khi cần → 409 accounts.last_representative ("HTX sẽ không còn người duyệt kết quả lô"); gửi lại
+                     *     với true và Idempotency-Key mới.
+                     */
+                    confirm_no_representative?: boolean;
+                };
                 header: {
                     "Idempotency-Key": components["parameters"]["IdempotencyKey"];
                 };
@@ -4760,11 +4775,18 @@ export interface paths {
         put?: never;
         /**
          * Khóa tài khoản FN-07 (Admin)
-         * @description AH-276, FN-07/AC-07, BR-06, BR-07 — đăng nhập bị chặn, mọi phiên bị thu hồi, dữ liệu giữ nguyên; không tự khóa chính mình.
+         * @description AH-276, FN-07/AC-07, BR-06, BR-07 — đăng nhập bị chặn, mọi phiên bị thu hồi, dữ liệu giữ nguyên; không tự khóa chính mình. Khóa Đại diện HTX cuối cùng còn hoạt động của HTX cần xác nhận (FN-TK-02/EX-04).
          */
         post: {
             parameters: {
-                query?: never;
+                query?: {
+                    /**
+                     * @description FN-TK-02/EX-04 (AH-223): true = người dùng đã xác nhận thao tác làm HTX không còn Đại diện HTX nào đang hoạt
+                     *     động. Thiếu khi cần → 409 accounts.last_representative ("HTX sẽ không còn người duyệt kết quả lô"); gửi lại
+                     *     với true và Idempotency-Key mới.
+                     */
+                    confirm_no_representative?: boolean;
+                };
                 header: {
                     "Idempotency-Key": components["parameters"]["IdempotencyKey"];
                 };

@@ -91,6 +91,14 @@ void main() {
         0,
         0,
       ),
+      (403, {'code': 'accounts.no_active_role'}, LoginKind.noActiveRole, 0, 0),
+      (
+        403,
+        {'code': 'accounts.temporary_password_expired'},
+        LoginKind.temporaryPasswordExpired,
+        0,
+        0,
+      ),
       (
         401,
         {'code': 'accounts.login_otp_invalid', 'remaining_attempts': 3},

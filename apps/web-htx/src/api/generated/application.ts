@@ -12458,10 +12458,14 @@ export interface paths {
         /**
          * FN-08 Tài khoản của HTX mình (Đại diện HTX)
          * @description AH-277. Thành viên HTX của HTX người gọi và dòng của chính người gọi (FN-08/AC-01, BR-01). Không có Admin, Đại diện HTX khác. Cache-Control no-store.
+         *     FN-TK-02/BR-04 (AH-223): phone đã che; SĐT đầy đủ chỉ ở GET /v1/htx-accounts/{id}.
          */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description FN-08 — tìm đúng SĐT (10 chữ số, bắt đầu bằng 0); máy chủ so trên SĐT đầy đủ rồi mới che. Sai định dạng → 422. */
+                    phone?: string;
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
@@ -12533,6 +12537,50 @@ export interface paths {
                 422: components["responses"]["Problem"];
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/htx-accounts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * FN-08 Chi tiết tài khoản trong phạm vi Đại diện HTX
+         * @description AH-223 (FN-TK-02/BR-04). Thành viên HTX của HTX người gọi hoặc chính người gọi; ngoài phạm vi → 404. Trả SĐT đầy
+         *     đủ; mỗi lượt xem ghi sổ truy cập pf_accounts.pii_view. Ghi sổ lỗi thì không trả. Cache-Control no-store.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Tài khoản, không có mật khẩu */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HTXAccount"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -35683,7 +35731,7 @@ export interface operations {
             400: components["responses"]["Problem"];
             /** @description accounts.login_failed (EX-02) | accounts.login_otp_invalid: extension remaining_attempts */
             401: components["responses"]["Problem"];
-            /** @description accounts.account_locked (EX-03) | accounts.login_setup_required | accounts.login_otp_email_missing */
+            /** @description accounts.account_locked (EX-03) | accounts.login_setup_required | accounts.login_otp_email_missing | accounts.no_active_role (FN-TK-01/EX-02, realm HTX) | accounts.temporary_password_expired (mật khẩu tạm quá 72 giờ, FN-TK-02/AC-04) */
             403: components["responses"]["Problem"];
             /** @description accounts.login_otp_expired (mã OTP email hết hạn, đã dùng, đã hủy hoặc đã có mã mới) */
             410: components["responses"]["Problem"];

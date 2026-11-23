@@ -31,10 +31,14 @@ func TestNativeFN07EditLockUnlock(t *testing.T) {
 	}
 	rep := create("edit-rep", "0912000001", htxroles.Representative, htxroles.Member)
 	member := create("edit-member", "0912000002", htxroles.Member)
-	edit := func(id uuid.UUID, idem string, body map[string]any) resp {
+	editAt := func(id uuid.UUID, query, idem string, body map[string]any) resp {
 		t.Helper()
 		b, _ := json.Marshal(body)
-		return admin.raw(http.MethodPost, "/v1/accounts/htx-users/"+id.String()+"/revisions", idem, "application/json", b)
+		return admin.raw(http.MethodPost, "/v1/accounts/htx-users/"+id.String()+"/revisions"+query, idem, "application/json", b)
+	}
+	edit := func(id uuid.UUID, idem string, body map[string]any) resp {
+		t.Helper()
+		return editAt(id, "", idem, body)
 	}
 	roles := func(id uuid.UUID) []string {
 		t.Helper()
@@ -49,7 +53,15 @@ func TestNativeFN07EditLockUnlock(t *testing.T) {
 	// AC-N1, AC-N2: đổi HTX của tài khoản kiêm hai vai → cả hai vai chuyển HTX, phiên cũ bị thu hồi.
 	before := f.dir.Logouts(rep)
 	moved := map[string]any{"full_name": "Đại diện mới", "phone": "0912000001", "cooperative_ref": f.coop30301.String()}
-	if r := edit(rep, "edit-move-coop", moved); r.status != http.StatusOK || str(r.body, "user", "org_ref") != f.coop30301.String() {
+	// FN-TK-02/EX-04 (AH-223): rep là Đại diện HTX duy nhất của HTX cũ → hỏi xác nhận, chưa đổi gì.
+	if r := edit(rep, "edit-move-coop-unconfirmed", moved); r.status != http.StatusConflict || r.body["code"] != "accounts.last_representative" {
+		t.Fatalf("move last representative without confirmation: %d %v", r.status, r.body)
+	}
+	if u, _ := f.dir.GetUser(ctx, rep); u.OrgRef != f.coop30292 || f.dir.Logouts(rep) != before {
+		t.Fatal("unconfirmed move must not change IAM or sessions")
+	}
+	const confirmed = "?confirm_no_representative=true"
+	if r := editAt(rep, confirmed, "edit-move-coop", moved); r.status != http.StatusOK || str(r.body, "user", "org_ref") != f.coop30301.String() {
 		t.Fatalf("move cooperative: %d %v", r.status, r.body)
 	}
 	if u, _ := f.dir.GetUser(ctx, rep); u.OrgRef != f.coop30301 || u.Username != "edit-rep" {
@@ -72,7 +84,7 @@ func TestNativeFN07EditLockUnlock(t *testing.T) {
 		t.Fatalf("new cooperative token passes the session gate (then is denied elsewhere): %d %v", r.status, r.body)
 	}
 	// Phát lại cùng khóa: không ghi lại, bản lưu không chứa PII.
-	if r := edit(rep, "edit-move-coop", moved); r.status != http.StatusOK {
+	if r := editAt(rep, confirmed, "edit-move-coop", moved); r.status != http.StatusOK {
 		t.Fatalf("replay: %d %v", r.status, r.body)
 	}
 	var cached []byte

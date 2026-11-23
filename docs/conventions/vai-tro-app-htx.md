@@ -114,6 +114,14 @@ Một tài khoản có thể kiêm Đại diện HTX và Thành viên HTX (FN-05
 - Web: `effectiveRole` và `matrixAllows` (`src/auth/permissions.ts`) theo cùng quy tắc.
 - Hệ quả: tài khoản kiêm hai vai chỉ xem vụ, kế hoạch mùa vụ, nhật ký, sản lượng (không mở vụ, không ghi nhật ký, không khai sản lượng) cho tới AH-270, vì quyền của Thành viên HTX ở phân hệ này không nằm trọn trong quyền của Đại diện HTX.
 
+### Vai bị ngừng trong lúc dùng (AH-222)
+
+Vai làm việc đang chọn không còn trong token đã làm mới (vd Admin tắt "Kiêm Thành viên HTX") → máy chủ trả 409
+`accounts.working_role_revoked` cho request còn gửi `X-HTX-Role` cũ. Web (`api/workingRoleRevoked.ts`) và app
+(`WorkingRoleRevokedException`, `AppController._onWorkingRoleRevoked`) đọc lại vai từ token: còn một vai thì dùng luôn, còn
+hai vai thì về màn Chọn vai trò, kèm câu báo. Tài khoản không còn vai nào → 403 `accounts.no_active_role`. Xem
+[ADR-0064](../adr/0064-bu-fn-tk-tren-fn-07.md).
+
 ## App di động (AH-303)
 
 - **Chế độ theo vai có hiệu lực** (`modeFor`, `apps/htx-app/lib/domain/roles.dart`; ma trận đọc qua `role_matrix.dart`): Admin → màn chặn "Tài khoản Admin chỉ dùng trên web…"; Đại diện HTX → chỉ xem vụ, nhật ký, sản lượng; Thành viên HTX → mở vụ, ghi nhật ký, khai sản lượng; tài khoản kiêm hai vai dùng quyền Đại diện HTX (tới AH-270). Không có vai ma trận: vai `farmer` giữ chế độ nông dân (AH-309 sẽ gỡ), còn lại → màn chặn "Tài khoản không dùng được App HTX…".

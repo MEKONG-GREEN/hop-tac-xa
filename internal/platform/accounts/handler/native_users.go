@@ -64,9 +64,18 @@ func (h Handler) nativeCreateWith(create func(context.Context, domain.NativeAcco
 
 func (h Handler) nativeUsers(c *gin.Context) { h.nativeUsersWith(h.Svc.NativeUsers)(c) }
 
+// nativeUsersWith: danh sách chỉ trả SĐT đã che (FN-TK-02/BR-04, AH-223); tìm theo SĐT bằng query phone (FN-07/AC-02) —
+// máy chủ so khớp trên SĐT đầy đủ rồi mới che. SĐT đầy đủ chỉ ở màn chi tiết (nativeUserWith), có ghi sổ truy cập.
 func (h Handler) nativeUsersWith(list func(context.Context) ([]app.UserView, error)) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("Cache-Control", "no-store")
+		phone, filter := c.GetQuery("phone")
+		if filter {
+			if phone = domain.NormalizePhone(phone); !domain.ValidPhone(phone) {
+				httpx.Fail(c, problem.Validation.WithField("phone", "SĐT gồm 10 chữ số, bắt đầu bằng 0"))
+				return
+			}
+		}
 		users, err := list(c.Request.Context())
 		if err != nil {
 			httpx.Fail(c, err)
@@ -74,24 +83,37 @@ func (h Handler) nativeUsersWith(list func(context.Context) ([]app.UserView, err
 		}
 		items := make([]userDTO, 0, len(users))
 		for _, u := range users {
-			items = append(items, toUserDTO(u))
+			if filter && u.User.Phone != phone {
+				continue
+			}
+			dto := toUserDTO(u)
+			if dto.Phone != nil {
+				masked := domain.MaskPhoneList(*dto.Phone)
+				dto.Phone = &masked
+			}
+			items = append(items, dto)
 		}
 		c.JSON(http.StatusOK, gin.H{"items": items})
 	}
 }
 
-func (h Handler) nativeUser(c *gin.Context) {
-	c.Header("Cache-Control", "no-store")
-	id, ok := pathID(c)
-	if !ok {
-		return
+func (h Handler) nativeUser(c *gin.Context) { h.nativeUserWith(h.Svc.NativeUser)(c) }
+
+// nativeUserWith: chi tiết kèm SĐT đầy đủ; service đã ghi pf_accounts.pii_view trước khi trả (FN-TK-02/BR-04).
+func (h Handler) nativeUserWith(get func(context.Context, string) (app.UserView, error)) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("Cache-Control", "no-store")
+		id, ok := pathID(c)
+		if !ok {
+			return
+		}
+		u, err := get(c.Request.Context(), id.String())
+		if err != nil {
+			httpx.Fail(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, toUserDTO(u))
 	}
-	u, err := h.Svc.NativeUser(c.Request.Context(), id.String())
-	if err != nil {
-		httpx.Fail(c, err)
-		return
-	}
-	c.JSON(http.StatusOK, toUserDTO(u))
 }
 
 // nativeUserReply trả tài khoản sau khi sửa/khóa; bản lưu cho phát lại (idempotency) không giữ PII của IAM.
@@ -129,7 +151,7 @@ func (h Handler) nativeUpdateWith(update func(context.Context, uuid.UUID, app.Na
 			httpx.Fail(c, problem.BadRequest.WithDetail("Chỉ nhận một đối tượng JSON"))
 			return
 		}
-		u, replayed, err := update(c.Request.Context(), id, in, key(c))
+		u, replayed, err := update(confirmNoRepresentative(c), id, in, key(c))
 		if err != nil {
 			httpx.Fail(c, err)
 			return
@@ -149,7 +171,7 @@ func (h Handler) nativeLockWith(set func(context.Context, uuid.UUID, bool, strin
 		if !ok {
 			return
 		}
-		u, replayed, err := set(c.Request.Context(), id, locked, key(c))
+		u, replayed, err := set(confirmNoRepresentative(c), id, locked, key(c))
 		if err != nil {
 			httpx.Fail(c, err)
 			return
@@ -158,9 +180,19 @@ func (h Handler) nativeLockWith(set func(context.Context, uuid.UUID, bool, strin
 	}
 }
 
+// confirmNoRepresentative: query confirm_no_representative=true là người dùng đã xác nhận để HTX không còn Đại diện
+// HTX đang hoạt động (FN-TK-02/EX-04, AH-223).
+func confirmNoRepresentative(c *gin.Context) context.Context {
+	if c.Query("confirm_no_representative") == "true" {
+		return app.WithLastRepresentativeConfirmed(c.Request.Context())
+	}
+	return c.Request.Context()
+}
+
 // registerCoopAccounts: FN-08 (AH-277) trên Application API — Đại diện HTX quản lý Thành viên HTX của HTX mình.
 func (h Handler) registerCoopAccounts(rg *gin.RouterGroup) {
 	rg.GET("/htx-accounts", h.nativeUsersWith(h.Svc.CoopNativeUsers))
+	rg.GET("/htx-accounts/:id", h.nativeUserWith(h.Svc.CoopNativeUser))
 	rg.POST("/htx-accounts", h.nativeCreateWith(h.Svc.CoopNativeCreate))
 	rg.POST("/htx-accounts/:id/revisions", h.nativeUpdateWith(h.Svc.CoopNativeUpdate))
 	rg.POST("/htx-accounts/:id/lock", h.nativeLockWith(h.Svc.CoopNativeSetLocked, true))
