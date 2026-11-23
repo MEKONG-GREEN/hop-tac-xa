@@ -19,6 +19,14 @@ type Path = { ref: string; household_ref: string; season_ref: string };
 const PAGE = 20;
 const STATE: { [k: string]: string } = { done: "Đã xong", partial: "Chưa xong, làm tiếp", skipped: "Bỏ qua", voided: "Đã xóa" };
 
+/** AH-141 AC1: ngày dự kiến của việc để đối chiếu với ngày làm. */
+function expected(task: { undated: boolean; from_date: string | null; to_date: string | null } | undefined): string {
+  if (!task) return "";
+  if (task.undated) return " (không đặt ngày)";
+  if (!task.from_date) return "";
+  return task.to_date ? ` (dự kiến ${formatDate(task.from_date)} – ${formatDate(task.to_date)})` : ` (dự kiến từ ${formatDate(task.from_date)})`;
+}
+
 /** Lý do sửa/xóa: bắt buộc, ít nhất 10 ký tự (máy chủ kiểm lại). */
 export function reasonError(reason: string): string | null {
   return reason.trim().length < 10 ? "Nhập lý do (ít nhất 10 ký tự)." : null;
@@ -150,7 +158,7 @@ export function HouseholdTaskJournal({ path, checklist, writable, onChanged }: {
     {!rows.length ? <p className="small mute">Chưa có bản ghi phù hợp.</p> : <ul className="stack">{rows.slice(0, shown).map((r) => {
       const task = tasks.get(r.step_seq);
       return <li key={r.id}>
-        <div><strong>{task?.name ?? `Việc ${r.step_seq}`}</strong> · {task?.stageName} · {formatDate(r.done_on)} · {STATE[r.state] ?? r.state}{r.inputs.map((i) => ` · ${i.name}: ${i.qty} ${i.unit}`).join("")}{r.note ? ` · ${r.note}` : ""}{(r.version ?? 1) > 1 ? " · Đã sửa" : ""}</div>
+        <div><strong>{task?.name ?? `Việc ${r.step_seq}`}</strong> · {task?.stageName} · làm {formatDate(r.done_on)}{expected(task)} · {STATE[r.state] ?? r.state}{r.inputs.map((i) => ` · ${i.name}: ${i.qty} ${i.unit}`).join("")}{r.note ? ` · ${r.note}` : ""}{(r.version ?? 1) > 1 ? " · Đã sửa" : ""}</div>
         <div className="row">
           {canEdit ? <button type="button" className="btn btn-o btn-sm" onClick={() => setOpen({ kind: "edit", record: r })}>Sửa</button> : null}
           {canDelete ? <button type="button" className="btn btn-o btn-sm" onClick={() => setOpen({ kind: "void", record: r })}>{r.state === "done" ? "Bỏ tích" : "Xóa"}</button> : null}

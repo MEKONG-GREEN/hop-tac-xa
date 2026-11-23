@@ -98,3 +98,36 @@ func TestAH126_EditVoidHistory(t *testing.T) {
 	expect(t, ch, http.StatusOK, "checklist")
 	expect(t, c.post(path+"/task-completions", tickBody(3, str(ch.body, "current_event_id"))), http.StatusCreated, "tích lại")
 }
+
+// AH-141: Đại diện HTX xem nhật ký và lịch sử của vụ trong HTX mình, chỉ đọc; HTX khác bị từ chối.
+func TestAH141_RepresentativeReadOnlyScope(t *testing.T) {
+	f, path, event := taskFixture(t)
+	r := f.memberA().post(path+"/task-completions", tickBody(1, event))
+	expect(t, r, http.StatusCreated, "tích việc")
+	id, logRef := str(r.body, "record", "id"), str(r.body, "record", "log_ref")
+	rec := path + "/task-records/" + logRef
+	rep := f.managerA()
+	ch := rep.get(path + "/checklist")
+	expect(t, ch, http.StatusOK, "AC1: đại diện đọc checklist")
+	if len(list(ch.body, "records")) != 1 || checklistTask(ch.body, 1)["from_date"] == nil {
+		t.Fatalf("AC1: bản ghi và ngày dự kiến: %v", ch.body)
+	}
+	expect(t, rep.get(rec+"/history"), http.StatusOK, "AC2: đại diện xem lịch sử")
+	for _, other := range []caller{f.managerB(), f.memberB()} {
+		expect(t, other.get(path+"/checklist"), http.StatusNotFound, "AC3: HTX khác đọc checklist")
+		expect(t, other.get(rec+"/history"), http.StatusNotFound, "AC3: HTX khác đọc lịch sử")
+	}
+	for _, c := range []struct{ path, name string }{{rec + "/corrections", "sửa"}, {rec + "/void", "xóa"}} {
+		body := editBody(id, "Đại diện thử sửa bản ghi", map[string]any{})
+		if c.name == "sửa" {
+			body = editBody(id, "Đại diện thử sửa bản ghi", map[string]any{"state": "partial", "done_on": str(r.body, "record", "done_on"), "materials": []any{}})
+		}
+		res := rep.post(c.path, body)
+		expect(t, res, http.StatusForbidden, "AC4: đại diện "+c.name)
+		if str(res.body, "code") != "cropcycle.read_only" {
+			t.Fatalf("AC4 %s: %v", c.name, res.body)
+		}
+	}
+	expect(t, rep.post(path+"/task-records", map[string]any{"step_seq": 2, "expected_season_event_id": event, "state": "done", "done_on": "2026-09-29", "materials": []any{}, "file_refs": []any{}}),
+		http.StatusForbidden, "AC4: đại diện ghi")
+}

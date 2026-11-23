@@ -13,7 +13,7 @@ const rec = (id: string, log: string, step: number, state: "done" | "partial", d
   actor_ref: "a", event_time: `${done}T01:00:00Z`, recorded_at: `${done}T01:00:00Z`, version: 1,
   details: { actual_materials: [{ material_code: "URE", name: "URE", unit: "kg", dose_per_ha: "50", quantity: "25" }], backfilled: false, zero_confirmed: false },
 }) as unknown as S["HouseholdTaskRecord"];
-const task = (seq: number, name: string, activity: string) => ({ seq, stage_seq: seq, task_seq: 1, name, activity_code: activity, window_kind: "none", from_date: null, to_date: null, expected_date: null, status: "due", undated: true, completion_status: "due", done_on: null, can_complete: true });
+const task = (seq: number, name: string, activity: string) => ({ seq, stage_seq: seq, task_seq: 1, name, activity_code: activity, window_kind: "date_range", from_date: seq === 2 ? "2026-11-21" : null, to_date: seq === 2 ? "2026-11-23" : null, expected_date: null, status: "due", undated: seq !== 2, completion_status: "due", done_on: null, can_complete: true });
 const checklist = {
   season_ref: "s", current_event_id: "e", records: [rec("r1", "l1", 1, "done", "2026-11-20"), rec("r2", "l2", 2, "partial", "2026-11-22")],
   progress: { as_of_date: "2026-11-24", done: 1, skipped: 0, total: 2, percent: "50.00", stages: [
@@ -93,7 +93,14 @@ describe("AH-126 nhật ký của vụ", () => {
     expect(within(history).getByText("Lý do: Mới bón một nửa diện tích")).toBeTruthy();
   });
 
-  it("AC6: Đại diện HTX chỉ xem lịch sử, không có nút sửa/xóa", () => {
+  it("AH-141 AC1: dòng nhật ký có ngày dự kiến để đối chiếu với ngày làm", () => {
+    setup("htx");
+    const rows = screen.getAllByRole("listitem").map((li) => li.textContent ?? "");
+    expect(rows[0]).toContain("làm 22/11/2026 (dự kiến 21/11/2026 – 23/11/2026)");
+    expect(rows[1]).toContain("(không đặt ngày)");
+  });
+
+  it("AC6, AH-141 AC4: Đại diện HTX chỉ xem lịch sử, không có nút sửa/xóa", () => {
     setup("htx");
     expect(screen.queryByRole("button", { name: "Sửa" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Bỏ tích|Xóa/ })).toBeNull();
