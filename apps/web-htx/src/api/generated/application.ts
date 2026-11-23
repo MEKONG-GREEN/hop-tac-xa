@@ -25088,6 +25088,11 @@ export interface components {
             channel: "app" | "web";
             /** @description Tùy chỉnh quy trình trước khi lưu vụ (AH-113), áp theo thứ tự; SOP chuẩn không đổi */
             plan_changes?: components["schemas"]["HouseholdPlanChange"][];
+            /**
+             * Format: uuid
+             * @description AH-139: sao chép giống và quy trình (kèm tùy chỉnh) từ vụ trước của chính hộ này (kể cả vụ đang canh tác). Loại cây, giống, SOP lấy theo vụ nguồn; nếu gửi thì phải khớp (422). Vụ nguồn ngoài phạm vi → 404 cropcycle.season_not_found. Vẫn kiểm diện tích còn lại và mốc gốc.
+             */
+            copy_from_season_ref?: string | null;
         };
         HouseholdSeasonSOPSnapshot: {
             /** Format: uuid */
@@ -25143,6 +25148,11 @@ export interface components {
             /** Format: uuid */
             current_event_id: string;
             version: number;
+            /**
+             * Format: uuid
+             * @description Vụ nguồn khi mở bằng sao chép (AH-139)
+             */
+            copied_from?: string | null;
             /** @description Thiếu hoặc từ chối GPS, không suy diễn tọa độ thành xác minh ranh đất */
             gps_missing: boolean;
             gps: components["schemas"]["CropGPS"];

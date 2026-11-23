@@ -38,6 +38,33 @@ type HouseholdOpenInput struct {
 	Channel, IdemKey                          string
 	// PlanChanges: tùy chỉnh quy trình trước khi lưu vụ (AH-113 AC1); bản chụp lưu đúng tùy chỉnh, SOP chuẩn không đổi.
 	PlanChanges []domain.PlanChange
+	// CopyFrom: AH-139 — sao chép giống và quy trình (kèm tùy chỉnh) từ một vụ trước của chính hộ này, kể cả vụ đang
+	// canh tác. Loại cây, giống, SOP lấy theo vụ nguồn; người dùng chỉ nhập Vụ/Năm, mốc gốc, diện tích.
+	CopyFrom uuid.UUID
+}
+
+// copySource đọc vụ nguồn để sao chép (AH-139): phải là vụ theo hộ của đúng hộ, đúng HTX trong phạm vi người gọi.
+// Loại cây, giống, SOP người dùng gửi (nếu có) phải khớp vụ nguồn.
+func (s *Service) copySource(ctx context.Context, tid uuid.UUID, in *HouseholdOpenInput) (*store.Season, error) {
+	var src *store.Season
+	err := s.inTx(ctx, tid, func(tx pgx.Tx) error {
+		var err error
+		src, err = householdTaskSeason(ctx, tx, tid, in.CooperativeRef, in.HouseholdRef, in.CopyFrom, false)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	switch {
+	case in.CropCode != "" && in.CropCode != src.CropCode:
+		return nil, problem.Validation.WithField("crop_code", "Sao chép giữ loại cây của vụ trước")
+	case in.VarietyCode != "" && in.VarietyCode != src.VarietyCode:
+		return nil, problem.Validation.WithField("variety_code", "Sao chép giữ giống của vụ trước")
+	case in.SOPVersionID != uuid.Nil && in.SOPVersionID != src.SOPVersionID:
+		return nil, problem.Validation.WithField("sop_version_id", "Sao chép giữ quy trình của vụ trước")
+	}
+	in.CropCode, in.VarietyCode, in.SOPVersionID = src.CropCode, src.VarietyCode, src.SOPVersionID
+	return src, nil
 }
 
 func (s *Service) householdAccess(ctx context.Context, coop uuid.UUID, write bool) (access, error) {
@@ -98,6 +125,11 @@ func (s *Service) OpenHouseholdSeason(ctx context.Context, in HouseholdOpenInput
 	if s.dependencyTxOpen(ctx) || s.Orgs == nil || s.Catalogs == nil {
 		return SeasonResult{}, ErrDependency
 	}
+	if in.CopyFrom != uuid.Nil {
+		if _, err := s.copySource(ctx, a.p.TenantID, &in); err != nil {
+			return SeasonResult{}, err
+		}
+	}
 	if err := s.checkCoop(ctx, in.CooperativeRef); err != nil {
 		return SeasonResult{}, err
 	}
@@ -138,29 +170,61 @@ func (s *Service) OpenHouseholdSeason(ctx context.Context, in HouseholdOpenInput
 		if area.GreaterThan(remaining) {
 			return SeasonResult{}, ErrHouseholdArea.With("remaining_area_ha", remaining.String()).With("active_area_ha", used.String()).With("land_area_ha", h.CultivatedAreaHa.String())
 		}
-		t, v, err := householdSOP(ctx, tx, in.CooperativeRef, in.CropCode, in.VarietyCode, in.SOPVersionID)
-		if err != nil {
-			return SeasonResult{}, err
-		}
-		stages, steps := v.Stages, v.Steps
-		if stages == nil {
-			stages = []domain.Stage{}
-		}
-		if steps == nil {
-			steps = []domain.Step{}
-		}
-		custom, err := applyPlanChanges(domain.SeasonSnapshot{Stages: stages, Steps: steps}, in.PlanChanges)
-		if err != nil {
-			return SeasonResult{}, err
-		}
-		fields := map[string]any{"template_ref": t.Ref, "version_id": v.ID, "version_no": v.VersionNo,
-			"crop_code": in.CropCode, "name": t.Name, "anchor_name": t.AnchorName, "stages": stages, "steps": steps}
-		if custom.Custom != nil {
-			fields["custom"] = custom.Custom
-		}
-		snapshot, err := json.Marshal(fields)
-		if err != nil {
-			return SeasonResult{}, err
+		var templateRef uuid.UUID
+		var v *store.Version
+		var snapshot json.RawMessage
+		if in.CopyFrom != uuid.Nil {
+			// AH-139: bản chụp của vụ nguồn (gồm lớp tùy chỉnh AH-113) dùng nguyên; ngày dự kiến tính theo mốc mới.
+			src, err := householdTaskSeason(ctx, tx, a.p.TenantID, in.CooperativeRef, in.HouseholdRef, in.CopyFrom, false)
+			if err != nil {
+				return SeasonResult{}, err
+			}
+			if src.CropCode != in.CropCode || src.VarietyCode != in.VarietyCode || src.SOPVersionID != in.SOPVersionID {
+				return SeasonResult{}, ErrConcurrentEdit.WithDetail("Vụ nguồn vừa đổi; mở lại form sao chép")
+			}
+			if v, err = store.VersionByID(ctx, tx, src.SOPVersionID, false); err != nil {
+				return SeasonResult{}, err
+			}
+			if v == nil {
+				return SeasonResult{}, ErrHouseholdSOP
+			}
+			var base domain.SeasonSnapshot
+			if err := json.Unmarshal(src.SOPSnapshot, &base); err != nil {
+				return SeasonResult{}, err
+			}
+			copied, err := applyPlanChanges(base, in.PlanChanges)
+			if err != nil {
+				return SeasonResult{}, err
+			}
+			if snapshot, err = mergeSnapshot(src.SOPSnapshot, copied); err != nil {
+				return SeasonResult{}, err
+			}
+			templateRef = src.SOPTemplateRef
+		} else {
+			t, version, err := householdSOP(ctx, tx, in.CooperativeRef, in.CropCode, in.VarietyCode, in.SOPVersionID)
+			if err != nil {
+				return SeasonResult{}, err
+			}
+			v, templateRef = version, t.Ref
+			stages, steps := v.Stages, v.Steps
+			if stages == nil {
+				stages = []domain.Stage{}
+			}
+			if steps == nil {
+				steps = []domain.Step{}
+			}
+			custom, err := applyPlanChanges(domain.SeasonSnapshot{Stages: stages, Steps: steps}, in.PlanChanges)
+			if err != nil {
+				return SeasonResult{}, err
+			}
+			fields := map[string]any{"template_ref": t.Ref, "version_id": v.ID, "version_no": v.VersionNo,
+				"crop_code": in.CropCode, "name": t.Name, "anchor_name": t.AnchorName, "stages": stages, "steps": steps}
+			if custom.Custom != nil {
+				fields["custom"] = custom.Custom
+			}
+			if snapshot, err = json.Marshal(fields); err != nil {
+				return SeasonResult{}, err
+			}
 		}
 		loc := domain.LocMissing
 		if in.GPS.HasPoint() {
@@ -170,7 +234,7 @@ func (s *Service) OpenHouseholdSeason(ctx context.Context, in HouseholdOpenInput
 			EntryKind: "household", CropCode: in.CropCode, SOPSnapshot: snapshot,
 			HouseholdRef: h.Ref, CooperativeRef: in.CooperativeRef, CommuneCode: h.CommuneCode,
 			SeasonCode: in.SeasonCode, SeasonYear: in.SeasonYear, VarietyCode: in.VarietyCode, AreaHa: area,
-			SowingDate: in.AnchorDate, SOPTemplateRef: t.Ref, SOPVersionID: v.ID, SOPVersionNo: v.VersionNo,
+			SowingDate: in.AnchorDate, SOPTemplateRef: templateRef, SOPVersionID: v.ID, SOPVersionNo: v.VersionNo, CopiedFrom: in.CopyFrom,
 			ExpectedYield: expectedYield(variety), GPS: in.GPS, LocationStatus: loc, Channel: in.Channel,
 			ActorRef: a.p.ActorRef, OnBehalf: a.onBehalf(), EventTime: now, IdemKey: key}
 		if v.HarvestDayOffset != nil && v.HarvestWindowDays != nil {
@@ -208,7 +272,7 @@ func (s *Service) OpenHouseholdSeason(ctx context.Context, in HouseholdOpenInput
 	if e.EntryKind != "household" || e.ActorRef != a.p.ActorRef || e.CooperativeRef != in.CooperativeRef || e.HouseholdRef != in.HouseholdRef ||
 		e.CropCode != in.CropCode || e.VarietyCode != in.VarietyCode || e.SeasonCode != in.SeasonCode || e.SeasonYear != in.SeasonYear ||
 		!e.AreaHa.Equal(area) || domain.FormatDay(e.SowingDate) != domain.FormatDay(in.AnchorDate) || e.Channel != in.Channel ||
-		!sameHouseholdGPS(e.GPS, in.GPS) || (in.SOPVersionID != uuid.Nil && in.SOPVersionID != e.SOPVersionID) {
+		!sameHouseholdGPS(e.GPS, in.GPS) || (in.SOPVersionID != uuid.Nil && in.SOPVersionID != e.SOPVersionID) || e.CopiedFrom != in.CopyFrom {
 		return SeasonResult{}, problem.IdempotencyConflict
 	}
 	return r, nil
