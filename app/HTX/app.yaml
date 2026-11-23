@@ -18,6 +18,7 @@ modules:
   pf/waterway: ">=1.0 <2"     # lớp đường thủy của bản đồ; pf/geo và pf/metrics dùng port
   pf/sync: ">=1.0 <2"          # đồng bộ ngoại tuyến của app HTX
   pf/workflow: ">=1.0 <2"      # cap/workflow: duyệt bốn mắt (tham số, cấp quyền chia sẻ — W6.1)
+  pf/weather: ">=1.0 <2"       # thời tiết, lịch âm, kết nối API thời tiết (FN-TT-01..03, ADR-0065)
 roles:
   - coop_manager
   - htx_member # Thành viên HTX (FN-05); trang đầu = mục menu đầu tiên được xem, không đặt landing
