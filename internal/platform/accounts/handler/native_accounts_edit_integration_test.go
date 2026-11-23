@@ -36,7 +36,10 @@ func TestNativeFN07EditLockUnlock(t *testing.T) {
 		b, _ := json.Marshal(body)
 		return admin.raw(http.MethodPost, "/v1/accounts/htx-users/"+id.String()+"/revisions"+query, idem, "application/json", b)
 	}
-	edit := func(id uuid.UUID, idem string, body map[string]any) resp { t.Helper(); return editAt(id, "", idem, body) }
+	edit := func(id uuid.UUID, idem string, body map[string]any) resp {
+		t.Helper()
+		return editAt(id, "", idem, body)
+	}
 	roles := func(id uuid.UUID) []string {
 		t.Helper()
 		all, err := f.dir.RealmRoles(ctx, id)
