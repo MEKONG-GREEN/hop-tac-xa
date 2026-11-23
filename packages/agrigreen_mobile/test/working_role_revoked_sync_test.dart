@@ -3,7 +3,6 @@ import 'dart:typed_data';
 import 'package:agrigreen_mobile/data/actions/action_queue.dart';
 import 'package:agrigreen_mobile/data/crypto/envelope.dart';
 import 'package:agrigreen_mobile/data/sync/sync_api.dart';
-import 'package:agrigreen_mobile/data/sync/sync_service.dart';
 import 'package:agrigreen_mobile/domain/outbox_record.dart';
 import 'package:flutter_test/flutter_test.dart';
 
