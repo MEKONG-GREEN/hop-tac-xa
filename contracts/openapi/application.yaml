@@ -14600,6 +14600,130 @@ paths:
         "401": {$ref: "#/components/responses/Problem"}
         "403": {$ref: "#/components/responses/Problem"}
         "404": {$ref: "#/components/responses/Problem"}
+  /v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/task-records/{log_ref}/corrections:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: household_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: season_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: log_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: correctHouseholdTask
+      summary: Sửa nhật ký việc kèm lý do (AH-126)
+      description: Thành viên HTX/Admin (KHMV-FN-05 U); Đại diện chỉ xem. Bản ghi bù chỉ ghi thêm (cùng log_ref, supersedes_id = phiên bản hiện hành); GPS, ảnh và thời điểm ghi giữ như bản đầu. Lý do bắt buộc, ít nhất 10 ký tự (422 nếu thiếu). Dữ liệu sửa kiểm như khi ghi (ngày làm xong không sau ngày ghi, vật tư theo danh mục, liều 0 cần xác nhận). expected_record_id lệch → 409 cropcycle.task_record_changed; bản đã xóa → 409 cropcycle.task_record_voided; vụ dừng/hủy → 422 cropcycle.task_season_state.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_record_id, reason, state, done_on, materials]
+              properties:
+                expected_record_id: {type: string, format: uuid}
+                reason: {type: string, minLength: 10, maxLength: 500}
+                state: {type: string, enum: [partial, done]}
+                done_on: {type: string, format: date}
+                note: {type: string, maxLength: 2000}
+                zero_confirmed: {type: boolean, default: false}
+                channel: {type: string, enum: [app, web], default: app}
+                materials:
+                  type: array
+                  maxItems: 20
+                  items:
+                    type: object
+                    required: [dose_per_ha]
+                    properties:
+                      material_code: {type: string}
+                      name: {type: string}
+                      unit: {type: string}
+                      dose_per_ha: {type: string, pattern: '^(0|[1-9][0-9]{0,8})(\.[0-9]{1,4})?$'}
+      responses:
+        "200":
+          description: Bản ghi bù và checklist tính lại; replay trả kết quả cũ
+          headers:
+            Idempotent-Replayed: {schema: {type: string}}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [record, checklist]
+                properties:
+                  record: {$ref: "#/components/schemas/HouseholdTaskRecord"}
+                  checklist: {$ref: "#/components/schemas/HouseholdChecklist"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/task-records/{log_ref}/void:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: household_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: season_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: log_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: voidHouseholdTask
+      summary: Xóa mềm nhật ký việc hoặc bỏ tích việc đã xong, kèm lý do (AH-126)
+      description: Thành viên HTX/Admin (KHMV-FN-05 D); Đại diện chỉ xem. Ghi bản ghi bù trạng thái voided — bản ghi ẩn khỏi checklist và tiến độ, không xóa cứng; nếu đó là bản "Đã xong" duy nhất thì việc về chưa xong. Lý do bắt buộc, ít nhất 10 ký tự.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_record_id, reason]
+              properties:
+                expected_record_id: {type: string, format: uuid}
+                reason: {type: string, minLength: 10, maxLength: 500}
+                channel: {type: string, enum: [app, web], default: app}
+      responses:
+        "200":
+          description: Bản ghi bù và checklist tính lại; replay trả kết quả cũ
+          headers:
+            Idempotent-Replayed: {schema: {type: string}}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [record, checklist]
+                properties:
+                  record: {$ref: "#/components/schemas/HouseholdTaskRecord"}
+                  checklist: {$ref: "#/components/schemas/HouseholdChecklist"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/task-records/{log_ref}/history:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: household_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: season_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: log_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: getHouseholdTaskHistory
+      summary: Lịch sử các phiên bản của nhật ký việc (AH-126)
+      description: Người xem được vụ (kể cả Đại diện HTX cùng HTX) xem được. Theo thứ tự ghi; mỗi phiên bản có người ghi (actor_ref), thời điểm (recorded_at), lý do sửa/xóa (correction_reason) và giá trị lúc đó.
+      responses:
+        "200":
+          description: Các phiên bản, cũ nhất trước
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: "#/components/schemas/HouseholdTaskRecord"}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
   /v1/extension/khtc/periods/{id}/report:
     get:
       summary: "Bản soạn Mẫu 1–5, ô số chỉ đọc và mốc dữ liệu"
@@ -28966,9 +29090,11 @@ components:
         id: {type: string, format: uuid}
         log_ref: {type: string, format: uuid}
         step_seq: {type: integer}
-        state: {type: string, enum: [done, partial, skipped]}
+        state: {type: string, enum: [done, partial, skipped, voided], description: "voided chỉ có trong lịch sử (bản ghi đã xóa/bỏ tích, AH-126)"}
         done_on: {type: string, format: date}
         sop_version_id: {type: string, format: uuid}
+        version: {type: integer, description: "Số phiên bản trong chuỗi của bản ghi (1 = bản đầu)"}
+        correction_reason: {type: string, description: "Lý do sửa/xóa của phiên bản bù (AH-126)"}
         inputs:
           type: array
           items:

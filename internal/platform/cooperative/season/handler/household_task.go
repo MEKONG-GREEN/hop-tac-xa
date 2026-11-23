@@ -18,7 +18,10 @@ func taskRecordOut(l store.FarmLog) gin.H {
 	out := gin.H{
 		"id": l.ID, "log_ref": l.LogRef, "step_seq": l.TaskCompletion.StepSeq, "state": l.TaskCompletion.State, "done_on": l.TaskCompletion.DoneOn,
 		"sop_version_id": l.TaskCompletion.SOPVersionID, "inputs": l.Inputs, "gps_missing": !l.GPS.HasPoint(), "gps": gpsOut(l.GPS),
-		"actor_ref": l.ActorRef, "event_time": ts(l.EventTime), "recorded_at": ts(l.RecordedAt),
+		"actor_ref": l.ActorRef, "event_time": ts(l.EventTime), "recorded_at": ts(l.RecordedAt), "version": l.Version,
+	}
+	if l.CorrectionReason != nil {
+		out["correction_reason"] = *l.CorrectionReason
 	}
 	if d := l.TaskCompletion.Details; d != nil {
 		out["details"] = gin.H{"actual_materials": d.ActualMaterials, "backfilled": d.Backfilled, "backfill_reason": d.BackfillReason, "zero_confirmed": d.ZeroConfirmed}

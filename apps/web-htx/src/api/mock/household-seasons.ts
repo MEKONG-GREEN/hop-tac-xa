@@ -16,6 +16,9 @@ const journalDevices = new Map<string, string>();
 const nativeJournalReceipts = new Map<string, string>();
 const planHistory = new Map<string, { event_id: string; actor_ref: string; event_time: string; summary: string }[]>();
 const planReceipts = new Map<string, { season: Season; summary: string }>();
+// AH-126: các phiên bản của nhật ký việc theo log_ref (lịch sử chỉ ghi thêm).
+const taskHistory = new Map<string, TaskRecord[]>();
+const editReceipts = new Map<string, TaskRecord>();
 const planProblem = (e: PlanError) => e.field ? validation([{ field: e.field, reason: e.reason }]) : problem(e.status, e.code, e.reason);
 
 const journalWriter = (p: MockPersona) => hasRole(p, "platform_admin") || (hasRole(p, "htx_member") && !hasRole(p, "coop_manager"));
@@ -114,7 +117,46 @@ function mockPlan(snapshot: Season["sop_snapshot"], anchor: string, event: strin
   };
 }
 
+function mockTaskEdit(void_: boolean): Route["handler"] {
+  return ({ params, persona, body, request }) => {
+    if (!journalWriter(persona)) return problem(403, "cropcycle.read_only", "Vai của bạn chỉ được xem");
+    const s = seasons.find((s) => s.cooperative_ref === params[0] && s.household_ref === params[1] && s.season_ref === params[2]);
+    if (!s || (!hasRole(persona, "platform_admin") && persona.me.org?.ref !== s.cooperative_ref)) return problem(404, "cropcycle.household_not_found", "Không tìm thấy nông hộ");
+    const receipt = `${persona.me.actor_ref}:${request.headers.get("Idempotency-Key")}`;
+    const replay = editReceipts.get(receipt);
+    if (replay) return json({ record: replay, checklist: mockChecklist(s, true) });
+    const b = body as { expected_record_id: string; reason: string; state?: "done" | "partial"; done_on?: string; note?: string };
+    if (!b.reason || b.reason.trim().length < 10) return validation([{ field: "reason", reason: "Nhập lý do sửa hoặc xóa (ít nhất 10 ký tự)" }]);
+    const records = taskRecords.get(s.season_ref) ?? [];
+    const cur = records.find((r) => r.log_ref === params[3]);
+    if (!cur) return (taskHistory.get(params[3]!) ?? []).length ? problem(409, "cropcycle.task_record_voided", "Bản ghi đã bị xóa") : problem(404, "cropcycle.task_record_not_found", "Không tìm thấy bản ghi");
+    if (cur.id !== b.expected_record_id) return problem(409, "cropcycle.task_record_changed", "Bản ghi đã được sửa ở nơi khác");
+    const history = taskHistory.get(cur.log_ref) ?? [{ ...cur, version: cur.version ?? 1 }];
+    const next: TaskRecord = { ...cur, id: uuidv7(), version: (cur.version ?? 1) + 1, recorded_at: nowIso(), actor_ref: persona.me.actor_ref, correction_reason: b.reason.trim(),
+      ...(void_ ? { state: "voided" as const } : { state: b.state ?? cur.state, done_on: b.done_on ?? cur.done_on, note: b.note ?? cur.note }) };
+    taskHistory.set(cur.log_ref, [...history, next]);
+    taskRecords.set(s.season_ref, void_ ? records.filter((r) => r.log_ref !== cur.log_ref) : records.map((r) => (r.log_ref === cur.log_ref ? next : r)));
+    editReceipts.set(receipt, next);
+    return json({ record: next, checklist: mockChecklist(s, true) });
+  };
+}
+
 export const householdSeasonRoutes: Route[] = [{
+  method: "POST", pattern: /^\/v1\/cooperatives\/([\w-]+)\/households\/([\w-]+)\/seasons\/([\w-]+)\/task-records\/([\w-]+)\/corrections$/,
+  handler: mockTaskEdit(false),
+}, {
+  method: "POST", pattern: /^\/v1\/cooperatives\/([\w-]+)\/households\/([\w-]+)\/seasons\/([\w-]+)\/task-records\/([\w-]+)\/void$/,
+  handler: mockTaskEdit(true),
+}, {
+  method: "GET", pattern: /^\/v1\/cooperatives\/([\w-]+)\/households\/([\w-]+)\/seasons\/([\w-]+)\/task-records\/([\w-]+)\/history$/,
+  handler: ({ params, persona }) => {
+    const s = seasons.find((s) => s.cooperative_ref === params[0] && s.household_ref === params[1] && s.season_ref === params[2]);
+    if (!s || !hasRole(persona, "platform_admin", "htx_member", "coop_manager") || (!hasRole(persona, "platform_admin") && persona.me.org?.ref !== s.cooperative_ref)) return problem(404, "cropcycle.household_not_found", "Không tìm thấy nông hộ");
+    const current = (taskRecords.get(s.season_ref) ?? []).find((r) => r.log_ref === params[3]);
+    const items = taskHistory.get(params[3]!) ?? (current ? [{ ...current, version: current.version ?? 1 }] : []);
+    return items.length ? json({ items }) : problem(404, "cropcycle.task_record_not_found", "Không tìm thấy bản ghi");
+  },
+}, {
   method: "POST", pattern: /^\/v1\/cooperatives\/([\w-]+)\/households\/([\w-]+)\/seasons\/([\w-]+)\/plan-changes$/,
   handler: ({ params, persona, body, request }) => {
     if (!journalWriter(persona)) return problem(403, "cropcycle.read_only", "Vai của bạn chỉ được xem");

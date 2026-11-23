@@ -10447,6 +10447,81 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/task-records/{log_ref}/corrections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+                log_ref: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sửa nhật ký việc kèm lý do (AH-126)
+         * @description Thành viên HTX/Admin (KHMV-FN-05 U); Đại diện chỉ xem. Bản ghi bù chỉ ghi thêm (cùng log_ref, supersedes_id = phiên bản hiện hành); GPS, ảnh và thời điểm ghi giữ như bản đầu. Lý do bắt buộc, ít nhất 10 ký tự (422 nếu thiếu). Dữ liệu sửa kiểm như khi ghi (ngày làm xong không sau ngày ghi, vật tư theo danh mục, liều 0 cần xác nhận). expected_record_id lệch → 409 cropcycle.task_record_changed; bản đã xóa → 409 cropcycle.task_record_voided; vụ dừng/hủy → 422 cropcycle.task_season_state.
+         */
+        post: operations["correctHouseholdTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/task-records/{log_ref}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+                log_ref: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Xóa mềm nhật ký việc hoặc bỏ tích việc đã xong, kèm lý do (AH-126)
+         * @description Thành viên HTX/Admin (KHMV-FN-05 D); Đại diện chỉ xem. Ghi bản ghi bù trạng thái voided — bản ghi ẩn khỏi checklist và tiến độ, không xóa cứng; nếu đó là bản "Đã xong" duy nhất thì việc về chưa xong. Lý do bắt buộc, ít nhất 10 ký tự.
+         */
+        post: operations["voidHouseholdTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/task-records/{log_ref}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+                log_ref: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Lịch sử các phiên bản của nhật ký việc (AH-126)
+         * @description Người xem được vụ (kể cả Đại diện HTX cùng HTX) xem được. Theo thứ tự ghi; mỗi phiên bản có người ghi (actor_ref), thời điểm (recorded_at), lý do sửa/xóa (correction_reason) và giá trị lúc đó.
+         */
+        get: operations["getHouseholdTaskHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/extension/khtc/periods/{id}/report": {
         parameters: {
             query?: never;
@@ -25198,12 +25273,19 @@ export interface components {
             /** Format: uuid */
             log_ref: string;
             step_seq: number;
-            /** @enum {string} */
-            state: "done" | "partial" | "skipped";
+            /**
+             * @description voided chỉ có trong lịch sử (bản ghi đã xóa/bỏ tích, AH-126)
+             * @enum {string}
+             */
+            state: "done" | "partial" | "skipped" | "voided";
             /** Format: date */
             done_on: string;
             /** Format: uuid */
             sop_version_id: string;
+            /** @description Số phiên bản trong chuỗi của bản ghi (1 = bản đầu) */
+            version?: number;
+            /** @description Lý do sửa/xóa của phiên bản bù (AH-126) */
+            correction_reason?: string;
             inputs: {
                 name: string;
                 qty: components["schemas"]["Decimal"];
@@ -50596,6 +50678,149 @@ export interface operations {
                             event_time: string;
                             summary: string;
                         }[];
+                    };
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+        };
+    };
+    correctHouseholdTask: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+                log_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    expected_record_id: string;
+                    reason: string;
+                    /** @enum {string} */
+                    state: "partial" | "done";
+                    /** Format: date */
+                    done_on: string;
+                    note?: string;
+                    /** @default false */
+                    zero_confirmed?: boolean;
+                    /**
+                     * @default app
+                     * @enum {string}
+                     */
+                    channel?: "app" | "web";
+                    materials: {
+                        material_code?: string;
+                        name?: string;
+                        unit?: string;
+                        dose_per_ha: string;
+                    }[];
+                };
+            };
+        };
+        responses: {
+            /** @description Bản ghi bù và checklist tính lại; replay trả kết quả cũ */
+            200: {
+                headers: {
+                    "Idempotent-Replayed"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        record: components["schemas"]["HouseholdTaskRecord"];
+                        checklist: components["schemas"]["HouseholdChecklist"];
+                    };
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    voidHouseholdTask: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+                log_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    expected_record_id: string;
+                    reason: string;
+                    /**
+                     * @default app
+                     * @enum {string}
+                     */
+                    channel?: "app" | "web";
+                };
+            };
+        };
+        responses: {
+            /** @description Bản ghi bù và checklist tính lại; replay trả kết quả cũ */
+            200: {
+                headers: {
+                    "Idempotent-Replayed"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        record: components["schemas"]["HouseholdTaskRecord"];
+                        checklist: components["schemas"]["HouseholdChecklist"];
+                    };
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    getHouseholdTaskHistory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+                log_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Các phiên bản, cũ nhất trước */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["HouseholdTaskRecord"][];
                     };
                 };
             };

@@ -14,6 +14,7 @@ import type { ApiProblem } from "@/api/problem";
 import { HouseholdTaskDetail } from "./HouseholdTaskDetail";
 import { cachedTaskRead, queuedTasks, flushTasks, enqueueTask, discardTask, taskRejectMessage } from "./taskJournalQueue";
 import { snapshotLookup } from "./SeasonPlanEditor";
+import { HouseholdTaskJournal } from "./HouseholdTaskJournal";
 
 /** AH-114: chu kỳ tự thử lại đồng bộ khi còn nhật ký chờ gửi. */
 export const TASK_RETRY_MS = 120_000;
@@ -136,6 +137,7 @@ export function HouseholdChecklist({ coopRef, householdRef, seasonRef, season }:
         })}</ul>
       </section>)}
       <button type="button" className="btn btn-o btn-sm" disabled={busy} onClick={() => { setPending(null); refresh(); }}>Tải lại checklist</button>
+      <HouseholdTaskJournal path={path} checklist={data} writable={canWrite && (season?.status ?? "open") !== "cancelled"} onChanged={(c) => { setUpdated(c); load.reload(); }} />
     </> : null}
     {detail && season && data ? <HouseholdTaskDetail key={detail.seq} path={path} event={data.current_event_id} task={detail} season={season} onClose={() => setDetail(null)} onQueued={() => { setDetail(null); setQueueRevision((r) => r + 1); if (navigator.onLine) void syncQueued(); }} /> : null}
     {pending ? <div role="region" aria-label="Xác nhận hoàn thành" className="row" style={{ position: "sticky", bottom: 0, background: "var(--bg)", padding: 12, borderTop: "1px solid var(--line)", zIndex: 2 }}>

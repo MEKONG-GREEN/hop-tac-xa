@@ -23,6 +23,13 @@ const _labels = {
   'in_progress': 'Đang thực hiện',
 };
 String _day(Object? raw) => '$raw'.split('-').reversed.join('/');
+String _stateLabel(Object? state) => switch (state) {
+  'done' => 'Đã xong',
+  'partial' => 'Chưa xong, làm tiếp',
+  'skipped' => 'Bỏ qua',
+  'voided' => 'Đã xóa',
+  _ => '$state',
+};
 List<HouseholdJson> _rows(Object? raw) => (raw as List<Object?>)
     .map((v) => Map<String, Object?>.from(v as Map))
     .toList();
@@ -214,6 +221,101 @@ class _HouseholdChecklistScreenState extends State<HouseholdChecklistScreen> {
             : 'Chưa lưu được trên máy. Thử lại; dữ liệu được giữ.',
       );
     }
+  }
+
+  /// AH-126 AC4, AC5: bỏ tích/xóa bắt buộc lý do ≥ 10 ký tự; không bỏ tích im lặng.
+  Future<void> _void(HouseholdJson record) async {
+    final untick = record['state'] == 'done';
+    final key = _ids.newId();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => _VoidDialog(
+        untick: untick,
+        submit: (reason) async {
+          try {
+            final res = await widget.service.voidTask(
+              widget.coop,
+              widget.household,
+              _season,
+              '${record['log_ref']}',
+              '${record['id']}',
+              reason,
+              key,
+            );
+            if (mounted) {
+              setState(() {
+                _updated = Map<String, Object?>.from(res['checklist'] as Map);
+                _load = widget.service.checklist(
+                  widget.coop,
+                  widget.household,
+                  _season,
+                );
+              });
+            }
+            return null;
+          } catch (e) {
+            return e is ApiException
+                ? (e.detail ?? 'Không lưu được. Tải lại rồi thử.')
+                : 'Cần mạng để xóa hoặc bỏ tích. Thử lại khi có mạng.';
+          }
+        },
+      ),
+    );
+    if (ok == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(untick ? 'Đã bỏ tích.' : 'Đã xóa bản ghi.')),
+      );
+    }
+  }
+
+  /// AH-126: lịch sử các phiên bản (giá trị, người, thời điểm, lý do).
+  Future<void> _history(HouseholdJson record) async {
+    final items = widget.service.taskHistory(
+      widget.coop,
+      widget.household,
+      _season,
+      '${record['log_ref']}',
+    );
+    await showDialog<void>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Lịch sử bản ghi'),
+        content: FutureBuilder<List<HouseholdJson>>(
+          future: items,
+          builder: (c, s) {
+            if (s.hasError) return const Text('Cần mạng để xem lịch sử.');
+            if (!s.hasData) return const LinearProgressIndicator();
+            return SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final v in s.data!)
+                    ListTile(
+                      title: Text(
+                        'Phiên bản ${v['version']} · ${_stateLabel(v['state'])} · làm ${_day(v['done_on'])}',
+                      ),
+                      subtitle: Text(
+                        [
+                          'Ghi lúc ${v['recorded_at']}',
+                          if (v['correction_reason'] != null)
+                            'Lý do: ${v['correction_reason']}',
+                          if ('${v['note'] ?? ''}'.isNotEmpty) '${v['note']}',
+                        ].join(' · '),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c),
+            child: const Text('Đóng'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _discard(OutboxRecord r) async {
@@ -416,6 +518,28 @@ class _HouseholdChecklistScreenState extends State<HouseholdChecklistScreen> {
           '${input['name']}: ${input['qty']} ${input['unit']}',
       ],
     ];
+    final logs = records.where((r) => r['step_seq'] == task['seq']).toList();
+    final journal = [
+      for (final r in logs)
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                '${_stateLabel(r['state'])} · ${_day(r['done_on'])}${(r['version'] as num? ?? 1) > 1 ? ' · Đã sửa' : ''}',
+              ),
+            ),
+            if (widget.canWrite)
+              TextButton(
+                onPressed: _busy ? null : () => _void(r),
+                child: Text(r['state'] == 'done' ? 'Bỏ tích' : 'Xóa'),
+              ),
+            TextButton(
+              onPressed: () => _history(r),
+              child: const Text('Lịch sử'),
+            ),
+          ],
+        ),
+    ];
     if (widget.canWrite && task['can_complete'] == true) {
       return Column(
         children: [
@@ -429,12 +553,99 @@ class _HouseholdChecklistScreenState extends State<HouseholdChecklistScreen> {
             onPressed: _busy ? null : () => _detail(task, data),
             child: Text('Ghi chi tiết ${task['name']}'),
           ),
+          ...journal,
         ],
       );
     }
-    return ListTile(
-      title: Text('${task['name']}'),
-      subtitle: Text(parts.join(' · ')),
+    return Column(
+      children: [
+        ListTile(
+          title: Text('${task['name']}'),
+          subtitle: Text(parts.join(' · ')),
+        ),
+        ...journal,
+      ],
     );
   }
+}
+
+/// Hộp thoại lý do bỏ tích/xóa (AH-126). Tự giữ controller để không dùng sau khi
+/// đã hủy trong lúc hộp thoại đang đóng. [submit] trả câu lỗi, hoặc null khi xong.
+class _VoidDialog extends StatefulWidget {
+  const _VoidDialog({required this.untick, required this.submit});
+  final bool untick;
+  final Future<String?> Function(String reason) submit;
+  @override
+  State<_VoidDialog> createState() => _VoidDialogState();
+}
+
+class _VoidDialogState extends State<_VoidDialog> {
+  final _reason = TextEditingController();
+  String? _error;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _reason.dispose();
+    super.dispose();
+  }
+
+  Future<void> _confirm() async {
+    final reason = _reason.text.trim();
+    if (reason.length < 10) {
+      setState(() => _error = 'Nhập lý do (ít nhất 10 ký tự).');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final error = await widget.submit(reason);
+    if (!mounted) return;
+    if (error == null) {
+      Navigator.pop(context, true);
+      return;
+    }
+    setState(() {
+      _busy = false;
+      _error = error;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text(widget.untick ? 'Bỏ tích việc đã xong' : 'Xóa bản ghi'),
+    content: SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${widget.untick ? 'Nếu đây là bản ghi duy nhất, việc trở về chưa xong. ' : ''}Bản ghi bị ẩn, không xóa hẳn; lịch sử vẫn xem được.',
+          ),
+          TextField(
+            key: const ValueKey('void-reason'),
+            controller: _reason,
+            enabled: !_busy,
+            maxLength: 500,
+            decoration: InputDecoration(
+              labelText: 'Lý do (ít nhất 10 ký tự)',
+              errorText: _error,
+              errorMaxLines: 3,
+            ),
+          ),
+        ],
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: _busy ? null : () => Navigator.pop(context, false),
+        child: const Text('Hủy'),
+      ),
+      FilledButton(
+        onPressed: _busy ? null : _confirm,
+        child: Text(widget.untick ? 'Bỏ tích' : 'Xóa'),
+      ),
+    ],
+  );
 }

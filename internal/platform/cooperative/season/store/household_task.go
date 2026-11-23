@@ -24,7 +24,7 @@ func SaveHouseholdTask(ctx context.Context, tx pgx.Tx, l FarmLog) error {
 
 func HouseholdTasks(ctx context.Context, tx pgx.Tx, season uuid.UUID) ([]FarmLog, error) {
 	rows, err := tx.Query(ctx, "SELECT "+farmLogCols+` FROM pf_coop.farm_log WHERE entry_kind='household' AND season_ref=$1 AND id IN
- (SELECT id FROM pf_coop.household_task_current WHERE season_ref=$1) ORDER BY recorded_at,id`, season)
+ (SELECT id FROM pf_coop.household_task_current WHERE season_ref=$1 AND state<>'voided') ORDER BY recorded_at,id`, season)
 	if err != nil {
 		return nil, err
 	}
