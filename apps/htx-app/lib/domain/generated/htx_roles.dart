@@ -278,6 +278,10 @@ const htxRoleMatrixJson = '''
     "POST /v1/cropcycle/farm-logs",
     "POST /v1/cropcycle/farm-logs/batch",
     "POST /v1/cropcycle/farm-logs/:id/corrections",
+    "POST /v1/cooperatives/:ref/households/:household_ref/seasons",
+    "POST /v1/cooperatives/:ref/households/:household_ref/season-plan-preview",
+    "POST /v1/cooperatives/:ref/households/:household_ref/seasons/:season_ref/task-completions",
+    "POST /v1/cooperatives/:ref/households/:household_ref/seasons/:season_ref/task-records",
     "POST /v1/me/data-consent",
     "PUT /v1/me/password"
   ]
