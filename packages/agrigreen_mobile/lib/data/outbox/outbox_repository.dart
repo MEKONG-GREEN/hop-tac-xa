@@ -475,8 +475,8 @@ class OutboxRepository {
   /// Trả true khi đã xóa.
   Future<bool> discardRejected(String id) async =>
       await _sql.delete(
-        outbox,
-        where: "id = ? AND status = rejected",
+        'outbox',
+        where: "id = ? AND status = 'rejected'",
         whereArgs: [id],
       ) ==
       1;
