@@ -17,7 +17,13 @@ type TaskRecord struct {
 	SeasonEventID uuid.UUID    `json:"season_event_id"`
 	Step          Step         `json:"step"`
 	Details       *TaskDetails `json:"details,omitempty"`
+	// Adhoc: việc phát sinh ngoài quy trình (AH-163) — nhãn "Ngoài SOP", số việc riêng > AdhocStepSeqBase, không tính
+	// vào tiến độ.
+	Adhoc bool `json:"adhoc,omitempty"`
 }
+
+// AdhocStepSeqBase: số việc của việc phát sinh bắt đầu sau mọi số việc của quy trình (MaxPlanStepSeq).
+const AdhocStepSeqBase = MaxPlanStepSeq
 
 type TaskProgress struct {
 	ScheduleStep

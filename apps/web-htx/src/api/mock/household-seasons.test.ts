@@ -81,4 +81,28 @@ describe("AH-61 mock route registration and budget", () => {
     expect(done.checklist.records).toHaveLength(3); expect(done.checklist.progress.done).toBe(1);
     const after = await unwrap(api.GET("/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}", { params: { path } })); expect(after.sop_snapshot).toEqual(opened.season.sop_snapshot);
   }, 15000);
+  it("AH-163 adhoc task is labelled Ngoài SOP, replays, and leaves progress unchanged", async () => {
+    const client = (persona: string) => createApiClient({ baseUrl: "https://api.test", getAccessToken: () => mockToken(persona), fetch: mockFetchNoDelay });
+    const api = client("htx-member"), coop = htxCoop().api.ref;
+    const households = await unwrap(api.GET("/v1/cooperatives/{ref}/households", { params: { path: { ref: coop }, query: { limit: 200 } } }));
+    const household = households.items.find((h) => h.can_open_season && scaledArea(h.remaining_area_ha ?? "0") >= 100n)!;
+    const base = { ref: coop, household_ref: household.household_ref };
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(new Date());
+    const opened = await unwrap(api.POST("/v1/cooperatives/{ref}/households/{household_ref}/seasons", { params: { path: base, header: { "Idempotency-Key": newIdempotencyKey() } }, body: { crop_code: "LUA", season_code: "DX", season_year: 2027, variety_code: "OM5451", area_ha: "0.01", anchor_date: today, channel: "web", gps: { source: "denied" } } }));
+    const path = { ...base, season_ref: opened.season.season_ref };
+    const before = await unwrap(api.GET("/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/checklist", { params: { path } }));
+    const body = { expected_season_event_id: before.current_event_id, stage_seq: 1, name: "Rải vôi bổ sung", activity_code: "bon_phan" as const, state: "done" as const, done_on: today, channel: "web" as const, zero_confirmed: false, materials: [{ name: "Vôi bột", unit: "kg", dose_per_ha: "50" }], gps: { source: "no_device" as const } };
+    const key = newIdempotencyKey();
+    const send = () => unwrap(api.POST("/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/adhoc-records", { params: { path, header: { "Idempotency-Key": key } }, body }));
+    const first = await send();
+    expect(first.record.adhoc).toBe(true); expect(first.record.adhoc_name).toBe("Rải vôi bổ sung"); expect(first.record.step_seq).toBe(1001);
+    expect(first.checklist.progress.done).toBe(before.progress.done); expect(first.checklist.progress.total).toBe(before.progress.total);
+    expect((await send()).record.id).toBe(first.record.id);
+    const second = await unwrap(api.POST("/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/adhoc-records", { params: { path, header: { "Idempotency-Key": newIdempotencyKey() } }, body }));
+    expect(second.record.step_seq).toBe(1002);
+    const future = await api.POST("/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/adhoc-records", { params: { path, header: { "Idempotency-Key": newIdempotencyKey() } }, body: { ...body, done_on: "2999-01-01" } });
+    expect(future.response.status).toBe(422);
+    const denied = await client("htx").POST("/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/adhoc-records", { params: { path, header: { "Idempotency-Key": newIdempotencyKey() } }, body });
+    expect(denied.response.status).toBe(403);
+  });
 });

@@ -23,6 +23,13 @@ func taskRecordOut(l store.FarmLog) gin.H {
 	if l.CorrectionReason != nil {
 		out["correction_reason"] = *l.CorrectionReason
 	}
+	if l.TaskCompletion.Adhoc {
+		// AH-163: việc phát sinh ngoài quy trình — nhãn "Ngoài SOP", không tính tiến độ.
+		out["adhoc"] = true
+		out["adhoc_name"] = l.TaskCompletion.Step.Name
+		out["stage_seq"] = l.TaskCompletion.StageSeq
+		out["activity_code"] = l.TaskCompletion.Step.ActivityCode
+	}
 	if d := l.TaskCompletion.Details; d != nil {
 		out["details"] = gin.H{"actual_materials": d.ActualMaterials, "backfilled": d.Backfilled, "backfill_reason": d.BackfillReason, "zero_confirmed": d.ZeroConfirmed}
 		out["note"] = l.Note

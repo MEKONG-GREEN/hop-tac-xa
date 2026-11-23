@@ -30,3 +30,12 @@ func HouseholdTasks(ctx context.Context, tx pgx.Tx, season uuid.UUID) ([]FarmLog
 	}
 	return collectFarmLogs(rows)
 }
+
+// NextAdhocStepSeq cấp số việc tiếp theo cho việc phát sinh của vụ (AH-163): lớn hơn base và mọi số đã cấp (kể cả bản
+// ghi đã xóa). Gọi dưới khóa của vụ.
+func NextAdhocStepSeq(ctx context.Context, tx pgx.Tx, season uuid.UUID, base int) (int, error) {
+	var n int
+	err := tx.QueryRow(ctx, `SELECT COALESCE(max(sop_step_seq), $2) + 1 FROM pf_coop.farm_log
+	  WHERE entry_kind='household' AND season_ref=$1 AND sop_step_seq > $2`, season, base).Scan(&n)
+	return n, err
+}

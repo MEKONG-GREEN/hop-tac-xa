@@ -15,6 +15,7 @@ import { HouseholdTaskDetail } from "./HouseholdTaskDetail";
 import { cachedTaskRead, queuedTasks, flushTasks, enqueueTask, discardTask, taskRejectMessage } from "./taskJournalQueue";
 import { snapshotLookup } from "./SeasonPlanEditor";
 import { HouseholdTaskJournal } from "./HouseholdTaskJournal";
+import { AdhocTaskForm } from "./AdhocTaskForm";
 
 /** AH-114: chu kỳ tự thử lại đồng bộ khi còn nhật ký chờ gửi. */
 export const TASK_RETRY_MS = 120_000;
@@ -52,6 +53,7 @@ export function HouseholdChecklist({ coopRef, householdRef, seasonRef, season }:
   const [error, setError] = useState<ApiProblem | null>(null);
   const [detail, setDetail] = useState<S["HouseholdTaskProgress"] | null>(null);
   const [queueRevision, setQueueRevision] = useState(0);
+  const [adhoc, setAdhoc] = useState(false);
   const queue = useAsync(() => canWrite && principal && typeof indexedDB !== "undefined" ? queuedTasks(principal, coopRef, householdRef, seasonRef) : Promise.resolve([]), [principal, canWrite, coopRef, householdRef, seasonRef, queueRevision]);
   const syncQueued = async () => {
     if (!principal || !canWrite || busy) return;
@@ -137,6 +139,9 @@ export function HouseholdChecklist({ coopRef, householdRef, seasonRef, season }:
         })}</ul>
       </section>)}
       <button type="button" className="btn btn-o btn-sm" disabled={busy} onClick={() => { setPending(null); refresh(); }}>Tải lại checklist</button>
+      {canWrite && (season?.status ?? "open") !== "cancelled" ? adhoc
+        ? <AdhocTaskForm path={path} event={data.current_event_id} stages={data.progress.stages} onClose={() => setAdhoc(false)} onSaved={(c) => { setAdhoc(false); setUpdated(c); load.reload(); }} />
+        : <button type="button" className="btn btn-o btn-sm" disabled={busy} onClick={() => setAdhoc(true)}>Ghi việc phát sinh</button> : null}
       <HouseholdTaskJournal path={path} checklist={data} writable={canWrite && (season?.status ?? "open") !== "cancelled"} onChanged={(c) => { setUpdated(c); load.reload(); }} />
     </> : null}
     {detail && season && data ? <HouseholdTaskDetail key={detail.seq} path={path} event={data.current_event_id} task={detail} season={season} onClose={() => setDetail(null)} onQueued={() => { setDetail(null); setQueueRevision((r) => r + 1); if (navigator.onLine) void syncQueued(); }} /> : null}

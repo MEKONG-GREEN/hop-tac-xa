@@ -144,7 +144,7 @@ export function HouseholdTaskJournal({ path, checklist, writable, onChanged }: {
   const tasks = useMemo(() => new Map(checklist.progress.stages.flatMap((s) => s.tasks.map((t) => [t.seq, { ...t, stageName: s.name, stageSeq: s.seq }] as const))), [checklist]);
   const activities = useMemo(() => Array.from(new Set(Array.from(tasks.values()).map((t) => t.activity_code))), [tasks]);
   const rows = checklist.records
-    .filter((r) => (!stage || String(tasks.get(r.step_seq)?.stageSeq) === stage) && (!activity || tasks.get(r.step_seq)?.activity_code === activity) && (!from || r.done_on >= from) && (!to || r.done_on <= to))
+    .filter((r) => (!stage || String(tasks.get(r.step_seq)?.stageSeq ?? r.stage_seq) === stage) && (!activity || (tasks.get(r.step_seq)?.activity_code ?? r.activity_code) === activity) && (!from || r.done_on >= from) && (!to || r.done_on <= to))
     .sort((a, b) => b.done_on.localeCompare(a.done_on) || b.recorded_at.localeCompare(a.recorded_at));
   const done = (c: S["HouseholdChecklist"]) => { setOpen(null); onChanged(c); };
   return <section aria-label="Nhật ký của vụ" className="stack">
@@ -158,7 +158,7 @@ export function HouseholdTaskJournal({ path, checklist, writable, onChanged }: {
     {!rows.length ? <p className="small mute">Chưa có bản ghi phù hợp.</p> : <ul className="stack">{rows.slice(0, shown).map((r) => {
       const task = tasks.get(r.step_seq);
       return <li key={r.id}>
-        <div><strong>{task?.name ?? `Việc ${r.step_seq}`}</strong> · {task?.stageName} · làm {formatDate(r.done_on)}{expected(task)} · {STATE[r.state] ?? r.state}{r.inputs.map((i) => ` · ${i.name}: ${i.qty} ${i.unit}`).join("")}{r.note ? ` · ${r.note}` : ""}{(r.version ?? 1) > 1 ? " · Đã sửa" : ""}</div>
+        <div><strong>{task?.name ?? r.adhoc_name ?? `Việc ${r.step_seq}`}</strong>{r.adhoc ? <span className="chip c-warn"> Ngoài SOP</span> : null} · {task?.stageName ?? checklist.progress.stages.find((s) => s.seq === r.stage_seq)?.name} · làm {formatDate(r.done_on)}{expected(task)} · {STATE[r.state] ?? r.state}{r.inputs.map((i) => ` · ${i.name}: ${i.qty} ${i.unit}`).join("")}{r.note ? ` · ${r.note}` : ""}{(r.version ?? 1) > 1 ? " · Đã sửa" : ""}</div>
         <div className="row">
           {canEdit ? <button type="button" className="btn btn-o btn-sm" onClick={() => setOpen({ kind: "edit", record: r })}>Sửa</button> : null}
           {canDelete ? <button type="button" className="btn btn-o btn-sm" onClick={() => setOpen({ kind: "void", record: r })}>{r.state === "done" ? "Bỏ tích" : "Xóa"}</button> : null}

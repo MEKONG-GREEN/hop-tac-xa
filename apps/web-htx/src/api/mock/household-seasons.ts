@@ -214,6 +214,38 @@ export const householdSeasonRoutes: Route[] = [{
     }) });
   },
 }, {
+  // AH-163: việc phát sinh ngoài quy trình — số việc riêng > 1000, nhãn Ngoài SOP, không tính tiến độ.
+  method: "POST", pattern: /^\/v1\/cooperatives\/([\w-]+)\/households\/([\w-]+)\/seasons\/([\w-]+)\/adhoc-records$/,
+  handler: ({ params, persona, body, request }) => {
+    if (!journalWriter(persona)) return problem(403, "cropcycle.read_only", "Vai của bạn chỉ được xem");
+    const s = seasons.find((s) => s.cooperative_ref === params[0] && s.household_ref === params[1] && s.season_ref === params[2]);
+    if (!s || (!hasRole(persona, "platform_admin") && persona.me.org?.ref !== s.cooperative_ref)) return problem(404, "cropcycle.season_not_found", "Không tìm thấy vụ");
+    const receipt = `${persona.me.actor_ref}:adhoc:${request.headers.get("Idempotency-Key")}`;
+    const replay = editReceipts.get(receipt);
+    if (replay) return json({ record: replay, checklist: mockChecklist(s, true) }, 201);
+    const b = body as { expected_season_event_id: string; stage_seq: number; name: string; activity_code: string; state: "done" | "partial"; done_on: string; note?: string; backfill_reason?: string; zero_confirmed?: boolean; materials: { name?: string; unit?: string; dose_per_ha: string }[] };
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(new Date(nowIso()));
+    if (!b.name?.trim()) return validation([{ field: "name", reason: "Nhập nội dung việc (tối đa 200 ký tự)" }]);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(b.done_on) || b.done_on > today) return validation([{ field: "done_on", reason: "Ngày làm không được sau hôm nay" }]);
+    if (b.expected_season_event_id !== s.current_event_id) return problem(409, "cropcycle.task_season_changed", "Vụ đã thay đổi");
+    const last = s.sop_snapshot.stages.length;
+    if (b.stage_seq < 1 || b.stage_seq > last) return validation([{ field: "stage_seq", reason: "Chọn giai đoạn của vụ" }]);
+    if (s.status === "completed" && b.stage_seq !== last) return problem(409, "cropcycle.task_season_locked", "Vụ đã thu hoạch chỉ ghi giai đoạn cuối");
+    if (s.status !== "open" && s.status !== "completed") return problem(422, "cropcycle.task_season_state", "Vụ không cho ghi");
+    if (b.done_on < new Date(Date.parse(`${today}T00:00:00Z`) - 3 * 86400000).toISOString().slice(0, 10) && !b.backfill_reason?.trim()) return validation([{ field: "backfill_reason", reason: "Bắt buộc nhập lý do khi ghi bù quá 3 ngày" }]);
+    for (const m of b.materials ?? []) {
+      if (!/^(0|[1-9][0-9]{0,8})(\.[0-9]{1,4})?$/.test(m.dose_per_ha)) return validation([{ field: "materials", reason: "Liều không âm, tối đa bốn chữ số lẻ" }]);
+      if (scaledArea(m.dose_per_ha) === 0n && !b.zero_confirmed) return problem(409, "cropcycle.task_zero_confirmation_required", "Xác nhận liều bằng 0");
+    }
+    const records = taskRecords.get(s.season_ref) ?? [];
+    const seq = Math.max(1000, ...records.filter((r) => r.adhoc).map((r) => r.step_seq)) + 1;
+    const id = uuidv7();
+    const record: TaskRecord = { id, log_ref: id, step_seq: seq, state: b.state, done_on: b.done_on, sop_version_id: s.sop_snapshot.version_id, adhoc: true, adhoc_name: b.name.trim(), stage_seq: b.stage_seq, activity_code: b.activity_code,
+      inputs: (b.materials ?? []).map((m) => ({ name: m.name ?? "", unit: m.unit ?? "", qty: m.dose_per_ha })), gps_missing: true, gps: { source: "no_device" }, actor_ref: persona.me.actor_ref, event_time: nowIso(), recorded_at: nowIso(), note: b.note, file_refs: [] };
+    taskRecords.set(s.season_ref, [...records, record]); editReceipts.set(receipt, record);
+    return json({ record, checklist: mockChecklist(s, true) }, 201);
+  },
+}, {
   method: "POST", pattern: /^\/v1\/cooperatives\/([\w-]+)\/households\/([\w-]+)\/seasons\/([\w-]+)\/task-records$/,
   handler: ({ persona, params, body }) => {
     const result = mockTaskDetail(persona, params[0]!, params[1]!, params[2]!, body as components["schemas"]["HouseholdTaskDetailInput"]);
