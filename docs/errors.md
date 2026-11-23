@@ -436,6 +436,9 @@ Cổng `geo.GpsLog.RecordFix` (module khác gọi, không qua HTTP) trả lỗi 
 | 409 | `cropcycle.plan_step_resolved` | AH-113: tùy chỉnh quy trình của vụ — việc đã xong không sửa, đổi chỗ, bỏ được; việc tự thêm đã có nhật ký không xóa được. |
 | 409 | `cropcycle.plan_step_skipped` | AH-113: việc của SOP đã bỏ qua khỏi quy trình của vụ. |
 | 409 | `cropcycle.plan_season_closed` | AH-113: chỉ tùy chỉnh quy trình của vụ đang canh tác. |
+| 404 | `cropcycle.task_record_not_found` | AH-126: không thấy nhật ký việc trong vụ của hộ (hoặc ngoài phạm vi). |
+| 409 | `cropcycle.task_record_changed` | AH-126: bản ghi đã được sửa ở nơi khác; tải lại rồi sửa tiếp. |
+| 409 | `cropcycle.task_record_voided` | AH-126: bản ghi đã bị xóa/bỏ tích; không sửa tiếp được. |
 | 409 | `cropcycle.task_season_changed` | AH-88: expected_season_event_id không còn hiện hành; tải lại trước khi xác nhận. |
 | 409 | `cropcycle.task_zero_confirmation_required` | AH-99: xác nhận liều bằng 0 hoặc không sử dụng vật tư khuyến cáo trước khi lưu. |
 | 404 | `cropcycle.calendar_not_found` | AH-58: không có lịch trong tenant/HTX/phạm vi người nhận hiện tại; Member không đọc lịch đã hủy. |

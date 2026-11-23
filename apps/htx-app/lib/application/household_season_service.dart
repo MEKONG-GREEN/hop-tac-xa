@@ -287,6 +287,44 @@ class HouseholdSeasonService {
     body: {...body, 'channel': 'app'},
   );
 
+  /// AH-126: xóa mềm nhật ký việc hoặc bỏ tích việc đã xong, kèm lý do (≥ 10 ký tự).
+  /// Cần mạng; [key] giữ nguyên khi thử lại cùng thao tác.
+  Future<HouseholdJson> voidTask(
+    String coop,
+    String household,
+    String season,
+    String logRef,
+    String expectedId,
+    String reason,
+    String key,
+  ) => api.sendJson(
+    method: 'POST',
+    path:
+        '/v1/cooperatives/$coop/households/$household/seasons/$season/task-records/$logRef/void',
+    idempotencyKey: key,
+    body: {
+      'expected_record_id': expectedId,
+      'reason': reason,
+      'channel': 'app',
+    },
+  );
+
+  /// AH-126: các phiên bản của nhật ký việc (cũ nhất trước).
+  Future<List<HouseholdJson>> taskHistory(
+    String coop,
+    String household,
+    String season,
+    String logRef,
+  ) async {
+    final value = await api.getJson(
+      '/v1/cooperatives/$coop/households/$household/seasons/$season/task-records/$logRef/history',
+    );
+    return ((value['items'] as List?) ?? const [])
+        .whereType<Map<Object?, Object?>>()
+        .map((m) => m.cast<String, Object?>())
+        .toList();
+  }
+
   Future<SeasonPlan> previewPlan(
     String coop,
     String household,
