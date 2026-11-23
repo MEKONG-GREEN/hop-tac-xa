@@ -129,11 +129,16 @@ func (s *Service) nativeUserDetail(ctx context.Context, a *actor, id string) (Us
 	if u.User.Phone == "" {
 		return u, nil
 	}
-	view := domain.PIIView{ID: ids.New(), TenantID: a.p.TenantID, UserRef: u.User.ID, Field: domain.PIIFieldPhone,
-		EventTime: s.now(), ActorRef: a.p.ActorRef}
-	view.IdemKey = "piiview:" + view.ID.String()
-	if err := tenant.WithTenantTx(ctx, s.DB, a.p.TenantID, func(tx pgx.Tx) error { return store.InsertPIIView(ctx, tx, &view) }); err != nil {
+	if err := s.recordPhoneView(ctx, a.p.TenantID, a.p.ActorRef, u.User.ID); err != nil {
 		return UserView{}, err
 	}
 	return u, nil
+}
+
+// recordPhoneView ghi một dòng pf_accounts.pii_view (ai xem SĐT đầy đủ của tài khoản nào, lúc nào). Gọi trước khi trả
+// SĐT; lỗi thì không trả (đóng khi lỗi — AH-223 BR-04, AH-9 AC3).
+func (s *Service) recordPhoneView(ctx context.Context, tid, actorRef, user uuid.UUID) error {
+	view := domain.PIIView{ID: ids.New(), TenantID: tid, UserRef: user, Field: domain.PIIFieldPhone, EventTime: s.now(), ActorRef: actorRef}
+	view.IdemKey = "piiview:" + view.ID.String()
+	return tenant.WithTenantTx(ctx, s.DB, tid, func(tx pgx.Tx) error { return store.InsertPIIView(ctx, tx, &view) })
 }

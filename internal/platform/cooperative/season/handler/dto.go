@@ -272,8 +272,8 @@ func seasonDetailOut(d app.SeasonDetail) seasonDetailDTO {
 // ---------------------------------------------------------------------------
 
 type gpsDTO struct {
-	Lon       *string `json:"lon"`
-	Lat       *string `json:"lat"`
+	Lon       *string `json:"lon" pii:"true"`
+	Lat       *string `json:"lat" pii:"true"`
 	AccuracyM *string `json:"accuracy_m"`
 	Source    string  `json:"source"`
 }
