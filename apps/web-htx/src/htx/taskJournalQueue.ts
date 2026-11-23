@@ -118,6 +118,32 @@ export async function queuedTasks(p: Principal, coop: string, household: string,
   } finally { db.close(); }
 }
 
+/** AH-114 AC4: người dùng xóa bản ghi đã bị máy chủ từ chối (vd vụ đã đóng). Bản chờ gửi không xóa được. */
+export async function discardTask(p: Principal, id: string): Promise<boolean> {
+  const scope = owner(p), db = await openDB();
+  try {
+    const s = await get<QueueState>(db, "state", scope); if (!s) return false;
+    const row = await get<Stored>(db, "records", id);
+    if (!row || row.owner !== scope || !(await unseal(row, s)).error) return false;
+    await mutate(db, id);
+    return true;
+  } finally { db.close(); }
+}
+
+/** Lý do máy chủ từ chối nhật ký việc → lời dễ hiểu (AH-114 AC4, AC7). */
+export function taskRejectMessage(code: string): string {
+  switch (code) {
+    case "cropcycle.task_season_state": return "Chưa đồng bộ: vụ đã đóng";
+    case "cropcycle.season_not_found": return "Chưa đồng bộ: vụ hoặc nông hộ không thuộc phạm vi của bạn";
+    case "cropcycle.task_already_resolved": return "Chưa đồng bộ: việc đã được ghi xong hoặc bỏ qua (có thể từ máy khác)";
+    case "cropcycle.task_season_changed": return "Chưa đồng bộ: quy trình của vụ đã đổi — tải lại checklist rồi ghi lại";
+    case "cropcycle.task_stage_locked": return "Chưa đồng bộ: vụ đã thu hoạch, chỉ ghi được việc của giai đoạn cuối";
+    case "cropcycle.read_only": return "Chưa đồng bộ: vai của bạn chỉ được xem";
+    case "validation_failed": return "Chưa đồng bộ: dữ liệu chưa hợp lệ";
+    default: return `Chưa đồng bộ: ${code}`;
+  }
+}
+
 export async function flushTasks(api: ApiClient, p: Principal, items: PendingTask[]): Promise<void> {
   const scope = owner(p), db = await openDB();
   try {

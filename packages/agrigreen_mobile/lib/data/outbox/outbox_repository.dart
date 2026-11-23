@@ -469,6 +469,18 @@ class OutboxRepository {
     [batchKey],
   );
 
+  /// Người dùng xóa một bản ghi bị máy chủ từ chối (AH-114 AC4: vd "Chưa đồng bộ:
+  /// vụ đã đóng" — giữ trên máy để xem rồi xóa). Chỉ xóa đúng bản ghi đang ở trạng
+  /// thái `rejected`; bản ghi chờ gửi hoặc đã gửi không bao giờ bị xóa ở đây.
+  /// Trả true khi đã xóa.
+  Future<bool> discardRejected(String id) async =>
+      await _sql.delete(
+        'outbox',
+        where: "id = ? AND status = 'rejected'",
+        whereArgs: [id],
+      ) ==
+      1;
+
   /// Xóa bản ghi đã được xác nhận quá [retention]. Không bao giờ xóa
   /// `pending` hoặc `rejected`.
   Future<int> purgeAcked(Duration retention) {

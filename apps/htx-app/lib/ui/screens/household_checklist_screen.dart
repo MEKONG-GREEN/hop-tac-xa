@@ -1,8 +1,10 @@
 import 'package:agrigreen_mobile/core/ids.dart';
+import 'package:agrigreen_mobile/data/db/storage_errors.dart';
 import 'package:agrigreen_mobile/data/sync/sync_api.dart';
 import 'package:flutter/material.dart';
 
 import '../../application/household_season_service.dart';
+import '../widgets.dart' show OfflineBanner, rejectMessage;
 import 'household_task_detail_screen.dart';
 
 import 'package:agrigreen_mobile/domain/outbox_record.dart';
@@ -56,6 +58,9 @@ class _HouseholdChecklistScreenState extends State<HouseholdChecklistScreen> {
   HouseholdJson? _updated;
   _PendingTask? _pending;
   bool _busy = false;
+
+  /// Lần gọi máy chủ gần nhất lỗi mạng (AH-114): hiện dải ngoại tuyến.
+  bool _offline = false;
   String? _error;
   List<OutboxRecord> _queued = [];
   String get _season => widget.season['season_ref'] as String;
@@ -86,6 +91,7 @@ class _HouseholdChecklistScreenState extends State<HouseholdChecklistScreen> {
           season: widget.season,
           task: task,
           event: '${data['current_event_id']}',
+          offline: _offline || data['offline_cache'] == true,
         ),
       ),
     );
@@ -158,6 +164,10 @@ class _HouseholdChecklistScreenState extends State<HouseholdChecklistScreen> {
       });
     } catch (e) {
       if (!mounted) return;
+      if (e is NetworkException && widget.service.canQueueOffline) {
+        await _queueOffline(pending);
+        return;
+      }
       if (e is ApiException &&
           ((e.status == 409 && e.code != 'idempotency_in_progress') ||
               e.code == 'cropcycle.task_season_state' ||
@@ -172,6 +182,63 @@ class _HouseholdChecklistScreenState extends State<HouseholdChecklistScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// AH-114 AC1: mất mạng khi tích nhanh → lưu trên máy "Chờ đồng bộ".
+  Future<void> _queueOffline(_PendingTask pending) async {
+    try {
+      await widget.service.queueTick(
+        widget.coop,
+        widget.household,
+        widget.season,
+        pending.seq,
+        pending.event,
+        await pending.gps,
+      );
+      if (!mounted) return;
+      setState(() {
+        _offline = true;
+        _pending = null;
+      });
+      await _loadPending();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đã lưu trên máy — chờ đồng bộ.')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(
+        () => _error = isStorageFull(e)
+            ? msgStorageFull
+            : 'Chưa lưu được trên máy. Thử lại; dữ liệu được giữ.',
+      );
+    }
+  }
+
+  Future<void> _discard(OutboxRecord r) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Xóa bản ghi chưa đồng bộ'),
+        content: const Text(
+          'Bản ghi đã bị máy chủ từ chối và chỉ còn trên máy. Xóa thì không khôi phục được.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Giữ lại'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Xóa'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await widget.service.discardTask(r.id);
+    await _loadPending();
   }
 
   @override
@@ -220,6 +287,8 @@ class _HouseholdChecklistScreenState extends State<HouseholdChecklistScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (_offline || data['offline_cache'] == true)
+                  const OfflineBanner(),
                 _header(),
                 if (data['offline_cache'] == true)
                   const Text(
@@ -228,11 +297,19 @@ class _HouseholdChecklistScreenState extends State<HouseholdChecklistScreen> {
                 for (final r in _queued)
                   ListTile(
                     title: Text(
-                      'Việc ${r.payload['step_seq']} · ${r.status.label}',
+                      r.status == OutboxStatus.rejected
+                          ? 'Việc ${r.payload['step_seq']} · ${rejectMessage(r.errorCode)}'
+                          : 'Việc ${r.payload['step_seq']} · ${r.status.label}',
                     ),
                     subtitle: Text(
                       '${r.payload['done_on']} · ${r.payload['state'] == 'partial' ? 'Làm tiếp' : 'Hoàn tất'}${r.errorSummary.isEmpty ? '' : ' · ${r.errorSummary}'}',
                     ),
+                    trailing: r.status == OutboxStatus.rejected
+                        ? TextButton(
+                            onPressed: () => _discard(r),
+                            child: const Text('Xóa'),
+                          )
+                        : null,
                   ),
                 Text(
                   'Tiến độ: ${progress['percent'] == null ? '—' : '${progress['percent']}%'}',

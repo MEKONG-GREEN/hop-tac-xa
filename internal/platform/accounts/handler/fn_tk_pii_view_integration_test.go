@@ -39,7 +39,7 @@ func TestNativeFNTK02_BR04_CheSDT(t *testing.T) {
 
 	views := func(user uuid.UUID) (n int, actors []string) {
 		t.Helper()
-		rows, err := f.env.AdminPool(t, migrations.PF).Query(ctx, `SELECT actor_ref::text, field FROM pf_accounts.pii_view WHERE tenant_id = $1 AND user_ref = $2`, f.tenant, user)
+		rows, err := f.env.AdminPool(t, migrations.PF).Query(ctx, `SELECT actor_ref::text, field FROM pf_accounts.pii_view WHERE tenant_id = $1 AND user_ref = $2 ORDER BY seq`, f.tenant, user)
 		if err != nil {
 			t.Fatal(err)
 		}

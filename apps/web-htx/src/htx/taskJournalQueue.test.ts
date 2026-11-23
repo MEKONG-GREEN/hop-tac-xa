@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MOCK_PERSONAS } from "@/api/mock/personas";
 import { buildPrincipal } from "@/auth/principal";
 import { createApiClient } from "@/api/client";
-import { cachedTaskRead, enqueueTask, queuedTasks, flushTasks } from "./taskJournalQueue";
+import { cachedTaskRead, enqueueTask, queuedTasks, flushTasks, discardTask, taskRejectMessage } from "./taskJournalQueue";
 import { ApiProblem } from "@/api/problem";
 import { actualMaterialTotal } from "./HouseholdTaskDetail";
 import { uuidv7 } from "@/api/idempotency";
@@ -79,5 +79,18 @@ describe("AH-99 Web native journal outbox", () => {
     const api = createApiClient({ baseUrl: "https://api.test", getAccessToken: () => "test", fetch: async (input) => (input as Request).url.endsWith("/devices") ? Response.json({}, { status: 201 }) : Response.json({ results: [{ id: rows[0]!.id, status: "rejected", code: "cropcycle.task_season_changed" }] }) });
     await expect(flushTasks(api, principal, rows)).rejects.toThrow("cropcycle.task_season_changed");
     expect((await queuedTasks(principal, first.coop, first.household, first.season))[0]?.error).toBe("cropcycle.task_season_changed");
+  });
+  it("AH-114 AC4: vụ đã đóng → nhãn \"Chưa đồng bộ: vụ đã đóng\"; chỉ xóa được bản bị từ chối", async () => {
+    const closed = item(), waiting = { ...item(), household: closed.household, season: closed.season };
+    await enqueueTask(principal, closed); await enqueueTask(principal, waiting);
+    const read = () => queuedTasks(principal, closed.coop, closed.household, closed.season);
+    const api = createApiClient({ baseUrl: "https://api.test", getAccessToken: () => "test", fetch: async (input) => (input as Request).url.endsWith("/devices") ? Response.json({}, { status: 201 }) : Response.json({ results: [{ id: closed.id, status: "rejected", code: "cropcycle.task_season_state" }] }) });
+    await expect(flushTasks(api, principal, await read())).rejects.toThrow("cropcycle.task_season_state");
+    const rejected = (await read()).find((r) => r.id === closed.id)!;
+    expect(taskRejectMessage(rejected.error!)).toBe("Chưa đồng bộ: vụ đã đóng");
+    expect(await discardTask(principal, waiting.id)).toBe(false);
+    expect(await discardTask({ ...principal, subject: uuidv7() }, closed.id)).toBe(false);
+    expect(await discardTask(principal, closed.id)).toBe(true);
+    expect((await read()).map((r) => r.id)).toEqual([waiting.id]);
   });
 });
