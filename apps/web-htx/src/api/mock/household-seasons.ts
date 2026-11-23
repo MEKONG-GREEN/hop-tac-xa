@@ -59,6 +59,21 @@ function mockTaskDetail(p: MockPersona, coop: string, household: string, season:
   return { record, checklist: mockChecklist(s, true) };
 }
 
+// AH-176 (KH-17): vụ cùng HTX, cùng SOP gốc, có việc cùng tên và loại; mã lý do khi việc không ghi được.
+const batchReceipts = new Map<string, string>();
+function batchCandidates(src: Season, step: Season["sop_snapshot"]["steps"][number]) {
+  const norm = (x: string) => x.trim().toLowerCase().replace(/\s+/g, " ");
+  return seasons.filter((c) => c.cooperative_ref === src.cooperative_ref && c.sop_snapshot.template_ref === src.sop_snapshot.template_ref && (c.status === "open" || c.status === "completed")).map((season) => {
+    const same = effectiveSteps(season.sop_snapshot).filter((t) => norm(t.name) === norm(step.name) && t.activity_code === step.activity_code);
+    const seq = same.find((t) => t.seq === step.seq)?.seq ?? (same.length === 1 ? same[0]!.seq : 0);
+    if (!seq) return { season, seq: 0, code: "cropcycle.batch_task_mismatch", reason: "Vụ không dùng cùng SOP gốc hoặc không có việc này" };
+    const task = mockChecklist(season, true).progress.stages.flatMap((st) => st.tasks).find((t) => t.seq === seq);
+    if (!task || task.done_on || task.completion_status === "skipped") return { season, seq, code: "cropcycle.task_already_resolved", reason: "Việc đã xong hoặc bỏ qua" };
+    if (!task.can_complete) return { season, seq, code: "cropcycle.task_stage_locked", reason: "Vụ đã thu hoạch chỉ ghi việc chưa xong của giai đoạn cuối" };
+    return { season, seq, code: "", reason: "" };
+  });
+}
+
 function mockChecklist(s: Season, write: boolean): components["schemas"]["HouseholdChecklist"] {
   const plan = mockPlan(s.sop_snapshot, s.anchor_date, s.current_event_id);
   const records = taskRecords.get(s.season_ref) ?? [];
@@ -212,6 +227,49 @@ export const householdSeasonRoutes: Route[] = [{
       if (result instanceof Response) return { id: r.id, status: "rejected", code: problemOf(result)?.code ?? "validation_failed" };
       return { id: r.id, status: existed ? "duplicate" : "accepted" };
     }) });
+  },
+}, {
+  // AH-176: các vụ cùng SOP gốc có thể ghi chung một việc.
+  method: "GET", pattern: /^\/v1\/cooperatives\/([\w-]+)\/households\/([\w-]+)\/seasons\/([\w-]+)\/task-batch-candidates$/,
+  handler: ({ params, persona, url }) => {
+    if (!journalWriter(persona)) return problem(403, "cropcycle.read_only", "Vai của bạn chỉ được xem");
+    const src = seasons.find((s) => s.cooperative_ref === params[0] && s.household_ref === params[1] && s.season_ref === params[2]);
+    if (!src || (!hasRole(persona, "platform_admin") && persona.me.org?.ref !== src.cooperative_ref)) return problem(404, "cropcycle.season_not_found", "Không tìm thấy vụ");
+    const seq = Number(url.searchParams.get("step_seq"));
+    const step = effectiveSteps(src.sop_snapshot).find((t) => t.seq === seq);
+    if (!step) return validation([{ field: "step_seq", reason: "Việc không thuộc quy trình của vụ" }]);
+    return json({ items: batchCandidates(src, step).map(({ season: c, seq: n, code, reason }) => ({ household_ref: c.household_ref, season_ref: c.season_ref, season_code: c.season_code, season_year: c.season_year,
+      variety_code: c.variety_code, status: c.status, current_event_id: c.current_event_id, eligible: !code, is_source: c.season_ref === src.season_ref, ...(n ? { step_seq: n } : {}), ...(code ? { code, reason } : {}) })) });
+  },
+}, {
+  // AH-176: ghi một việc cho nhiều vụ; mỗi vụ một bản ghi, vụ không ghi được bị bỏ qua kèm lý do.
+  method: "POST", pattern: /^\/v1\/cooperatives\/([\w-]+)\/households\/([\w-]+)\/seasons\/([\w-]+)\/task-batches$/,
+  handler: ({ params, persona, body, request }) => {
+    if (!journalWriter(persona)) return problem(403, "cropcycle.read_only", "Vai của bạn chỉ được xem");
+    const src = seasons.find((s) => s.cooperative_ref === params[0] && s.household_ref === params[1] && s.season_ref === params[2]);
+    if (!src || (!hasRole(persona, "platform_admin") && persona.me.org?.ref !== src.cooperative_ref)) return problem(404, "cropcycle.season_not_found", "Không tìm thấy vụ");
+    const b = body as components["schemas"]["HouseholdTaskDetailInput"] & { seasons: { household_ref: string; season_ref: string; expected_season_event_id: string }[] };
+    if (!b.seasons?.length || b.seasons.length > 50) return validation([{ field: "seasons", reason: "Chọn từ 1 đến 50 vụ" }]);
+    const step = effectiveSteps(src.sop_snapshot).find((t) => t.seq === b.step_seq);
+    if (!step) return validation([{ field: "step_seq", reason: "Việc không thuộc quy trình của vụ" }]);
+    const key = request.headers.get("Idempotency-Key");
+    const options = batchCandidates(src, step);
+    const results = b.seasons.map((t) => {
+      const match = options.find((o) => o.season.season_ref === t.season_ref && o.season.household_ref === t.household_ref);
+      if (!match?.seq) return { household_ref: t.household_ref, season_ref: t.season_ref, status: "skipped" as const, code: "cropcycle.batch_task_mismatch", reason: "Vụ không dùng cùng SOP gốc hoặc không có việc này" };
+      const id = batchReceipts.get(`${persona.me.actor_ref}:${key}:${t.season_ref}`);
+      const old = id ? taskRecords.get(t.season_ref)?.find((r) => r.id === id) : undefined;
+      if (old) return { household_ref: t.household_ref, season_ref: t.season_ref, status: "recorded" as const, step_seq: match.seq, record: old, replayed: true };
+      const r = mockTaskDetail(persona, match.season.cooperative_ref, t.household_ref, t.season_ref, { ...b, step_seq: match.seq, expected_season_event_id: t.expected_season_event_id });
+      if (r instanceof Response) {
+        const p = problemOf(r);
+        return { household_ref: t.household_ref, season_ref: t.season_ref, status: "skipped" as const, step_seq: match.seq, code: p?.code ?? "validation_failed", reason: p?.title ?? "Không ghi được" };
+      }
+      batchReceipts.set(`${persona.me.actor_ref}:${key}:${t.season_ref}`, r.record.id);
+      return { household_ref: t.household_ref, season_ref: t.season_ref, status: "recorded" as const, step_seq: match.seq, record: r.record, replayed: false };
+    });
+    const recorded = results.filter((r) => r.status === "recorded").length;
+    return json({ results, recorded, skipped: results.length - recorded });
   },
 }, {
   // AH-163: việc phát sinh ngoài quy trình — số việc riêng > 1000, nhãn Ngoài SOP, không tính tiến độ.

@@ -10546,6 +10546,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/task-batch-candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Các vụ có thể ghi chung một việc với vụ này (AH-176)
+         * @description Thành viên HTX/Admin (KHMV-FN-05 C). Vụ của HTX dùng cùng SOP gốc (KH-17), đang canh tác hoặc đã thu hoạch; mỗi vụ kèm số việc tương ứng (cùng tên và loại việc) và việc còn ghi được không, kèm mã lý do nếu không. Tối đa 200 vụ.
+         */
+        get: operations["listHouseholdTaskBatchCandidates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/task-batches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ghi một việc cho nhiều vụ cùng lúc (AH-176)
+         * @description Thành viên HTX/Admin (KHMV-FN-05 C); Đại diện chỉ xem. Vụ trong đường dẫn xác định SOP gốc và việc (step_seq). Mỗi vụ được chọn có một bản ghi riêng theo đúng quy tắc ghi chi tiết (AH-99) với ngày, kết quả, liều, ghi chú, GPS chung; vụ không cùng SOP gốc/không có việc, việc đã xong, vụ đã đổi hoặc không ghi được bị bỏ qua kèm mã và lý do. Ảnh chỉ dùng chung khi mọi vụ cùng hộ với vụ đường dẫn (ảnh mã hóa theo hộ). Idempotency-Key sinh khóa riêng cho từng vụ nên thử lại không tạo bản ghi trùng.
+         */
+        post: operations["recordHouseholdTaskBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/extension/khtc/periods/{id}/report": {
         parameters: {
             query?: never;
@@ -25453,6 +25501,39 @@ export interface components {
             };
             window?: components["schemas"]["CropSOPWindow"];
             materials?: components["schemas"]["CropSOPMaterial"][];
+        };
+        HouseholdTaskBatchCandidate: {
+            /** Format: uuid */
+            household_ref: string;
+            /** Format: uuid */
+            season_ref: string;
+            season_code: string;
+            season_year: number;
+            variety_code: string;
+            status: string;
+            /** Format: uuid */
+            current_event_id: string;
+            /** @description Số việc tương ứng trong vụ (có thể khác vụ nguồn giữa các phiên bản SOP) */
+            step_seq?: number;
+            eligible: boolean;
+            is_source: boolean;
+            /** @description Mã lý do không ghi được */
+            code?: string;
+            reason?: string;
+        };
+        HouseholdTaskBatchResult: {
+            /** Format: uuid */
+            household_ref: string;
+            /** Format: uuid */
+            season_ref: string;
+            /** @enum {string} */
+            status: "recorded" | "skipped";
+            step_seq?: number;
+            record?: components["schemas"]["HouseholdTaskRecord"];
+            replayed?: boolean;
+            /** @description Mã lý do bỏ qua, vd cropcycle.task_already_resolved, cropcycle.batch_task_mismatch */
+            code?: string;
+            reason?: string;
         };
         KHTCReportSupplement: {
             /** Format: uuid */
@@ -50942,6 +51023,110 @@ export interface operations {
                     "application/json": {
                         record: components["schemas"]["HouseholdTaskRecord"];
                         checklist: components["schemas"]["HouseholdChecklist"];
+                    };
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listHouseholdTaskBatchCandidates: {
+        parameters: {
+            query: {
+                step_seq: number;
+            };
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Danh sách vụ */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["HouseholdTaskBatchCandidate"][];
+                    };
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    recordHouseholdTaskBatch: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    step_seq: number;
+                    seasons: {
+                        /** Format: uuid */
+                        household_ref: string;
+                        /** Format: uuid */
+                        season_ref: string;
+                        /** Format: uuid */
+                        expected_season_event_id: string;
+                    }[];
+                    /** @enum {string} */
+                    state: "partial" | "done";
+                    /** Format: date */
+                    done_on: string;
+                    note?: string;
+                    backfill_reason?: string;
+                    /** @default false */
+                    zero_confirmed?: boolean;
+                    file_refs?: string[];
+                    gps: components["schemas"]["CropGPS"];
+                    /**
+                     * @default app
+                     * @enum {string}
+                     */
+                    channel?: "app" | "web";
+                    materials: {
+                        material_code?: string;
+                        name?: string;
+                        unit?: string;
+                        dose_per_ha: string;
+                    }[];
+                };
+            };
+        };
+        responses: {
+            /** @description Kết quả từng vụ */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        results: components["schemas"]["HouseholdTaskBatchResult"][];
+                        recorded: number;
+                        skipped: number;
                     };
                 };
             };
