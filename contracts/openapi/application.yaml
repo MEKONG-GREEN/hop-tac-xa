@@ -14882,6 +14882,33 @@ paths:
         "409": {$ref: "#/components/responses/Problem"}
         "422": {$ref: "#/components/responses/Problem"}
         "503": {$ref: "#/components/responses/Problem"}
+  /v1/cooperatives/{ref}/household-seasons:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: listCooperativeHouseholdSeasons
+      summary: Danh sách vụ nông hộ của HTX kèm tiến độ (AH-140)
+      description: Chỉ đọc (KHMV-FN-03-XEM R) — Đại diện HTX, Thành viên HTX, Admin; phạm vi theo HTX (KH-02), HTX khác bị từ chối. Mỗi vụ kèm trạng thái, % tiến độ, số việc đến hạn, trễ; lọc theo trạng thái và người mở vụ (Thành viên HTX). Phân trang theo season_ref.
+      parameters:
+        - {name: status, in: query, schema: {type: string, enum: [open, completed, cancelled]}}
+        - {name: opened_by, in: query, schema: {type: string, format: uuid}}
+        - {name: cursor, in: query, schema: {type: string, format: uuid}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100}}
+      responses:
+        "200":
+          description: Một trang vụ
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items: {type: array, items: {$ref: "#/components/schemas/HouseholdSeasonOverviewItem"}}
+                  next_cursor: {type: [string, "null"]}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
   /v1/extension/khtc/periods/{id}/report:
     get:
       summary: "Bản soạn Mẫu 1–5, ô số chỉ đọc và mốc dữ liệu"
@@ -29408,6 +29435,34 @@ components:
         replayed: {type: boolean}
         code: {type: string, description: "Mã lý do bỏ qua, vd cropcycle.task_already_resolved, cropcycle.batch_task_mismatch"}
         reason: {type: string}
+    HouseholdSeasonOverviewItem:
+      type: object
+      required: [season_ref, household_ref, crop_code, season_code, season_year, variety_code, area_ha, status, opened_by, opened_at, progress]
+      properties:
+        season_ref: {type: string, format: uuid}
+        household_ref: {type: string, format: uuid}
+        crop_code: {type: string}
+        season_code: {type: string}
+        season_year: {type: integer}
+        variety_code: {type: string}
+        area_ha: {type: string}
+        status: {type: string, enum: [open, completed, cancelled]}
+        opened_by: {type: string, format: uuid}
+        opened_by_label: {type: string, description: "Tên hiển thị của người mở vụ (nếu có danh bạ)"}
+        opened_at: {type: string, format: date-time}
+        progress:
+          description: "Tiến độ của vụ; null khi không tính được"
+          oneOf:
+            - type: "null"
+            - type: object
+              required: [percent, done, total, skipped, due, overdue]
+              properties:
+                percent: {type: [string, "null"], description: "Decimal phần trăm; null khi mẫu số bằng 0"}
+                done: {type: integer}
+                total: {type: integer}
+                skipped: {type: integer}
+                due: {type: integer}
+                overdue: {type: integer}
     KHTCReportSupplement:
       type: object
       required: [id, department, instruction, state, due_at, native_submission_ref, return_applied]
