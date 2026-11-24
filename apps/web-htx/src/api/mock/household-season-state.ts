@@ -14,3 +14,8 @@ export function householdMockArea<T extends { household_ref: string; active_area
   const remaining = scaledArea(h.remaining_area_ha) - used;
   return { ...h, active_area_ha: decimalArea(scaledArea(h.active_area_ha) + used), remaining_area_ha: decimalArea(remaining > 0n ? remaining : 0n), can_open_season: h.can_open_season && remaining > 0n, open_season_blocked_reason: remaining > 0n ? h.open_season_blocked_reason : "Hết diện tích để mở vụ." };
 }
+/** AH-70: dừng vụ giải phóng diện tích đã cấp. */
+export function releaseHouseholdMock(coop: string, household: string, area: string): void {
+  const key = `${coop}/${household}`; const left = (allocated.get(key) ?? 0n) - scaledArea(area);
+  allocated.set(key, left > 0n ? left : 0n);
+}

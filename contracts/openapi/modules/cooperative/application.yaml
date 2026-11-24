@@ -751,6 +751,44 @@ paths:
         "409": {$ref: "#/components/responses/Problem"}
         "422": {$ref: "#/components/responses/Problem"}
         "503": {$ref: "#/components/responses/Problem"}
+# @ag-order: 10019
+  /v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/stop:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: household_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: season_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: stopHouseholdSeason
+      summary: Dừng (hủy) vụ nông hộ đang canh tác kèm lý do (AH-70)
+      description: Thành viên HTX/Admin (KHMV-FN-03 D); Đại diện chỉ xem. Chỉ vụ "Đang canh tác"; lý do 10–500 ký tự, không SĐT/CCCD; expected_season_event_id phải là phiên bản hiện tại. Vụ chuyển "Đã dừng vụ" (cancelled), diện tích được giải phóng, nhật ký và kế hoạch giữ nguyên ở chế độ chỉ đọc; vụ đã dừng không quay lại "Đang canh tác". Phát lại cùng Idempotency-Key trả kết quả cũ.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_season_event_id, reason]
+              properties:
+                expected_season_event_id: {type: string, format: uuid}
+                reason: {type: string, minLength: 10, maxLength: 500}
+                channel: {type: string, enum: [app, web], default: web}
+      responses:
+        "200":
+          description: Vụ đã dừng (kèm lý do)
+          headers:
+            Idempotent-Replayed: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/HouseholdSeason"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
 components:
   schemas:
 # @ag-order: 10017
@@ -924,6 +962,8 @@ components:
         current_event_id: {type: string, format: uuid}
         version: {type: integer, minimum: 1}
         copied_from: {type: [string, "null"], format: uuid, description: "Vụ nguồn khi mở bằng sao chép (AH-139)"}
+        stop_reason: {type: string, description: "Lý do dừng vụ, chỉ có khi status = cancelled (AH-70)"}
+        stopped_at: {type: string, format: date-time, description: "Thời điểm dừng vụ (AH-70)"}
         gps_missing: {type: boolean, description: "Thiếu hoặc từ chối GPS, không suy diễn tọa độ thành xác minh ranh đất"}
         gps: {$ref: "#/components/schemas/CropGPS"}
         opened_by: {type: string, format: uuid}
