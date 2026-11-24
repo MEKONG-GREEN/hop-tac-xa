@@ -10,6 +10,7 @@ import (
 
 	notifyport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/notify/port"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/ids"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/problem"
 )
 
 // AH-279 (NTF-01): thông báo trong ứng dụng cho Đại diện HTX về yêu cầu chia sẻ dữ liệu — có trong Trung tâm thông báo,
@@ -32,7 +33,8 @@ func TestAH279_SharingNoticeInAppOnly(t *testing.T) {
 	// AC-N5: Thành viên HTX không nhận loại này — người nhận sai thì từ chối cả lần gọi.
 	bad := notice
 	bad.SourceID, bad.Recipients = ids.New(), []uuid.UUID{rep.actor, member.actor}
-	if err := n.SharingChanged(ctx, f.tenant, bad); !errors.Is(err, notifyport.ErrRecipientNotRepresentative) {
+	var pr *problem.Problem
+	if err := n.SharingChanged(ctx, f.tenant, bad); !errors.As(err, &pr) || pr.Code != notifyport.ErrRecipientNotRepresentative.Code {
 		t.Fatalf("Thành viên nhận thông báo chia sẻ: %v", err)
 	}
 	if len(rep.list("")) != 0 {
