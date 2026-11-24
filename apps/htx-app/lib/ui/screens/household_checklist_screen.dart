@@ -4,6 +4,7 @@ import 'package:agrigreen_mobile/data/sync/sync_api.dart';
 import 'package:flutter/material.dart';
 
 import '../../application/household_season_service.dart';
+import '../season_plan_view.dart';
 import '../widgets.dart' show OfflineBanner, rejectMessage;
 import 'household_task_detail_screen.dart';
 
@@ -413,8 +414,18 @@ class _HouseholdChecklistScreenState extends State<HouseholdChecklistScreen> {
                           )
                         : null,
                   ),
+                // AH-124: % tiến độ, số việc đến hạn và trễ; sang Kế hoạch mùa vụ.
                 Text(
-                  'Tiến độ: ${progress['percent'] == null ? '—' : '${progress['percent']}%'}',
+                  'Tiến độ: ${progress['percent'] == null ? '—' : '${progress['percent']}%'}'
+                  ' · Đến hạn: ${progress['due'] ?? 0} · Trễ: ${progress['overdue'] ?? 0}',
+                ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: _openPlan,
+                    icon: const Icon(Icons.calendar_month),
+                    label: const Text('Kế hoạch mùa vụ'),
+                  ),
                 ),
                 if (_error != null)
                   Text(
@@ -423,14 +434,20 @@ class _HouseholdChecklistScreenState extends State<HouseholdChecklistScreen> {
                       color: Theme.of(context).colorScheme.error,
                     ),
                   ),
-                for (final stage in _rows(progress['stages'])) ...[
-                  Text(
-                    '${stage['name']} · ${_labels[stage['status']]}',
-                    style: Theme.of(context).textTheme.titleMedium,
+                // AH-124: nhóm theo giai đoạn, mặc định đóng.
+                for (final stage in _rows(progress['stages']))
+                  ExpansionTile(
+                    key: PageStorageKey('stage-${stage['seq']}'),
+                    tilePadding: EdgeInsets.zero,
+                    title: Text(
+                      '${stage['name']} · ${_labels[stage['status']]} · ${_rows(stage['tasks']).length} việc',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    children: [
+                      for (final task in _rows(stage['tasks']))
+                        _task(task, data, records),
+                    ],
                   ),
-                  for (final task in _rows(stage['tasks']))
-                    _task(task, data, records),
-                ],
                 TextButton(
                   onPressed: _busy ? null : _reload,
                   child: const Text('Tải lại checklist'),
@@ -476,6 +493,28 @@ class _HouseholdChecklistScreenState extends State<HouseholdChecklistScreen> {
                 ),
               ),
             ),
+    );
+  }
+
+  void _openPlan() {
+    final season = '${widget.season['season_ref']}';
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          appBar: AppBar(title: const Text('Kế hoạch mùa vụ')),
+          body: FutureBuilder(
+            future: widget.service.plan(widget.coop, widget.household, season),
+            builder: (context, snap) => snap.hasError
+                ? Center(child: Text('Không tải được kế hoạch: ${snap.error}'))
+                : !snap.hasData
+                ? const Center(child: CircularProgressIndicator())
+                : SingleChildScrollView(
+                    padding: const EdgeInsets.all(12),
+                    child: SeasonPlanView(plan: snap.data!),
+                  ),
+          ),
+        ),
+      ),
     );
   }
 

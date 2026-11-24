@@ -36,7 +36,7 @@ function captureGPS(): Promise<S["CropGPS"]> {
   });
 }
 
-export function HouseholdChecklist({ coopRef, householdRef, seasonRef, season }: { coopRef: string; householdRef: string; seasonRef: string; season?: S["HouseholdSeason"] }) {
+export function HouseholdChecklist({ coopRef, householdRef, seasonRef, season, onOpenPlan }: { coopRef: string; householdRef: string; seasonRef: string; season?: S["HouseholdSeason"]; onOpenPlan?: () => void }) {
   const { api, principal } = useAuth();
   const canWrite = matrixAllows(principal, "KHMV-FN-05", "C");
   const path = { ref: coopRef, household_ref: householdRef, season_ref: seasonRef };
@@ -56,6 +56,9 @@ export function HouseholdChecklist({ coopRef, householdRef, seasonRef, season }:
   const [batch, setBatch] = useState<S["HouseholdTaskProgress"] | null>(null);
   const [queueRevision, setQueueRevision] = useState(0);
   const [adhoc, setAdhoc] = useState(false);
+  // AH-124: checklist nhóm theo giai đoạn, mặc định đóng.
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const toggleStage = (seq: number) => setExpanded((cur) => { const next = new Set(cur); if (next.has(seq)) next.delete(seq); else next.add(seq); return next; });
   const queue = useAsync(() => canWrite && principal && typeof indexedDB !== "undefined" ? queuedTasks(principal, coopRef, householdRef, seasonRef) : Promise.resolve([]), [principal, canWrite, coopRef, householdRef, seasonRef, queueRevision]);
   const syncQueued = async () => {
     if (!principal || !canWrite || busy) return;
@@ -125,10 +128,11 @@ export function HouseholdChecklist({ coopRef, householdRef, seasonRef, season }:
     {!queue.loading && queue.data?.length ? <section aria-label="Nhật ký chờ đồng bộ"><p>{queue.data.length} bản ghi lưu trên máy, chưa đánh dấu xong trên máy chủ.</p><ul>{queue.data.map((r) => <li key={r.id}>Việc {r.input.step_seq} · {r.input.done_on} · {r.input.state === "partial" ? "Làm tiếp" : "Hoàn tất"}{r.error ? <> · {taskRejectMessage(r.error)} <button type="button" className="btn btn-o btn-sm" disabled={busy} onClick={() => void discard(r.id)}>Xóa</button></> : " · Chờ đồng bộ"}</li>)}</ul><button type="button" disabled={busy} onClick={() => void syncQueued()}>Đồng bộ nhật ký</button></section> : null}
     {queue.error ? <ProblemAlert problem={queue.error} onRetry={queue.reload} /> : null}
     {data ? <>
-      <p>Tiến độ: <strong>{data.progress.percent == null ? "—" : `${data.progress.percent}%`}</strong> · {data.progress.done}/{data.progress.total - data.progress.skipped} việc</p>
+      <p>Tiến độ: <strong>{data.progress.percent == null ? "—" : `${data.progress.percent}%`}</strong> · {data.progress.done}/{data.progress.total - data.progress.skipped} việc · Đến hạn: <strong>{data.progress.due}</strong> · Trễ: <strong>{data.progress.overdue}</strong></p>
+      {onOpenPlan ? <button type="button" className="btn btn-o btn-sm" onClick={onOpenPlan}>Kế hoạch mùa vụ</button> : null}
       {data.progress.stages.map((stage) => <section key={stage.seq} aria-label={stage.name}>
-        <h4>{stage.name} · {stage.status === "done" ? "Đã xong" : LABEL[stage.status]}</h4>
-        <ul>{stage.tasks.map((task) => {
+        <h4><button type="button" className="btn btn-sm" aria-expanded={expanded.has(stage.seq)} onClick={() => toggleStage(stage.seq)}>{expanded.has(stage.seq) ? "▾" : "▸"} {stage.name} · {stage.status === "done" ? "Đã xong" : LABEL[stage.status]} · {stage.tasks.length} việc</button></h4>
+        {expanded.has(stage.seq) ? <ul>{stage.tasks.map((task) => {
           const record = data.records.find((r) => r.step_seq === task.seq && r.state === "done");
           return <li key={task.seq}>
             {canWrite && task.can_complete ? <label><input type="checkbox" aria-label={`Hoàn thành ${task.name}`} checked={pending?.seq === task.seq} disabled={busy} onChange={() => { setError(null); setPending(pending?.seq === task.seq ? null : { seq: task.seq, name: task.name, event: data.current_event_id, key: newIdempotencyKey(), gps: captureGPS() }); }} /> {task.name}</label> : <span>{task.name}</span>}
@@ -139,7 +143,7 @@ export function HouseholdChecklist({ coopRef, householdRef, seasonRef, season }:
             {record ? <span> · Làm xong {formatDate(record.done_on)}{record.gps_missing ? " · Thiếu GPS" : " · Đã ghi nhận vị trí"}{record.inputs.map((i) => ` · ${i.name}: ${i.qty} ${i.unit}`).join("")}</span> : null}
             <ul>{data.records.filter((r) => r.step_seq === task.seq && r.details).map((r) => <li key={r.id}>{formatDate(r.done_on)} · {r.state === "partial" ? "Chưa xong, làm tiếp" : "Đã xong"}{r.details?.backfilled ? " · Ghi bù" : ""}{r.details?.actual_materials.map((m) => ` · ${m.name}: ${m.dose_per_ha} ${m.unit}/ha · tổng ${m.quantity} ${m.unit}`).join("")} · {r.note} · {r.file_refs?.length ?? 0} ảnh</li>)}</ul>
           </li>;
-        })}</ul>
+        })}</ul> : null}
       </section>)}
       <button type="button" className="btn btn-o btn-sm" disabled={busy} onClick={() => { setPending(null); refresh(); }}>Tải lại checklist</button>
       {canWrite && (season?.status ?? "open") !== "cancelled" ? adhoc
