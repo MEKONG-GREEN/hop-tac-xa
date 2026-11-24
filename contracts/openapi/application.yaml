@@ -14919,6 +14919,46 @@ paths:
         "404": {$ref: "#/components/responses/Problem"}
         "409": {$ref: "#/components/responses/Problem"}
         "422": {$ref: "#/components/responses/Problem"}
+  /v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/corrections:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: household_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: season_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: editHouseholdSeason
+      summary: Sửa mốc gốc, diện tích, giống/SOP của vụ đang canh tác (AH-175)
+      description: Thành viên HTX/Admin (KHMV-FN-03 U); Đại diện chỉ xem. Chỉ vụ "Đang canh tác"; lý do 10–500 ký tự; ít nhất một nội dung đổi; expected_season_event_id phải là phiên bản hiện tại. Mốc gốc không ràng buộc khoảng ngày (Q-13), ngày dự kiến của việc chưa xong tính lại, việc đã xong giữ ngày. Diện tích > 0, hai chữ số thập phân, không vượt diện tích đất trừ các vụ đang canh tác khác (409 household_area_exceeded kèm remaining_area_ha). Đổi giống/SOP chỉ khi vụ chưa có nhật ký (409 season_has_logs, KH-10); đổi giống bắt buộc chọn SOP đang áp dụng theo giống mới, thay bản chụp, giữ sản lượng dự kiến. Mỗi lần sửa ghi một sự kiện corrected (xem plan-history).
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_season_event_id, reason]
+              properties:
+                expected_season_event_id: {type: string, format: uuid}
+                reason: {type: string, minLength: 10, maxLength: 500}
+                anchor_date: {type: string, format: date}
+                area_ha: {type: string, pattern: '^(0|[1-9][0-9]{0,9})(\.[0-9]{1,2})?$'}
+                variety_code: {type: string}
+                sop_version_id: {type: string, format: uuid}
+                channel: {type: string, enum: [app, web], default: web}
+      responses:
+        "200":
+          description: Vụ sau khi sửa
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/HouseholdSeason"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
   /v1/extension/khtc/periods/{id}/report:
     get:
       summary: "Bản soạn Mẫu 1–5, ô số chỉ đọc và mốc dữ liệu"

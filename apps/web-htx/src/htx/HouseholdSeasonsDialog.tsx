@@ -22,6 +22,7 @@ import { HouseholdChecklist } from "./HouseholdChecklist";
 import { SeasonPlanEditor, type PlanChange, type PlanStage } from "./SeasonPlanEditor";
 import { RunningSeasonPlan } from "./SeasonPlanCustomizer";
 import { StopSeasonForm } from "./StopSeasonForm";
+import { EditSeasonForm } from "./EditSeasonForm";
 import { SelfMadePlanBuilder, type SelfMadePlan } from "./SelfMadePlanBuilder";
 import type { CalendarPrefill } from "./seasonCalendarModel";
 
@@ -39,6 +40,8 @@ export function HouseholdSeasonsDialog({ coopRef, household, calendarPrefill, on
   const canCreate = hasRole(principal, ROLES.platformAdmin, ROLES.htxMember) && matrixAllows(principal, "KHMV-FN-03", "C");
   // AH-70: dừng vụ — KHMV-FN-03 D; Đại diện không có nút.
   const canStop = hasRole(principal, ROLES.platformAdmin, ROLES.htxMember) && matrixAllows(principal, "KHMV-FN-03", "D");
+  // AH-175: sửa vụ — KHMV-FN-03 U; Đại diện không có nút.
+  const canEdit = hasRole(principal, ROLES.platformAdmin, ROLES.htxMember) && matrixAllows(principal, "KHMV-FN-03", "U");
   const [opening, setOpening] = useState(!!calendarPrefill);
   const [crop, setCrop] = useState(calendarPrefill?.crop_code ?? "");
   const [variety, setVariety] = useState("");
@@ -183,6 +186,7 @@ export function HouseholdSeasonsDialog({ coopRef, household, calendarPrefill, on
       <p>{detail.sop_snapshot.anchor_name}: {detail.anchor_date} · {detail.gps_missing ? "Thiếu GPS" : "Đã ghi nhận vị trí"}</p>
       <p>SOP bản {detail.sop_snapshot.version_no} · Diện tích {formatDecimal(detail.area_ha, 2)} ha · {SEASON_STATUS[detail.status] ?? detail.status}</p>
       {detail.status === "cancelled" && detail.stop_reason ? <p role="status">Đã dừng vụ: {detail.stop_reason}</p> : null}
+      {canEdit && detail.status === "open" ? <EditSeasonForm key={`edit:${detail.current_event_id}`} coopRef={coopRef} season={detail} onSaved={(s) => { setDetail(s); setRevision((v) => v + 1); onSaved(); }} /> : null}
       {canStop && detail.status === "open" ? <StopSeasonForm key={detail.current_event_id} coopRef={coopRef} season={detail} onStopped={(s) => { setDetail(s); setRevision((v) => v + 1); onSaved(); }} /> : null}
       <ol>{detail.sop_snapshot.steps.map((step, i) => <li key={i}>{step.name}</li>)}</ol>
       <HouseholdChecklist key={`${detail.season_ref}:${detail.current_event_id}`} coopRef={coopRef} householdRef={household.household_ref} seasonRef={detail.season_ref} season={detail}
