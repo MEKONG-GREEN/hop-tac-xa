@@ -11,6 +11,7 @@ import { useAuth } from "@/auth/AuthProvider";
 import { Icon } from "@/components/Icon";
 import { ProblemAlert } from "@/components/ProblemAlert";
 import { Empty, LoadMore, Loading, PageHead } from "@/components/ui";
+import { HouseholdSeasonProgress } from "@/htx/HouseholdSeasonProgress";
 import { SeasonDetailDialog } from "@/htx/SeasonDetailDialog";
 import { LocationChip, ReasonDialog, ResultList, StatusChip, useCatalog, useCatalogNames } from "@/htx/common";
 import { SEASON_STATUS, sowingDateError, todayVN } from "@/htx/rules";
@@ -384,6 +385,8 @@ function SeasonsInner() {
       <ReadOnlyNotice scope={scope} writable={canOpen} />
       {canOpen && !scope.coopRef ? <p className="small mute">Chọn một HTX để mở vụ.</p> : null}
       {showOpen && scope.coopRef ? <OpenPanel scope={scope} onDone={reload} /> : null}
+      {/* AH-140: vụ nông hộ của HTX kèm tiến độ (chỉ đọc). */}
+      {scope.coopRef ? <HouseholdSeasonProgress coopRef={scope.coopRef} householdLabel={fields.householdLabel} /> : null}
       <div className="card sec">
         <form className="row" role="search" style={{ marginBottom: 14, alignItems: "flex-end" }} onSubmit={(e) => e.preventDefault()}>
           <CoopPicker scope={scope} />

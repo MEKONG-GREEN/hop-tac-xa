@@ -160,6 +160,23 @@ function mockTaskEdit(void_: boolean): Route["handler"] {
 }
 
 export const householdSeasonRoutes: Route[] = [{
+  // AH-140: vụ nông hộ của HTX kèm tiến độ (chỉ đọc), lọc trạng thái, người mở vụ.
+  method: "GET", pattern: /^\/v1\/cooperatives\/([\w-]+)\/household-seasons$/,
+  handler: ({ params, persona, url }) => {
+    if (!hasRole(persona, "platform_admin", "htx_member", "coop_manager") || (!hasRole(persona, "platform_admin") && persona.me.org?.ref !== params[0])) return problem(404, "cropcycle.household_not_found", "Không tìm thấy HTX");
+    const status = url.searchParams.get("status") ?? "", openedBy = url.searchParams.get("opened_by") ?? "";
+    if (status && !["open", "completed", "cancelled"].includes(status)) return validation([{ field: "status", reason: "trạng thái không hợp lệ" }]);
+    const rows = seasons.filter((x) => x.cooperative_ref === params[0] && (!status || x.status === status) && (!openedBy || x.opened_by === openedBy))
+      .sort((a, b) => a.season_ref.localeCompare(b.season_ref))
+      .map((x) => {
+        const p = mockChecklist(x, false).progress;
+        return { season_ref: x.season_ref, household_ref: x.household_ref, crop_code: x.crop_code, season_code: x.season_code, season_year: x.season_year,
+          variety_code: x.variety_code, area_ha: x.area_ha, status: x.status, opened_by: x.opened_by, opened_at: x.opened_at,
+          progress: { percent: p.percent, done: p.done, total: p.total, skipped: p.skipped, due: p.due, overdue: p.overdue } };
+      });
+    return json(paginate(rows, url));
+  },
+}, {
   method: "POST", pattern: /^\/v1\/cooperatives\/([\w-]+)\/households\/([\w-]+)\/seasons\/([\w-]+)\/task-records\/([\w-]+)\/corrections$/,
   handler: mockTaskEdit(false),
 }, {
