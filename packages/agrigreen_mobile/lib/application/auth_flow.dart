@@ -76,6 +76,16 @@ class AuthFlow {
         : const AuthView(AuthStage.needsPinSetup);
   }
 
+  /// Đăng nhập bằng màn riêng (FN-01, AH-300): máy chủ đã trả token cho mật
+  /// khẩu (và mã OTP) đúng — lưu như phiên trực tuyến rồi tạo/hỏi PIN.
+  Future<AuthView> loginWithPasswordTokens(OidcTokens tokens) async {
+    await session.signInWithPasswordTokens(tokens);
+    final p = pins;
+    return p == null || await p.isSet()
+        ? const AuthView(AuthStage.unlocked)
+        : const AuthView(AuthStage.needsPinSetup);
+  }
+
   /// Đăng xuất: xóa token và mốc xác thực trực tuyến — lần sau phải đăng nhập trực tuyến.
   Future<AuthView> signOut() async {
     await session.signOut();

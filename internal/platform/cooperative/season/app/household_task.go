@@ -61,11 +61,8 @@ func householdTaskSeason(ctx context.Context, tx pgx.Tx, tid, coop, hh, season u
 }
 
 func (s *Service) householdChecklistTx(ctx context.Context, tx pgx.Tx, cur store.Season, canWrite bool) (HouseholdChecklist, error) {
-	var content struct {
-		Stages []domain.Stage `json:"stages"`
-		Steps  []domain.Step  `json:"steps"`
-	}
-	if err := json.Unmarshal(cur.SOPSnapshot, &content); err != nil {
+	var snap domain.SeasonSnapshot
+	if err := json.Unmarshal(cur.SOPSnapshot, &snap); err != nil {
 		return HouseholdChecklist{}, err
 	}
 	var actual *time.Time
@@ -79,7 +76,7 @@ func (s *Service) householdChecklistTx(ctx context.Context, tx pgx.Tx, cur store
 			actual = &d
 		}
 	}
-	plan, err := domain.CalculateSchedule(domain.Content{Stages: content.Stages, Steps: content.Steps}, cur.SowingDate, s.today(), actual)
+	plan, err := snap.Schedule(cur.SowingDate, s.today(), actual)
 	if err != nil {
 		return HouseholdChecklist{}, fieldProblem(err)
 	}
@@ -93,7 +90,7 @@ func (s *Service) householdChecklistTx(ctx context.Context, tx pgx.Tx, cur store
 			records = append(records, *l.TaskCompletion)
 		}
 	}
-	progress, err := domain.BuildChecklist(plan, records, cur.Status)
+	progress, err := domain.BuildSeasonChecklist(plan, records, cur.Status, snap.SkippedSet())
 	if err != nil {
 		return HouseholdChecklist{}, fieldProblem(err)
 	}
@@ -141,7 +138,7 @@ func (s *Service) CompleteHouseholdTask(ctx context.Context, in CompleteTaskInpu
 	if in.IdemKey == "" {
 		return CompleteTaskResult{}, problem.IdempotencyRequired
 	}
-	if in.StepSeq < 1 || in.StepSeq > domain.MaxSteps || in.ExpectedEventID == uuid.Nil {
+	if in.StepSeq < 1 || in.StepSeq > domain.MaxPlanStepSeq || in.ExpectedEventID == uuid.Nil {
 		return CompleteTaskResult{}, problem.Validation.WithField("step_seq", "chọn việc và phiên bản vụ hợp lệ")
 	}
 	if in.Channel == "" {
@@ -213,13 +210,14 @@ func (s *Service) CompleteHouseholdTask(ctx context.Context, in CompleteTaskInpu
 			if !selected.CanComplete {
 				return ErrTaskLocked
 			}
-			var snapshot struct {
-				Steps []domain.Step `json:"steps"`
-			}
+			var snapshot domain.SeasonSnapshot
 			if err := json.Unmarshal(cur.SOPSnapshot, &snapshot); err != nil {
 				return err
 			}
-			step := snapshot.Steps[in.StepSeq-1]
+			step, ok := snapshot.Step(in.StepSeq)
+			if !ok {
+				return ErrDependency
+			}
 			inputs := []domain.Input{}
 			for _, m := range step.Materials {
 				name := m.Name

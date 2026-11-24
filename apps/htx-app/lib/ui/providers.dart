@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:agrigreen_mobile/application/auth_flow.dart';
 import 'package:agrigreen_mobile/application/push_coordinator.dart';
 import 'package:agrigreen_mobile/data/auth/oidc_client.dart';
+import 'package:agrigreen_mobile/data/auth/password_login.dart';
 import 'package:agrigreen_mobile/data/auth/pin_service.dart';
 import 'package:agrigreen_mobile/data/auth/session_service.dart';
 import 'package:agrigreen_mobile/data/outbox/outbox_repository.dart';
@@ -25,12 +26,22 @@ final oidcProvider = Provider<OidcClient>(
   (ref) => throw UnimplementedError('oidcProvider'),
 );
 
+/// AH-300 (FN-01): API đăng nhập riêng của realm HTX. null → realm cũ, đăng
+/// nhập qua trang Keycloak (AppAuth).
+final passwordLoginProvider = Provider<PasswordLoginApi?>((ref) {
+  final pf = ref.watch(platformProvider);
+  return isNativeHtxRealm(pf.config.oidcIssuer)
+      ? HttpPasswordLoginApi(baseUrl: pf.config.apiBaseUrl, clock: pf.clock)
+      : null;
+});
+
 final sessionServiceProvider = Provider<SessionService>((ref) {
   final pf = ref.watch(platformProvider);
   return SessionService(
     store: pf.store,
     clock: pf.clock,
     oidc: ref.watch(oidcProvider),
+    passwordLogin: ref.watch(passwordLoginProvider),
     offlineMax: pf.config.offlineSessionMax,
   );
 });
@@ -214,6 +225,10 @@ class AppController extends Notifier<AppState> {
   }
 
   Future<void> loginOnline() => _busy(_flow.loginOnline);
+
+  /// AH-300: màn đăng nhập riêng đã nhận token (mật khẩu, mã OTP không qua đây).
+  Future<void> completePasswordLogin(OidcTokens tokens) =>
+      _busy(() => _flow.loginWithPasswordTokens(tokens));
   Future<void> setPin(String pin, String confirm) =>
       _busy(() => _flow.setPin(pin, confirm));
   Future<void> unlock(String pin) => _busy(() => _flow.unlock(pin));
@@ -289,6 +304,33 @@ class AppController extends Notifier<AppState> {
     );
   }
 
+  /// FN-TK-01/EX-03, AC-06 (AH-222): vai đang chọn bị ngừng trong lúc đang dùng —
+  /// máy chủ từ chối lượt đồng bộ bằng 409 accounts.working_role_revoked. Đọc lại
+  /// vai từ token: còn hai vai → màn Chọn vai trò; còn một vai → dùng luôn vai đó.
+  /// Kèm câu báo; dữ liệu chờ gửi giữ nguyên ở máy.
+  Future<void> _onWorkingRoleRevoked(HtxServices s) async {
+    if (state.services != s || state.view.stage != AuthStage.unlocked) return;
+    _stopAutoSync();
+    _push.detach();
+    await s.reloadWorkingRoles();
+    s.workingRole.notice = WorkingRoleRevokedException.userMessage;
+    if (s.workingRole.needsSelection) {
+      state = state.copyWith();
+      return;
+    }
+    try {
+      await _enter(s, state.view);
+      s.workingRole.notice = WorkingRoleRevokedException.userMessage;
+      state = state.copyWith();
+    } on StateError catch (e) {
+      // Còn dữ liệu chờ gửi tạo dưới vai đã bị ngừng (FN-TK-01/EX-04 thuộc nền
+      // tảng offline AH-245): không gửi dưới vai khác, báo cho người dùng.
+      s.workingRole.notice =
+          '${WorkingRoleRevokedException.userMessage} ${e.message}';
+      state = state.copyWith();
+    }
+  }
+
   /// Khóa màn hình: đóng CSDL, về màn PIN.
   Future<void> lock() async {
     _stopAutoSync();
@@ -303,6 +345,13 @@ class AppController extends Notifier<AppState> {
     if (services == null) return;
     await services.bindWorkingRole(role);
     await _enter(services, state.view);
+  }
+
+  void dismissWorkingRoleNotice() {
+    final services = state.services;
+    if (services == null || services.workingRole.notice == null) return;
+    services.workingRole.notice = null;
+    state = state.copyWith();
   }
 
   void chooseWorkingRoleAgain() {
@@ -347,6 +396,9 @@ class AppController extends Notifier<AppState> {
       }
       if (st.lastError == AccountLockedException.accountLockedCode) {
         unawaited(_onAccountLocked());
+      }
+      if (st.lastError == WorkingRoleRevokedException.workingRoleRevokedCode) {
+        unawaited(_onWorkingRoleRevoked(s));
       }
     });
     final pf = s.platform;

@@ -24,6 +24,25 @@ type householdSeasonRequest struct {
 	SOPVersionID *string `json:"sop_version_id"`
 	GPS          *gpsReq `json:"gps"`
 	Channel      string  `json:"channel"`
+	// PlanChanges: tùy chỉnh quy trình trước khi lưu vụ (AH-113).
+	PlanChanges []domain.PlanChange `json:"plan_changes"`
+	// CopyFromSeasonRef: AH-139 — sao chép giống và quy trình (kèm tùy chỉnh) từ vụ trước của hộ.
+	CopyFromSeasonRef *string `json:"copy_from_season_ref"`
+	// SelfMadePlan, SelfMadeAnchor: AH-162 — quy trình tự tạo khi loại cây chưa có SOP đang áp dụng.
+	SelfMadePlan   *selfMadePlanReq `json:"self_made_plan"`
+	SelfMadeAnchor string           `json:"self_made_anchor"`
+}
+
+type selfMadePlanReq struct {
+	Stages []domain.Stage `json:"stages"`
+	Steps  []domain.Step  `json:"steps"`
+}
+
+func (p *selfMadePlanReq) content() *domain.Content {
+	if p == nil {
+		return nil
+	}
+	return &domain.Content{Stages: p.Stages, Steps: p.Steps}
 }
 
 func householdPath(c *gin.Context) (uuid.UUID, uuid.UUID, bool) {
@@ -65,9 +84,17 @@ func (h Handler) openHouseholdSeason(c *gin.Context) {
 			return
 		}
 	}
+	var copyFrom uuid.UUID
+	if req.CopyFromSeasonRef != nil {
+		if copyFrom, err = uuid.Parse(*req.CopyFromSeasonRef); err != nil || copyFrom == uuid.Nil {
+			httpx.Fail(c, problem.Validation.WithField("copy_from_season_ref", "mã vụ nguồn không hợp lệ"))
+			return
+		}
+	}
 	r, err := h.Svc.OpenHouseholdSeason(c.Request.Context(), app.HouseholdOpenInput{CooperativeRef: coop, HouseholdRef: hh,
 		CropCode: req.CropCode, SeasonCode: req.SeasonCode, SeasonYear: req.SeasonYear, VarietyCode: req.VarietyCode,
-		AreaHa: req.AreaHa, AnchorDate: anchor, SOPVersionID: version, GPS: req.GPS.gps(), Channel: req.Channel, IdemKey: idem(c)})
+		AreaHa: req.AreaHa, AnchorDate: anchor, SOPVersionID: version, GPS: req.GPS.gps(), Channel: req.Channel, IdemKey: idem(c), PlanChanges: req.PlanChanges, CopyFrom: copyFrom,
+		SelfMade: req.SelfMadePlan.content(), SelfMadeAnchor: req.SelfMadeAnchor})
 	if err != nil {
 		httpx.Fail(c, err)
 		return
@@ -129,10 +156,22 @@ func householdSeasonOut(r app.SeasonResult) gin.H {
 		v := domain.FormatDay(s.HarvestOpenDate)
 		harvest = &v
 	}
-	return gin.H{"season_ref": s.SeasonRef, "entry_kind": "household", "household_ref": s.HouseholdRef,
+	out := gin.H{"season_ref": s.SeasonRef, "entry_kind": "household", "household_ref": s.HouseholdRef,
 		"cooperative_ref": s.CooperativeRef, "commune_code": s.CommuneCode, "crop_code": s.CropCode,
 		"season_code": s.SeasonCode, "season_year": s.SeasonYear, "variety_code": s.VarietyCode, "area_ha": s.AreaHa.String(),
 		"anchor_date": domain.FormatDay(s.SowingDate), "expected_harvest_date": forecast, "harvest_open_date": harvest,
 		"sop_snapshot": s.SOPSnapshot, "status": s.Status, "current_event_id": s.CurrentEventID, "version": s.Version,
-		"gps_missing": !r.Event.GPS.HasPoint(), "gps": gpsOut(r.Event.GPS), "opened_by": s.OpenedBy, "opened_at": ts(s.OpenedAt)}
+		"gps_missing": !r.Event.GPS.HasPoint(), "gps": gpsOut(r.Event.GPS), "opened_by": s.OpenedBy, "opened_at": ts(s.OpenedAt), "copied_from": uuidOrNil(s.CopiedFrom)}
+	// AH-70: lý do dừng vụ (sự kiện hiện tại của vụ đã dừng).
+	if s.Status == "cancelled" && r.Event.Action == "cancelled" {
+		out["stop_reason"], out["stopped_at"] = r.Event.Reason, ts(r.Event.EventTime)
+	}
+	return out
+}
+
+func uuidOrNil(u uuid.UUID) *uuid.UUID {
+	if u == uuid.Nil {
+		return nil
+	}
+	return &u
 }

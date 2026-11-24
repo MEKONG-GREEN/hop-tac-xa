@@ -41,6 +41,7 @@ func (h Handler) RegisterAdmin(rg *gin.RouterGroup) {
 	rg.POST("/accounts/htx-users/:id/revisions", h.nativeUpdate)
 	rg.POST("/accounts/htx-users/:id/lock", h.nativeLock(true))
 	rg.POST("/accounts/htx-users/:id/unlock", h.nativeLock(false))
+	rg.POST("/accounts/htx-users/:id/password-reset", h.nativeResetWith(h.Svc.NativeResetPassword))
 	rg.GET("/accounts/audit", h.audit)
 	rg.GET("/accounts/grants", h.grants)
 	rg.GET("/accounts/users", h.list)

@@ -44,6 +44,11 @@ import '../domain/roles.dart';
 
 /// Client OIDC công khai của App HTX (deploy/compose/keycloak/agrigreen-realm.json).
 const htxOidcClientId = 'agrigreen-htx-app';
+
+/// Realm HTX riêng (`agrigreen-htx`, ADR-0062): đăng nhập bằng màn riêng của
+/// app (FN-01, AH-300) và chọn vai làm việc.
+bool isNativeHtxRealm(String issuer) =>
+    issuer.replaceFirst(RegExp(r'/$'), '').endsWith('/realms/agrigreen-htx');
 const htxOidcRedirect = 'vn.agrigreen.htx:/oauth2redirect';
 
 /// Phụ thuộc nền tảng, thay được trong kiểm thử.
@@ -155,6 +160,25 @@ class HtxServices {
   final ProfileService profile;
   final HtxWorkingRole workingRole;
 
+  /// FN-TK-01/EX-03 (AH-222): máy chủ báo vai đang chọn đã bị ngừng — đọc lại vai
+  /// từ token hiện tại (đã làm mới).
+  Future<void> reloadWorkingRoles() async {
+    workingRole.reset(
+      rolesFromJwt(await platform.store.read(SecureKeys.accessToken)),
+    );
+  }
+
+  /// UX-TP-09 (AH-222): vai dùng lần trước của chính tài khoản này trên máy (mốc
+  /// `htx.working_role`), nếu vai đó vẫn còn trong token.
+  Future<String?> lastWorkingRole() async {
+    final checkpoint = await db.getMetaJson('htx.working_role');
+    if (checkpoint == null) return null;
+    final identity = await profile.journalContext();
+    if (identity.entries.any((e) => checkpoint[e.key] != e.value)) return null;
+    final role = checkpoint['role'];
+    return role is String && workingRole.available.contains(role) ? role : null;
+  }
+
   /// Pending operations retain the role and identity that created them. A new
   /// selection cannot replay the same immutable keys under another permission scope.
   Future<void> bindWorkingRole(String role) async {
@@ -233,9 +257,7 @@ class HtxServices {
       onWiped: onWiped,
     );
     final workingRole = HtxWorkingRole(
-      enabled: pf.config.oidcIssuer
-          .replaceFirst(RegExp(r'/$'), '')
-          .endsWith('/realms/agrigreen-htx'),
+      enabled: isNativeHtxRealm(pf.config.oidcIssuer),
       roles: rolesFromJwt(await pf.store.read(SecureKeys.accessToken)),
     );
     final profile = ProfileService(

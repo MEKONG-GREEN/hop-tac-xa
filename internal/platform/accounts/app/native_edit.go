@@ -161,6 +161,12 @@ func (s *Service) nativeUpdate(ctx context.Context, a *actor, id uuid.UUID, inpu
 			return UserView{}, false, ErrDuplicateIdentity.WithDetail("Email đã được dùng cho tài khoản khác")
 		}
 	}
+	if orgChanged {
+		// FN-TK-02/EX-04: chuyển Đại diện HTX cuối cùng sang HTX khác để HTX cũ không còn người duyệt.
+		if err := s.guardLastRepresentative(ctx, a, cur); err != nil {
+			return UserView{}, false, err
+		}
+	}
 	reservation := uuid.Nil
 	if orgChanged {
 		o, err := s.checkOrg(ctx, a, next.CooperativeRef)
@@ -257,12 +263,18 @@ func (s *Service) nativeSetLocked(ctx context.Context, a *actor, id uuid.UUID, l
 	if id == a.p.ActorRef {
 		return UserView{}, false, ErrSelfAction
 	}
-	if _, err := s.nativeTarget(ctx, a, id); err != nil {
+	target, err := s.nativeTarget(ctx, a, id)
+	if err != nil {
 		return UserView{}, false, err
+	}
+	if locked {
+		// FN-TK-02/EX-04: khóa Đại diện HTX cuối cùng còn hoạt động của HTX phải được xác nhận.
+		if err := s.guardLastRepresentative(ctx, a, target); err != nil {
+			return UserView{}, false, err
+		}
 	}
 	in := LockInput{UserID: id, IdemKey: key, Reason: nativeLockReason}
 	var res Result
-	var err error
 	if locked {
 		res, err = s.lock(ctx, a, in)
 	} else {

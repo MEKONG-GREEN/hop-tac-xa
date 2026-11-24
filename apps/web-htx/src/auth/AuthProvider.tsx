@@ -12,6 +12,7 @@ import { LOCK_MINUTES, mockKnLogin } from "@/api/mock/kn";
 import { findPersona, mockToken, type MockPersona } from "@/api/mock/personas";
 import { ApiProblem } from "@/api/problem";
 import type { Me } from "@/api/types";
+import { WORKING_ROLE_REVOKED_NOTICE, withWorkingRoleRevokedWatch } from "@/api/workingRoleRevoked";
 import { config } from "@/config";
 import { createKnApi } from "@/kn/client";
 import { createCollectApi, createCycleApi, createKnAdminApi, supportReasonStore, type CollectApi, type CycleApi, type KnAdminApi } from "@/kn/cycle/api";
@@ -89,7 +90,14 @@ export interface AuthContextValue {
   /** Thu thập dữ liệu Cấp Xã KN v7.7 (P7 /v1/kn/*). */
   collectApi: CollectApi;
   kn: KnSessionState;
-  htxRoles?: { roles: HtxWorkingRole[]; selected: HtxWorkingRole | null; select: (role: HtxWorkingRole) => Promise<void>; chooseAgain: () => void };
+  htxRoles?: {
+    roles: HtxWorkingRole[]; selected: HtxWorkingRole | null; select: (role: HtxWorkingRole) => Promise<void>; chooseAgain: () => void;
+    /** UX-TP-09 (AH-222): vai dùng lần trước trên trình duyệt này — chỉ để đánh dấu thẻ. */
+    lastUsed?: HtxWorkingRole | null;
+    /** FN-TK-01/EX-03 (AH-222): câu báo vai vừa bị ngừng; null khi không có. */
+    notice?: string | null;
+    clearNotice?: () => void;
+  };
   /** Trạng thái đồng ý thu thập dữ liệu của phiên (GET /v1/me/data-consent). */
   dataConsent: DataConsentState;
   /** Ghi đồng ý phiên bản `version` (POST /v1/me/data-consent); gọi trong `useIdempotentAction().run`. */
@@ -152,7 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [principal, setPrincipal] = useState<Principal | null>(null);
   const [scopeWarning, setScopeWarning] = useState<string | null>(null);
   const [kn, setKn] = useState<KnSessionState>(KN_LEGACY);
-  const [htxRoles,setHtxRoles] = useState<{roles:HtxWorkingRole[];selected:HtxWorkingRole|null}>({roles:[],selected:null});
+  const [htxRoles,setHtxRoles] = useState<{roles:HtxWorkingRole[];selected:HtxWorkingRole|null;notice?:string|null}>({roles:[],selected:null});
   const [dataConsent, setDataConsent] = useState<DataConsentState>(CONSENT_UNKNOWN);
   const claimsRef = useRef<AccessTokenClaims>({});
   // Máy chủ chặn route ảnh/GPS bằng 403 accounts.data_consent_required → tăng số này để hỏi lại trạng thái (client dựng
@@ -171,6 +179,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const onDataConsentRequired = useCallback(() => setConsentPing((n) => n + 1), []);
+
+  // FN-TK-01/EX-03, AC-06 (AH-222): 409 accounts.working_role_revoked — vai đang chọn đã bị ngừng (token làm mới không
+  // còn vai đó). Đọc lại vai từ token hiện tại: còn hai vai → màn Chọn vai trò; còn một vai → dùng luôn (AC-01); kèm câu
+  // báo. Tải lại /v1/me qua roleRevokedPing (client dựng trước loadPrincipal nên không gọi thẳng được).
+  const [roleRevokedPing, setRoleRevokedPing] = useState(0);
+  const onWorkingRoleRevoked = useCallback(() => {
+    const token = tokenStore.get();
+    if (!token) return;
+    const c = decodeAccessToken(token);
+    const next = htxWorkingRole.bind(`${c.tenant_id ?? ""}:${c.sub ?? ""}:${c.org_ref ?? ""}`, c.realm_access?.roles ?? []);
+    setHtxRoles({ ...next, notice: WORKING_ROLE_REVOKED_NOTICE });
+    setRoleRevokedPing((n) => n + 1);
+  }, []);
 
   /**
    * AH-301 (FN-01/EX-06): máy chủ trả 403 accounts.account_locked cho token đang dùng → xóa phiên đang giữ; AppShell
@@ -194,7 +215,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const watch = (base: FetchFn): FetchFn => withAccountLockWatch((request) => {
       const role=htxWorkingRole.get();
       if (!role) return base(request);
-      const scoped=new Request(request);scoped.headers.set("X-HTX-Role",role);return base(scoped);
+      const scoped=new Request(request);scoped.headers.set("X-HTX-Role",role);
+      return withWorkingRoleRevokedWatch(base, htxWorkingRole.get, onWorkingRoleRevoked)(scoped);
     }, getAccessToken, onAccountLocked);
     const appFetch = watch(config.mock ? mockFetch : (r) => fetch(r));
     const adminFetch = watch(config.mock ? mockAdminFetch : (r) => fetch(r));
@@ -219,7 +241,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       collectApi: createCollectApi({ baseUrl: config.apiBaseUrl, getAccessToken, getContextId, fetch: appFetch }),
       knAdminApi: createKnAdminApi({ baseUrl: config.adminApiBaseUrl, getAccessToken, getContextId, fetch: adminFetch }),
     };
-  }, [onUnauthenticated, onDataConsentRequired, onAccountLocked]);
+  }, [onUnauthenticated, onDataConsentRequired, onAccountLocked, onWorkingRoleRevoked]);
 
   /** GET /v1/me → Principal (gọi lại sau khi đổi ngữ cảnh: vai và phạm vi theo lần gán đã chọn). */
   const loadPrincipal = useCallback(async () => {
@@ -516,9 +538,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const selectHtxRole=useCallback(async (role:HtxWorkingRole)=>{
     htxWorkingRole.select(role);
     await loadPrincipal();
-    setHtxRoles((previous)=>({...previous,selected:role}));
+    setHtxRoles((previous)=>({...previous,selected:role,notice:null}));
   },[loadPrincipal]);
-  const chooseHtxRoleAgain=useCallback(()=>{htxWorkingRole.chooseAgain();setHtxRoles((previous)=>({...previous,selected:null}));},[]);
+  const chooseHtxRoleAgain=useCallback(()=>{htxWorkingRole.chooseAgain();setHtxRoles((previous)=>({...previous,selected:null,notice:null}));},[]);
+  const clearHtxNotice=useCallback(()=>setHtxRoles((previous)=>(previous.notice ? {...previous,notice:null} : previous)),[]);
+
+  // Sau 409 accounts.working_role_revoked: dựng lại principal từ token đã làm mới và /v1/me (menu theo vai còn lại).
+  useEffect(() => {
+    if (roleRevokedPing === 0) return;
+    let alive = true;
+    invalidateUnitResolver(clients.api);
+    void unwrap(clients.api.GET("/v1/me")).then((me): Me | null => me, () => null).then((me) => {
+      if (!alive) return;
+      const token = tokenStore.get();
+      if (token) claimsRef.current = decodeAccessToken(token);
+      setPrincipal(withHtxWorkingRole(buildPrincipal(claimsRef.current, me)));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [roleRevokedPing, clients]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -533,7 +572,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       knAdminApi: clients.knAdminApi,
       collectApi: clients.collectApi,
       kn,
-      htxRoles:{...htxRoles,select:selectHtxRole,chooseAgain:chooseHtxRoleAgain},
+      htxRoles:{...htxRoles,select:selectHtxRole,chooseAgain:chooseHtxRoleAgain,lastUsed:htxWorkingRole.lastUsed(),clearNotice:clearHtxNotice},
       dataConsent,
       acceptDataConsent,
       refreshDataConsent,
@@ -548,7 +587,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       changePassword,
       logout,
     }),
-    [status, sessionEnd, principal, scopeWarning, clients, kn, htxRoles,selectHtxRole,chooseHtxRoleAgain,dataConsent, acceptDataConsent, refreshDataConsent, loadPrincipal, enterSupport, exitSupport, setSupportReason, selectContext, login, signIn, loginAsPersona, changePassword, logout],
+    [status, sessionEnd, principal, scopeWarning, clients, kn, htxRoles,selectHtxRole,chooseHtxRoleAgain,clearHtxNotice,dataConsent, acceptDataConsent, refreshDataConsent, loadPrincipal, enterSupport, exitSupport, setSupportReason, selectContext, login, signIn, loginAsPersona, changePassword, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -29,6 +29,8 @@ type Memory struct {
 	logout map[uuid.UUID]int
 	// passwords: băm SHA-256 của mật khẩu đã đặt bằng SetPassword (mô phỏng passwordHistory của realm).
 	passwords map[uuid.UUID][32]byte
+	// passwordAt: lúc đặt mật khẩu hiện tại (createdDate của thông tin xác thực "password").
+	passwordAt map[uuid.UUID]time.Time
 	// PasswordMinLen mô phỏng length(n) của chính sách realm; 0 = MinPasswordLen (realm KN). Realm HTX: 6 (FN-01/BR-03).
 	PasswordMinLen int
 	failFor        map[string]error // tên thao tác → lỗi giả
@@ -92,7 +94,7 @@ func NewMemory(realmRoles ...string) *Memory {
 		realmRoles = append(slices.Clone(port.ManagedRoles), "platform_admin", "offline_access", "cgh_sync", port.RoleFarmer)
 	}
 	return &Memory{
-		realm: realmRoles, users: map[uuid.UUID]*memUser{}, logout: map[uuid.UUID]int{}, passwords: map[uuid.UUID][32]byte{},
+		realm: realmRoles, users: map[uuid.UUID]*memUser{}, logout: map[uuid.UUID]int{}, passwords: map[uuid.UUID][32]byte{}, passwordAt: map[uuid.UUID]time.Time{},
 		failFor: map[string]error{}, now: time.Now, loginSessions: map[string]loginSession{}, grants: map[uuid.UUID]int{},
 	}
 }
@@ -416,6 +418,20 @@ func (m *Memory) HasOTP(_ context.Context, id uuid.UUID) (bool, error) {
 	return u.otp, nil
 }
 
+// PasswordSetAt thực hiện port.PasswordAgeReader.
+func (m *Memory) PasswordSetAt(_ context.Context, id uuid.UUID) (time.Time, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.fail("PasswordSetAt"); err != nil {
+		return time.Time{}, err
+	}
+	if _, err := m.get(id); err != nil {
+		return time.Time{}, err
+	}
+	// Keycloak lưu createdDate theo mili giây.
+	return m.passwordAt[id].Truncate(time.Millisecond).UTC(), nil
+}
+
 // ExecuteActionsEmail thực hiện port.Directory.
 func (m *Memory) ExecuteActionsEmail(_ context.Context, id uuid.UUID, actions []string, lifespan time.Duration) error {
 	m.mu.Lock()
@@ -509,6 +525,7 @@ func (m *Memory) SetPassword(_ context.Context, id uuid.UUID, password string) e
 		return port.ErrPasswordPolicy
 	}
 	m.passwords[id] = sum
+	m.passwordAt[id] = m.now()
 	return nil
 }
 
@@ -542,6 +559,7 @@ func (m *Memory) SetTemporaryPassword(_ context.Context, id uuid.UUID, password 
 		return port.ErrPasswordPolicy
 	}
 	m.passwords[id] = sha256.Sum256([]byte(password))
+	m.passwordAt[id] = m.now()
 	if !slices.Contains(u.u.RequiredActions, port.ActionUpdatePassword) {
 		u.u.RequiredActions = append(u.u.RequiredActions, port.ActionUpdatePassword)
 	}

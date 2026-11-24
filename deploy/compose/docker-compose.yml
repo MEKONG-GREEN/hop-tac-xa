@@ -332,6 +332,10 @@ services:
       # Admin API cấp khóa API cần pepper (ADR-0022 mục 4); rỗng khi chưa chạy hồ sơ phasek.
       AG_APIKEY_PEPPER_V1: ${AG_APIKEY_PEPPER_V1:-}
       AG_APIKEY_PEPPER_CURRENT: "1"
+      # pf/weather (ADR-0065): khóa mã hóa khóa API thời tiết (scripts/gen-dev-secrets); Local cho chọn nguồn giả.
+      # Open-Meteo miễn phí chạy không cần biến nào khác (AG_ENV=local không qua guard production).
+      AG_WEATHER_SECRET_KEY: ${AG_WEATHER_SECRET_KEY:-}
+      AG_WEATHER_FAKE: ${AG_WEATHER_FAKE:-true}
     ports: ["127.0.0.1:8080:8080", "127.0.0.1:8082:8082"]
 
   outbox-publisher:
@@ -368,6 +372,10 @@ services:
       # app_agg (ADR-0031 §3): chỉ `worker -agg-run`; rỗng → AG_DB_APP_PASSWORD. AG_AGG_GOVERNANCE_TENANT: tenant quản trị.
       AG_DB_PASSWORD_APP_AGG: ${AG_DB_PASSWORD_APP_AGG:-}
       AG_AGG_GOVERNANCE_TENANT: ${AG_AGG_GOVERNANCE_TENANT:-}
+      # pf/weather (ADR-0065): khóa mã hóa khóa API thời tiết (scripts/gen-dev-secrets); job weather_fetch giải mã khóa đã lưu.
+      # Open-Meteo miễn phí chạy không cần biến nào khác (AG_ENV=local không qua guard production).
+      AG_WEATHER_SECRET_KEY: ${AG_WEATHER_SECRET_KEY:-}
+      AG_WEATHER_FAKE: ${AG_WEATHER_FAKE:-true}
       AG_AMQP_URL: amqp://agrigreen:${AMQP_PASSWORD}@rabbitmq:5672/
       AG_ANCHOR_SIGNING_KEY: ${AG_ANCHOR_SIGNING_KEY:?chạy scripts/gen-dev-secrets}
       AG_ANCHOR_KEY_ID: local-dev-1

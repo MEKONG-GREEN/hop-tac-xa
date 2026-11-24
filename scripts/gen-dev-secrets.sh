@@ -15,10 +15,11 @@ if [ -f "$target" ] && [ "${1:-}" != "--force" ]; then
     echo "Đã bổ sung AG_KC_CLIENT_SECRET vào $target (giá trị không in ra). Tạo lại container keycloak để nhập lại realm."
   fi
   # FN-01 (ADR-0060): bí mật client đăng nhập riêng và khóa HMAC bộ đếm mã định danh không tồn tại.
-  for v in AG_KC_LOGIN_CLIENT_SECRET AG_LOGIN_ID_KEY; do
+  # AG_WEATHER_SECRET_KEY (ADR-0065): khóa AES-256 mã hóa khóa API nhà cung cấp thời tiết.
+  for v in AG_KC_LOGIN_CLIENT_SECRET AG_LOGIN_ID_KEY AG_WEATHER_SECRET_KEY; do
     if ! grep -q "^$v=" "$target"; then
       [ -z "$(tail -c1 "$target")" ] || echo >> "$target"
-      if [ "$v" = AG_LOGIN_ID_KEY ]; then
+      if [ "$v" = AG_LOGIN_ID_KEY ] || [ "$v" = AG_WEATHER_SECRET_KEY ]; then
         echo "$v='$(head -c 32 /dev/urandom | base64 | tr -d '
 ')'" >> "$target"
       else
@@ -67,6 +68,8 @@ tmp="$target.tmp.$$"
   # FN-01 (ADR-0060): bí mật client đăng nhập riêng; khóa HMAC bộ đếm mã định danh không tồn tại (base64 32 byte).
   echo "AG_KC_LOGIN_CLIENT_SECRET=$(hex 32)"
   echo "AG_LOGIN_ID_KEY='$(b64 32)'"
+  # pf/weather (ADR-0065): khóa AES-256 mã hóa khóa API nhà cung cấp thời tiết (base64 32 byte).
+  echo "AG_WEATHER_SECRET_KEY='$(b64 32)'"
   # Public API (G5, docker compose --profile phasek): pepper HMAC khóa API phiên bản 1 (ADR-0022 mục 4, ≥ 32 byte).
   echo "AG_APIKEY_PEPPER_V1=$(hex 32)"
   # Sao lưu (docker-compose.backup.yml): mã hóa kho pgBackRest, kho S3 thứ hai với danh tính ghi/đọc tách biệt.

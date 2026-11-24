@@ -388,8 +388,531 @@ paths:
         "401": {$ref: "#/components/responses/Problem"}
         "403": {$ref: "#/components/responses/Problem"}
         "404": {$ref: "#/components/responses/Problem"}
+# @ag-order: 10011
+  /v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/plan-changes:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: household_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: season_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: changeHouseholdPlan
+      summary: Tùy chỉnh quy trình của vụ đang canh tác (AH-113)
+      description: Thành viên HTX/Admin (KHMV-FN-04 U); Đại diện chỉ xem. Một thay đổi mỗi yêu cầu — thêm việc, sửa ngày/vật tư, đổi chỗ (chỉ đổi thứ tự hiển thị trong giai đoạn), bỏ việc (việc SOP chuyển Bỏ qua, việc tự thêm bị xóa). Chỉ đổi bản chụp của vụ, SOP chuẩn không đổi. Việc đã xong không sửa, đổi chỗ, bỏ được (409 cropcycle.plan_step_resolved); việc tự thêm đã có nhật ký không xóa được. Khóa vụ rồi so expected_season_event_id (409 cropcycle.task_season_changed). Mỗi thay đổi ghi một sự kiện corrected chỉ ghi thêm (người, thời điểm, nội dung). Kiểm cửa sổ và vật tư theo luật của SOP.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_season_event_id, change]
+              properties:
+                expected_season_event_id: {type: string, format: uuid}
+                change: {$ref: "#/components/schemas/HouseholdPlanChange"}
+      responses:
+        "200":
+          description: Vụ sau thay đổi, checklist tính lại và câu mô tả đã ghi lịch sử; replay trả kết quả cũ
+          headers:
+            Idempotent-Replayed: {schema: {type: string}}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [season, checklist, summary]
+                properties:
+                  season: {$ref: "#/components/schemas/HouseholdSeason"}
+                  checklist: {$ref: "#/components/schemas/HouseholdChecklist"}
+                  summary: {type: string}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+# @ag-order: 10012
+  /v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/plan-history:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: household_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: season_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: getHouseholdPlanHistory
+      summary: Lịch sử tùy chỉnh quy trình của vụ (AH-113)
+      description: Người xem được vụ (kể cả Đại diện HTX cùng HTX) xem được. Mới nhất trước.
+      responses:
+        "200":
+          description: Các thay đổi đã ghi
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [event_id, actor_ref, event_time, summary]
+                      properties:
+                        event_id: {type: string, format: uuid}
+                        actor_ref: {type: string, format: uuid}
+                        event_time: {type: string, format: date-time}
+                        summary: {type: string}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+# @ag-order: 10013
+  /v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/task-records/{log_ref}/corrections:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: household_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: season_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: log_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: correctHouseholdTask
+      summary: Sửa nhật ký việc kèm lý do (AH-126)
+      description: Thành viên HTX/Admin (KHMV-FN-05 U); Đại diện chỉ xem. Bản ghi bù chỉ ghi thêm (cùng log_ref, supersedes_id = phiên bản hiện hành); GPS, ảnh và thời điểm ghi giữ như bản đầu. Lý do bắt buộc, ít nhất 10 ký tự (422 nếu thiếu). Dữ liệu sửa kiểm như khi ghi (ngày làm xong không sau ngày ghi, vật tư theo danh mục, liều 0 cần xác nhận). expected_record_id lệch → 409 cropcycle.task_record_changed; bản đã xóa → 409 cropcycle.task_record_voided; vụ dừng/hủy → 422 cropcycle.task_season_state.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_record_id, reason, state, done_on, materials]
+              properties:
+                expected_record_id: {type: string, format: uuid}
+                reason: {type: string, minLength: 10, maxLength: 500}
+                state: {type: string, enum: [partial, done]}
+                done_on: {type: string, format: date}
+                note: {type: string, maxLength: 2000}
+                zero_confirmed: {type: boolean, default: false}
+                channel: {type: string, enum: [app, web], default: app}
+                materials:
+                  type: array
+                  maxItems: 20
+                  items:
+                    type: object
+                    required: [dose_per_ha]
+                    properties:
+                      material_code: {type: string}
+                      name: {type: string}
+                      unit: {type: string}
+                      dose_per_ha: {type: string, pattern: '^(0|[1-9][0-9]{0,8})(\.[0-9]{1,4})?$'}
+      responses:
+        "200":
+          description: Bản ghi bù và checklist tính lại; replay trả kết quả cũ
+          headers:
+            Idempotent-Replayed: {schema: {type: string}}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [record, checklist]
+                properties:
+                  record: {$ref: "#/components/schemas/HouseholdTaskRecord"}
+                  checklist: {$ref: "#/components/schemas/HouseholdChecklist"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+# @ag-order: 10014
+  /v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/task-records/{log_ref}/void:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: household_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: season_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: log_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: voidHouseholdTask
+      summary: Xóa mềm nhật ký việc hoặc bỏ tích việc đã xong, kèm lý do (AH-126)
+      description: Thành viên HTX/Admin (KHMV-FN-05 D); Đại diện chỉ xem. Ghi bản ghi bù trạng thái voided — bản ghi ẩn khỏi checklist và tiến độ, không xóa cứng; nếu đó là bản "Đã xong" duy nhất thì việc về chưa xong. Lý do bắt buộc, ít nhất 10 ký tự.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_record_id, reason]
+              properties:
+                expected_record_id: {type: string, format: uuid}
+                reason: {type: string, minLength: 10, maxLength: 500}
+                channel: {type: string, enum: [app, web], default: app}
+      responses:
+        "200":
+          description: Bản ghi bù và checklist tính lại; replay trả kết quả cũ
+          headers:
+            Idempotent-Replayed: {schema: {type: string}}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [record, checklist]
+                properties:
+                  record: {$ref: "#/components/schemas/HouseholdTaskRecord"}
+                  checklist: {$ref: "#/components/schemas/HouseholdChecklist"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+# @ag-order: 10015
+  /v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/task-records/{log_ref}/history:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: household_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: season_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: log_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: getHouseholdTaskHistory
+      summary: Lịch sử các phiên bản của nhật ký việc (AH-126)
+      description: Người xem được vụ (kể cả Đại diện HTX cùng HTX) xem được. Theo thứ tự ghi; mỗi phiên bản có người ghi (actor_ref), thời điểm (recorded_at), lý do sửa/xóa (correction_reason) và giá trị lúc đó.
+      responses:
+        "200":
+          description: Các phiên bản, cũ nhất trước
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: "#/components/schemas/HouseholdTaskRecord"}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+# @ag-order: 10016
+  /v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/adhoc-records:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: household_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: season_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: recordHouseholdAdhocTask
+      summary: Ghi việc phát sinh ngoài quy trình của vụ (AH-163)
+      description: Thành viên HTX/Admin (KHMV-FN-05 C); Đại diện chỉ xem. Nội dung, giai đoạn, loại việc, ngày bắt buộc; ngày không sau hôm nay; liều ≥ 0 (liều 0 cần xác nhận); ghi bù quá 3 ngày cần lý do. Bản ghi gắn nhãn "Ngoài SOP" (adhoc), mang số việc riêng của vụ (> 1000) và không tính vào % tiến độ. Vụ đã thu hoạch chỉ ghi vào giai đoạn cuối; vụ dừng/hủy không ghi. Sửa/xóa như nhật ký việc (AH-126).
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_season_event_id, stage_seq, name, activity_code, state, done_on, materials, gps]
+              properties:
+                expected_season_event_id: {type: string, format: uuid}
+                stage_seq: {type: integer, minimum: 1}
+                name: {type: string, minLength: 1, maxLength: 200}
+                activity_code: {type: string, enum: [lam_dat, gieo_sa, tuoi_nuoc, bon_phan, phun_thuoc, kiem_tra, thu_hoach, cat_tia, khac]}
+                state: {type: string, enum: [partial, done]}
+                done_on: {type: string, format: date}
+                note: {type: string, maxLength: 2000}
+                backfill_reason: {type: string, maxLength: 500}
+                zero_confirmed: {type: boolean, default: false}
+                gps: {$ref: "#/components/schemas/CropGPS"}
+                channel: {type: string, enum: [app, web], default: app}
+                materials:
+                  type: array
+                  maxItems: 20
+                  items:
+                    type: object
+                    required: [dose_per_ha]
+                    properties:
+                      material_code: {type: string}
+                      name: {type: string}
+                      unit: {type: string}
+                      dose_per_ha: {type: string, pattern: '^(0|[1-9][0-9]{0,8})(\.[0-9]{1,4})?$'}
+      responses:
+        "201":
+          description: Bản ghi việc phát sinh và checklist (tiến độ không đổi); replay trả bản ghi cũ
+          headers:
+            Idempotent-Replayed: {schema: {type: string}}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [record, checklist]
+                properties:
+                  record: {$ref: "#/components/schemas/HouseholdTaskRecord"}
+                  checklist: {$ref: "#/components/schemas/HouseholdChecklist"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+# @ag-order: 10020
+  /v1/cooperatives/{ref}/household-seasons:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: listCooperativeHouseholdSeasons
+      summary: Danh sách vụ nông hộ của HTX kèm tiến độ (AH-140)
+      description: Chỉ đọc (KHMV-FN-03-XEM R) — Đại diện HTX, Thành viên HTX, Admin; phạm vi theo HTX (KH-02), HTX khác bị từ chối. Mỗi vụ kèm trạng thái, % tiến độ, số việc đến hạn, trễ; lọc theo trạng thái và người mở vụ (Thành viên HTX). Phân trang theo season_ref.
+      parameters:
+        - {name: status, in: query, schema: {type: string, enum: [open, completed, cancelled]}}
+        - {name: opened_by, in: query, schema: {type: string, format: uuid}}
+        - {name: cursor, in: query, schema: {type: string, format: uuid}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100}}
+      responses:
+        "200":
+          description: Một trang vụ
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items: {type: array, items: {$ref: "#/components/schemas/HouseholdSeasonOverviewItem"}}
+                  next_cursor: {type: [string, "null"]}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+# @ag-order: 10017
+  /v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/task-batch-candidates:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: household_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: season_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: listHouseholdTaskBatchCandidates
+      summary: Các vụ có thể ghi chung một việc với vụ này (AH-176)
+      description: Thành viên HTX/Admin (KHMV-FN-05 C). Vụ của HTX dùng cùng SOP gốc (KH-17), đang canh tác hoặc đã thu hoạch; mỗi vụ kèm số việc tương ứng (cùng tên và loại việc) và việc còn ghi được không, kèm mã lý do nếu không. Tối đa 200 vụ.
+      parameters:
+        - {name: step_seq, in: query, required: true, schema: {type: integer, minimum: 1, maximum: 1000}}
+      responses:
+        "200":
+          description: Danh sách vụ
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: "#/components/schemas/HouseholdTaskBatchCandidate"}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+# @ag-order: 10018
+  /v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/task-batches:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: household_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: season_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: recordHouseholdTaskBatch
+      summary: Ghi một việc cho nhiều vụ cùng lúc (AH-176)
+      description: Thành viên HTX/Admin (KHMV-FN-05 C); Đại diện chỉ xem. Vụ trong đường dẫn xác định SOP gốc và việc (step_seq). Mỗi vụ được chọn có một bản ghi riêng theo đúng quy tắc ghi chi tiết (AH-99) với ngày, kết quả, liều, ghi chú, GPS chung; vụ không cùng SOP gốc/không có việc, việc đã xong, vụ đã đổi hoặc không ghi được bị bỏ qua kèm mã và lý do. Ảnh chỉ dùng chung khi mọi vụ cùng hộ với vụ đường dẫn (ảnh mã hóa theo hộ). Idempotency-Key sinh khóa riêng cho từng vụ nên thử lại không tạo bản ghi trùng.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [step_seq, seasons, state, done_on, materials, gps]
+              properties:
+                step_seq: {type: integer, minimum: 1, maximum: 1000}
+                seasons:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [household_ref, season_ref, expected_season_event_id]
+                    properties:
+                      household_ref: {type: string, format: uuid}
+                      season_ref: {type: string, format: uuid}
+                      expected_season_event_id: {type: string, format: uuid}
+                state: {type: string, enum: [partial, done]}
+                done_on: {type: string, format: date}
+                note: {type: string, maxLength: 2000}
+                backfill_reason: {type: string, maxLength: 500}
+                zero_confirmed: {type: boolean, default: false}
+                file_refs: {type: array, maxItems: 5, items: {type: string, format: uuid}}
+                gps: {$ref: "#/components/schemas/CropGPS"}
+                channel: {type: string, enum: [app, web], default: app}
+                materials:
+                  type: array
+                  maxItems: 20
+                  items:
+                    type: object
+                    required: [dose_per_ha]
+                    properties:
+                      material_code: {type: string}
+                      name: {type: string}
+                      unit: {type: string}
+                      dose_per_ha: {type: string, pattern: '^(0|[1-9][0-9]{0,8})(\.[0-9]{1,4})?$'}
+      responses:
+        "200":
+          description: Kết quả từng vụ
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [results, recorded, skipped]
+                properties:
+                  results: {type: array, items: {$ref: "#/components/schemas/HouseholdTaskBatchResult"}}
+                  recorded: {type: integer}
+                  skipped: {type: integer}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+# @ag-order: 10021
+  /v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/corrections:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: household_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: season_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: editHouseholdSeason
+      summary: Sửa mốc gốc, diện tích, giống/SOP của vụ đang canh tác (AH-175)
+      description: Thành viên HTX/Admin (KHMV-FN-03 U); Đại diện chỉ xem. Chỉ vụ "Đang canh tác"; lý do 10–500 ký tự; ít nhất một nội dung đổi; expected_season_event_id phải là phiên bản hiện tại. Mốc gốc không ràng buộc khoảng ngày (Q-13), ngày dự kiến của việc chưa xong tính lại, việc đã xong giữ ngày. Diện tích > 0, hai chữ số thập phân, không vượt diện tích đất trừ các vụ đang canh tác khác (409 household_area_exceeded kèm remaining_area_ha). Đổi giống/SOP chỉ khi vụ chưa có nhật ký (409 season_has_logs, KH-10); đổi giống bắt buộc chọn SOP đang áp dụng theo giống mới, thay bản chụp, giữ sản lượng dự kiến. Mỗi lần sửa ghi một sự kiện corrected (xem plan-history).
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_season_event_id, reason]
+              properties:
+                expected_season_event_id: {type: string, format: uuid}
+                reason: {type: string, minLength: 10, maxLength: 500}
+                anchor_date: {type: string, format: date}
+                area_ha: {type: string, pattern: '^(0|[1-9][0-9]{0,9})(\.[0-9]{1,2})?$'}
+                variety_code: {type: string}
+                sop_version_id: {type: string, format: uuid}
+                channel: {type: string, enum: [app, web], default: web}
+      responses:
+        "200":
+          description: Vụ sau khi sửa
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/HouseholdSeason"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
+# @ag-order: 10019
+  /v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/stop:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: household_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: season_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: stopHouseholdSeason
+      summary: Dừng (hủy) vụ nông hộ đang canh tác kèm lý do (AH-70)
+      description: Thành viên HTX/Admin (KHMV-FN-03 D); Đại diện chỉ xem. Chỉ vụ "Đang canh tác"; lý do 10–500 ký tự, không SĐT/CCCD; expected_season_event_id phải là phiên bản hiện tại. Vụ chuyển "Đã dừng vụ" (cancelled), diện tích được giải phóng, nhật ký và kế hoạch giữ nguyên ở chế độ chỉ đọc; vụ đã dừng không quay lại "Đang canh tác". Phát lại cùng Idempotency-Key trả kết quả cũ.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_season_event_id, reason]
+              properties:
+                expected_season_event_id: {type: string, format: uuid}
+                reason: {type: string, minLength: 10, maxLength: 500}
+                channel: {type: string, enum: [app, web], default: web}
+      responses:
+        "200":
+          description: Vụ đã dừng (kèm lý do)
+          headers:
+            Idempotent-Replayed: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/HouseholdSeason"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
 components:
   schemas:
+# @ag-order: 10017
+    HouseholdTaskBatchCandidate:
+      type: object
+      required: [household_ref, season_ref, season_code, season_year, variety_code, status, current_event_id, eligible, is_source]
+      properties:
+        household_ref: {type: string, format: uuid}
+        season_ref: {type: string, format: uuid}
+        season_code: {type: string}
+        season_year: {type: integer}
+        variety_code: {type: string}
+        status: {type: string}
+        current_event_id: {type: string, format: uuid}
+        step_seq: {type: integer, description: "Số việc tương ứng trong vụ (có thể khác vụ nguồn giữa các phiên bản SOP)"}
+        eligible: {type: boolean}
+        is_source: {type: boolean}
+        code: {type: string, description: "Mã lý do không ghi được"}
+        reason: {type: string}
+# @ag-order: 10018
+    HouseholdTaskBatchResult:
+      type: object
+      required: [household_ref, season_ref, status]
+      properties:
+        household_ref: {type: string, format: uuid}
+        season_ref: {type: string, format: uuid}
+        status: {type: string, enum: [recorded, skipped]}
+        step_seq: {type: integer}
+        record: {$ref: "#/components/schemas/HouseholdTaskRecord"}
+        replayed: {type: boolean}
+        code: {type: string, description: "Mã lý do bỏ qua, vd cropcycle.task_already_resolved, cropcycle.batch_task_mismatch"}
+        reason: {type: string}
+# @ag-order: 10015
+    HouseholdPlanChange:
+      type: object
+      additionalProperties: false
+      required: [kind]
+      description: "Một thay đổi quy trình của vụ (AH-113): add cần step; edit cần step_seq, window, materials; move cần step_seq, direction; remove cần step_seq"
+      properties:
+        kind: {type: string, enum: [add, edit, move, remove]}
+        step_seq: {type: integer, minimum: 1, maximum: 1000}
+        direction: {type: string, enum: [up, down]}
+        step:
+          type: object
+          additionalProperties: false
+          required: [name, stage_seq, activity_code, window]
+          properties:
+            name: {type: string, minLength: 1, maxLength: 200}
+            stage_seq: {type: integer, minimum: 1}
+            activity_code: {type: string, enum: [lam_dat, gieo_sa, tuoi_nuoc, bon_phan, phun_thuoc, kiem_tra, thu_hoach, cat_tia, khac]}
+            window: {$ref: "#/components/schemas/CropSOPWindow"}
+            materials: {type: array, items: {$ref: "#/components/schemas/CropSOPMaterial"}}
+            instruction: {type: string, maxLength: 2000}
+        window: {$ref: "#/components/schemas/CropSOPWindow"}
+        materials: {type: array, items: {$ref: "#/components/schemas/CropSOPMaterial"}}
 # @ag-order: 10012
     SeasonCalendarInput:
       type: object
@@ -458,6 +981,10 @@ components:
           description: Phiên bản đang áp dụng trong nhóm SOP phù hợp. Bỏ trống để server tự chọn nếu chỉ có một SOP phù hợp.
         gps: {$ref: "#/components/schemas/CropGPS"}
         channel: {type: string, enum: [app, web], default: app}
+        plan_changes: {type: array, maxItems: 200, description: "Tùy chỉnh quy trình trước khi lưu vụ (AH-113), áp theo thứ tự; SOP chuẩn không đổi", items: {$ref: "#/components/schemas/HouseholdPlanChange"}}
+        self_made_plan: {type: object, additionalProperties: false, required: [stages, steps], description: "AH-162: quy trình tự tạo (cùng cấu trúc SOP) khi loại cây/giống chưa có SOP đang áp dụng; chỉ gắn vụ này (KH-12). Kiểm như soạn SOP (thứ tự liên tục, Từ ≤ Đến). Đã có SOP → 409 cropcycle.sop_available. Không có việc Thu hoạch thì không có ngày thu hoạch dự kiến.", properties: {stages: {type: array, minItems: 1, items: {$ref: "#/components/schemas/CropSOPStage"}}, steps: {type: array, minItems: 1, items: {$ref: "#/components/schemas/CropSOPStep"}}}}
+        self_made_anchor: {type: string, maxLength: 100, description: "Tên mốc gốc của quy trình tự tạo; mặc định Ngày xuống giống"}
+        copy_from_season_ref: {type: [string, "null"], format: uuid, description: "AH-139: sao chép giống và quy trình (kèm tùy chỉnh) từ vụ trước của chính hộ này (kể cả vụ đang canh tác). Loại cây, giống, SOP lấy theo vụ nguồn; nếu gửi thì phải khớp (422). Vụ nguồn ngoài phạm vi → 404 cropcycle.season_not_found. Vẫn kiểm diện tích còn lại và mốc gốc."}
 # @ag-order: 10002
     HouseholdSeasonSOPSnapshot:
       type: object
@@ -471,6 +998,16 @@ components:
         anchor_name: {type: string}
         stages: {type: array, items: {$ref: "#/components/schemas/CropSOPStage"}}
         steps: {type: array, items: {$ref: "#/components/schemas/CropSOPStep"}}
+        self_made: {type: boolean, description: "Quy trình tự tạo của riêng vụ (AH-162); template_ref/version_id là mã riêng của vụ, không có SOP master"}
+        custom:
+          type: object
+          description: "Lớp tùy chỉnh của riêng vụ (AH-113): việc tự thêm, sửa ngày/vật tư, việc bỏ qua, thứ tự hiển thị. Lịch và checklist đã áp lớp này."
+          properties:
+            added: {type: array, items: {$ref: "#/components/schemas/CropSOPStep"}}
+            edits: {type: array, items: {type: object, properties: {seq: {type: integer}, window: {$ref: "#/components/schemas/CropSOPWindow"}, materials: {type: array, items: {$ref: "#/components/schemas/CropSOPMaterial"}}}}}
+            skipped: {type: array, items: {type: integer}}
+            order: {type: array, items: {type: object, properties: {stage_seq: {type: integer}, steps: {type: array, items: {type: integer}}}}}
+            last_seq: {type: integer}
 # @ag-order: 10003
     HouseholdSeason:
       type: object
@@ -493,6 +1030,9 @@ components:
         status: {type: string, enum: [open, completed, cancelled]}
         current_event_id: {type: string, format: uuid}
         version: {type: integer, minimum: 1}
+        copied_from: {type: [string, "null"], format: uuid, description: "Vụ nguồn khi mở bằng sao chép (AH-139)"}
+        stop_reason: {type: string, description: "Lý do dừng vụ, chỉ có khi status = cancelled (AH-70)"}
+        stopped_at: {type: string, format: date-time, description: "Thời điểm dừng vụ (AH-70)"}
         gps_missing: {type: boolean, description: "Thiếu hoặc từ chối GPS, không suy diễn tọa độ thành xác minh ranh đất"}
         gps: {$ref: "#/components/schemas/CropGPS"}
         opened_by: {type: string, format: uuid}
@@ -513,13 +1053,16 @@ components:
     SeasonSchedulePreviewInput:
       type: object
       additionalProperties: false
-      required: [crop_code, variety_code, sop_version_id, area_ha, anchor_date]
+      required: [crop_code, variety_code, area_ha, anchor_date]
+      description: "Cần sop_version_id hoặc self_made_plan (AH-162)"
       properties:
         crop_code: {type: string}
         variety_code: {type: string, minLength: 1}
         sop_version_id: {type: string, format: uuid}
+        self_made_plan: {type: object, additionalProperties: false, required: [stages, steps], description: "AH-162: quy trình tự tạo (cùng cấu trúc SOP) khi loại cây/giống chưa có SOP đang áp dụng; chỉ gắn vụ này (KH-12). Kiểm như soạn SOP (thứ tự liên tục, Từ ≤ Đến). Đã có SOP → 409 cropcycle.sop_available. Không có việc Thu hoạch thì không có ngày thu hoạch dự kiến.", properties: {stages: {type: array, minItems: 1, items: {$ref: "#/components/schemas/CropSOPStage"}}, steps: {type: array, minItems: 1, items: {$ref: "#/components/schemas/CropSOPStep"}}}}
         area_ha: {$ref: "#/components/schemas/HouseholdSeasonAreaInput"}
         anchor_date: {type: string, format: date}
+        plan_changes: {type: array, maxItems: 200, description: "Tùy chỉnh quy trình đang soạn (AH-113)", items: {$ref: "#/components/schemas/HouseholdPlanChange"}}
 # @ag-order: 10006
     SeasonSchedule:
       type: object
@@ -559,6 +1102,7 @@ components:
         expected_date: {type: [string, "null"], format: date, description: "Ngày Từ; không lấy Đến"}
         status: {type: string, enum: [upcoming, due, overdue, waiting_anchor]}
         undated: {type: boolean, description: "Chỉ true cho Không ngày; luôn due, không overdue"}
+        custom: {type: boolean, description: "Việc tự thêm vào quy trình của riêng vụ (AH-113); vắng mặt = việc của SOP"}
 
 # @ag-order: 10008
     HouseholdTaskCompleteInput:
@@ -566,7 +1110,7 @@ components:
       additionalProperties: false
       required: [step_seq, expected_season_event_id]
       properties:
-        step_seq: {type: integer, minimum: 1, maximum: 100}
+        step_seq: {type: integer, minimum: 1, maximum: 1000}
         expected_season_event_id: {type: string, format: uuid}
         gps: {$ref: "#/components/schemas/CropGPS"}
         channel: {type: string, enum: [app, web], default: app}
@@ -576,7 +1120,7 @@ components:
       additionalProperties: false
       required: [step_seq, expected_season_event_id, state, done_on, materials, file_refs]
       properties:
-        step_seq: {type: integer, minimum: 1, maximum: 100}
+        step_seq: {type: integer, minimum: 1, maximum: 1000}
         expected_season_event_id: {type: string, format: uuid}
         state: {type: string, enum: [partial, done]}
         done_on: {type: string, format: date}
@@ -624,9 +1168,15 @@ components:
         id: {type: string, format: uuid}
         log_ref: {type: string, format: uuid}
         step_seq: {type: integer}
-        state: {type: string, enum: [done, partial, skipped]}
+        state: {type: string, enum: [done, partial, skipped, voided], description: "voided chỉ có trong lịch sử (bản ghi đã xóa/bỏ tích, AH-126)"}
         done_on: {type: string, format: date}
         sop_version_id: {type: string, format: uuid}
+        version: {type: integer, description: "Số phiên bản trong chuỗi của bản ghi (1 = bản đầu)"}
+        correction_reason: {type: string, description: "Lý do sửa/xóa của phiên bản bù (AH-126)"}
+        adhoc: {type: boolean, description: "Việc phát sinh ngoài quy trình — nhãn Ngoài SOP, không tính tiến độ (AH-163)"}
+        adhoc_name: {type: string, description: "Nội dung việc phát sinh (AH-163)"}
+        stage_seq: {type: integer, description: "Giai đoạn của việc phát sinh (AH-163)"}
+        activity_code: {type: string, description: "Loại việc của việc phát sinh (AH-163)"}
         inputs:
           type: array
           items:
@@ -664,11 +1214,13 @@ components:
         records: {type: array, items: {$ref: "#/components/schemas/HouseholdTaskRecord"}}
         progress:
           type: object
-          required: [as_of_date, done, skipped, total, percent, stages]
+          required: [as_of_date, done, skipped, total, due, overdue, percent, stages]
           properties:
             as_of_date: {type: string, format: date}
             done: {type: integer}
             skipped: {type: integer}
+            due: {type: integer, description: "AH-124: số việc chưa xong đang Đến hạn (không tính việc Không ngày)"}
+            overdue: {type: integer, description: "AH-124: số việc chưa xong đang Trễ"}
             total: {type: integer}
             percent: {type: [string, "null"], description: "Decimal phần trăm; null khi mẫu số bằng 0"}
             stages:
@@ -681,3 +1233,32 @@ components:
                   name: {type: string}
                   status: {type: string, enum: [not_started, in_progress, done]}
                   tasks: {type: array, items: {$ref: "#/components/schemas/HouseholdTaskProgress"}}
+# @ag-order: 10020
+    HouseholdSeasonOverviewItem:
+      type: object
+      required: [season_ref, household_ref, crop_code, season_code, season_year, variety_code, area_ha, status, opened_by, opened_at, progress]
+      properties:
+        season_ref: {type: string, format: uuid}
+        household_ref: {type: string, format: uuid}
+        crop_code: {type: string}
+        season_code: {type: string}
+        season_year: {type: integer}
+        variety_code: {type: string}
+        area_ha: {type: string}
+        status: {type: string, enum: [open, completed, cancelled]}
+        opened_by: {type: string, format: uuid}
+        opened_by_label: {type: string, description: "Tên hiển thị của người mở vụ (nếu có danh bạ)"}
+        opened_at: {type: string, format: date-time}
+        progress:
+          description: "Tiến độ của vụ; null khi không tính được"
+          oneOf:
+            - type: "null"
+            - type: object
+              required: [percent, done, total, skipped, due, overdue]
+              properties:
+                percent: {type: [string, "null"], description: "Decimal phần trăm; null khi mẫu số bằng 0"}
+                done: {type: integer}
+                total: {type: integer}
+                skipped: {type: integer}
+                due: {type: integer}
+                overdue: {type: integer}

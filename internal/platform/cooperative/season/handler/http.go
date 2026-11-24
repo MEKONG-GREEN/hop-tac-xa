@@ -31,14 +31,25 @@ func (h Handler) RegisterApp(rg *gin.RouterGroup) {
 	rg.GET("/cropcycle/calendars/:calendar_ref", h.calendar)
 	rg.GET("/cooperatives/:ref/season-calendars", h.calendars)
 	rg.GET("/cooperatives/:ref/season-calendar-recipients", h.calendarRecipients)
+	rg.GET("/cooperatives/:ref/household-seasons", h.householdSeasonOverview)
 	rg.POST("/cooperatives/:ref/season-calendars", h.writeCalendar("published"))
 	rg.POST("/cooperatives/:ref/season-calendars/:calendar_ref/revisions", h.writeCalendar("edited"))
 	rg.POST("/cooperatives/:ref/season-calendars/:calendar_ref/cancel", h.writeCalendar("cancelled"))
 	rg.GET("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/checklist", h.householdChecklist)
 	rg.POST("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/task-completions", h.completeHouseholdTask)
 	rg.POST("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/task-records", h.recordHouseholdTask)
+	rg.POST("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/adhoc-records", h.recordAdhocTask)
+	rg.GET("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/task-batch-candidates", h.householdTaskBatchCandidates)
+	rg.POST("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/task-batches", h.recordHouseholdTaskBatch)
+	rg.POST("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/task-records/:log_ref/corrections", h.editHouseholdTask(false))
+	rg.POST("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/task-records/:log_ref/void", h.editHouseholdTask(true))
+	rg.GET("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/task-records/:log_ref/history", h.householdTaskHistory)
 	rg.POST("/cooperatives/:ref/households/:household_ref/season-plan-preview", h.previewHouseholdSchedule)
 	rg.GET("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/plan", h.householdSchedule)
+	rg.POST("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/plan-changes", h.changeHouseholdPlan)
+	rg.POST("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/stop", h.stopHouseholdSeason)
+	rg.POST("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/corrections", h.editHouseholdSeason)
+	rg.GET("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/plan-history", h.householdPlanHistory)
 	rg.POST("/cooperatives/:ref/households/:household_ref/seasons", h.openHouseholdSeason)
 	rg.GET("/cooperatives/:ref/households/:household_ref/seasons", h.listHouseholdSeasons)
 	rg.GET("/cooperatives/:ref/households/:household_ref/seasons/:season_ref", h.getHouseholdSeason)
@@ -236,8 +247,8 @@ func idem(c *gin.Context) string { return idempotency.KeyFromContext(c.Request.C
 
 // gpsReq là vị trí gửi lên; lon/lat là số thập phân (chuỗi hoặc số JSON).
 type gpsReq struct {
-	Lon       *decimal.Decimal `json:"lon"`
-	Lat       *decimal.Decimal `json:"lat"`
+	Lon       *decimal.Decimal `json:"lon" pii:"true"`
+	Lat       *decimal.Decimal `json:"lat" pii:"true"`
 	AccuracyM *decimal.Decimal `json:"accuracy_m"`
 	Source    string           `json:"source"`
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/domain"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/port"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/store"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/ids"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/problem"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/tenant"
 )
@@ -95,15 +96,49 @@ func (s *Service) nativeUsers(ctx context.Context, a *actor) ([]UserView, error)
 	return items, nil
 }
 
+// NativeUser là màn chi tiết tài khoản của Admin: SĐT đầy đủ, mỗi lần xem ghi sổ truy cập (FN-TK-02/BR-04, AH-223).
 func (s *Service) NativeUser(ctx context.Context, id string) (UserView, error) {
-	users, err := s.NativeUsers(ctx)
+	a, err := s.nativeAccountCaller(ctx)
 	if err != nil {
 		return UserView{}, err
 	}
-	for _, u := range users {
-		if u.User.ID.String() == id {
-			return u, nil
-		}
+	return s.nativeUserDetail(ctx, a, id)
+}
+
+// CoopNativeUser là màn chi tiết của Đại diện HTX (FN-08): chỉ tài khoản trong phạm vi coopVisible.
+func (s *Service) CoopNativeUser(ctx context.Context, id string) (UserView, error) {
+	a, err := s.coopAccountCaller(ctx)
+	if err != nil {
+		return UserView{}, err
 	}
-	return UserView{}, problem.NotFound
+	return s.nativeUserDetail(ctx, a, id)
+}
+
+// nativeUserDetail trả tài khoản kèm SĐT đầy đủ sau khi đã ghi pf_accounts.pii_view. Ghi sổ lỗi → không trả (đóng khi
+// lỗi): không có lượt xem SĐT đầy đủ nào không để lại dấu.
+func (s *Service) nativeUserDetail(ctx context.Context, a *actor, id string) (UserView, error) {
+	users, err := s.nativeUsers(ctx, a)
+	if err != nil {
+		return UserView{}, err
+	}
+	idx := slices.IndexFunc(users, func(u UserView) bool { return u.User.ID.String() == id })
+	if idx < 0 {
+		return UserView{}, problem.NotFound
+	}
+	u := users[idx]
+	if u.User.Phone == "" {
+		return u, nil
+	}
+	if err := s.recordPhoneView(ctx, a.p.TenantID, a.p.ActorRef, u.User.ID); err != nil {
+		return UserView{}, err
+	}
+	return u, nil
+}
+
+// recordPhoneView ghi một dòng pf_accounts.pii_view (ai xem SĐT đầy đủ của tài khoản nào, lúc nào). Gọi trước khi trả
+// SĐT; lỗi thì không trả (đóng khi lỗi — AH-223 BR-04, AH-9 AC3).
+func (s *Service) recordPhoneView(ctx context.Context, tid, actorRef, user uuid.UUID) error {
+	view := domain.PIIView{ID: ids.New(), TenantID: tid, UserRef: user, Field: domain.PIIFieldPhone, EventTime: s.now(), ActorRef: actorRef}
+	view.IdemKey = "piiview:" + view.ID.String()
+	return tenant.WithTenantTx(ctx, s.DB, tid, func(tx pgx.Tx) error { return store.InsertPIIView(ctx, tx, &view) })
 }

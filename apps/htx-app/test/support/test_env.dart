@@ -6,6 +6,7 @@ import 'package:agrigreen_htx/application/app_services.dart';
 import 'package:agrigreen_htx/ui/app.dart';
 import 'package:agrigreen_htx/ui/providers.dart';
 import 'package:agrigreen_htx/ui/screens/home_screen.dart';
+import 'package:agrigreen_htx/ui/screens/onboarding_screen.dart';
 import 'package:agrigreen_mobile/core/clock.dart';
 import 'package:agrigreen_mobile/core/config.dart';
 import 'package:agrigreen_mobile/core/ids.dart';
@@ -182,6 +183,10 @@ class TestEnv {
 
   final List<String> roles;
   final bool nativeRealm;
+
+  /// AH-101: tự mở hướng dẫn lần đầu. Tắt mặc định để các kiểm thử khác vào
+  /// thẳng trang chủ; kiểm thử hướng dẫn bật lại.
+  bool onboarding = false;
   final FakeServer server;
 
   /// CSDL của app; mặc định trong bộ nhớ (mất khi đóng).
@@ -194,6 +199,16 @@ class TestEnv {
   final MemoryBlobStore blobs = MemoryBlobStore();
   final List<String> copied = [];
   final JwtOidc oidc;
+
+  /// AH-300: API đăng nhập riêng giả của realm HTX — tài khoản mặc định
+  /// [testUsername]/[testPhone] với mật khẩu [testPassword].
+  late final FakePasswordLoginApi password = FakePasswordLoginApi(
+    issue: () => OidcTokens(
+      accessToken: fakeJwt(oidc.roles, native: true),
+      refreshToken: 'p-rt',
+      accessTokenExpiry: DateTime.utc(2100),
+    ),
+  )..addAccount(testUsername, testPhone, testPassword);
 
   /// Kênh đẩy giả (FCM) và thông báo cục bộ ghi lại — `notifier.tap(link)`
   /// mô phỏng người dùng chạm thông báo.
@@ -396,10 +411,19 @@ Future<void> settle(WidgetTester tester, [int frames = 20]) async {
   }
 }
 
+/// Tài khoản mặc định của API đăng nhập giả (realm HTX, AH-300).
+const testUsername = 'tanphu';
+const testPhone = '0912345678';
+const testPassword = 'matkhau1';
+
 Widget appUnderTest(TestEnv env) => ProviderScope(
   overrides: [
     platformProvider.overrideWithValue(env.platform),
     oidcProvider.overrideWithValue(env.oidc),
+    onboardingAutoShowProvider.overrideWithValue(env.onboarding),
+    passwordLoginProvider.overrideWithValue(
+      env.nativeRealm ? env.password : null,
+    ),
     // PBKDF2 nhẹ cho kiểm thử (bản thật 60 000 vòng).
     pinServiceProvider.overrideWith(
       (ref) => PinService(store: env.store, clock: env.clock, iterations: 1000),
@@ -413,6 +437,17 @@ Widget appUnderTest(TestEnv env) => ProviderScope(
 Future<void> loginAndSetPin(WidgetTester tester, TestEnv env) async {
   await tester.pumpWidget(appUnderTest(env));
   await settle(tester);
+  if (env.nativeRealm) {
+    await tester.enterText(
+      find.byKey(const ValueKey('login-identifier')),
+      testUsername,
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('login-password')),
+      testPassword,
+    );
+  }
+  await tester.ensureVisible(find.text('Đăng nhập'));
   await tester.tap(find.text('Đăng nhập'));
   await settle(tester);
   for (var round = 0; round < 2; round++) {

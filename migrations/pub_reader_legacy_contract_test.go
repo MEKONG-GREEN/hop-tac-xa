@@ -211,6 +211,12 @@ func TestLegacyPublishedReaderAccessContract(t *testing.T) {
 		t.Fatal("new guestlink role must not be added to the frozen OLD snapshot")
 	}
 	want.Roles = append(want.Roles, roleFlags{Role: "r_guestlink", Inherit: true, BypassRLS: false, Login: false})
+	// AH-224 (ADR-0065): pf/weather là module mới, không đọc dữ liệu module khác qua view công bố. Giữ cờ chính xác và
+	// không cho Access/Memberships: mọi quyền đọc view _pub cấp cho r_weather vẫn làm hỏng ảnh chụp này.
+	if slices.ContainsFunc(want.Roles, func(r roleFlags) bool { return r.Role == "r_weather" }) {
+		t.Fatal("new weather role must not be added to the frozen OLD snapshot")
+	}
+	want.Roles = append(want.Roles, roleFlags{Role: "r_weather", Inherit: true, BypassRLS: false, Login: false})
 	slices.SortFunc(want.Roles, func(a, b roleFlags) int { return strings.Compare(a.Role, b.Role) })
 	want.Access = append(want.Access, additions.Access...)
 	want.Memberships = append(want.Memberships, additions.Memberships...)

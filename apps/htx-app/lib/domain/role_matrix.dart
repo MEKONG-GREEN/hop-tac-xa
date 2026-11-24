@@ -37,6 +37,12 @@ abstract final class HtxFn {
 
   /// Khai báo sản lượng.
   static const harvest = 'KHMV-FN-06';
+
+  /// Thời tiết hôm nay trên Trang chủ (BRD Thời tiết & Thu gom phụ phẩm).
+  static const weatherToday = 'TTPP-FN-TT-01';
+
+  /// Lịch thời tiết (dương lịch và âm lịch).
+  static const weatherCalendar = 'TTPP-FN-TT-02';
 }
 
 /// Ma trận quyền App HTX (FN-05, Mục V và dòng KHMV-*), đọc từ bản sinh của

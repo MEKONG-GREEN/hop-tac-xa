@@ -4571,10 +4571,14 @@ export interface paths {
         /**
          * Danh sách tài khoản FN-07 trong tenant (Admin, realm HTX)
          * @description Chỉ Admin đã qua MFA. Snapshot đầy đủ tối đa 2000 tài khoản IAM; vượt giới hạn trả lỗi. Cache-Control no-store.
+         *     FN-TK-02/BR-04 (AH-223): phone trong danh sách đã che (09•• ••• 678); SĐT đầy đủ chỉ ở GET /v1/accounts/htx-users/{id}.
          */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description FN-07/AC-02 — tìm đúng SĐT (10 chữ số, bắt đầu bằng 0); máy chủ so trên SĐT đầy đủ rồi mới che. Sai định dạng → 422. */
+                    phone?: string;
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
@@ -4656,7 +4660,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Chi tiết tài khoản FN-07 (Admin, realm HTX) */
+        /**
+         * Chi tiết tài khoản FN-07 (Admin, realm HTX)
+         * @description FN-TK-02/BR-04 (AH-223) — trả SĐT đầy đủ; mỗi lượt xem ghi sổ truy cập pf_accounts.pii_view (người xem, tài khoản, thời điểm). Ghi sổ lỗi thì không trả. Cache-Control no-store.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -4701,10 +4708,18 @@ export interface paths {
          * @description AH-276: sửa họ tên, SĐT, email, HTX; tên đăng nhập và vai chính không sửa được (FN-07/AC-06, BR-03).
          *     also_member chỉ áp cho Đại diện HTX (kiêm Thành viên HTX, QTPQ-Q-23), vắng = giữ nguyên. Đổi HTX: cả hai vai
          *     cùng chuyển, mọi phiên đang mở bị thu hồi (QTPQ-Q-21, Q-22). Không tự đổi HTX hoặc vai của chính mình.
+         *     Chuyển Đại diện HTX cuối cùng còn hoạt động sang HTX khác cần xác nhận (confirm_no_representative).
          */
         post: {
             parameters: {
-                query?: never;
+                query?: {
+                    /**
+                     * @description FN-TK-02/EX-04 (AH-223): true = người dùng đã xác nhận thao tác làm HTX không còn Đại diện HTX nào đang hoạt
+                     *     động. Thiếu khi cần → 409 accounts.last_representative ("HTX sẽ không còn người duyệt kết quả lô"); gửi lại
+                     *     với true và Idempotency-Key mới.
+                     */
+                    confirm_no_representative?: boolean;
+                };
                 header: {
                     "Idempotency-Key": components["parameters"]["IdempotencyKey"];
                 };
@@ -4760,11 +4775,18 @@ export interface paths {
         put?: never;
         /**
          * Khóa tài khoản FN-07 (Admin)
-         * @description AH-276, FN-07/AC-07, BR-06, BR-07 — đăng nhập bị chặn, mọi phiên bị thu hồi, dữ liệu giữ nguyên; không tự khóa chính mình.
+         * @description AH-276, FN-07/AC-07, BR-06, BR-07 — đăng nhập bị chặn, mọi phiên bị thu hồi, dữ liệu giữ nguyên; không tự khóa chính mình. Khóa Đại diện HTX cuối cùng còn hoạt động của HTX cần xác nhận (FN-TK-02/EX-04).
          */
         post: {
             parameters: {
-                query?: never;
+                query?: {
+                    /**
+                     * @description FN-TK-02/EX-04 (AH-223): true = người dùng đã xác nhận thao tác làm HTX không còn Đại diện HTX nào đang hoạt
+                     *     động. Thiếu khi cần → 409 accounts.last_representative ("HTX sẽ không còn người duyệt kết quả lô"); gửi lại
+                     *     với true và Idempotency-Key mới.
+                     */
+                    confirm_no_representative?: boolean;
+                };
                 header: {
                     "Idempotency-Key": components["parameters"]["IdempotencyKey"];
                 };
@@ -4833,6 +4855,209 @@ export interface paths {
                 403: components["responses"]["Problem"];
                 404: components["responses"]["Problem"];
                 409: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/accounts/htx-users/{id}/password-reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * FN-10 Đặt lại mật khẩu (Admin)
+         * @description AH-281. Kênh SMS bật → gửi mã OTP tới số đã lưu (mode otp_sent, phone_hint); kênh tắt → cấp mật khẩu tạm 08 ký tự chỉ
+         *     trong phản hồi đầu (mode temporary_password), mật khẩu cũ hết hiệu lực, phiên bị thu hồi, phải đổi ở lần đăng nhập
+         *     kế tiếp. Không cho chính mình (403), tài khoản đã khóa (409); ngoài phạm vi → 404. Phát lại không trả mật khẩu.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Đã gửi mã OTP hoặc đã cấp mật khẩu tạm; Cache-Control no-store */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NativeHTXPasswordReset"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                429: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/weather/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cấu hình kết nối API thời tiết (FN-TT-03, Admin)
+         * @description AH-224. Chưa cấu hình → giá trị mặc định, configured = false. Khóa API chỉ trả dạng che (••••1234 — AC-03). Cache-Control no-store.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Cấu hình hiện hành */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["WeatherConfig"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/weather/config/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Lưu cấu hình kết nối API thời tiết (FN-TT-03, Admin)
+         * @description AH-224. Máy chủ kiểm tra kết nối trước; lỗi → 422 weather.connection_failed, không lưu (EX-01, AC-04). Mỗi lần lưu là
+         *     một phiên bản mới, có hiệu lực từ lần lấy kế tiếp (AC-01). api_key: vắng = giữ khóa đang có; "" = bỏ khóa. Khóa lưu
+         *     mã hóa AES-256-GCM, chỉ trả 4 ký tự cuối (BR-03); có khóa mà máy chủ chưa cấu hình khóa mã hóa → 503
+         *     weather.secret_unavailable. Gọi lại cùng Idempotency-Key → 200 phiên bản đã ghi.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["WeatherConfigInput"];
+                };
+            };
+            responses: {
+                /** @description Phát lại cùng khóa */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["WeatherConfig"];
+                    };
+                };
+                /** @description Đã lưu */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["WeatherConfig"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+                503: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/weather/config/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Kiểm tra kết nối API thời tiết (FN-TT-03, Admin)
+         * @description AH-224. Gọi nhà cung cấp một lần với cấu hình định lưu, không lưu gì. Lỗi → 422 weather.connection_failed (detail nêu lý do, reason = unavailable | quota | auth | bad_response).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["WeatherConfigInput"];
+                };
+            };
+            responses: {
+                /** @description Kết nối được */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            ok: boolean;
+                            provider: string;
+                            temperature_c: number | null;
+                            condition: string;
+                            days: number;
+                        };
+                    };
+                };
+                403: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+                503: components["responses"]["Problem"];
             };
         };
         delete?: never;
@@ -7389,6 +7614,44 @@ export interface components {
         NativeHTXAccountChanged: {
             user: components["schemas"]["AccountsUser"];
             replayed: boolean;
+        };
+        NativeHTXPasswordReset: {
+            /** @enum {string} */
+            mode: "temporary_password" | "otp_sent";
+            /** @description Chỉ phản hồi đầu; không ghi log hoặc lưu cache */
+            temporary_password: string | null;
+            /** @description SĐT đã che khi mode otp_sent */
+            phone_hint: string;
+            replayed: boolean;
+        };
+        WeatherConfigInput: {
+            /**
+             * @description fake chỉ có ngoài production
+             * @enum {string}
+             */
+            provider: "open_meteo" | "fake";
+            /** @enum {integer} */
+            refresh_minutes: 30 | 60 | 120 | 180 | 360;
+            forecast_days: number;
+            /** @description Bí mật: vắng = giữ khóa đang có; "" = bỏ khóa */
+            api_key?: string;
+        };
+        WeatherConfig: {
+            configured: boolean;
+            provider: string;
+            providers: {
+                code: string;
+                label: string;
+            }[];
+            refresh_minutes: number;
+            refresh_options: number[];
+            forecast_days: number;
+            max_forecast_days: number;
+            api_key_set: boolean;
+            api_key_masked: string;
+            version: number;
+            /** Format: date-time */
+            updated_at: string | null;
         };
         CatalogDeleteResult: {
             /** @enum {string} */

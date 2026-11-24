@@ -20,6 +20,8 @@ type HouseholdIdentities interface {
 	Phone(ctx context.Context, ref uuid.UUID) (string, error)
 	// LookupPhone tra ref theo SĐT qua chỉ mục mù (mục đích registry.admin); không thấy → ErrIdentityNotFound.
 	LookupPhone(ctx context.Context, phone string) (uuid.UUID, error)
+	// LookupNationalID (AH-293) tra ref theo ĐỦ số CCCD/CMND qua chỉ mục mù; không thấy → ErrIdentityNotFound.
+	LookupNationalID(ctx context.Context, nationalID string) (uuid.UUID, error)
 }
 
 // NativeHouseholdIdentityReader returns only the native FN-04 projection
@@ -61,12 +63,17 @@ const (
 
 // HouseholdIdentity là dữ liệu cá nhân của chủ hộ — chỉ đi thẳng vào kho định danh, không lưu ở pf_coop.
 type HouseholdIdentity struct {
-	FullName, Phone, NationalID, Address, AreaCode string
+	FullName   string `pii:"true"`
+	Phone      string `pii:"true"`
+	NationalID string `pii:"true"`
+	Address    string `pii:"true"`
+	AreaCode   string
 }
 
 // IdentityLabel là nhãn đã che của kho định danh.
 type IdentityLabel struct {
-	Label, MaskedPhone string
+	Label       string `pii:"true"` // họ tên đã che — vẫn là dữ liệu cá nhân, không vào log (AH-9 AC4)
+	MaskedPhone string `pii:"true"`
 }
 
 // Lỗi của HouseholdIdentities.

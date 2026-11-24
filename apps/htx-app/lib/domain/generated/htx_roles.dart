@@ -3,7 +3,7 @@
 const htxRoleMatrixJson = '''
 {
   "version": 1,
-  "source": "BRD_App_HTX_QuanTriPhanQuyen_HoSoHTX_ThongKeBaoCao_v3.0 — Mục V (FN-05, ADM-01); quyết định nhóm dự án 17/11/2026 (AH-272); BRD Kế hoạch mùa vụ v3.9 Mục VI — dòng KHMV-* (AH-39, KH-02, KH-28)",
+  "source": "BRD_App_HTX_QuanTriPhanQuyen_HoSoHTX_ThongKeBaoCao_v3.0 — Mục V (FN-05, ADM-01); quyết định nhóm dự án 17/11/2026 (AH-272); BRD Kế hoạch mùa vụ v3.9 Mục VI — dòng KHMV-* (AH-39, KH-02, KH-28); BRD Thời tiết & Thu gom phụ phẩm — dòng TTPP-FN-TT-* (AH-224..AH-226)",
   "actions": {
     "C": "tạo",
     "R": "xem",
@@ -234,6 +234,33 @@ const htxRoleMatrixJson = '''
         "coop_manager": "",
         "htx_member": "R"
       }
+    },
+    {
+      "key": "TTPP-FN-TT-01",
+      "name": "Thời tiết hôm nay trên Trang chủ",
+      "grants": {
+        "platform_admin": "R",
+        "coop_manager": "R",
+        "htx_member": "R"
+      }
+    },
+    {
+      "key": "TTPP-FN-TT-02",
+      "name": "Lịch thời tiết (dương lịch và âm lịch)",
+      "grants": {
+        "platform_admin": "R",
+        "coop_manager": "R",
+        "htx_member": "R"
+      }
+    },
+    {
+      "key": "TTPP-FN-TT-03",
+      "name": "Kết nối API thời tiết",
+      "grants": {
+        "platform_admin": "CRU",
+        "coop_manager": "",
+        "htx_member": ""
+      }
     }
   ],
   "member_write_routes": [
@@ -251,7 +278,19 @@ const htxRoleMatrixJson = '''
     "POST /v1/cropcycle/farm-logs",
     "POST /v1/cropcycle/farm-logs/batch",
     "POST /v1/cropcycle/farm-logs/:id/corrections",
-    "POST /v1/me/data-consent"
+    "POST /v1/cooperatives/:ref/households/:household_ref/seasons",
+    "POST /v1/cooperatives/:ref/households/:household_ref/season-plan-preview",
+    "POST /v1/cooperatives/:ref/households/:household_ref/seasons/:season_ref/task-completions",
+    "POST /v1/cooperatives/:ref/households/:household_ref/seasons/:season_ref/task-records",
+    "POST /v1/cooperatives/:ref/households/:household_ref/seasons/:season_ref/stop",
+    "POST /v1/cooperatives/:ref/households/:household_ref/seasons/:season_ref/corrections",
+    "POST /v1/cooperatives/:ref/households/:household_ref/seasons/:season_ref/task-batches",
+    "POST /v1/cooperatives/:ref/households/:household_ref/seasons/:season_ref/adhoc-records",
+    "POST /v1/cooperatives/:ref/households/:household_ref/seasons/:season_ref/task-records/:log_ref/corrections",
+    "POST /v1/cooperatives/:ref/households/:household_ref/seasons/:season_ref/task-records/:log_ref/void",
+    "POST /v1/cooperatives/:ref/households/:household_ref/seasons/:season_ref/plan-changes",
+    "POST /v1/me/data-consent",
+    "PUT /v1/me/password"
   ]
 }
 ''';

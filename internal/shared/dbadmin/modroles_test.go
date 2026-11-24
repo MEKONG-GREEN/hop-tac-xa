@@ -221,6 +221,7 @@ var laterGroups = map[string]string{
 	"pf/hrm":         "pf/000147_pf_hrm_catalog.up.sql",               // W11.21 (ADR-0050): dom/hrm, danh mục nhân sự
 	"pf/contact":     "pf/20261013230912_pf_contact_directory.up.sql", // W11.23: cap/directory, Contact (FN-13)
 	"pf/export":      "pf/20261024090957_pf_export_docx.up.sql",       // W10.17 (ADR-0051): cap/export, mẫu văn bản + .docx
+	"pf/weather":     "pf/20261123041038_pf_weather_core.up.sql",      // AH-224 (ADR-0065): thời tiết HTX
 }
 
 // pf 000092 (W2.5) cấp SELECT k_ref.* cho MỌI r_* của module pf lúc đó (R-DB-05) — danh sách ghi tay khớp

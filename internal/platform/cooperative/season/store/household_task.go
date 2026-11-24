@@ -24,9 +24,18 @@ func SaveHouseholdTask(ctx context.Context, tx pgx.Tx, l FarmLog) error {
 
 func HouseholdTasks(ctx context.Context, tx pgx.Tx, season uuid.UUID) ([]FarmLog, error) {
 	rows, err := tx.Query(ctx, "SELECT "+farmLogCols+` FROM pf_coop.farm_log WHERE entry_kind='household' AND season_ref=$1 AND id IN
- (SELECT id FROM pf_coop.household_task_current WHERE season_ref=$1) ORDER BY recorded_at,id`, season)
+ (SELECT id FROM pf_coop.household_task_current WHERE season_ref=$1 AND state<>'voided') ORDER BY recorded_at,id`, season)
 	if err != nil {
 		return nil, err
 	}
 	return collectFarmLogs(rows)
+}
+
+// NextAdhocStepSeq cấp số việc tiếp theo cho việc phát sinh của vụ (AH-163): lớn hơn base và mọi số đã cấp (kể cả bản
+// ghi đã xóa). Gọi dưới khóa của vụ.
+func NextAdhocStepSeq(ctx context.Context, tx pgx.Tx, season uuid.UUID, base int) (int, error) {
+	var n int
+	err := tx.QueryRow(ctx, `SELECT COALESCE(max(sop_step_seq), $2) + 1 FROM pf_coop.farm_log
+	  WHERE entry_kind='household' AND season_ref=$1 AND sop_step_seq > $2`, season, base).Scan(&n)
+	return n, err
 }

@@ -12,6 +12,7 @@ import type { ApiProblem } from "@/api/problem";
 import { TaskCamera } from "./TaskCamera";
 import type { TaskPhoto } from "./taskPhoto";
 import { cachedTaskRead, enqueueTask } from "./taskJournalQueue";
+import { snapshotLookup } from "./SeasonPlanEditor";
 
 type S = components["schemas"];
 type Material = S["HouseholdTaskDetailInput"]["materials"][number];
@@ -31,7 +32,8 @@ export function HouseholdTaskDetail({ path, event, task, season, onQueued, onClo
   onQueued: () => void; onClose: () => void;
 }) {
   const { api, principal } = useAuth();
-  const recommended = season.sop_snapshot.steps.find((s) => s.seq === task.seq)?.materials ?? [];
+  // AH-113: vật tư khuyến cáo theo việc hiệu lực (việc tự thêm, việc đã sửa).
+  const recommended = snapshotLookup(season.sop_snapshot)(task.seq)?.materials ?? [];
   const [materials, setMaterials] = useState<Material[]>(() => recommended.map((m) => ({ material_code: m.material_code ?? "", name: m.name, unit: m.unit, dose_per_ha: m.dose_per_ha })));
   const [day, setDay] = useState(() => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(new Date()));
   const [state, setState] = useState<"partial" | "done">("done");

@@ -122,6 +122,46 @@ func TestFN05_BR03_HTXMemberWriteRoutesDenied(t *testing.T) {
 				t.Errorf("Thành viên HTX POST %s bị lớp chặn ghi từ chối: %d %q %q", path, status, code, detail)
 			}
 		}
+		// AH-312: mở vụ, xem trước lịch việc, tích việc, ghi việc của vụ theo hộ (KHMV-FN-03/04/05). Thân đủ để qua
+		// bước đọc request, nên lỗi (nếu có) là của dịch vụ:
+		//   - Thành viên HTX, hộ (không tồn tại) của HTX mình → lớp chặn cho qua, dịch vụ báo không thấy hộ (AC1);
+		//   - Thành viên HTX, HTX khác → 404 như trước (AC2);
+		//   - Đại diện HTX → dịch vụ vẫn chỉ cho xem (AC2).
+		// Mở vụ và tích việc nhận GPS nên đi qua cổng đồng ý thu thập dữ liệu (AH-23) trước dịch vụ; môi trường test này
+		// không cấu hình nội dung đồng ý nên cổng trả 503 cho mọi vai. AC2 của hai route đó do test tích hợp của
+		// pf/cooperative/season kiểm (household_integration_test, household_task_integration_test).
+		other, hh, season := ids.New(), ids.New().String(), ids.New().String()
+		manager := token(partyport.RoleCoopManager)
+		const consentGate = "accounts.data_consent_unconfigured"
+		for _, c := range []struct {
+			path, body string
+			gated      bool
+		}{
+			{"/households/" + hh + "/seasons", `{"anchor_date":"2026-11-01"}`, true},
+			{"/households/" + hh + "/season-plan-preview", `{"anchor_date":"2026-11-01","variety_code":"OM18","area_ha":"1","sop_version_id":"` + ids.New().String() + `"}`, false},
+			{"/households/" + hh + "/seasons/" + season + "/task-completions", `{"step_seq":1,"expected_season_event_id":"` + ids.New().String() + `"}`, true},
+			{"/households/" + hh + "/seasons/" + season + "/task-records", `{"step_seq":1,"expected_season_event_id":"` + ids.New().String() + `","state":"done","done_on":"2026-11-01"}`, false},
+		} {
+			own := "/v1/cooperatives/" + org.String() + c.path
+			if status, code, detail := callBody(t, srv.URL, own, c.body, member); detail == memberGuardDetail || code == "forbidden" || status < 400 {
+				t.Errorf("AC1: Thành viên HTX POST %s = %d %q %q, cần tới dịch vụ (lỗi của dịch vụ, không phải lớp chặn)", own, status, code, detail)
+			}
+			foreign := "/v1/cooperatives/" + other.String() + c.path
+			if c.gated {
+				for _, tok := range []string{member, manager} {
+					if status, code, detail := callBody(t, srv.URL, foreign, c.body, tok); detail == memberGuardDetail || code != consentGate {
+						t.Errorf("POST %s = %d %q %q, cần lỗi của cổng đồng ý %q (không phải lớp chặn ghi)", foreign, status, code, detail, consentGate)
+					}
+				}
+				continue
+			}
+			if status, code, _ := callBody(t, srv.URL, foreign, c.body, member); status != http.StatusNotFound || code != "cropcycle.household_not_found" {
+				t.Errorf("AC2: Thành viên HTX POST %s (HTX khác) = %d %q, cần 404 cropcycle.household_not_found", foreign, status, code)
+			}
+			if status, code, detail := callBody(t, srv.URL, own, c.body, manager); status != http.StatusForbidden || code != "cropcycle.read_only" || detail == memberGuardDetail {
+				t.Errorf("AC2: Đại diện HTX POST %s = %d %q %q, cần 403 cropcycle.read_only", own, status, code, detail)
+			}
+		}
 		// Đối chứng: lớp lắp ráp không chặn Đại diện HTX và tài khoản kiêm hai vai (BR-02).
 		for _, roles := range [][]string{{partyport.RoleCoopManager}, {partyport.RoleCoopManager, htxroles.Member}} {
 			if status, _, detail := callJSON(t, srv.URL, http.MethodPost, "/v1/households/copy", token(roles...)); status == http.StatusForbidden && detail == memberGuardDetail {
@@ -160,4 +200,24 @@ func callJSON(t *testing.T, base, method, path, token string) (int, string, stri
 	}
 	_ = json.NewDecoder(resp.Body).Decode(&body)
 	return resp.StatusCode, body.Code, body.Detail
+}
+
+// callBody gọi POST path với thân body và Idempotency-Key; trả status, code, detail của problem.
+func callBody(t *testing.T, base, path, body, token string) (int, string, string) {
+	t.Helper()
+	req, _ := http.NewRequest(http.MethodPost, base+path, strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Idempotency-Key", "k-"+ids.New().String())
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var out struct {
+		Code   string `json:"code"`
+		Detail string `json:"detail"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	return resp.StatusCode, out.Code, out.Detail
 }

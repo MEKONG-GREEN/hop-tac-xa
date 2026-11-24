@@ -34,6 +34,7 @@ type Handler struct {
 func (h Handler) Register(rg *gin.RouterGroup) {
 	rg.POST("/household-identities/:ref/read", h.readHouseholdIdentity)
 	rg.POST("/household-identities/phone-lookup", h.lookupHouseholdPhone)
+	rg.POST("/household-identities/national-id-lookup", h.lookupHouseholdNationalID)
 	rg.POST("/household-commands/:command/identity", h.writeHouseholdIdentity)
 	rg.POST("/htx-contacts/:ref/read", h.readHTXContact)
 	rg.POST("/htx-contacts/:ref/erasure-check", h.validateHTXContactErasure)

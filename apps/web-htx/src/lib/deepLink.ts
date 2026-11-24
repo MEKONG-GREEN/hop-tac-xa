@@ -36,6 +36,8 @@ const RULES: readonly Rule[] = [
   { re: new RegExp(`^/sync/integrations/(${UUID})$`), to: () => "/quan-tri/giam-sat-dong-bo" },
   // area_feed_stale (CGH FN-07): dữ liệu App HTX quá ngưỡng độ tươi → Bản đồ CGH (banner + nhật ký đồng bộ).
   { re: /^\/mechanization\/(area-sync-log)$/, to: () => "/cgh" },
+  // cooperative_sharing (AH-279, NTF-01): yêu cầu chia sẻ dữ liệu → màn Liên kết & chia sẻ dữ liệu (FN-09).
+  { re: new RegExp(`^/cooperatives/sharing/(${UUID})$`), to: () => "/htx/chia-se" },
 ];
 
 /** Trang đích theo loại thông báo khi `deep_link` trống hoặc không nhận dạng được. */
@@ -48,6 +50,7 @@ const KIND_FALLBACK: Readonly<Record<string, string>> = {
   season_task_due: SEASONS,
   season_log_missing: SEASONS,
   season_process_changed: SEASONS,
+  cooperative_sharing: "/htx/chia-se",
   household_registered: "/htx",
   household_membership_changed: "/htx",
   integration_dead_lettered: "/quan-tri/giam-sat-dong-bo",

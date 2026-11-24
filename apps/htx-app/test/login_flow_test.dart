@@ -7,8 +7,9 @@ import 'support/test_env.dart';
 
 void main() {
   testWidgets(
-    'HTX US-LOGIN-01: nông dân đăng nhập → PIN → trang chủ nông dân; thời tiết '
-    'chờ nguồn, thẻ lời khuyên ẩn khi chưa có vụ (US-WEATHER-02 AC-2)',
+    'HTX US-LOGIN-01: nông dân đăng nhập → PIN → trang chủ nông dân; không có '
+    'thẻ thời tiết (BRD TTPP chỉ cho vai HTX), thẻ lời khuyên ẩn khi chưa có '
+    'vụ (US-WEATHER-02 AC-2)',
     (tester) async {
       final env = TestEnv()..seed();
       final s = await loginToHome(tester, env);
@@ -18,7 +19,7 @@ void main() {
       );
       expect(find.text('Ruộng của tôi'), findsOneWidget);
       expect(find.text('Duyệt nhật ký'), findsNothing);
-      expect(find.textContaining('Chưa có nguồn thời tiết'), findsOneWidget);
+      expect(find.byKey(const ValueKey('weather-card')), findsNothing);
       expect(find.byKey(const ValueKey('advice-card')), findsNothing);
       // Đăng ký thiết bị + pull đã chạy; client OIDC riêng của App HTX.
       expect(env.server.registeredDevices, [s.deviceId]);

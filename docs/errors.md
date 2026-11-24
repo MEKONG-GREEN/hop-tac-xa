@@ -433,6 +433,15 @@ Cổng `geo.GpsLog.RecordFix` (module khác gọi, không qua HTTP) trả lỗi 
 | 422 | `cropcycle.task_season_state` | AH-88: vụ đã dừng hoặc đóng, không cho thêm việc. |
 | 422 | `cropcycle.task_stage_locked` | AH-88: sau thu hoạch chỉ ghi việc chưa xong của giai đoạn cuối. |
 | 409 | `cropcycle.task_already_resolved` | AH-88: việc đã xong hoặc bỏ qua; tải lại checklist. |
+| 409 | `cropcycle.sop_available` | AH-162: loại cây/giống đã có SOP đang áp dụng — chọn SOP thay vì tự tạo quy trình. |
+| 409 | `cropcycle.season_has_logs` | AH-175: vụ đã có nhật ký không đổi giống/SOP (KH-10) — dừng vụ và mở vụ mới. |
+| 409 | `cropcycle.batch_task_mismatch` | AH-176: ghi nhiều vụ — vụ không dùng cùng SOP gốc hoặc không có việc cùng tên, loại; trả trong kết quả từng vụ (skipped), không phải lỗi của cả thao tác. |
+| 409 | `cropcycle.plan_step_resolved` | AH-113: tùy chỉnh quy trình của vụ — việc đã xong không sửa, đổi chỗ, bỏ được; việc tự thêm đã có nhật ký không xóa được. |
+| 409 | `cropcycle.plan_step_skipped` | AH-113: việc của SOP đã bỏ qua khỏi quy trình của vụ. |
+| 409 | `cropcycle.plan_season_closed` | AH-113: chỉ tùy chỉnh quy trình của vụ đang canh tác. |
+| 404 | `cropcycle.task_record_not_found` | AH-126: không thấy nhật ký việc trong vụ của hộ (hoặc ngoài phạm vi). |
+| 409 | `cropcycle.task_record_changed` | AH-126: bản ghi đã được sửa ở nơi khác; tải lại rồi sửa tiếp. |
+| 409 | `cropcycle.task_record_voided` | AH-126: bản ghi đã bị xóa/bỏ tích; không sửa tiếp được. |
 | 409 | `cropcycle.task_season_changed` | AH-88: expected_season_event_id không còn hiện hành; tải lại trước khi xác nhận. |
 | 409 | `cropcycle.task_zero_confirmation_required` | AH-99: xác nhận liều bằng 0 hoặc không sử dụng vật tư khuyến cáo trước khi lưu. |
 | 404 | `cropcycle.calendar_not_found` | AH-58: không có lịch trong tenant/HTX/phạm vi người nhận hiện tại; Member không đọc lịch đã hủy. |
@@ -477,9 +486,20 @@ Nhãn vị trí (HTX US-GPS-01/02): `location_status` = `match` (≤ `cropcycle.
 | 422 | `notify.nudge_entity_unknown` | pf/notify: `entities[]` của `POST /v1/sync/nudge` có tên không phải entity chiều xuống của pf/sync (KN US-SYNC-02) |
 | 503 | `notify.dependency_unavailable` | pf/notify: chưa nối sổ thiết bị của pf/sync; hoặc chưa nối danh bạ Thành viên HTX (pf/accounts) cho cổng `MemberNotifier` (AH-22) |
 | 422 | `notify.member_notice_invalid` | pf/notify: cổng `MemberNotifier` (AH-22) từ chối nội dung thông báo cho Thành viên HTX; `errors[].field` nêu trường sai. Bên phát sinh hiện lỗi cho người thao tác |
+| 422 | `notify.recipient_not_representative` | pf/notify: cổng `RepresentativeNotifier` (AH-279) có người nhận không phải Đại diện HTX đang hoạt động của HTX; cả lần gọi bị từ chối, không tạo thông báo nào |
 | 422 | `notify.recipient_not_member` | pf/notify: cổng `MemberNotifier` (AH-22) có người nhận không phải Thành viên HTX đang hoạt động của HTX; cả lần gọi bị từ chối, không tạo thông báo nào |
 
 Consumer `pf.notify.egress_anomaly` (G5, ADR-0024) không trả mã HTTP: payload `pf.metering.egress.anomaly_detected` hỏng → lỗi consumer, giao lại rồi vào `pf.notify.egress_anomaly.dlq` (R-62); giao lặp → inbox bỏ qua (R-61).
+### pf/weather
+
+| HTTP | code | Ý nghĩa |
+|---|---|---|
+| 422 | `weather.connection_failed` | pf/weather: "Kiểm tra kết nối" hoặc "Lưu" cấu hình thời tiết không gọi được nhà cung cấp; `detail` nêu lý do (khóa API sai, vượt hạn mức, nhà cung cấp không phản hồi, dữ liệu trả về sai) — cấu hình không được lưu. Cũng trả khi nguồn chưa được phép ở môi trường này (production thiếu `AG_WEATHER_OPEN_METEO_URL`/`AG_WEATHER_SOURCE_ADR`, ADR-0065) |
+| 503 | `weather.secret_unavailable` | pf/weather: lưu khóa API khi máy chủ chưa đặt `AG_WEATHER_SECRET_KEY` (hoặc khóa đã lưu không giải mã được bằng khóa hiện tại) |
+| 503 | `weather.dependency_unavailable` | pf/weather: chưa nối danh sách HTX có tọa độ của pf/cooperative |
+
+Phạm vi theo vai dùng mã chung: Admin gọi `GET /v1/weather/today|calendar` thiếu `cooperative_ref` → 422 `validation_failed` (trường `cooperative_ref`, "Chọn HTX"); Đại diện HTX, Thành viên HTX hỏi HTX khác → 403 `forbidden`; tài khoản chưa gắn HTX → 403 `node_scope_required`; vai khác → 403.
+
 ### pf/accounts
 
 Tài khoản cán bộ quản lý trong Keycloak qua Admin REST (KN US-ADM-01..03, HTX US-ACC-01/02, US-HTXSTATUS-01..03, CGH FN-01). Lỗi không bao giờ chứa họ tên, email, SĐT hay thân phản hồi của Keycloak (R-14).
@@ -513,6 +533,10 @@ Tài khoản cán bộ quản lý trong Keycloak qua Admin REST (KN US-ADM-01..0
 | 423 | `accounts.login_temporarily_locked` | pf/accounts (FN-01/BR-06, QTPQ-Q-03): khóa đăng nhập tạm — 5 lần sai liên tiếp khóa 15 phút, hai lần sai cách nhau dưới 1 giây khóa 60 giây. Thân có `retry_after_minutes` (làm tròn lên), header `Retry-After` (giây); không kiểm mật khẩu trong lúc khóa. Khác trạng thái "Đã khóa" của FN-07; Admin mở sớm bằng nút Mở khóa |
 | 403 | `accounts.login_setup_required` | pf/accounts (FN-01, ADR-0060): đăng nhập đúng mật khẩu nhưng tài khoản còn việc lần đầu (đổi mật khẩu tạm, đăng ký TOTP) hoặc có vai bắt TOTP mà chưa đăng ký OTP — không phát token; hoàn tất ở trang xác thực của Keycloak (đến khi có màn đổi mật khẩu lần đầu AH-269) |
 | 409 | `accounts.working_role_required` | FN-07/AH-270, realm HTX riêng: tài khoản Đại diện + Thành viên chưa chọn vai làm việc; chọn một vai có trong token và gửi `X-HTX-Role`. Thiếu lựa chọn không cấp quyền đọc/ghi nghiệp vụ; giữ nguyên actor, tenant, HTX và MFA. |
+| 409 | `accounts.working_role_revoked` | FN-TK-01/EX-03, AC-06 (AH-222), realm HTX: `X-HTX-Role` là Đại diện HTX hoặc Thành viên HTX không còn trong token đã làm mới (vai bị ngừng trong lúc dùng). Web và app đọc lại vai từ token: còn một vai thì dùng luôn, còn hai vai thì về màn Chọn vai trò; câu "Vai trò đang dùng đã bị ngừng. Chọn lại vai trò làm việc." Lựa chọn Admin không có trong token vẫn là 403 `forbidden`. API và Vault trả cùng mã |
+| 403 | `accounts.no_active_role` | FN-TK-01/EX-02 (AH-222), realm HTX: tài khoản không còn vai App HTX nào — "Tài khoản chưa được gán vai trò. Liên hệ quản trị viên." Ở `POST /v1/public/auth/login` chỉ báo sau khi mật khẩu đúng, không phát token và thu hồi phiên vừa phát; ở API và Vault cho token không có vai HTX |
+| 403 | `accounts.temporary_password_expired` | FN-TK-02/AC-04, BR-03 (AH-223), realm HTX: `POST /v1/public/auth/login` — mật khẩu tạm đúng nhưng đã cấp quá 72 giờ (createdDate của thông tin xác thực ở Keycloak) mà chưa đổi; không phát token, không đổi mật khẩu. Không đọc được mốc cấp → coi như hết hạn. Lấy lại bằng "Quên mật khẩu?" (OTP SMS) hoặc nhờ người cấp tài khoản đặt lại |
+| 409 | `accounts.last_representative` | FN-TK-02/EX-04 (AH-223), FN-07: khóa Đại diện HTX đang hoạt động cuối cùng của một HTX, hoặc chuyển tài khoản đó sang HTX khác — "HTX sẽ không còn người duyệt kết quả lô". Chưa đổi gì; gửi lại với query `confirm_no_representative=true` và `Idempotency-Key` mới. Bước hỏi lại trên giao diện, không phải bất biến dữ liệu |
 | 503 | `accounts.login_unavailable` | pf/accounts (FN-01, ADR-0060): đăng nhập riêng chưa cấu hình (thiếu `AG_KC_LOGIN_*`, `AG_LOGIN_ID_KEY` hoặc `AG_KC_ADMIN_URL`) — fail-closed, không chạy ở chế độ nới lỏng |
 | 401 | `accounts.login_otp_invalid` | pf/accounts (ADR-0061): bước 2 đăng nhập của Admin — mã OTP trong email sai. Thân có `remaining_attempts` và `detail` "Mã OTP không đúng. Còn n lần thử."; sai lần thứ 5 thì mã bị hủy (trả `accounts.login_otp_expired`) |
 | 410 | `accounts.login_otp_expired` | pf/accounts (ADR-0061): mã OTP email đã quá 5 phút, đã dùng, đã bị hủy (sai 5 lần) hoặc đã có mã mới — đăng nhập lại để nhận mã mới |

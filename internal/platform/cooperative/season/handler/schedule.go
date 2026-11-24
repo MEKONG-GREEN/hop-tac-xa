@@ -20,11 +20,13 @@ func (h Handler) previewHouseholdSchedule(c *gin.Context) {
 		return
 	}
 	var req struct {
-		CropCode     string `json:"crop_code"`
-		VarietyCode  string `json:"variety_code"`
-		AreaHa       string `json:"area_ha"`
-		SOPVersionID string `json:"sop_version_id"`
-		AnchorDate   string `json:"anchor_date"`
+		CropCode     string              `json:"crop_code"`
+		VarietyCode  string              `json:"variety_code"`
+		AreaHa       string              `json:"area_ha"`
+		SOPVersionID string              `json:"sop_version_id"`
+		AnchorDate   string              `json:"anchor_date"`
+		PlanChanges  []domain.PlanChange `json:"plan_changes"`
+		SelfMadePlan *selfMadePlanReq    `json:"self_made_plan"`
 	}
 	decoder := json.NewDecoder(c.Request.Body)
 	decoder.DisallowUnknownFields()
@@ -37,14 +39,16 @@ func (h Handler) previewHouseholdSchedule(c *gin.Context) {
 		httpx.Fail(c, problem.Validation.WithField("anchor_date", "ngày hợp lệ YYYY-MM-DD"))
 		return
 	}
-	version, err := uuid.Parse(req.SOPVersionID)
-	if err != nil {
-		httpx.Fail(c, problem.Validation.WithField("sop_version_id", "chọn phiên bản SOP hợp lệ"))
-		return
+	var version uuid.UUID
+	if req.SelfMadePlan == nil || req.SOPVersionID != "" {
+		if version, err = uuid.Parse(req.SOPVersionID); err != nil {
+			httpx.Fail(c, problem.Validation.WithField("sop_version_id", "chọn phiên bản SOP hợp lệ"))
+			return
+		}
 	}
 	plan, err := h.Svc.PreviewHouseholdSchedule(c.Request.Context(), app.SchedulePreviewInput{
 		CooperativeRef: coop, HouseholdRef: hh, CropCode: req.CropCode, VarietyCode: req.VarietyCode,
-		AreaHa: req.AreaHa, SOPVersionID: version, AnchorDate: anchor,
+		AreaHa: req.AreaHa, SOPVersionID: version, AnchorDate: anchor, PlanChanges: req.PlanChanges, SelfMade: req.SelfMadePlan.content(),
 	})
 	if err != nil {
 		httpx.Fail(c, err)

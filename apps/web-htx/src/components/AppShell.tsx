@@ -13,6 +13,8 @@ import { contextLabel, contextShortLabel, optionLabel, otherOptions } from "@/kn
 import { canSee, disabledModules, findNavItem, homeFor, visibleNav, type DisabledModules } from "@/nav/nav";
 import { AccountMenu } from "@/shell/AccountMenu";
 import { HtxRolePicker } from "@/shell/HtxRolePicker";
+import { WeatherCard } from "@/weather/WeatherCard";
+import { SelfChangePassword } from "@/shell/SelfChangePassword";
 import { Dialog } from "./Dialog";
 import { Breadcrumb, BreadcrumbTailProvider, useBreadcrumbTailValue, type Crumb } from "@/shell/Breadcrumb";
 import { crumbsFor, legacyMenu, menuAllows, withExtraGroups } from "@/shell/menu";
@@ -23,6 +25,8 @@ import { Icon } from "./Icon";
 import { NotificationBell } from "./NotificationBell";
 import { Loading } from "./ui";
 import { SupportBanner } from "@/kn/SupportBanner";
+
+const nativeHTXRealm = config.oidc.issuer.replace(/\/$/, "").endsWith("/realms/agrigreen-htx");
 
 /** Trang không có khung (đăng nhập, chọn vai trò & phòng ban, đồng ý thu thập dữ liệu). */
 export function isBareRoute(pathname: string): boolean {
@@ -131,6 +135,7 @@ export function AppShell({ children, SidebarComponent = Sidebar }: {
   const [navOpen, setNavOpen] = useState(false);
   // AH-270 AC-N1: đổi vai trò, HTX làm việc hỏi xác nhận vì dữ liệu chưa lưu sẽ mất.
   const [confirmRole, setConfirmRole] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
   const prefCollapsed = useStoredValue(COLLAPSE_KEY) === "1";
   // Thông báo trong menu tài khoản gắn với trang hiện tại (đổi trang → ẩn).
   const [noteState, setNoteState] = useState<{ path: string; text: string } | null>(null);
@@ -181,7 +186,7 @@ export function AppShell({ children, SidebarComponent = Sidebar }: {
   const note = noteState?.path === pathname ? noteState.text : null;
 
   if (bare) return <>{children}</>;
-  if (status==="authenticated" && needsHtxRole && htxRoles && dataConsent.status==="not_required") return <HtxRolePicker roles={htxRoles.roles} select={htxRoles.select} htxName={principal?.orgName} />;
+  if (status==="authenticated" && needsHtxRole && htxRoles && dataConsent.status==="not_required") return <HtxRolePicker roles={htxRoles.roles} select={htxRoles.select} htxName={principal?.orgName} lastUsed={htxRoles.lastUsed} notice={htxRoles.notice} />;
   if (status !== "authenticated" || !principal || kn.status === "choose" || dataConsent.status !== "not_required") {
     return (
       <main style={{ display: "grid", placeItems: "center", minHeight: "100vh" }}>
@@ -243,12 +248,15 @@ export function AppShell({ children, SidebarComponent = Sidebar }: {
                 router.push(next.default_route);
               }}
               onChangePassword={() => {
-                if (config.mock) setNoteState({ path: pathname, text: "Chế độ giả lập: bản thật đổi mật khẩu ở trang xác thực (Keycloak)." });
+                // AH-281: realm HTX đăng nhập bằng màn riêng → tự đổi mật khẩu qua PUT /v1/me/password.
+                if (nativeHTXRealm || (htxRoles?.roles.length ?? 0) > 0) setChangingPassword(true);
+                else if (config.mock) setNoteState({ path: pathname, text: "Chế độ giả lập: bản thật đổi mật khẩu ở trang xác thực (Keycloak)." });
                 else void changePassword();
               }}
               onLogout={() => void logout()}
               note={note}
             />
+            {changingPassword ? <SelfChangePassword api={api} onClose={() => setChangingPassword(false)} /> : null}
             {confirmRole && htxRoles ? (
               <Dialog
                 title="Đổi vai trò, HTX làm việc"
@@ -268,6 +276,17 @@ export function AppShell({ children, SidebarComponent = Sidebar }: {
               <div className="alert alert-warn" role="status" style={{ marginBottom: 16 }}>
                 <Icon name="info" />
                 <span>{scopeWarning}</span>
+              </div>
+            ) : null}
+            {/* FN-TT-01 (AH-225): thẻ Thời tiết hôm nay ở đầu Trang chủ (trang đầu tiên được xem) của ba vai App HTX. */}
+            {isHtxAppUser(principal) && pathname === home && !disabled.has("pf/weather") ? <WeatherCard /> : null}
+            {htxRoles?.notice && !needsHtxRole ? (
+              // FN-TK-01/EX-03 (AH-222): vai vừa bị ngừng, tài khoản còn một vai nên dùng luôn vai đó (AC-01). Giữ câu báo
+              // qua lần chuyển trang do mất quyền, tới khi người dùng đóng.
+              <div className="alert alert-warn" role="status" style={{ marginBottom: 16 }}>
+                <Icon name="info" />
+                <span>{htxRoles.notice}</span>
+                <button type="button" className="btn btn-sm" onClick={() => htxRoles.clearNotice?.()}>Đóng</button>
               </div>
             ) : null}
             {notice ? (

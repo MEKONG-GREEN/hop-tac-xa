@@ -18,6 +18,7 @@ import 'bulk_open_screen.dart';
 import 'collection_screen.dart';
 import 'news_screen.dart';
 import 'notifications_screen.dart';
+import 'onboarding_screen.dart';
 import 'plot_map_screen.dart';
 import 'plots_screen.dart';
 import 'review_screen.dart';
@@ -25,6 +26,7 @@ import 'staff_screen.dart';
 import 'support_screen.dart';
 import 'season_calendars_screen.dart';
 import 'sync_queue_screen.dart';
+import 'weather_screen.dart';
 
 /// Trang chủ theo vai (HTX US-LOGIN-01 AC-1, FN-05): nông dân, Đại diện HTX
 /// hoặc Thành viên HTX.
@@ -41,6 +43,9 @@ class HomeScreen extends ConsumerWidget {
             .then((_) => ref.invalidate(homeSummaryProvider));
     final s = summary.value;
     final today = ref.read(appControllerProvider).services?.crop.today();
+    final notice = ref.watch(
+      appControllerProvider.select((s) => s.services?.workingRole.notice),
+    );
     // Thông báo được chạm (kể cả trước khi mở khóa) → mở đúng màn hình.
     void consumeLink(String? link) {
       if (link == null) return;
@@ -193,6 +198,14 @@ class HomeScreen extends ConsumerWidget {
             ),
           ),
           (
+            HtxScreen.weatherCalendar,
+            BigTile(
+              icon: Icons.calendar_month,
+              label: 'Lịch thời tiết',
+              onTap: () => open(const WeatherCalendarScreen()),
+            ),
+          ),
+          (
             HtxScreen.news,
             BigTile(
               icon: Icons.newspaper,
@@ -257,6 +270,16 @@ class HomeScreen extends ConsumerWidget {
                 }
               },
             ),
+          if (mode == HtxMode.member)
+            IconButton(
+              tooltip: 'Hướng dẫn sử dụng',
+              iconSize: 28,
+              icon: const Icon(Icons.help_outline),
+              onPressed: () {
+                final db = ref.read(appControllerProvider).services?.db;
+                if (db != null) openOnboarding(context, db);
+              },
+            ),
           IconButton(
             tooltip: 'Thông báo',
             iconSize: 28,
@@ -279,10 +302,27 @@ class HomeScreen extends ConsumerWidget {
               ?.sync
               .syncOnce(force: true);
           ref.invalidate(homeSummaryProvider);
+          ref.invalidate(weatherTodayProvider);
         },
         child: ListView(
           padding: const EdgeInsets.all(12),
           children: [
+            if (mode == HtxMode.member) const _OnboardingGate(),
+            if (notice != null)
+              // FN-TK-01/EX-03 (AH-222): vai vừa bị ngừng, còn một vai nên dùng
+              // luôn vai đó; giữ câu báo tới khi người dùng đóng.
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.info_outline),
+                  title: Text(notice),
+                  trailing: TextButton(
+                    onPressed: () => ref
+                        .read(appControllerProvider.notifier)
+                        .dismissWorkingRoleNotice(),
+                    child: const Text('Đóng'),
+                  ),
+                ),
+              ),
             summary.when(
               data: (s) => SyncCard(summary: s),
               loading: () => const Card(
@@ -293,7 +333,12 @@ class HomeScreen extends ConsumerWidget {
               ),
               error: (e, _) => Card(child: ListTile(title: Text('Lỗi: $e'))),
             ),
-            const WeatherCard(),
+            if (mode.canView(HtxScreen.weatherToday))
+              WeatherCard(
+                onOpenCalendar: mode.canView(HtxScreen.weatherCalendar)
+                    ? () => open(const WeatherCalendarScreen())
+                    : null,
+              ),
             if (s?.advice != null && today != null)
               AdviceCard(
                 season: s!.advice!.$1,
@@ -343,4 +388,26 @@ class HomeScreen extends ConsumerWidget {
         : null,
     onTap: onTap,
   );
+}
+
+/// AH-101: lần đầu Thành viên HTX vào trang chủ thì mở hướng dẫn một lần.
+class _OnboardingGate extends ConsumerStatefulWidget {
+  const _OnboardingGate();
+
+  @override
+  ConsumerState<_OnboardingGate> createState() => _OnboardingGateState();
+}
+
+class _OnboardingGateState extends ConsumerState<_OnboardingGate> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final db = ref.read(appControllerProvider).services?.db;
+      if (db != null && mounted) maybeShowOnboarding(context, ref, db);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }

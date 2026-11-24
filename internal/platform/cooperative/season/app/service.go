@@ -113,6 +113,8 @@ type Service struct {
 	Log              *slog.Logger
 	CalendarMembers  port.CalendarMembers
 	CalendarNotifier port.CalendarNotifier
+	// TaskNotifier (AH-191): gửi nhắc việc đến hạn/trễ; thiếu → job nhắc việc không khởi động.
+	TaskNotifier port.TaskReminderNotifier
 }
 
 func (s *Service) now() time.Time { return s.Clock.Now().UTC() }

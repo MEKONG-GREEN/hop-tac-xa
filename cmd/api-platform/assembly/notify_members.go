@@ -34,3 +34,23 @@ func (m NotifyMembers) IsActiveMember(ctx context.Context, tid, coop, actor uuid
 	}
 	return slices.Contains(roles, htxroles.Member), nil
 }
+
+// IsActiveRepresentative thực hiện notify/port.RepresentativeDirectory (AH-279): tài khoản bật, cùng tenant, cùng HTX
+// và có vai Đại diện HTX (kể cả tài khoản kiêm Thành viên).
+func (m NotifyMembers) IsActiveRepresentative(ctx context.Context, tid, coop, actor uuid.UUID) (bool, error) {
+	u, err := m.Dir.GetUser(ctx, actor)
+	if errors.Is(err, accport.ErrUserNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if !u.Enabled || u.TenantID != tid || u.OrgRef != coop {
+		return false, nil
+	}
+	roles, err := m.Dir.RealmRoles(ctx, actor)
+	if err != nil {
+		return false, err
+	}
+	return slices.Contains(roles, htxroles.Representative), nil
+}

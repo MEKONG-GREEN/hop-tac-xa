@@ -149,6 +149,75 @@ class HouseholdSeasonService {
     );
   }
 
+  /// Có hàng đợi nhật ký trên máy (đủ để lưu khi ngoại tuyến).
+  bool get canQueueOffline => outbox != null && journalContext != null;
+
+  /// Việc hiệu lực trong bản chụp SOP của vụ (AH-113): việc tự thêm, hoặc việc gốc
+  /// đã áp sửa ngày/vật tư của lớp tùy chỉnh.
+  static HouseholdJson? effectiveStep(Object? snapshot, Object? seq) {
+    if (snapshot is! Map) return null;
+    final custom = snapshot['custom'] is Map
+        ? snapshot['custom'] as Map
+        : const <Object?, Object?>{};
+    HouseholdJson? find(Object? list) => (list is List ? list : const [])
+        .whereType<Map<Object?, Object?>>()
+        .where((s) => s['seq'] == seq)
+        .map((s) => s.cast<String, Object?>())
+        .firstOrNull;
+    final added = find(custom['added']);
+    if (added != null) return added;
+    final step = find(snapshot['steps']);
+    if (step == null) return null;
+    final edit = find(custom['edits']);
+    return edit == null
+        ? step
+        : {...step, 'window': edit['window'], 'materials': edit['materials']};
+  }
+
+  /// AH-114 AC1: tích nhanh khi mất mạng — lưu trên máy như bản ghi việc "Hoàn
+  /// tất" ngày hôm nay với vật tư khuyến cáo của việc; đồng bộ khi có mạng.
+  /// Khóa idempotency là khóa của bản ghi trên máy nên gửi lại không tạo trùng.
+  Future<OutboxRecord> queueTick(
+    String coop,
+    String household,
+    HouseholdJson season,
+    int seq,
+    String event,
+    HouseholdJson gps, {
+    DateTime? now,
+  }) {
+    final step = effectiveStep(season['sop_snapshot'], seq);
+    final day = now ?? DateTime.now();
+    final materials = ((step?['materials'] as List?) ?? const [])
+        .whereType<Map<Object?, Object?>>()
+        .map(
+          (m) => <String, Object?>{
+            'material_code': '${m['material_code'] ?? ''}',
+            'name': '${m['name'] ?? ''}',
+            'unit': '${m['unit'] ?? ''}',
+            'dose_per_ha': '${m['dose_per_ha'] ?? '0'}',
+          },
+        )
+        .toList();
+    return recordTask(coop, household, '${season['season_ref']}', {
+      'expected_season_event_id': event,
+      'step_seq': seq,
+      'state': 'done',
+      'done_on':
+          '${day.year.toString().padLeft(4, '0')}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}',
+      'materials': materials,
+      'file_refs': <String>[],
+      'note': '',
+      'backfill_reason': '',
+      'zero_confirmed': false,
+      'gps': gps,
+    });
+  }
+
+  /// AH-114 AC4: xóa bản ghi bị máy chủ từ chối (vd vụ đã đóng) theo ý người dùng.
+  Future<bool> discardTask(String id) async =>
+      (await outbox?.discardRejected(id)) ?? false;
+
   Future<List<OutboxRecord>> pendingTasks(
     String coop,
     String household,
@@ -217,6 +286,44 @@ class HouseholdSeasonService {
     idempotencyKey: key,
     body: {...body, 'channel': 'app'},
   );
+
+  /// AH-126: xóa mềm nhật ký việc hoặc bỏ tích việc đã xong, kèm lý do (≥ 10 ký tự).
+  /// Cần mạng; [key] giữ nguyên khi thử lại cùng thao tác.
+  Future<HouseholdJson> voidTask(
+    String coop,
+    String household,
+    String season,
+    String logRef,
+    String expectedId,
+    String reason,
+    String key,
+  ) => api.sendJson(
+    method: 'POST',
+    path:
+        '/v1/cooperatives/$coop/households/$household/seasons/$season/task-records/$logRef/void',
+    idempotencyKey: key,
+    body: {
+      'expected_record_id': expectedId,
+      'reason': reason,
+      'channel': 'app',
+    },
+  );
+
+  /// AH-126: các phiên bản của nhật ký việc (cũ nhất trước).
+  Future<List<HouseholdJson>> taskHistory(
+    String coop,
+    String household,
+    String season,
+    String logRef,
+  ) async {
+    final value = await api.getJson(
+      '/v1/cooperatives/$coop/households/$household/seasons/$season/task-records/$logRef/history',
+    );
+    return ((value['items'] as List?) ?? const [])
+        .whereType<Map<Object?, Object?>>()
+        .map((m) => m.cast<String, Object?>())
+        .toList();
+  }
 
   Future<SeasonPlan> previewPlan(
     String coop,

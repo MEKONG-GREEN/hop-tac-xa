@@ -100,11 +100,25 @@ Nguồn: BRD App HTX — Kế hoạch vụ mùa và Nhật ký sản xuất v3.9
 | `GET /v1/cropcycle/sops`, `GET /v1/cropcycle/sops/{ref}`, `GET /v1/cropcycle/sop-versions/{id}` (Application API) | `KHMV-FN-01` R |
 | `GET /v1/cooperatives/{ref}/plots` | `KHMV-FN-02` R |
 
-- **Route ghi mở cho Thành viên HTX trong `member_write_routes`:** `POST /v1/cropcycle/seasons`, `…/seasons/bulk-open`, `…/seasons/:ref/corrections`, `…/seasons/:ref/cancel`, `…/seasons/:ref/harvest`, `…/harvests/bulk`, `…/harvests/import`, `…/harvests/:id/corrections`, `…/farm-logs`, `…/farm-logs/batch`, `…/farm-logs/:id/corrections` và `POST /v1/me/data-consent`. Phê duyệt nhật ký (`…/farm-logs/:id/reviews`) không có trong ma trận nên giữ quyền cũ (Đại diện HTX, Admin).
+- **Route ghi mở cho Thành viên HTX trong `member_write_routes`:** `POST /v1/cropcycle/seasons`, `…/seasons/bulk-open`, `…/seasons/:ref/corrections`, `…/seasons/:ref/cancel`, `…/seasons/:ref/harvest`, `…/harvests/bulk`, `…/harvests/import`, `…/harvests/:id/corrections`, `…/farm-logs`, `…/farm-logs/batch`, `…/farm-logs/:id/corrections`, `POST /v1/me/data-consent` và bốn route ghi của vụ theo hộ (AH-312): `POST /v1/cooperatives/:ref/households/:household_ref/seasons` (mở vụ, `KHMV-FN-03` C), `…/households/:household_ref/season-plan-preview` (xem trước lịch việc, `KHMV-FN-04` C), `…/seasons/:season_ref/task-completions` và `…/seasons/:season_ref/task-records` (tích việc, ghi việc, `KHMV-FN-05` C), `…/seasons/:season_ref/plan-changes` (tùy chỉnh quy trình của vụ, `KHMV-FN-04` U — AH-113), `…/task-records/:log_ref/corrections` và `…/task-records/:log_ref/void` (sửa, xóa mềm/bỏ tích nhật ký việc kèm lý do, `KHMV-FN-05` U/D — AH-126), `…/seasons/:season_ref/adhoc-records` (việc phát sinh ngoài quy trình, `KHMV-FN-05` C — AH-163), `…/seasons/:season_ref/task-batches` (ghi một việc cho nhiều vụ cùng SOP gốc, `KHMV-FN-05` C — AH-176), `…/seasons/:season_ref/stop` (dừng vụ kèm lý do, `KHMV-FN-03` D — AH-70), `…/seasons/:season_ref/corrections` (sửa mốc gốc, diện tích, giống/SOP kèm lý do, `KHMV-FN-03` U — AH-175). Dịch vụ vẫn giới hạn theo HTX của người gọi (HTX khác → 404 `cropcycle.household_not_found`). Phê duyệt nhật ký (`…/farm-logs/:id/reviews`) không có trong ma trận nên giữ quyền cũ (Đại diện HTX, Admin).
 - **Chưa có API:** lịch thời vụ (AH-51) — chỉ có dòng `KHMV-FN-03-LICH`; kế hoạch mùa vụ (`KHMV-FN-04`) chưa có API riêng — kế hoạch là các bước SOP trong chi tiết vụ; hủy khai báo sản lượng chưa có API.
 - **Thông báo (`KHMV-NTF`):** dòng này chỉ áp cho thông báo của BRD Kế hoạch mùa vụ — bốn loại của AH-22 (lịch thời vụ được phát, việc đến hạn, vụ thiếu nhật ký, quy trình đổi do đổi giống), người nhận là tài khoản có vai `htx_member` của HTX liên quan. Đại diện HTX vẫn nhận bốn loại thông báo khác (nhật ký chờ duyệt, vụ đã được mở, lịch thu gom rơm, bảng kê thu gom) và vẫn thấy màn Thông báo.
 - **Đồng bộ từ app:** máy chủ chưa mở cho Thành viên HTX (phần máy chủ thuộc AH-310; app đã nhận vai ở AH-303): chiều xuống không trả entity, chiều lên bị từ chối. Đại diện HTX và tài khoản kiêm hai vai bị từ chối ghi qua đồng bộ (chỉ xem); nông dân giữ nguyên.
 - **Web:** mục "Vụ canh tác", "Nhật ký canh tác", "Sản lượng thu hoạch" gắn `KHMV-FN-03-XEM`, `KHMV-FN-05`, `KHMV-FN-06`; nút thao tác ẩn/hiện theo `HtxScope.can(dòng, hành động)`.
+
+## Ma trận BRD Thời tiết & Thu gom phụ phẩm (dòng `TTPP-FN-TT-*`)
+
+| Khóa | Chức năng | Admin | Đại diện HTX | Thành viên HTX |
+|---|---|---|---|---|
+| `TTPP-FN-TT-01` | Thời tiết hôm nay trên Trang chủ | R (mọi HTX, chọn HTX ở bộ lọc) | R (HTX của mình) | R (HTX của mình) |
+| `TTPP-FN-TT-02` | Lịch thời tiết (dương lịch và âm lịch) | R (mọi HTX) | R (HTX của mình) | R (HTX của mình) |
+| `TTPP-FN-TT-03` | Kết nối API thời tiết | CRU | - | - |
+
+- **Kênh:** Admin chỉ dùng web (thẻ thời tiết có bộ lọc HTX, màn "Kết nối thời tiết"); Đại diện HTX và Thành viên HTX dùng
+  web và app (thẻ Thời tiết hôm nay, Lịch thời tiết). Nông dân ngoài BRD: máy chủ trả 403, app ẩn thẻ.
+- **API:** `GET /v1/weather/today`, `GET /v1/weather/calendar` (`TTPP-FN-TT-01`, `-02` R; Application API);
+  `GET /v1/weather/config`, `POST /v1/weather/config/revisions`, `POST /v1/weather/config/test` (`TTPP-FN-TT-03`; Admin API).
+  Nguồn và cấu hình: [ADR-0065](../adr/0065-nguon-thoi-tiet-open-meteo.md).
 
 ## Kiêm hai vai
 
@@ -113,6 +127,14 @@ Một tài khoản có thể kiêm Đại diện HTX và Thành viên HTX (FN-05
 - Máy chủ: `htxroles.Effective(has)` trả vai có hiệu lực, `htxroles.Allows(has, fn, action)` kiểm theo vai đó. Các dòng ma trận KHMV kiểm qua `matrixAccess`; lớp chặn ghi của Thành viên HTX dùng `htxroles.IsMemberOnly` (= vai có hiệu lực là Thành viên HTX).
 - Web: `effectiveRole` và `matrixAllows` (`src/auth/permissions.ts`) theo cùng quy tắc.
 - Hệ quả: tài khoản kiêm hai vai chỉ xem vụ, kế hoạch mùa vụ, nhật ký, sản lượng (không mở vụ, không ghi nhật ký, không khai sản lượng) cho tới AH-270, vì quyền của Thành viên HTX ở phân hệ này không nằm trọn trong quyền của Đại diện HTX.
+
+### Vai bị ngừng trong lúc dùng (AH-222)
+
+Vai làm việc đang chọn không còn trong token đã làm mới (vd Admin tắt "Kiêm Thành viên HTX") → máy chủ trả 409
+`accounts.working_role_revoked` cho request còn gửi `X-HTX-Role` cũ. Web (`api/workingRoleRevoked.ts`) và app
+(`WorkingRoleRevokedException`, `AppController._onWorkingRoleRevoked`) đọc lại vai từ token: còn một vai thì dùng luôn, còn
+hai vai thì về màn Chọn vai trò, kèm câu báo. Tài khoản không còn vai nào → 403 `accounts.no_active_role`. Xem
+[ADR-0064](../adr/0064-bu-fn-tk-tren-fn-07.md).
 
 ## App di động (AH-303)
 

@@ -52,3 +52,34 @@ it("[AC-07, AC-N1] đổi vai trò qua menu tài khoản hỏi xác nhận; Hủ
   await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Tiếp tục" }));
   expect(chooseAgain).toHaveBeenCalledTimes(1);
 });
+
+it("[AH-222 UX-TP-09, FN-TK-01/EX-03] thẻ vai dùng lần trước có dấu; vai vừa bị ngừng hiện câu báo", () => {
+  render(<HtxRolePicker roles={["coop_manager", "htx_member"]} select={vi.fn()} htxName="HTX Tân Phú" lastUsed="htx_member" notice="Vai trò đang dùng đã bị ngừng. Chọn lại vai trò làm việc." />);
+  expect(screen.getByRole("button", { name: /Thành viên HTX/ })).toHaveTextContent("Dùng lần trước");
+  expect(screen.getByRole("button", { name: /Quản lý HTX/ })).not.toHaveTextContent("Dùng lần trước");
+  expect(screen.getByRole("status")).toHaveTextContent("Vai trò đang dùng đã bị ngừng. Chọn lại vai trò làm việc.");
+});
+
+it("[AH-222 FN-TK-01/EX-03, AC-01] còn một vai sau khi bị ngừng → vào thẳng ứng dụng kèm câu báo, đóng được", async () => {
+  const user = userEvent.setup();
+  const p = MOCK_PERSONAS.find((x) => x.id === "htx")!;
+  const principal = buildPrincipal({ sub: p.me.actor_ref, name: p.displayName, amr: p.amr, realm_access: { roles: ["coop_manager"] } }, p.me);
+  const clearNotice = vi.fn();
+  const value = {
+    status: "authenticated",
+    principal,
+    scopeWarning: null,
+    kn: { status: "legacy", assignments: [], context: null, menu: null, badges: null } satisfies KnSessionState,
+    dataConsent: { status: "not_required" },
+    api: { GET: vi.fn(async () => ({ data: { items: [] }, response: { ok: true, status: 200 } })) },
+    htxRoles: { roles: ["coop_manager"], selected: "coop_manager", select: vi.fn(), chooseAgain: vi.fn(), notice: "Vai trò đang dùng đã bị ngừng. Chọn lại vai trò làm việc.", clearNotice },
+    logout: vi.fn(),
+    selectContext: vi.fn(),
+    changePassword: vi.fn(),
+  } as unknown as AuthContextValue;
+  render(<AuthContextForTests.Provider value={value}><AppShell><p>Trang chủ</p></AppShell></AuthContextForTests.Provider>);
+  expect(screen.queryByRole("heading", { name: "Chọn vai trò và HTX làm việc" })).not.toBeInTheDocument();
+  const banner = screen.getAllByRole("status").find((n) => n.textContent?.includes("đã bị ngừng"))!;
+  await user.click(within(banner).getByRole("button", { name: "Đóng" }));
+  expect(clearNotice).toHaveBeenCalledTimes(1);
+});

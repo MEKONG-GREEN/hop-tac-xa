@@ -490,7 +490,8 @@ export interface paths {
          * Nông hộ thành viên của HTX, kèm nhãn hiển thị đã che (không bao giờ có định danh đầy đủ)
          * @description HTX US-HH-01 AC-2: `phone` tìm ĐÚNG một SĐT qua chỉ mục mù của kho định danh (mục đích registry.admin, kho ghi sổ
          *     tra cứu) — trả tối đa một hộ của HTX này, SĐT lạ hoặc hộ HTX khác → danh sách rỗng; giá trị không phải SĐT → 422.
-         *     Không tìm theo họ tên: họ tên chỉ nằm ở kho định danh (R-04), pf không lọc được.
+         *     Không tìm theo họ tên: họ tên chỉ nằm ở kho định danh (R-04), pf không lọc được. AH-293: `national_id` tìm ĐÚNG đủ số
+         *     CCCD/CMND (không tìm gần đúng trên dữ liệu mã hóa).
          */
         get: operations["listCooperativeHouseholds"];
         put?: never;
@@ -10399,6 +10400,271 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/plan-changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Tùy chỉnh quy trình của vụ đang canh tác (AH-113)
+         * @description Thành viên HTX/Admin (KHMV-FN-04 U); Đại diện chỉ xem. Một thay đổi mỗi yêu cầu — thêm việc, sửa ngày/vật tư, đổi chỗ (chỉ đổi thứ tự hiển thị trong giai đoạn), bỏ việc (việc SOP chuyển Bỏ qua, việc tự thêm bị xóa). Chỉ đổi bản chụp của vụ, SOP chuẩn không đổi. Việc đã xong không sửa, đổi chỗ, bỏ được (409 cropcycle.plan_step_resolved); việc tự thêm đã có nhật ký không xóa được. Khóa vụ rồi so expected_season_event_id (409 cropcycle.task_season_changed). Mỗi thay đổi ghi một sự kiện corrected chỉ ghi thêm (người, thời điểm, nội dung). Kiểm cửa sổ và vật tư theo luật của SOP.
+         */
+        post: operations["changeHouseholdPlan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/plan-history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Lịch sử tùy chỉnh quy trình của vụ (AH-113)
+         * @description Người xem được vụ (kể cả Đại diện HTX cùng HTX) xem được. Mới nhất trước.
+         */
+        get: operations["getHouseholdPlanHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/task-records/{log_ref}/corrections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+                log_ref: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sửa nhật ký việc kèm lý do (AH-126)
+         * @description Thành viên HTX/Admin (KHMV-FN-05 U); Đại diện chỉ xem. Bản ghi bù chỉ ghi thêm (cùng log_ref, supersedes_id = phiên bản hiện hành); GPS, ảnh và thời điểm ghi giữ như bản đầu. Lý do bắt buộc, ít nhất 10 ký tự (422 nếu thiếu). Dữ liệu sửa kiểm như khi ghi (ngày làm xong không sau ngày ghi, vật tư theo danh mục, liều 0 cần xác nhận). expected_record_id lệch → 409 cropcycle.task_record_changed; bản đã xóa → 409 cropcycle.task_record_voided; vụ dừng/hủy → 422 cropcycle.task_season_state.
+         */
+        post: operations["correctHouseholdTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/task-records/{log_ref}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+                log_ref: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Xóa mềm nhật ký việc hoặc bỏ tích việc đã xong, kèm lý do (AH-126)
+         * @description Thành viên HTX/Admin (KHMV-FN-05 D); Đại diện chỉ xem. Ghi bản ghi bù trạng thái voided — bản ghi ẩn khỏi checklist và tiến độ, không xóa cứng; nếu đó là bản "Đã xong" duy nhất thì việc về chưa xong. Lý do bắt buộc, ít nhất 10 ký tự.
+         */
+        post: operations["voidHouseholdTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/task-records/{log_ref}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+                log_ref: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Lịch sử các phiên bản của nhật ký việc (AH-126)
+         * @description Người xem được vụ (kể cả Đại diện HTX cùng HTX) xem được. Theo thứ tự ghi; mỗi phiên bản có người ghi (actor_ref), thời điểm (recorded_at), lý do sửa/xóa (correction_reason) và giá trị lúc đó.
+         */
+        get: operations["getHouseholdTaskHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/adhoc-records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ghi việc phát sinh ngoài quy trình của vụ (AH-163)
+         * @description Thành viên HTX/Admin (KHMV-FN-05 C); Đại diện chỉ xem. Nội dung, giai đoạn, loại việc, ngày bắt buộc; ngày không sau hôm nay; liều ≥ 0 (liều 0 cần xác nhận); ghi bù quá 3 ngày cần lý do. Bản ghi gắn nhãn "Ngoài SOP" (adhoc), mang số việc riêng của vụ (> 1000) và không tính vào % tiến độ. Vụ đã thu hoạch chỉ ghi vào giai đoạn cuối; vụ dừng/hủy không ghi. Sửa/xóa như nhật ký việc (AH-126).
+         */
+        post: operations["recordHouseholdAdhocTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/task-batch-candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Các vụ có thể ghi chung một việc với vụ này (AH-176)
+         * @description Thành viên HTX/Admin (KHMV-FN-05 C). Vụ của HTX dùng cùng SOP gốc (KH-17), đang canh tác hoặc đã thu hoạch; mỗi vụ kèm số việc tương ứng (cùng tên và loại việc) và việc còn ghi được không, kèm mã lý do nếu không. Tối đa 200 vụ.
+         */
+        get: operations["listHouseholdTaskBatchCandidates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/task-batches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ghi một việc cho nhiều vụ cùng lúc (AH-176)
+         * @description Thành viên HTX/Admin (KHMV-FN-05 C); Đại diện chỉ xem. Vụ trong đường dẫn xác định SOP gốc và việc (step_seq). Mỗi vụ được chọn có một bản ghi riêng theo đúng quy tắc ghi chi tiết (AH-99) với ngày, kết quả, liều, ghi chú, GPS chung; vụ không cùng SOP gốc/không có việc, việc đã xong, vụ đã đổi hoặc không ghi được bị bỏ qua kèm mã và lý do. Ảnh chỉ dùng chung khi mọi vụ cùng hộ với vụ đường dẫn (ảnh mã hóa theo hộ). Idempotency-Key sinh khóa riêng cho từng vụ nên thử lại không tạo bản ghi trùng.
+         */
+        post: operations["recordHouseholdTaskBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dừng (hủy) vụ nông hộ đang canh tác kèm lý do (AH-70)
+         * @description Thành viên HTX/Admin (KHMV-FN-03 D); Đại diện chỉ xem. Chỉ vụ "Đang canh tác"; lý do 10–500 ký tự, không SĐT/CCCD; expected_season_event_id phải là phiên bản hiện tại. Vụ chuyển "Đã dừng vụ" (cancelled), diện tích được giải phóng, nhật ký và kế hoạch giữ nguyên ở chế độ chỉ đọc; vụ đã dừng không quay lại "Đang canh tác". Phát lại cùng Idempotency-Key trả kết quả cũ.
+         */
+        post: operations["stopHouseholdSeason"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperatives/{ref}/household-seasons": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Danh sách vụ nông hộ của HTX kèm tiến độ (AH-140)
+         * @description Chỉ đọc (KHMV-FN-03-XEM R) — Đại diện HTX, Thành viên HTX, Admin; phạm vi theo HTX (KH-02), HTX khác bị từ chối. Mỗi vụ kèm trạng thái, % tiến độ, số việc đến hạn, trễ; lọc theo trạng thái và người mở vụ (Thành viên HTX). Phân trang theo season_ref.
+         */
+        get: operations["listCooperativeHouseholdSeasons"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/corrections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sửa mốc gốc, diện tích, giống/SOP của vụ đang canh tác (AH-175)
+         * @description Thành viên HTX/Admin (KHMV-FN-03 U); Đại diện chỉ xem. Chỉ vụ "Đang canh tác"; lý do 10–500 ký tự; ít nhất một nội dung đổi; expected_season_event_id phải là phiên bản hiện tại. Mốc gốc không ràng buộc khoảng ngày (Q-13), ngày dự kiến của việc chưa xong tính lại, việc đã xong giữ ngày. Diện tích > 0, hai chữ số thập phân, không vượt diện tích đất trừ các vụ đang canh tác khác (409 household_area_exceeded kèm remaining_area_ha). Đổi giống/SOP chỉ khi vụ chưa có nhật ký (409 season_has_logs, KH-10); đổi giống bắt buộc chọn SOP đang áp dụng theo giống mới, thay bản chụp, giữ sản lượng dự kiến. Mỗi lần sửa ghi một sự kiện corrected (xem plan-history).
+         */
+        post: operations["editHouseholdSeason"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/extension/khtc/periods/{id}/report": {
         parameters: {
             query?: never;
@@ -12458,10 +12724,14 @@ export interface paths {
         /**
          * FN-08 Tài khoản của HTX mình (Đại diện HTX)
          * @description AH-277. Thành viên HTX của HTX người gọi và dòng của chính người gọi (FN-08/AC-01, BR-01). Không có Admin, Đại diện HTX khác. Cache-Control no-store.
+         *     FN-TK-02/BR-04 (AH-223): phone đã che; SĐT đầy đủ chỉ ở GET /v1/htx-accounts/{id}.
          */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description FN-08 — tìm đúng SĐT (10 chữ số, bắt đầu bằng 0); máy chủ so trên SĐT đầy đủ rồi mới che. Sai định dạng → 422. */
+                    phone?: string;
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
@@ -12533,6 +12803,50 @@ export interface paths {
                 422: components["responses"]["Problem"];
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/htx-accounts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * FN-08 Chi tiết tài khoản trong phạm vi Đại diện HTX
+         * @description AH-223 (FN-TK-02/BR-04). Thành viên HTX của HTX người gọi hoặc chính người gọi; ngoài phạm vi → 404. Trả SĐT đầy
+         *     đủ; mỗi lượt xem ghi sổ truy cập pf_accounts.pii_view. Ghi sổ lỗi thì không trả. Cache-Control no-store.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Tài khoản, không có mật khẩu */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HTXAccount"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -12682,6 +12996,105 @@ export interface paths {
                 409: components["responses"]["Problem"];
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/htx-accounts/{id}/password-reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * FN-10 Đặt lại mật khẩu (Đại diện HTX, Thành viên HTX của HTX mình)
+         * @description AH-281. Kênh SMS bật → gửi mã OTP tới số đã lưu (mode otp_sent, phone_hint); kênh tắt → cấp mật khẩu tạm 08 ký tự chỉ
+         *     trong phản hồi đầu (mode temporary_password), mật khẩu cũ hết hiệu lực, phiên bị thu hồi, phải đổi ở lần đăng nhập
+         *     kế tiếp. Không cho chính mình (403), tài khoản đã khóa (409); ngoài phạm vi → 404. Phát lại không trả mật khẩu.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                };
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Đã gửi mã OTP hoặc đã cấp mật khẩu tạm; Cache-Control no-store */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HTXPasswordReset"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                409: components["responses"]["Problem"];
+                429: components["responses"]["Problem"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * FN-10 Tự đổi mật khẩu (người dùng đã đăng nhập, realm HTX)
+         * @description AH-281 (AC-N4, AC-N5). PUT, không Idempotency-Key: thân chứa mật khẩu không vào kho idempotency. Mật khẩu hiện tại
+         *     kiểm bằng Keycloak (sai → 422 current_password "Mật khẩu hiện tại không đúng"); mật khẩu mới tối thiểu 06 ký tự, khác
+         *     mật khẩu hiện tại, nhập lại khớp. Thành viên HTX gọi được.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        current_password: string;
+                        new_password: string;
+                        confirm_password: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Đã đổi mật khẩu */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                403: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+                503: components["responses"]["Problem"];
+            };
+        };
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -12884,6 +13297,104 @@ export interface paths {
                 };
                 403: components["responses"]["Problem"];
                 404: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/weather/today": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Thời tiết hôm nay trên Trang chủ (FN-TT-01)
+         * @description AH-225. Ba vai App HTX. Ngày dương, ngày âm (lịch Việt Nam GMT+7) và số liệu từ bộ đệm máy chủ (không gọi nhà
+         *     cung cấp). Đại diện HTX, Thành viên HTX: HTX của mình (cooperative_ref khác → 403). Admin: bắt buộc cooperative_ref
+         *     (bộ lọc HTX, AC-06). HTX chưa có tọa độ → status no_location (EX-02); chưa có số liệu → no_data (EX-03). Nhà cung
+         *     cấp lỗi → vẫn trả số liệu gần nhất, source.stale = true kèm updated_at (EX-01). Không có lời khuyên hay cảnh báo.
+         *     Cache-Control no-store.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    cooperative_ref?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Thẻ thời tiết hôm nay */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["WeatherToday"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/weather/calendar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lịch thời tiết tháng — dương lịch và âm lịch (FN-TT-02)
+         * @description AH-226. Mọi ngày của tháng kèm ngày âm (mùng 1, rằm, tháng nhuận). Từ hôm nay đến hết phạm vi dự báo (cấu hình,
+         *     tối đa 14 ngày) có dự báo; ngày đã qua có số liệu đã lưu kèm nhãn "Thực đo" hoặc "Dự báo cuối ngày"; ngày ngoài phạm
+         *     vi hoặc chưa lưu thì weather = null. Buổi (Đêm, Sáng, Chiều, Tối — 6 giờ) tổng hợp từ số liệu theo giờ: nhiệt độ
+         *     trung bình làm tròn số nguyên, mưa cộng dồn 1 chữ số thập phân, khả năng mưa và gió lấy lớn nhất. Không có số liệu
+         *     theo giờ → hourly_available = false, periods rỗng. Phạm vi HTX như /v1/weather/today. Cache-Control no-store.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description YYYY-MM; vắng = tháng hiện tại (giờ Việt Nam) */
+                    month?: string;
+                    cooperative_ref?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Lịch tháng */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["WeatherCalendar"];
+                    };
+                };
+                403: components["responses"]["Problem"];
+                404: components["responses"]["Problem"];
+                422: components["responses"]["Problem"];
             };
         };
         put?: never;
@@ -16894,7 +17405,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             /** @enum {string} */
-            kind: "directive" | "alert" | "document" | "task_escalated" | "sync_conflict" | "org_deactivated" | "household_registered" | "household_membership_changed" | "task_assigned" | "farm_log_pending" | "farm_log_reviewed" | "season_opened" | "integration_dead_lettered" | "area_feed_stale" | "price_reminder" | "price_alert" | "price_verify_request" | "price_verify_reply" | "price_verify_decision" | "price_lock_summary" | "price_board_approved" | "price_board_reopened" | "price_proxy_entry" | "cnts_knqg_sent" | "cnts_knqg_reviewed" | "cnts_knqg_submitted" | "hrm_appraisal" | "hrm_promotion_due" | "hrm_plan_reminder" | "season_calendar_published" | "season_task_due" | "season_log_missing" | "season_process_changed";
+            kind: "directive" | "alert" | "document" | "task_escalated" | "sync_conflict" | "org_deactivated" | "household_registered" | "household_membership_changed" | "task_assigned" | "farm_log_pending" | "farm_log_reviewed" | "season_opened" | "integration_dead_lettered" | "area_feed_stale" | "price_reminder" | "price_alert" | "price_verify_request" | "price_verify_reply" | "price_verify_decision" | "price_lock_summary" | "price_board_approved" | "price_board_reopened" | "price_proxy_entry" | "cnts_knqg_sent" | "cnts_knqg_reviewed" | "cnts_knqg_submitted" | "hrm_appraisal" | "hrm_promotion_due" | "hrm_plan_reminder" | "season_calendar_published" | "season_task_due" | "season_log_missing" | "season_process_changed" | "cooperative_sharing";
             /** @enum {string} */
             severity: "urgent" | "normal";
             title: string;
@@ -24718,6 +25229,20 @@ export interface components {
              * @enum {string}
              */
             channel: "app" | "web";
+            /** @description Tùy chỉnh quy trình trước khi lưu vụ (AH-113), áp theo thứ tự; SOP chuẩn không đổi */
+            plan_changes?: components["schemas"]["HouseholdPlanChange"][];
+            /** @description AH-162: quy trình tự tạo (cùng cấu trúc SOP) khi loại cây/giống chưa có SOP đang áp dụng; chỉ gắn vụ này (KH-12). Kiểm như soạn SOP (thứ tự liên tục, Từ ≤ Đến). Đã có SOP → 409 cropcycle.sop_available. Không có việc Thu hoạch thì không có ngày thu hoạch dự kiến. */
+            self_made_plan?: {
+                stages: components["schemas"]["CropSOPStage"][];
+                steps: components["schemas"]["CropSOPStep"][];
+            };
+            /** @description Tên mốc gốc của quy trình tự tạo; mặc định Ngày xuống giống */
+            self_made_anchor?: string;
+            /**
+             * Format: uuid
+             * @description AH-139: sao chép giống và quy trình (kèm tùy chỉnh) từ vụ trước của chính hộ này (kể cả vụ đang canh tác). Loại cây, giống, SOP lấy theo vụ nguồn; nếu gửi thì phải khớp (422). Vụ nguồn ngoài phạm vi → 404 cropcycle.season_not_found. Vẫn kiểm diện tích còn lại và mốc gốc.
+             */
+            copy_from_season_ref?: string | null;
         };
         HouseholdSeasonSOPSnapshot: {
             /** Format: uuid */
@@ -24730,6 +25255,23 @@ export interface components {
             anchor_name: string;
             stages: components["schemas"]["CropSOPStage"][];
             steps: components["schemas"]["CropSOPStep"][];
+            /** @description Quy trình tự tạo của riêng vụ (AH-162); template_ref/version_id là mã riêng của vụ, không có SOP master */
+            self_made?: boolean;
+            /** @description Lớp tùy chỉnh của riêng vụ (AH-113): việc tự thêm, sửa ngày/vật tư, việc bỏ qua, thứ tự hiển thị. Lịch và checklist đã áp lớp này. */
+            custom?: {
+                added?: components["schemas"]["CropSOPStep"][];
+                edits?: {
+                    seq?: number;
+                    window?: components["schemas"]["CropSOPWindow"];
+                    materials?: components["schemas"]["CropSOPMaterial"][];
+                }[];
+                skipped?: number[];
+                order?: {
+                    stage_seq?: number;
+                    steps?: number[];
+                }[];
+                last_seq?: number;
+            };
         };
         HouseholdSeason: {
             /** Format: uuid */
@@ -24758,6 +25300,18 @@ export interface components {
             /** Format: uuid */
             current_event_id: string;
             version: number;
+            /**
+             * Format: uuid
+             * @description Vụ nguồn khi mở bằng sao chép (AH-139)
+             */
+            copied_from?: string | null;
+            /** @description Lý do dừng vụ, chỉ có khi status = cancelled (AH-70) */
+            stop_reason?: string;
+            /**
+             * Format: date-time
+             * @description Thời điểm dừng vụ (AH-70)
+             */
+            stopped_at?: string;
             /** @description Thiếu hoặc từ chối GPS, không suy diễn tọa độ thành xác minh ranh đất */
             gps_missing: boolean;
             gps: components["schemas"]["CropGPS"];
@@ -24773,14 +25327,22 @@ export interface components {
             active_area_ha?: components["schemas"]["Decimal"];
             land_area_ha?: components["schemas"]["Decimal"];
         };
+        /** @description Cần sop_version_id hoặc self_made_plan (AH-162) */
         SeasonSchedulePreviewInput: {
             crop_code: string;
             variety_code: string;
             /** Format: uuid */
-            sop_version_id: string;
+            sop_version_id?: string;
+            /** @description AH-162: quy trình tự tạo (cùng cấu trúc SOP) khi loại cây/giống chưa có SOP đang áp dụng; chỉ gắn vụ này (KH-12). Kiểm như soạn SOP (thứ tự liên tục, Từ ≤ Đến). Đã có SOP → 409 cropcycle.sop_available. Không có việc Thu hoạch thì không có ngày thu hoạch dự kiến. */
+            self_made_plan?: {
+                stages: components["schemas"]["CropSOPStage"][];
+                steps: components["schemas"]["CropSOPStep"][];
+            };
             area_ha: components["schemas"]["HouseholdSeasonAreaInput"];
             /** Format: date */
             anchor_date: string;
+            /** @description Tùy chỉnh quy trình đang soạn (AH-113) */
+            plan_changes?: components["schemas"]["HouseholdPlanChange"][];
         };
         SeasonSchedule: {
             /** Format: date */
@@ -24824,6 +25386,8 @@ export interface components {
             status: "upcoming" | "due" | "overdue" | "waiting_anchor";
             /** @description Chỉ true cho Không ngày; luôn due, không overdue */
             undated: boolean;
+            /** @description Việc tự thêm vào quy trình của riêng vụ (AH-113); vắng mặt = việc của SOP */
+            custom?: boolean;
         };
         HouseholdTaskCompleteInput: {
             step_seq: number;
@@ -24884,12 +25448,27 @@ export interface components {
             /** Format: uuid */
             log_ref: string;
             step_seq: number;
-            /** @enum {string} */
-            state: "done" | "partial" | "skipped";
+            /**
+             * @description voided chỉ có trong lịch sử (bản ghi đã xóa/bỏ tích, AH-126)
+             * @enum {string}
+             */
+            state: "done" | "partial" | "skipped" | "voided";
             /** Format: date */
             done_on: string;
             /** Format: uuid */
             sop_version_id: string;
+            /** @description Số phiên bản trong chuỗi của bản ghi (1 = bản đầu) */
+            version?: number;
+            /** @description Lý do sửa/xóa của phiên bản bù (AH-126) */
+            correction_reason?: string;
+            /** @description Việc phát sinh ngoài quy trình — nhãn Ngoài SOP, không tính tiến độ (AH-163) */
+            adhoc?: boolean;
+            /** @description Nội dung việc phát sinh (AH-163) */
+            adhoc_name?: string;
+            /** @description Giai đoạn của việc phát sinh (AH-163) */
+            stage_seq?: number;
+            /** @description Loại việc của việc phát sinh (AH-163) */
+            activity_code?: string;
             inputs: {
                 name: string;
                 qty: components["schemas"]["Decimal"];
@@ -24925,6 +25504,10 @@ export interface components {
                 as_of_date: string;
                 done: number;
                 skipped: number;
+                /** @description AH-124: số việc chưa xong đang Đến hạn (không tính việc Không ngày) */
+                due: number;
+                /** @description AH-124: số việc chưa xong đang Trễ */
+                overdue: number;
                 total: number;
                 /** @description Decimal phần trăm; null khi mẫu số bằng 0 */
                 percent: string | null;
@@ -24981,6 +25564,87 @@ export interface components {
             recipients?: string[];
             /** Format: date-time */
             updated_at: string;
+        };
+        /** @description Một thay đổi quy trình của vụ (AH-113): add cần step; edit cần step_seq, window, materials; move cần step_seq, direction; remove cần step_seq */
+        HouseholdPlanChange: {
+            /** @enum {string} */
+            kind: "add" | "edit" | "move" | "remove";
+            step_seq?: number;
+            /** @enum {string} */
+            direction?: "up" | "down";
+            step?: {
+                name: string;
+                stage_seq: number;
+                /** @enum {string} */
+                activity_code: "lam_dat" | "gieo_sa" | "tuoi_nuoc" | "bon_phan" | "phun_thuoc" | "kiem_tra" | "thu_hoach" | "cat_tia" | "khac";
+                window: components["schemas"]["CropSOPWindow"];
+                materials?: components["schemas"]["CropSOPMaterial"][];
+                instruction?: string;
+            };
+            window?: components["schemas"]["CropSOPWindow"];
+            materials?: components["schemas"]["CropSOPMaterial"][];
+        };
+        HouseholdTaskBatchCandidate: {
+            /** Format: uuid */
+            household_ref: string;
+            /** Format: uuid */
+            season_ref: string;
+            season_code: string;
+            season_year: number;
+            variety_code: string;
+            status: string;
+            /** Format: uuid */
+            current_event_id: string;
+            /** @description Số việc tương ứng trong vụ (có thể khác vụ nguồn giữa các phiên bản SOP) */
+            step_seq?: number;
+            eligible: boolean;
+            is_source: boolean;
+            /** @description Mã lý do không ghi được */
+            code?: string;
+            reason?: string;
+        };
+        HouseholdTaskBatchResult: {
+            /** Format: uuid */
+            household_ref: string;
+            /** Format: uuid */
+            season_ref: string;
+            /** @enum {string} */
+            status: "recorded" | "skipped";
+            step_seq?: number;
+            record?: components["schemas"]["HouseholdTaskRecord"];
+            replayed?: boolean;
+            /** @description Mã lý do bỏ qua, vd cropcycle.task_already_resolved, cropcycle.batch_task_mismatch */
+            code?: string;
+            reason?: string;
+        };
+        HouseholdSeasonOverviewItem: {
+            /** Format: uuid */
+            season_ref: string;
+            /** Format: uuid */
+            household_ref: string;
+            crop_code: string;
+            season_code: string;
+            season_year: number;
+            variety_code: string;
+            area_ha: string;
+            /** @enum {string} */
+            status: "open" | "completed" | "cancelled";
+            /** Format: uuid */
+            opened_by: string;
+            /** @description Tên hiển thị của người mở vụ (nếu có danh bạ) */
+            opened_by_label?: string;
+            /** Format: date-time */
+            opened_at: string;
+            /** @description Tiến độ của vụ; null khi không tính được */
+            progress: null | {
+                /** @description Decimal phần trăm; null khi mẫu số bằng 0 */
+                percent: string | null;
+                done: number;
+                total: number;
+                skipped: number;
+                due: number;
+                overdue: number;
+            };
         };
         KHTCReportSupplement: {
             /** Format: uuid */
@@ -25273,6 +25937,15 @@ export interface components {
             user: components["schemas"]["HTXAccount"];
             replayed: boolean;
         };
+        HTXPasswordReset: {
+            /** @enum {string} */
+            mode: "temporary_password" | "otp_sent";
+            /** @description Chỉ phản hồi đầu; không ghi log hoặc lưu cache */
+            temporary_password: string | null;
+            /** @description SĐT đã che khi mode otp_sent */
+            phone_hint: string;
+            replayed: boolean;
+        };
         NativeSharing: {
             /** Format: uuid */
             ref: string;
@@ -25291,6 +25964,98 @@ export interface components {
             processed_at: string | null;
             /** Format: uuid */
             actor_ref: string;
+        };
+        WeatherLunar: {
+            day: number;
+            month: number;
+            year: number;
+            leap: boolean;
+            /** @description dd/mm, tháng nhuận thêm " nhuận" (UX-TP-04) */
+            label: string;
+            /** @description mùng 1 */
+            first_day: boolean;
+            /** @description rằm */
+            full_moon: boolean;
+        };
+        WeatherSource: {
+            provider: string;
+            /** @description Nhãn nguồn hiển thị (LEGAL-TP-02) */
+            label: string;
+            /** Format: date-time */
+            updated_at: string | null;
+            /** @description Lần lấy gần nhất lỗi hoặc số liệu cũ — hiện "Cập nhật lúc hh:mm dd/mm" */
+            stale: boolean;
+        };
+        WeatherReading: {
+            /** Format: date-time */
+            time: string;
+            temperature_c: number | null;
+            condition: string;
+            weather_code: number | null;
+            precipitation_mm: number | null;
+            precipitation_probability: number | null;
+            wind_speed_kmh: number | null;
+            /** @description B, ĐB, Đ, ĐN, N, TN, T, TB */
+            wind_direction: string;
+            humidity_pct: number | null;
+        };
+        WeatherSummary: {
+            condition: string;
+            weather_code: number | null;
+            temperature_min_c: number | null;
+            temperature_max_c: number | null;
+            precipitation_mm: number | null;
+            precipitation_probability_max: number | null;
+            wind_speed_max_kmh: number | null;
+            wind_direction: string;
+            humidity_pct: number | null;
+        };
+        WeatherToday: {
+            /** Format: uuid */
+            cooperative_ref: string;
+            /** Format: date */
+            date: string;
+            lunar: components["schemas"]["WeatherLunar"];
+            /** @enum {string} */
+            status: "ok" | "no_location" | "no_data";
+            message?: string;
+            current: components["schemas"]["WeatherReading"] | null;
+            today: components["schemas"]["WeatherSummary"] | null;
+            source: components["schemas"]["WeatherSource"];
+        };
+        WeatherPeriod: {
+            /** @enum {string} */
+            name: "Đêm" | "Sáng" | "Chiều" | "Tối";
+            condition: string;
+            weather_code: number | null;
+            temperature_c: number | null;
+            precipitation_mm: number | null;
+            precipitation_probability_max: number | null;
+            wind_speed_max_kmh: number | null;
+        };
+        WeatherDay: components["schemas"]["WeatherSummary"] & {
+            /** @enum {string} */
+            kind: "forecast" | "observed" | "final_forecast";
+            /** @description Thực đo | Dự báo cuối ngày | rỗng (dự báo) */
+            label: string;
+            hourly_available: boolean;
+            periods: components["schemas"]["WeatherPeriod"][];
+        };
+        WeatherCalendar: {
+            /** Format: uuid */
+            cooperative_ref: string;
+            month: string;
+            /** @enum {string} */
+            status: "ok" | "no_location" | "no_data";
+            message?: string;
+            forecast_days: number;
+            source: components["schemas"]["WeatherSource"];
+            days: {
+                /** Format: date */
+                date: string;
+                lunar: components["schemas"]["WeatherLunar"];
+                weather: components["schemas"]["WeatherDay"] | null;
+            }[];
         };
         KHTCReportPeriod: {
             /** Format: uuid */
@@ -29613,6 +30378,8 @@ export interface operations {
             query?: {
                 /** @description SĐT chủ hộ cần tìm (khớp chính xác sau chuẩn hóa) */
                 phone?: string;
+                /** @description AH-293: ĐỦ số CCCD (12 số) hoặc CMND (9 số) của chủ hộ, khớp chính xác qua chỉ mục mù; một phần số → 422; không dùng cùng phone; HTX được chia sẻ → 403 */
+                national_id?: string;
                 status?: "active" | "inactive";
                 cursor?: string;
                 limit?: number;
@@ -29639,6 +30406,7 @@ export interface operations {
             };
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
         };
     };
     listBilateralPairs: {
@@ -35575,7 +36343,7 @@ export interface operations {
             400: components["responses"]["Problem"];
             /** @description accounts.login_failed (EX-02) | accounts.login_otp_invalid: extension remaining_attempts */
             401: components["responses"]["Problem"];
-            /** @description accounts.account_locked (EX-03) | accounts.login_setup_required | accounts.login_otp_email_missing */
+            /** @description accounts.account_locked (EX-03) | accounts.login_setup_required | accounts.login_otp_email_missing | accounts.no_active_role (FN-TK-01/EX-02, realm HTX) | accounts.temporary_password_expired (mật khẩu tạm quá 72 giờ, FN-TK-02/AC-04) */
             403: components["responses"]["Problem"];
             /** @description accounts.login_otp_expired (mã OTP email hết hạn, đã dùng, đã hủy hoặc đã có mã mới) */
             410: components["responses"]["Problem"];
@@ -50086,6 +50854,535 @@ export interface operations {
                 };
             };
             default: components["responses"]["Problem"];
+        };
+    };
+    changeHouseholdPlan: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    expected_season_event_id: string;
+                    change: components["schemas"]["HouseholdPlanChange"];
+                };
+            };
+        };
+        responses: {
+            /** @description Vụ sau thay đổi, checklist tính lại và câu mô tả đã ghi lịch sử; replay trả kết quả cũ */
+            200: {
+                headers: {
+                    "Idempotent-Replayed"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        season: components["schemas"]["HouseholdSeason"];
+                        checklist: components["schemas"]["HouseholdChecklist"];
+                        summary: string;
+                    };
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    getHouseholdPlanHistory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Các thay đổi đã ghi */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: {
+                            /** Format: uuid */
+                            event_id: string;
+                            /** Format: uuid */
+                            actor_ref: string;
+                            /** Format: date-time */
+                            event_time: string;
+                            summary: string;
+                        }[];
+                    };
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+        };
+    };
+    correctHouseholdTask: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+                log_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    expected_record_id: string;
+                    reason: string;
+                    /** @enum {string} */
+                    state: "partial" | "done";
+                    /** Format: date */
+                    done_on: string;
+                    note?: string;
+                    /** @default false */
+                    zero_confirmed?: boolean;
+                    /**
+                     * @default app
+                     * @enum {string}
+                     */
+                    channel?: "app" | "web";
+                    materials: {
+                        material_code?: string;
+                        name?: string;
+                        unit?: string;
+                        dose_per_ha: string;
+                    }[];
+                };
+            };
+        };
+        responses: {
+            /** @description Bản ghi bù và checklist tính lại; replay trả kết quả cũ */
+            200: {
+                headers: {
+                    "Idempotent-Replayed"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        record: components["schemas"]["HouseholdTaskRecord"];
+                        checklist: components["schemas"]["HouseholdChecklist"];
+                    };
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    voidHouseholdTask: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+                log_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    expected_record_id: string;
+                    reason: string;
+                    /**
+                     * @default app
+                     * @enum {string}
+                     */
+                    channel?: "app" | "web";
+                };
+            };
+        };
+        responses: {
+            /** @description Bản ghi bù và checklist tính lại; replay trả kết quả cũ */
+            200: {
+                headers: {
+                    "Idempotent-Replayed"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        record: components["schemas"]["HouseholdTaskRecord"];
+                        checklist: components["schemas"]["HouseholdChecklist"];
+                    };
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    getHouseholdTaskHistory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+                log_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Các phiên bản, cũ nhất trước */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["HouseholdTaskRecord"][];
+                    };
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+        };
+    };
+    recordHouseholdAdhocTask: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    expected_season_event_id: string;
+                    stage_seq: number;
+                    name: string;
+                    /** @enum {string} */
+                    activity_code: "lam_dat" | "gieo_sa" | "tuoi_nuoc" | "bon_phan" | "phun_thuoc" | "kiem_tra" | "thu_hoach" | "cat_tia" | "khac";
+                    /** @enum {string} */
+                    state: "partial" | "done";
+                    /** Format: date */
+                    done_on: string;
+                    note?: string;
+                    backfill_reason?: string;
+                    /** @default false */
+                    zero_confirmed?: boolean;
+                    gps: components["schemas"]["CropGPS"];
+                    /**
+                     * @default app
+                     * @enum {string}
+                     */
+                    channel?: "app" | "web";
+                    materials: {
+                        material_code?: string;
+                        name?: string;
+                        unit?: string;
+                        dose_per_ha: string;
+                    }[];
+                };
+            };
+        };
+        responses: {
+            /** @description Bản ghi việc phát sinh và checklist (tiến độ không đổi); replay trả bản ghi cũ */
+            201: {
+                headers: {
+                    "Idempotent-Replayed"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        record: components["schemas"]["HouseholdTaskRecord"];
+                        checklist: components["schemas"]["HouseholdChecklist"];
+                    };
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listHouseholdTaskBatchCandidates: {
+        parameters: {
+            query: {
+                step_seq: number;
+            };
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Danh sách vụ */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["HouseholdTaskBatchCandidate"][];
+                    };
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    recordHouseholdTaskBatch: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    step_seq: number;
+                    seasons: {
+                        /** Format: uuid */
+                        household_ref: string;
+                        /** Format: uuid */
+                        season_ref: string;
+                        /** Format: uuid */
+                        expected_season_event_id: string;
+                    }[];
+                    /** @enum {string} */
+                    state: "partial" | "done";
+                    /** Format: date */
+                    done_on: string;
+                    note?: string;
+                    backfill_reason?: string;
+                    /** @default false */
+                    zero_confirmed?: boolean;
+                    file_refs?: string[];
+                    gps: components["schemas"]["CropGPS"];
+                    /**
+                     * @default app
+                     * @enum {string}
+                     */
+                    channel?: "app" | "web";
+                    materials: {
+                        material_code?: string;
+                        name?: string;
+                        unit?: string;
+                        dose_per_ha: string;
+                    }[];
+                };
+            };
+        };
+        responses: {
+            /** @description Kết quả từng vụ */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        results: components["schemas"]["HouseholdTaskBatchResult"][];
+                        recorded: number;
+                        skipped: number;
+                    };
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    stopHouseholdSeason: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    expected_season_event_id: string;
+                    reason: string;
+                    /**
+                     * @default web
+                     * @enum {string}
+                     */
+                    channel?: "app" | "web";
+                };
+            };
+        };
+        responses: {
+            /** @description Vụ đã dừng (kèm lý do) */
+            200: {
+                headers: {
+                    "Idempotent-Replayed"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HouseholdSeason"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    listCooperativeHouseholdSeasons: {
+        parameters: {
+            query?: {
+                status?: "open" | "completed" | "cancelled";
+                opened_by?: string;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Một trang vụ */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["HouseholdSeasonOverviewItem"][];
+                        next_cursor: string | null;
+                    };
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    editHouseholdSeason: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    expected_season_event_id: string;
+                    reason: string;
+                    /** Format: date */
+                    anchor_date?: string;
+                    area_ha?: string;
+                    variety_code?: string;
+                    /** Format: uuid */
+                    sop_version_id?: string;
+                    /**
+                     * @default web
+                     * @enum {string}
+                     */
+                    channel?: "app" | "web";
+                };
+            };
+        };
+        responses: {
+            /** @description Vụ sau khi sửa */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HouseholdSeason"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
         };
     };
     extensionKhtcReportGet: {

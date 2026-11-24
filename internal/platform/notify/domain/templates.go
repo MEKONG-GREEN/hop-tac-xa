@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	weatherport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/weather/port"
 	"time"
 
 	"github.com/google/uuid"
@@ -160,6 +161,23 @@ func EgressAnomalyTemplate(p meteringport.EgressAnomalyV1, occurred time.Time) T
 		t.SubjectRef = &id
 	}
 	return t
+}
+
+// WeatherFetchFailingTemplate: API thời tiết lỗi 3 lần liên tiếp (pf.weather.fetch.failing, FN-TT-03/EX-02,
+// NTF-TP-07). App vẫn dùng số liệu gần nhất; Admin kiểm tra cấu hình ở màn Kết nối thời tiết.
+func WeatherFetchFailingTemplate(p weatherport.FetchFailingV1, occurred time.Time) Template {
+	reason := map[string]string{
+		"unavailable": "không kết nối được nhà cung cấp", "quota": "vượt hạn mức gọi của nhà cung cấp",
+		"auth": "khóa API không đúng hoặc đã hết hạn", "bad_response": "nhà cung cấp trả số liệu sai định dạng",
+	}[p.LastError]
+	if reason == "" {
+		reason = "lỗi không xác định"
+	}
+	return Template{Kind: port.KindWeatherFetchFailing, Severity: port.SeverityUrgent,
+		Title: "Không lấy được số liệu thời tiết",
+		Body: fmt.Sprintf("Gọi API thời tiết lỗi %d lần liên tiếp (%s). Ứng dụng đang hiện số liệu gần nhất. Kiểm tra cấu hình kết nối.",
+			p.Failures, reason),
+		DeepLink: "/quan-tri/ket-noi-thoi-tiet", CreatedAt: ParseTime(p.LastAttempt, occurred)}
 }
 
 // MRVAlertTemplate: cảnh báo MRV (pf.mrv.alert.raised, G3). Chỉ mã tham chiếu và mã xã — không có

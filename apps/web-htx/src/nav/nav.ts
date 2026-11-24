@@ -126,6 +126,8 @@ export const NAV_GROUPS: readonly NavGroup[] = [
       { href: "/htx", label: "Quản lý HTX & nông hộ", icon: "coop", levels: KN },
       { href: "/htx/dashboard", module: "pf/cropcycle", label: "Bảng điều hành sản xuất", icon: "chart", roles: HTX_READ },
       { href: "/htx/nong-ho", label: "Quản lý nông hộ", icon: "coop", roles: HTX_READ, fn: "FN-04" },
+      // FN-TT-02 (AH-226): ba vai. Đặt sau "Quản lý nông hộ" để trang đầu tiên của Thành viên HTX không đổi.
+      { href: "/thoi-tiet", module: "pf/weather", label: "Lịch thời tiết", icon: "calendar", roles: [ROLES.platformAdmin, ROLES.coopManager, ROLES.htxMember], fn: "TTPP-FN-TT-02" },
       // VTKM-Q-07 (AH-274): danh mục dùng chung Vật tư/Máy móc — Đại diện HTX, Thành viên HTX chỉ xem và xuất Excel.
       { href: "/htx/danh-muc-vat-tu", module: "pf/masterdata", label: "Danh mục vật tư, máy móc", icon: "warehouse", roles: [ROLES.coopManager, ROLES.htxMember] },
       { href: "/htx/chia-se", module: "pf/cooperative", label: "Liên kết & chia sẻ dữ liệu", icon: "send", roles: [ROLES.coopManager], fn: "FN-09" },
@@ -223,6 +225,8 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     label: "7. Dữ liệu nền",
     items: [
       { href: "/quan-tri/he-so-rom", module: "pf/cooperative", label: "Hệ số rơm", icon: "param", fn: "FN-11", roles: [ROLES.platformAdmin] },
+      // FN-TT-03 (AH-224): Admin cấu hình nhà cung cấp, tần suất, số ngày dự báo, khóa API.
+      { href: "/quan-tri/ket-noi-thoi-tiet", module: "pf/weather", label: "Kết nối thời tiết", icon: "param", fn: "TTPP-FN-TT-03", roles: [ROLES.platformAdmin] },
       { href: "/du-lieu-nen/danh-muc-giong", module: "pf/masterdata", label: "Danh mục giống", icon: "sprout", roles: [ROLES.platformAdmin, ROLES.masterdataAdmin] },
       { href: "/du-lieu-nen/danh-muc-mua-vu", module: "pf/masterdata", label: "Danh mục mùa vụ", icon: "season", roles: [ROLES.platformAdmin, ROLES.masterdataAdmin] },
       // AH-8: soạn và phát hành SOP dạng checklist (Admin); vai param_approver chỉ xem.

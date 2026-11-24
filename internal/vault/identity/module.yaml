@@ -16,6 +16,7 @@ provides:
     - HouseholdCommandVerifier
     - HouseholdIdentityReader
     - HouseholdIdentityWriter
+    - HouseholdNationalIDLookup
     - HouseholdPhoneLookup
     - HouseholdScopeVerifier
     - ProfileBatch

@@ -23,6 +23,7 @@ import { dialUri } from "@/lib/dial";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { toApiProblem, useAsync } from "@/lib/useAsync";
 import { ResultList } from "./common";
+import { BulkOpenSeasonsDialog } from "./BulkOpenSeasonsDialog";
 import { HouseholdSeasonsDialog } from "./HouseholdSeasonsDialog";
 import { HouseholdProfileButton } from "./HouseholdProfileButton";
 import { HouseholdEditorButton } from "./HouseholdEditor";
@@ -216,21 +217,25 @@ export function HouseholdsPanel({ coop, readOnly: readOnlyProp = false, showSeas
   const { api, principal } = useAuth();
   const id = coop.ref;
   const [query, setQuery] = useState("");
-  const [search, setSearch] = useState<{ phone: string } | null>(null);
+  const [search, setSearch] = useState<{ phone: string } | { national_id: string } | null>(null);
   const [queryError, setQueryError] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
   const [status,setStatus]=useState<""|"active"|"inactive">("");
   const [picked, setPicked] = useState<Map<string, HouseholdListItem>>(new Map());
   const [copying, setCopying] = useState(false);
   const [seasonHousehold, setSeasonHousehold] = useState<HouseholdListItem | null>(null);
+  const [bulkPicked, setBulkPicked] = useState<Map<string, HouseholdListItem>>(new Map());
+  const [bulkOpening, setBulkOpening] = useState(false);
   const canViewSeasons = showSeasons && hasRole(principal, ROLES.platformAdmin, ROLES.coopManager, ROLES.htxMember) && matrixAllows(principal, "KHMV-FN-03-XEM", "R");
   const canViewProfile = hasRole(principal, ROLES.platformAdmin, ROLES.coopManager, ROLES.htxMember) && matrixAllows(principal, "FN-04", "R");
   // FN-05/AC-01: nút thao tác (sao chép, chọn, gọi) theo ma trận — Thành viên HTX (FN-04: R) không thấy.
   const canWrite =
     !readOnly && coop.active && hasRole(principal, ROLES.coopManager, ROLES.knOfficer, ROLES.knProvinceAdmin, ROLES.registryAdmin) && matrixAllows(principal, "FN-04", "C");
+  // AH-68: Thành viên HTX và Admin mở vụ đồng loạt trên Web (KHMV-FN-03 C); Đại diện HTX không có chức năng này.
+  const canBulkOpen = showSeasons && !shared && coop.active && hasRole(principal, ROLES.platformAdmin, ROLES.htxMember) && matrixAllows(principal, "KHMV-FN-03", "C");
   const list = usePagedList((cursor) => householdsPage(api, id, cursor, 20,status||undefined), [api, id, version,status]);
   const found = useAsync(
-    () => (search ? unwrap(api.GET("/v1/cooperatives/{ref}/households", { params: { path: { ref: id }, query: { phone: search.phone,status:status||undefined } } })) : Promise.resolve(null)),
+    () => (search ? unwrap(api.GET("/v1/cooperatives/{ref}/households", { params: { path: { ref: id }, query: { ...search, status: status || undefined } } })) : Promise.resolve(null)),
     [api, id, search, version,status],
   );
   const lost = list.error ?? found.error;
@@ -263,6 +268,25 @@ export function HouseholdsPanel({ coop, readOnly: readOnlyProp = false, showSeas
       return next;
     });
 
+  const bulkSelectable = rows.filter((h) => h.active && h.can_open_season);
+  const bulkAll = bulkSelectable.length > 0 && bulkSelectable.every((h) => bulkPicked.has(h.household_ref));
+  const toggleBulk = (h: HouseholdListItem) =>
+    setBulkPicked((m) => {
+      const next = new Map(m);
+      if (next.has(h.household_ref)) next.delete(h.household_ref);
+      else next.set(h.household_ref, h);
+      return next;
+    });
+  const toggleBulkAll = () =>
+    setBulkPicked((m) => {
+      const next = new Map(m);
+      for (const h of bulkSelectable) {
+        if (bulkAll) next.delete(h.household_ref);
+        else next.set(h.household_ref, h);
+      }
+      return next;
+    });
+
   return (
     <>
       <div className="alert alert-info" style={{ marginBottom: 12 }}>
@@ -278,7 +302,7 @@ export function HouseholdsPanel({ coop, readOnly: readOnlyProp = false, showSeas
         {!shared ? (
           <>
             <div className="field" style={{ flex: "1 1 260px" }}>
-              <label htmlFor={`hh-q-${id}`}>Tìm nông hộ theo SĐT</label>
+              <label htmlFor={`hh-q-${id}`}>Tìm nông hộ theo SĐT hoặc CCCD</label>
               <input id={`hh-q-${id}`} className="input" type="search" inputMode="tel" placeholder="0xxxxxxxxx" value={query} onChange={(e) => setQuery(e.target.value)} />
             </div>
             <button type="submit" className="btn btn-o btn-sm">
@@ -303,6 +327,11 @@ export function HouseholdsPanel({ coop, readOnly: readOnlyProp = false, showSeas
             Sao chép hàng loạt ({picked.size})
           </button>
         ) : null}
+        {canBulkOpen ? (
+          <button type="button" className="btn btn-p btn-sm" disabled={bulkPicked.size === 0} onClick={() => setBulkOpening(true)}>
+            Mở vụ đồng loạt ({bulkPicked.size} hộ)
+          </button>
+        ) : null}
       </form>
       {!readOnly ? <HouseholdEditorButton coop={coop} onSaved={()=>setVersion((v)=>v+1)}/> : null}
       <p className="small mute">Đang hiển thị {rows.length} hộ.</p>
@@ -311,7 +340,7 @@ export function HouseholdsPanel({ coop, readOnly: readOnlyProp = false, showSeas
           {queryError}
         </p>
       ) : null}
-      {search && found.data && found.data.items.length === 0 ? <Empty>Không có nông hộ của HTX này với SĐT {search.phone}.</Empty> : null}
+      {search && found.data && found.data.items.length === 0 ? <Empty>Không có nông hộ của HTX này với {"phone" in search ? `SĐT ${search.phone}` : "số CCCD đã nhập"}.</Empty> : null}
       {(search ? found.error : list.error) ? (
         <ProblemAlert problem={(search ? found.error : list.error)!} onRetry={search ? found.reload : list.reload} />
       ) : null}
@@ -321,6 +350,11 @@ export function HouseholdsPanel({ coop, readOnly: readOnlyProp = false, showSeas
           <thead>
             <tr>
               {canWrite ? <th scope="col">Chọn</th> : null}
+              {canBulkOpen ? (
+                <th scope="col">
+                  <label><input type="checkbox" checked={bulkAll} disabled={bulkSelectable.length === 0} onChange={toggleBulkAll} /> Chọn tất cả</label>
+                </th>
+              ) : null}
               <th scope="col">Nông hộ (đã che)</th>
               <th scope="col">SĐT (đã che)</th>
               <th scope="col">Xã</th>
@@ -342,6 +376,11 @@ export function HouseholdsPanel({ coop, readOnly: readOnlyProp = false, showSeas
                 {canWrite ? (
                   <td>
                     <input type="checkbox" aria-label={`Chọn ${labelOf(h)} để sao chép`} checked={picked.has(h.household_ref)} onChange={() => toggle(h)} />
+                  </td>
+                ) : null}
+                {canBulkOpen ? (
+                  <td>
+                    <input type="checkbox" aria-label={`Chọn ${labelOf(h)} để mở vụ`} checked={bulkPicked.has(h.household_ref)} disabled={!h.active || !h.can_open_season} onChange={() => toggleBulk(h)} />
                   </td>
                 ) : null}
                 <td>{h.label_unavailable ? <span className="mute">Không hiển thị được nhãn</span> : h.label}</td>
@@ -376,6 +415,17 @@ export function HouseholdsPanel({ coop, readOnly: readOnlyProp = false, showSeas
       {!search && !list.loading && list.items.length === 0 && !list.error ? <Empty>Chưa có nông hộ.</Empty> : null}
       {!search ? <LoadMore hasMore={list.hasMore} loading={list.loading} onClick={list.loadMore} /> : null}
       {seasonHousehold ? <HouseholdSeasonsDialog coopRef={id} household={seasonHousehold} onClose={() => setSeasonHousehold(null)} onSaved={() => setVersion((v) => v + 1)} /> : null}
+      {bulkOpening ? (
+        <BulkOpenSeasonsDialog
+          coopRef={id}
+          households={Array.from(bulkPicked.values())}
+          onClose={() => {
+            setBulkOpening(false);
+            setBulkPicked(new Map());
+          }}
+          onDone={() => setVersion((v) => v + 1)}
+        />
+      ) : null}
       {copying ? (
         <CopyDialog
           coop={coop}

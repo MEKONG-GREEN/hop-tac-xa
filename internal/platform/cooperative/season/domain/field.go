@@ -32,9 +32,10 @@ const (
 // DefaultGPSToleranceM là ngưỡng khớp mặc định (m).
 var DefaultGPSToleranceM = decimal.NewFromInt(50)
 
-// GPS là vị trí khai báo kèm bản ghi.
+// GPS là vị trí khai báo kèm bản ghi. Toạ độ gắn với nông hộ là dữ liệu cá nhân (NĐ 13/2023): không vào log (AH-9 AC4).
 type GPS struct {
-	Lon, Lat  *decimal.Decimal
+	Lon       *decimal.Decimal `pii:"true"`
+	Lat       *decimal.Decimal `pii:"true"`
 	AccuracyM *decimal.Decimal
 	Source    string
 }

@@ -38,6 +38,8 @@ Future<List<http.Request>> showChecklist(
     'progress': {
       'as_of_date': '2026-11-18',
       'percent': '0.00',
+      'due': 1,
+      'overdue': 0,
       'stages': [
         {
           'seq': 1,
@@ -50,6 +52,7 @@ Future<List<http.Request>> showChecklist(
   };
   final record = {
     'id': 'log',
+    'log_ref': 'log',
     'step_seq': 1,
     'state': 'done',
     'done_on': '2026-11-18',
@@ -143,6 +146,10 @@ Future<List<http.Request>> showChecklist(
     ),
   );
   await tester.pumpAndSettle();
+  // AH-124: giai đoạn mặc định đóng.
+  expect(find.text('Bón phân'), findsNothing);
+  await tester.tap(find.textContaining('Chăm sóc ·'));
+  await tester.pumpAndSettle();
   return calls;
 }
 
@@ -176,7 +183,7 @@ void main() {
         );
         expect(calls[0].body, calls[1].body);
         expect((jsonDecode(calls[0].body) as Map)['gps'], {'source': 'denied'});
-        expect(find.text('Tiến độ: 100.00%'), findsOneWidget);
+        expect(find.textContaining('Tiến độ: 100.00%'), findsOneWidget);
         expect(find.textContaining('Thiếu GPS'), findsOneWidget);
         expect(find.byType(CheckboxListTile), findsNothing);
       },
@@ -204,6 +211,54 @@ void main() {
     expect((jsonDecode(calls[0].body) as Map)['gps'], {'source': 'no_device'});
     gps.wait.complete(const LocationResult(GpsStatus.denied));
     await tester.pumpAndSettle();
-    expect(find.text('Tiến độ: 100.00%'), findsOneWidget);
+    expect(find.textContaining('Tiến độ: 100.00%'), findsOneWidget);
   });
+  testWidgets('AH-126 bỏ tích bắt buộc lý do, gửi bản ghi bù kèm phiên bản', (
+    tester,
+  ) async {
+    final calls = await showChecklist(tester);
+    await tester.tap(find.byType(CheckboxListTile));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Xác nhận'));
+    await tester.pumpAndSettle();
+    expect(calls, hasLength(1));
+    await tester.ensureVisible(find.text('Bỏ tích'));
+    await tester.tap(find.text('Bỏ tích'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('void-reason')), 'ngắn');
+    await tester.tap(find.widgetWithText(FilledButton, 'Bỏ tích'));
+    await tester.pumpAndSettle();
+    expect(find.text('Nhập lý do (ít nhất 10 ký tự).'), findsOneWidget);
+    expect(calls, hasLength(1));
+    await tester.enterText(
+      find.byKey(const ValueKey('void-reason')),
+      'Tích nhầm việc, chưa làm',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Bỏ tích'));
+    await tester.pumpAndSettle();
+    expect(calls, hasLength(2));
+    expect(calls[1].url.path, endsWith('/task-records/log/void'));
+    expect(jsonDecode(calls[1].body), {
+      'expected_record_id': 'log',
+      'reason': 'Tích nhầm việc, chưa làm',
+      'channel': 'app',
+    });
+    expect(calls[1].headers['Idempotency-Key'], isNotEmpty);
+    expect(find.text('Đã bỏ tích.'), findsOneWidget);
+  });
+  testWidgets(
+    'AH-124 tiến độ, số việc đến hạn/trễ, giai đoạn đóng sẵn, nút Kế hoạch',
+    (tester) async {
+      await showChecklist(tester, write: false);
+      expect(
+        find.textContaining('Tiến độ: 0.00% · Đến hạn: 1 · Trễ: 0'),
+        findsOneWidget,
+      );
+      expect(find.text('Kế hoạch mùa vụ'), findsOneWidget);
+      // Đóng lại giai đoạn: việc ẩn đi.
+      await tester.tap(find.textContaining('Chăm sóc ·'));
+      await tester.pumpAndSettle();
+      expect(find.text('Bón phân'), findsNothing);
+    },
+  );
 }

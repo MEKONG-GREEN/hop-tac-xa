@@ -3,10 +3,10 @@
 package modreg
 
 var assembly = map[string][]string{
-	"api-platform":     {"pf/accounts", "pf/apiclient", "pf/content", "pf/cooperative", "pf/cropcycle", "pf/evidence", "pf/geo", "pf/masterdata", "pf/mechanization", "pf/metering", "pf/metrics", "pf/mrv", "pf/notify", "pf/party", "pf/reports", "pf/sync", "pf/waterway", "pf/workflow"},
+	"api-platform":     {"pf/accounts", "pf/apiclient", "pf/content", "pf/cooperative", "pf/cropcycle", "pf/evidence", "pf/geo", "pf/masterdata", "pf/mechanization", "pf/metering", "pf/metrics", "pf/mrv", "pf/notify", "pf/party", "pf/reports", "pf/sync", "pf/waterway", "pf/weather", "pf/workflow"},
 	"bootstrap-admin":  {"pf/accounts"},
 	"identity-vault":   {"vault/identity"},
 	"migrate":          {},
 	"outbox-publisher": {},
-	"worker":           {"pf/accounts", "pf/apiclient", "pf/cooperative", "pf/cropcycle", "pf/kref", "pf/masterdata", "pf/mechanization", "pf/metering", "pf/metrics", "pf/mrv", "pf/notify", "pf/party", "pf/reports", "pf/sync", "pf/waterway"},
+	"worker":           {"pf/accounts", "pf/apiclient", "pf/cooperative", "pf/cropcycle", "pf/kref", "pf/masterdata", "pf/mechanization", "pf/metering", "pf/metrics", "pf/mrv", "pf/notify", "pf/party", "pf/reports", "pf/sync", "pf/waterway", "pf/weather"},
 }

@@ -246,3 +246,44 @@ func TestConfigFromEnv(t *testing.T) {
 		t.Fatalf("cấu hình: %v %v %v", ok, err, cfg.Timeout)
 	}
 }
+
+// PasswordSetAt (FN-TK-02/AC-04, AH-223): đọc lúc đặt mật khẩu hiện tại; chưa có mật khẩu → mốc 0; đặt lại → mốc mới.
+func runPasswordAgeContract(t *testing.T, d port.Directory, mem *Memory, now *time.Time) {
+	ctx := context.Background()
+	reader, ok := d.(port.PasswordAgeReader)
+	if !ok {
+		t.Fatal("Directory phải đọc được thời điểm đặt mật khẩu")
+	}
+	id, err := d.CreateUser(ctx, port.NewUser{Username: "mat-khau-tam", TenantID: uuid.New(), OrgRef: uuid.New()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if at, err := reader.PasswordSetAt(ctx, id); err != nil || !at.IsZero() {
+		t.Fatalf("chưa có mật khẩu: %v %v", at, err)
+	}
+	first := *now
+	if err := mem.SetTemporaryPassword(ctx, id, "Tam12345"); err != nil {
+		t.Fatal(err)
+	}
+	if at, err := reader.PasswordSetAt(ctx, id); err != nil || !at.Equal(first.Truncate(time.Millisecond)) {
+		t.Fatalf("sau khi đặt mật khẩu tạm: %v (muốn %v) %v", at, first, err)
+	}
+	*now = now.Add(73 * time.Hour)
+	if err := mem.SetTemporaryPassword(ctx, id, "Tam67890"); err != nil {
+		t.Fatal(err)
+	}
+	if at, _ := reader.PasswordSetAt(ctx, id); !at.Equal(now.Truncate(time.Millisecond)) {
+		t.Fatalf("đặt lại phải có mốc mới: %v", at)
+	}
+}
+
+func TestPasswordAgeContract(t *testing.T) {
+	now := time.Date(2026, 11, 20, 8, 0, 0, 123456789, time.UTC)
+	m := NewMemory()
+	m.SetNow(func() time.Time { return now })
+	runPasswordAgeContract(t, m, m, &now)
+
+	e := newEmulator(t)
+	e.mem.SetNow(func() time.Time { return now })
+	runPasswordAgeContract(t, e.client(t), e.mem, &now)
+}

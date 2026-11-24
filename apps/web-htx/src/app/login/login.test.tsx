@@ -165,6 +165,26 @@ describe("Trang Đăng nhập (FN-01)", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Tài khoản đã bị khóa. Liên hệ người đã cấp tài khoản để mở khóa.");
   });
 
+  it("FN-TK-01/EX-02 (AH-222): tài khoản không còn vai → câu EX-02, không vào ứng dụng", async () => {
+    const user = userEvent.setup();
+    render(<LoginPage />);
+    await fill(user, "an.nv", "dung");
+    signIn.mockResolvedValueOnce({ kind: "no_active_role" });
+    await submit(user);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Tài khoản chưa được gán vai trò. Liên hệ quản trị viên.");
+    expect(nav.replace).not.toHaveBeenCalled();
+  });
+
+  it("FN-TK-02/AC-04 (AH-223): mật khẩu tạm quá 72 giờ → hướng dẫn Quên mật khẩu", async () => {
+    const user = userEvent.setup();
+    render(<LoginPage />);
+    await fill(user, "an.nv", "Tam12345");
+    signIn.mockResolvedValueOnce({ kind: "temporary_password_expired" });
+    await submit(user);
+    expect(await screen.findByRole("alert")).toHaveTextContent('Mật khẩu tạm đã quá 72 giờ nên không còn dùng được. Dùng "Quên mật khẩu?"');
+    expect(nav.replace).not.toHaveBeenCalled();
+  });
+
   it("AC-N2 (FN-01/EX-06): bị đưa về vì tài khoản bị khóa → hiện câu EX-03 ngay khi mở màn", () => {
     auth.sessionEnd = "account_locked";
     render(<LoginPage />);

@@ -74,6 +74,36 @@ paths:
         "404": {$ref: "#/components/responses/Problem"}
         "422": {$ref: "#/components/responses/Problem"}
         "429": {$ref: "#/components/responses/Problem"}
+  /v1/household-identities/national-id-lookup:
+    post:
+      summary: "AH-293: tìm đúng đủ số CCCD/CMND, chỉ trả ref sau khi owner xác minh phạm vi hiện tại; một phần số không khớp"
+      operationId: lookupHouseholdNationalID
+      parameters:
+        - {$ref: "#/components/parameters/Purpose"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value]
+              properties:
+                purpose: {type: string, const: extension.contact}
+                value: {type: string, description: "12 số CCCD hoặc 9 số CMND"}
+      responses:
+        "200":
+          description: "Chỉ mã hộ, no-store; không cấp quyền Lookup dùng chung"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ref]
+                properties:
+                  ref: {type: string, format: uuid}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "429": {$ref: "#/components/responses/Problem"}
   /v1/household-identities/{ref}/read:
     post:
       summary: "FN-04: định danh hộ theo bằng chứng owner và ma trận vai HTX"

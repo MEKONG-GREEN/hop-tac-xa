@@ -34,7 +34,10 @@ describe("HTX US-HH-01 AC-2: ô tìm nông hộ", () => {
   it("chỉ SĐT được gửi lên; họ tên → giải thích vì sao không tìm được", () => {
     expect(householdQuery("")).toBeNull();
     expect(householdQuery("+84 912 345 678")).toEqual({ phone: "0912345678" });
-    expect(householdQuery("0912")).toEqual({ error: expect.stringContaining("SĐT phải có dạng") });
+    expect(householdQuery("0912")).toEqual({ error: expect.stringContaining("Nhập SĐT dạng") });
+    // AH-293: đủ 12 số CCCD (cho phép dấu cách) → tìm theo CCCD; 6 số đầu không phải CCCD.
+    expect(householdQuery("079 293 456 123")).toEqual({ national_id: "079293456123" });
+    expect(householdQuery("079293")).toEqual({ error: expect.stringContaining("đủ 12 số CCCD") });
     expect(householdQuery("Nguyễn Văn A")).toEqual({ error: expect.stringContaining("họ tên chủ hộ được lưu mã hoá") });
   });
 
@@ -46,6 +49,10 @@ describe("HTX US-HH-01 AC-2: ô tìm nông hộ", () => {
     const miss = await unwrap(api.GET("/v1/cooperatives/{ref}/households", { params: { path: { ref: c.api.ref }, query: { phone: "0988000000" } } }));
     expect(miss.items).toEqual([]);
     await expect(unwrap(api.GET("/v1/cooperatives/{ref}/households", { params: { path: { ref: c.api.ref }, query: { phone: "abc" } } }))).rejects.toMatchObject({ status: 422 });
+    // AH-293: đủ số CCCD → đúng hộ; 6 số đầu → 422.
+    const byId = await unwrap(api.GET("/v1/cooperatives/{ref}/households", { params: { path: { ref: c.api.ref }, query: { national_id: "079123400002" } } }));
+    expect(byId.items.map((h) => h.household_ref)).toEqual([householdRefOf(c, 2)]);
+    await expect(unwrap(api.GET("/v1/cooperatives/{ref}/households", { params: { path: { ref: c.api.ref }, query: { national_id: "079123" } } }))).rejects.toMatchObject({ status: 422 });
   });
 });
 

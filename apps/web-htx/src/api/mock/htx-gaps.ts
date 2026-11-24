@@ -156,8 +156,17 @@ export const htxGapAppRoutes: Route[] = [
       if (!c || (!shared && !inScope(persona, c.province_code, c.api.admin_unit_code))) return problem(404, "party.org_not_found", "Not found");
       if (!shared && ownCoopOnly(persona) && persona.me.org?.ref !== c.api.ref) return problem(404, "party.org_not_found", "Not found");
       // Dữ liệu chia sẻ chỉ xem: không tra theo SĐT đầy đủ, không mở thao tác (khớp member/app.ListHouseholds).
-      if (shared && url.searchParams.get("phone")) return problem(403, "forbidden", "Dữ liệu được chia sẻ chỉ xem");
+      if (shared && (url.searchParams.get("phone") || url.searchParams.get("national_id"))) return problem(403, "forbidden", "Dữ liệu được chia sẻ chỉ xem");
       const all = shared ? householdMockRows(c).map((h) => ({ ...h, can_open_season: false, open_season_blocked_reason: "Dữ liệu được chia sẻ chỉ xem" })) : householdMockRows(c);
+      // AH-293: ?national_id= khớp ĐỦ số CCCD/CMND (cùng số giả lập với hồ sơ hộ); một phần số → 422.
+      const nidRaw = url.searchParams.get("national_id");
+      if (nidRaw !== null && nidRaw.trim() !== "") {
+        if (url.searchParams.get("phone")) return validation([{ field: "national_id", reason: "Tìm theo SĐT hoặc CCCD, không cùng lúc" }]);
+        const nid = nidRaw.replace(/[\s.-]/g, "");
+        if (!/^(\d{12}|\d{9})$/.test(nid)) return validation([{ field: "national_id", reason: "Nhập đủ 12 số CCCD hoặc 9 số CMND" }]);
+        const at = Array.from({ length: householdCount(c) }, (_, i) => `0791234${String(i).padStart(5, "0")}`).indexOf(nid);
+        return json({ items: at >= 0 && all[at] ? [all[at]] : [], next_cursor: null });
+      }
       const raw = url.searchParams.get("phone");
       if (raw === null || raw.trim() === "") return json(paginate(all, url));
       const phone = normPhone(raw.trim());

@@ -29,6 +29,7 @@ var catalog = []CatalogEntry{
 	{Name: "pf/simulation", Kind: "domain", Enable: "per_tenant", Permissions: []string{"simulation_analyst"}, Zones: []string{"pf"}, OwnsSchema: []string{"pf_simulation"}, Shares: []string{}},
 	{Name: "pf/sync", Kind: "capability", Enable: "per_tenant", Permissions: []string{"device_admin", "sync_conflict_resolver"}, Zones: []string{"pf"}, OwnsSchema: []string{"pf_sync", "pf_sync_pub"}, Shares: []string{}},
 	{Name: "pf/waterway", Kind: "domain", Enable: "per_tenant", Permissions: []string{"waterway_editor", "waterway_publisher"}, Zones: []string{"pf"}, OwnsSchema: []string{"pf_waterway"}, Shares: []string{}},
+	{Name: "pf/weather", Kind: "domain", Enable: "per_tenant", Permissions: []string{}, Zones: []string{"pf"}, OwnsSchema: []string{"pf_weather"}, Shares: []string{}},
 	{Name: "pf/workflow", Kind: "capability", Enable: "always", Permissions: []string{}, Zones: []string{"pf"}, OwnsSchema: []string{"pf_workflow"}, Shares: []string{}},
 	{Name: "vault/identity", Kind: "kernel", Enable: "always", Permissions: []string{"farmer", "vault_directory", "vault_display", "vault_eraser", "vault_evidence_viewer", "vault_pubkey_sync", "vault_registrar"}, Zones: []string{"vault"}, OwnsSchema: []string{"vault"}, Shares: []string{}},
 }
@@ -56,4 +57,5 @@ var catalogDepends = map[string][]string{
 	"pf/reports":       {"pf/accounts", "pf/masterdata", "pf/party"},
 	"pf/sync":          {"pf/accounts", "pf/evidence", "pf/party", "vault/identity"},
 	"pf/waterway":      {"pf/geo", "pf/masterdata", "pf/party"},
+	"pf/weather":       {"pf/cooperative"},
 }

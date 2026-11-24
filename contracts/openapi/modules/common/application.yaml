@@ -150,11 +150,13 @@ paths:
       description: |
         HTX US-HH-01 AC-2: `phone` tìm ĐÚNG một SĐT qua chỉ mục mù của kho định danh (mục đích registry.admin, kho ghi sổ
         tra cứu) — trả tối đa một hộ của HTX này, SĐT lạ hoặc hộ HTX khác → danh sách rỗng; giá trị không phải SĐT → 422.
-        Không tìm theo họ tên: họ tên chỉ nằm ở kho định danh (R-04), pf không lọc được.
+        Không tìm theo họ tên: họ tên chỉ nằm ở kho định danh (R-04), pf không lọc được. AH-293: `national_id` tìm ĐÚNG đủ số
+        CCCD/CMND (không tìm gần đúng trên dữ liệu mã hóa).
       operationId: listCooperativeHouseholds
       parameters:
         - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
         - {name: phone, in: query, description: "SĐT chủ hộ cần tìm (khớp chính xác sau chuẩn hóa)", schema: {type: string, maxLength: 20}}
+        - {name: national_id, in: query, description: "AH-293: ĐỦ số CCCD (12 số) hoặc CMND (9 số) của chủ hộ, khớp chính xác qua chỉ mục mù; một phần số → 422; không dùng cùng phone; HTX được chia sẻ → 403", schema: {type: string, maxLength: 20}}
         - {name: status, in: query, schema: {type: string, enum: [active, inactive]}}
         - {name: cursor, in: query, schema: {type: string}}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
@@ -171,6 +173,7 @@ paths:
                   next_cursor: {type: [string, "null"]}
         "403": {$ref: "#/components/responses/Problem"}
         "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
 # @ag-order: 26
   /v1/bilateral/pairs:
     get:
@@ -7069,7 +7072,7 @@ components:
       description: Không chứa dữ liệu cá nhân. Cũng là data của entity đồng bộ "notification" (không có topic).
       properties:
         id: {type: string, format: uuid}
-        kind: {type: string, enum: [directive, alert, document, task_escalated, sync_conflict, org_deactivated, household_registered, household_membership_changed, task_assigned, farm_log_pending, farm_log_reviewed, season_opened, integration_dead_lettered, area_feed_stale, price_reminder, price_alert, price_verify_request, price_verify_reply, price_verify_decision, price_lock_summary, price_board_approved, price_board_reopened, price_proxy_entry, cnts_knqg_sent, cnts_knqg_reviewed, cnts_knqg_submitted, hrm_appraisal, hrm_promotion_due, hrm_plan_reminder, season_calendar_published, season_task_due, season_log_missing, season_process_changed]}
+        kind: {type: string, enum: [directive, alert, document, task_escalated, sync_conflict, org_deactivated, household_registered, household_membership_changed, task_assigned, farm_log_pending, farm_log_reviewed, season_opened, integration_dead_lettered, area_feed_stale, price_reminder, price_alert, price_verify_request, price_verify_reply, price_verify_decision, price_lock_summary, price_board_approved, price_board_reopened, price_proxy_entry, cnts_knqg_sent, cnts_knqg_reviewed, cnts_knqg_submitted, hrm_appraisal, hrm_promotion_due, hrm_plan_reminder, season_calendar_published, season_task_due, season_log_missing, season_process_changed, cooperative_sharing]}
         severity: {type: string, enum: [urgent, normal]}
         title: {type: string, maxLength: 300}
         body: {type: string, maxLength: 2000}

@@ -29,6 +29,7 @@ import (
 	syncmod "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/sync"
 	syncport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/sync/port"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/waterway"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/weather"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/authz"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/clock"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/dbadmin"
@@ -45,6 +46,8 @@ type PoolOpener func(ctx context.Context, role string) (*pgxpool.Pool, error)
 
 // External là phụ thuộc ngoài cụm pf.
 type External struct {
+	// Weather: phụ thuộc của pf/weather (nhà cung cấp, khóa mã hóa khóa API) — kiểm thử ghi đè; nil → đọc AG_WEATHER_*.
+	Weather *weather.Deps
 	// Vault: kho định danh (R-04, qua client).
 	Vault client.Client
 	// Store: kho đối tượng (tệp minh chứng, tệp đính kèm, gói MRV). Nil → đọc từ
@@ -84,6 +87,7 @@ type Modules struct {
 	Metrics       *metrics.Module
 	Metering      *metering.Module  // G5 (ADR-0023/0024): sổ sử dụng Public API, điểm kiểm soát xuất, bảng kê
 	APIClient     *apiclient.Module // G5 (ADR-0022): khách hàng Public API, khóa, đăng ký, gói hạn mức — Admin API
+	Weather       *weather.Module   // FN-TT-01..03 (ADR-0065): thời tiết, lịch âm, kết nối API thời tiết — schema pf_weather
 }
 
 // Named trả module kèm tên repo (module.yaml) theo thứ tự gắn route.
@@ -93,7 +97,7 @@ func (m Modules) Named() []NamedModule {
 		{"pf/mechanization", m.Mechanization}, {"pf/mrv", m.MRV}, {"pf/sync", m.Sync},
 		{"pf/notify", m.Notify}, {"pf/accounts", m.Accounts}, {"pf/reports", m.Reports}, {"pf/waterway", m.Waterway},
 		{"pf/cropcycle", m.CropCycle}, {"pf/cooperative", m.Cooperative}, {"pf/metrics", m.Metrics},
-		{"pf/metering", m.Metering}, {"pf/apiclient", m.APIClient},
+		{"pf/metering", m.Metering}, {"pf/apiclient", m.APIClient}, {"pf/weather", m.Weather},
 	}
 }
 
@@ -221,6 +225,9 @@ func Build(ctx context.Context, open PoolOpener, clk clock.Clock, ext External) 
 	if dir != nil {
 		nt.UseMembers(NotifyMembers{Dir: dir}) // AH-22: cổng thông báo Thành viên HTX kiểm người nhận
 		coop.UseCalendars(CalendarMembers{Dir: dir}, CalendarNotifier{Notifier: nt.MemberNotifier()})
+		coop.UseTaskReminders(CalendarNotifier{Notifier: nt.MemberNotifier()}) // AH-191: nhắc việc 07:00
+		nt.UseRepresentatives(NotifyMembers{Dir: dir})                         // AH-279: kiểm người nhận Đại diện HTX
+		coop.UseSharingNotices(SharingRepresentatives{Dir: dir}, SharingNotifier{Notifier: nt.RepresentativeNotifier()})
 	}
 	// Không có hồ sơ phiên ứng dụng nào đăng ký: quyền lấy từ vai realm (coop_manager, farmer, …) và sổ gán của pf/accounts.
 	sessionRegistry, err := authz.NewSessionRegistry()
@@ -389,8 +396,18 @@ func Build(ctx context.Context, open PoolOpener, clk clock.Clock, ext External) 
 	coop.UseEgress(egress, mode, slog.Default())
 	pty.UseEgress(egress, mode, slog.Default())
 
+	// pf/weather (ADR-0065): tọa độ trụ sở HTX đọc qua port của pf/cooperative; nhà cung cấp và khóa mã hóa từ AG_WEATHER_*.
+	var wxDeps weather.Deps
+	if ext.Weather != nil {
+		wxDeps = *ext.Weather
+	} else if wxDeps, err = weather.DepsFromEnv(os.Getenv); err != nil {
+		return Modules{}, pools, err
+	}
+	wxDeps.Coops = coop.Cooperatives()
+	wx := weather.New(unit, clk, wxDeps)
+
 	return Modules{MasterData: md, Party: pty, Geo: g, Content: cnt, Mechanization: mech, MRV: mrvMod, Sync: snc, Notify: nt, Accounts: acc,
-		Reports: rep, Waterway: ww, CropCycle: cc, Cooperative: coop, Metrics: met, Metering: meter, APIClient: apic}, pools, nil
+		Reports: rep, Waterway: ww, CropCycle: cc, Cooperative: coop, Metrics: met, Metering: meter, APIClient: apic, Weather: wx}, pools, nil
 }
 
 // EgressModeFromEnv đọc AG_EGRESS_MODE (ADR-0024 mục 2): rỗng → observe; giá trị lạ → lỗi khởi động.

@@ -19,6 +19,10 @@ abstract final class SecureKeys {
   static const idToken = 'ag.oidc.id';
   static const accessExpiry = 'ag.oidc.access_exp';
   static const subject = 'ag.oidc.sub';
+
+  /// Nguồn của token đang lưu: `password` = API đăng nhập riêng (FN-01,
+  /// AH-300), làm mới/đăng xuất qua `/v1/public/auth/*`; vắng = OIDC (AppAuth).
+  static const tokenSource = 'ag.oidc.source';
   static const lastOnlineAuthAt = 'ag.session.last_online_auth';
   static const lastSeenAt = 'ag.session.last_seen';
   static const pinHash = 'ag.pin.hash';

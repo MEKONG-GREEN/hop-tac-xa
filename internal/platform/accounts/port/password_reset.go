@@ -3,6 +3,7 @@ package port
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -39,4 +40,11 @@ type PasswordSetter interface {
 // IAM must require a password change before issuing a normal session.
 type TemporaryPasswordSetter interface {
 	SetTemporaryPassword(ctx context.Context, id uuid.UUID, password string) error
+}
+
+// PasswordAgeReader (tùy chọn, kiểm bằng type assertion) đọc thời điểm đặt mật khẩu hiện tại của người dùng ở IAM
+// (createdDate của thông tin xác thực "password"). Dùng cho hạn 72 giờ của mật khẩu tạm (FN-TK-02/AC-04, AH-223).
+// Chưa có mật khẩu → time.Time{} và nil.
+type PasswordAgeReader interface {
+	PasswordSetAt(ctx context.Context, id uuid.UUID) (time.Time, error)
 }

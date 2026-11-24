@@ -19,6 +19,34 @@ IconData activityIcon(FarmActivity a) => switch (a) {
   FarmActivity.thuHoach => Icons.inventory_2,
 };
 
+/// AH-114 AC1: dải báo khi đang ngoại tuyến trên màn checklist và form ghi việc.
+const msgOfflineBanner = 'Đang ngoại tuyến — dữ liệu sẽ đồng bộ khi có mạng';
+
+class OfflineBanner extends StatelessWidget {
+  const OfflineBanner({super.key});
+  @override
+  Widget build(BuildContext context) => Container(
+    key: const ValueKey('offline-banner'),
+    width: double.infinity,
+    margin: const EdgeInsets.only(bottom: 12),
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: AgColors.amber.withValues(alpha: 0.15),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: const Row(
+      children: [
+        Icon(Icons.cloud_off, color: AgColors.amber),
+        SizedBox(width: 8),
+        Expanded(child: Text(msgOfflineBanner, style: TextStyle(fontSize: 16))),
+      ],
+    ),
+  );
+}
+
+/// AH-114 AC4: vụ đã đóng trong lúc ngoại tuyến — bản ghi giữ trên máy để xem/xóa.
+const msgTaskSeasonClosed = 'Chưa đồng bộ: vụ đã đóng';
+
 /// Lý do từ chối của máy chủ → lời dễ hiểu (docs/errors.md, cropcycle.*).
 String rejectMessage(String? code) => switch (code) {
   'cropcycle.sowing_date_out_of_window' => msgSowingWindow,
@@ -55,6 +83,18 @@ String rejectMessage(String? code) => switch (code) {
   'geo.area_out_of_range' => 'Diện tích lô ngoài giới hạn cho phép.',
   'geo.version_conflict' =>
     'Ranh giới đã được sửa ở nơi khác — đồng bộ lại rồi sửa tiếp.',
+  'cropcycle.task_season_state' => msgTaskSeasonClosed,
+  'cropcycle.season_not_found' =>
+    'Chưa đồng bộ: vụ hoặc nông hộ không thuộc phạm vi của bạn.',
+  'cropcycle.task_already_resolved' =>
+    'Chưa đồng bộ: việc đã được ghi xong hoặc bỏ qua (có thể từ máy khác).',
+  'cropcycle.task_season_changed' =>
+    'Chưa đồng bộ: quy trình của vụ đã đổi — tải lại checklist rồi ghi lại.',
+  'cropcycle.task_stage_locked' =>
+    'Chưa đồng bộ: vụ đã thu hoạch, chỉ ghi được việc của giai đoạn cuối.',
+  'cropcycle.task_zero_confirmation_required' =>
+    'Chưa đồng bộ: cần xác nhận không dùng vật tư khuyến cáo.',
+  'cropcycle.read_only' => 'Chưa đồng bộ: vai của bạn chỉ được xem.',
   'validation_failed' => 'Dữ liệu chưa hợp lệ.',
   null => 'Bị từ chối.',
   _ => 'Bị từ chối ($code).',
@@ -155,24 +195,6 @@ class _Count extends StatelessWidget {
       ),
       Text(label, style: const TextStyle(fontSize: 16)),
     ],
-  );
-}
-
-/// Thẻ thời tiết (HTX US-WEATHER-01): nhà cung cấp chưa chốt (RB-7) → nói rõ,
-/// không để trống màn hình, không chặn thẻ lời khuyên.
-class WeatherCard extends StatelessWidget {
-  const WeatherCard({super.key});
-
-  @override
-  Widget build(BuildContext context) => const Card(
-    child: ListTile(
-      leading: Icon(Icons.cloud_off_outlined, size: 36, color: AgColors.mute),
-      title: Text('Thời tiết'),
-      subtitle: Text(
-        'Chưa có nguồn thời tiết — đang chờ chốt nhà cung cấp dữ liệu. '
-        'Theo dõi bản tin khuyến nông để biết cảnh báo mưa, triều cường, độ mặn.',
-      ),
-    ),
   );
 }
 

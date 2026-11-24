@@ -36,7 +36,10 @@ provides:
     - Plots
     - Resolve
     - Seasons
+    - SharingNotifier
+    - SharingRepresentatives
     - StrawFactors
+    - TaskReminderNotifier
   events:
     - pf.cooperative.household_season.opened/v1
     - pf.cooperative.household_task.completed/v1

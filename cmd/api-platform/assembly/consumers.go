@@ -43,6 +43,9 @@ type Consumer struct {
 var Consumers = []Consumer{
 	{Name: coopport.CalendarNoticeConsumer, Module: cooperative.DBModule, Events: []string{coopport.EventSeasonCalendarPublished},
 		Handler: func(m Modules) inbox.Handler { return m.Cooperative.CalendarNoticeHandler() }},
+	// AH-279 (NTF-01): đổi trạng thái yêu cầu chia sẻ dữ liệu → thông báo trong ứng dụng cho Đại diện HTX bên kia.
+	{Name: coopport.SharingNoticeConsumer, Module: cooperative.DBModule, Events: []string{coopport.EventNativeSharingChanged},
+		Handler: func(m Modules) inbox.Handler { return m.Cooperative.SharingNoticeHandler() }},
 	{Name: mechport.AreaSyncConsumer, Module: mechanization.DBModule, Events: []string{coopport.EventCoopSeasonAreaChanged},
 		Handler: func(m Modules) inbox.Handler { return m.Mechanization.AreaSyncHandler() }},
 	{Name: geoport.HubValveConsumer, Module: geo.DBModule, Events: []string{geoport.EventMKGHubFacilityPublished, geoport.EventMKGHubCapacityPublished},

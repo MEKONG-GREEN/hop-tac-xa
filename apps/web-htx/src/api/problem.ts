@@ -19,7 +19,11 @@ export interface ProblemDetails {
   rows?: Record<string, unknown>[];
   /** 429: số giây phải chờ (thân `retry_after_s` hoặc header Retry-After). */
   retry_after_s?: number;
+  /** Trường mở rộng khác của problem (vd `remaining_area_ha` của cropcycle.household_area_exceeded). */
+  extensions?: Record<string, unknown>;
 }
+
+const PROBLEM_FIELDS: ReadonlySet<string> = new Set(["type", "title", "status", "code", "detail", "instance", "trace_id", "errors", "rows", "retry_after_s"]);
 
 /** Thông báo tiếng Việt theo mã lỗi (docs/errors.md). */
 export const PROBLEM_MESSAGES: Readonly<Record<string, string>> = {
@@ -291,6 +295,10 @@ export const PROBLEM_MESSAGES: Readonly<Record<string, string>> = {
   "accounts.out_of_scope": "Tổ chức hoặc tài khoản nằm ngoài phạm vi TW → Tỉnh → Xã bạn phụ trách.",
   "accounts.role_not_grantable": "Vai trò vượt quyền cấp của bạn (hoặc tài khoản đích đang có vai bạn không được cấp).",
   "accounts.self_action": "Không được tự khóa, mở khóa hoặc đổi đơn vị/vai của chính mình.",
+  "accounts.no_active_role": "Tài khoản chưa được gán vai trò. Liên hệ quản trị viên.",
+  "accounts.working_role_revoked": "Vai trò đang dùng đã bị ngừng. Chọn lại vai trò làm việc.",
+  "accounts.temporary_password_expired": 'Mật khẩu tạm đã quá 72 giờ nên không còn dùng được. Dùng "Quên mật khẩu?" hoặc liên hệ người đã cấp tài khoản để được cấp lại.',
+  "accounts.last_representative": "HTX sẽ không còn người duyệt kết quả lô.",
   "accounts.user_not_found": "Không tìm thấy tài khoản.",
   "accounts.user_exists": "Tên đăng nhập hoặc email đã có.",
   "accounts.phone_taken": "Số điện thoại này đã được đăng ký cho một tài khoản khác.",
@@ -640,6 +648,7 @@ export function toProblem(body: unknown, response?: Pick<Response, "status" | "h
         }))
       : undefined;
     const rows = Array.isArray(body.rows) ? body.rows.filter(isRecord) : undefined;
+    const extra = Object.entries(body).filter(([k]) => !PROBLEM_FIELDS.has(k));
     return {
       type: typeof body.type === "string" ? body.type : `https://errors.agrigreen.vn/${body.code}`,
       title: typeof body.title === "string" ? body.title : "",
@@ -651,6 +660,7 @@ export function toProblem(body: unknown, response?: Pick<Response, "status" | "h
       errors,
       ...(rows ? { rows } : {}),
       retry_after_s: retryAfter,
+      ...(extra.length ? { extensions: Object.fromEntries(extra) } : {}),
     };
   }
   const code = STATUS_FALLBACK[status] ?? (status >= 500 ? "internal_error" : "bad_request");

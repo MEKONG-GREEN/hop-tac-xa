@@ -1,8 +1,9 @@
+import 'package:agrigreen_mobile/data/db/storage_errors.dart';
 import 'package:flutter/material.dart';
 
 import '../../application/household_season_service.dart';
 import '../../domain/cropcycle.dart' show parseScaled, formatScaled;
-import '../widgets.dart' show PhotoCapture;
+import '../widgets.dart' show OfflineBanner, PhotoCapture;
 
 String? taskActualTotal(String dose, String area) {
   if (!RegExp(r'^(0|[1-9][0-9]{0,8})(\.[0-9]{1,4})?$').hasMatch(dose)) {
@@ -22,9 +23,13 @@ class HouseholdTaskDetailScreen extends StatefulWidget {
     required this.season,
     required this.task,
     required this.event,
+    this.offline = false,
   });
   final HouseholdSeasonService service;
   final String coop, household, event;
+
+  /// Đang ngoại tuyến (AH-114): hiện dải báo; bản ghi vẫn lưu trên máy như thường.
+  final bool offline;
   final HouseholdJson season, task;
   @override
   State<HouseholdTaskDetailScreen> createState() => _HouseholdTaskDetailState();
@@ -69,11 +74,10 @@ class _HouseholdTaskDetailState extends State<HouseholdTaskDetailScreen> {
     final now = DateTime.now();
     _day.text =
         '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-    final steps = (widget.season['sop_snapshot'] as Map)['steps'] as List;
-    final step = steps
-        .cast<Map<Object?, Object?>>()
-        .where((s) => s['seq'] == widget.task['seq'])
-        .firstOrNull;
+    final step = HouseholdSeasonService.effectiveStep(
+      widget.season['sop_snapshot'],
+      widget.task['seq'],
+    );
     final recommended = (step?['materials'] as List? ?? [])
         .cast<Map<Object?, Object?>>();
     _hasRecommendation = recommended.isNotEmpty;
@@ -144,11 +148,12 @@ class _HouseholdTaskDetailState extends State<HouseholdTaskDetailScreen> {
         },
       );
       if (mounted) Navigator.pop(context, true);
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
         setState(
-          () => _error =
-              'Chưa lưu được trên máy. Dữ liệu form được giữ để thử lại.',
+          () => _error = isStorageFull(e)
+              ? msgStorageFull
+              : 'Chưa lưu được trên máy. Dữ liệu form được giữ để thử lại.',
         );
       }
     } finally {
@@ -166,6 +171,7 @@ class _HouseholdTaskDetailState extends State<HouseholdTaskDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (widget.offline) const OfflineBanner(),
             Text(
               'Diện tích vụ: ${widget.season['area_ha']} ha. Liều thực tế lưu riêng với SOP.',
             ),

@@ -1,8 +1,11 @@
 import 'package:agrigreen_mobile/core/ids.dart';
+import 'package:agrigreen_mobile/data/db/storage_errors.dart';
 import 'package:agrigreen_mobile/data/sync/sync_api.dart';
 import 'package:flutter/material.dart';
 
 import '../../application/household_season_service.dart';
+import '../season_plan_view.dart';
+import '../widgets.dart' show OfflineBanner, rejectMessage;
 import 'household_task_detail_screen.dart';
 
 import 'package:agrigreen_mobile/domain/outbox_record.dart';
@@ -21,6 +24,13 @@ const _labels = {
   'in_progress': 'Đang thực hiện',
 };
 String _day(Object? raw) => '$raw'.split('-').reversed.join('/');
+String _stateLabel(Object? state) => switch (state) {
+  'done' => 'Đã xong',
+  'partial' => 'Chưa xong, làm tiếp',
+  'skipped' => 'Bỏ qua',
+  'voided' => 'Đã xóa',
+  _ => '$state',
+};
 List<HouseholdJson> _rows(Object? raw) => (raw as List<Object?>)
     .map((v) => Map<String, Object?>.from(v as Map))
     .toList();
@@ -56,6 +66,9 @@ class _HouseholdChecklistScreenState extends State<HouseholdChecklistScreen> {
   HouseholdJson? _updated;
   _PendingTask? _pending;
   bool _busy = false;
+
+  /// Lần gọi máy chủ gần nhất lỗi mạng (AH-114): hiện dải ngoại tuyến.
+  bool _offline = false;
   String? _error;
   List<OutboxRecord> _queued = [];
   String get _season => widget.season['season_ref'] as String;
@@ -86,6 +99,7 @@ class _HouseholdChecklistScreenState extends State<HouseholdChecklistScreen> {
           season: widget.season,
           task: task,
           event: '${data['current_event_id']}',
+          offline: _offline || data['offline_cache'] == true,
         ),
       ),
     );
@@ -158,6 +172,10 @@ class _HouseholdChecklistScreenState extends State<HouseholdChecklistScreen> {
       });
     } catch (e) {
       if (!mounted) return;
+      if (e is NetworkException && widget.service.canQueueOffline) {
+        await _queueOffline(pending);
+        return;
+      }
       if (e is ApiException &&
           ((e.status == 409 && e.code != 'idempotency_in_progress') ||
               e.code == 'cropcycle.task_season_state' ||
@@ -172,6 +190,158 @@ class _HouseholdChecklistScreenState extends State<HouseholdChecklistScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// AH-114 AC1: mất mạng khi tích nhanh → lưu trên máy "Chờ đồng bộ".
+  Future<void> _queueOffline(_PendingTask pending) async {
+    try {
+      await widget.service.queueTick(
+        widget.coop,
+        widget.household,
+        widget.season,
+        pending.seq,
+        pending.event,
+        await pending.gps,
+      );
+      if (!mounted) return;
+      setState(() {
+        _offline = true;
+        _pending = null;
+      });
+      await _loadPending();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đã lưu trên máy — chờ đồng bộ.')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(
+        () => _error = isStorageFull(e)
+            ? msgStorageFull
+            : 'Chưa lưu được trên máy. Thử lại; dữ liệu được giữ.',
+      );
+    }
+  }
+
+  /// AH-126 AC4, AC5: bỏ tích/xóa bắt buộc lý do ≥ 10 ký tự; không bỏ tích im lặng.
+  Future<void> _void(HouseholdJson record) async {
+    final untick = record['state'] == 'done';
+    final key = _ids.newId();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => _VoidDialog(
+        untick: untick,
+        submit: (reason) async {
+          try {
+            final res = await widget.service.voidTask(
+              widget.coop,
+              widget.household,
+              _season,
+              '${record['log_ref']}',
+              '${record['id']}',
+              reason,
+              key,
+            );
+            if (mounted) {
+              setState(() {
+                _updated = Map<String, Object?>.from(res['checklist'] as Map);
+                _load = widget.service.checklist(
+                  widget.coop,
+                  widget.household,
+                  _season,
+                );
+              });
+            }
+            return null;
+          } catch (e) {
+            return e is ApiException
+                ? (e.detail ?? 'Không lưu được. Tải lại rồi thử.')
+                : 'Cần mạng để xóa hoặc bỏ tích. Thử lại khi có mạng.';
+          }
+        },
+      ),
+    );
+    if (ok == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(untick ? 'Đã bỏ tích.' : 'Đã xóa bản ghi.')),
+      );
+    }
+  }
+
+  /// AH-126: lịch sử các phiên bản (giá trị, người, thời điểm, lý do).
+  Future<void> _history(HouseholdJson record) async {
+    final items = widget.service.taskHistory(
+      widget.coop,
+      widget.household,
+      _season,
+      '${record['log_ref']}',
+    );
+    await showDialog<void>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Lịch sử bản ghi'),
+        content: FutureBuilder<List<HouseholdJson>>(
+          future: items,
+          builder: (c, s) {
+            if (s.hasError) return const Text('Cần mạng để xem lịch sử.');
+            if (!s.hasData) return const LinearProgressIndicator();
+            return SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final v in s.data!)
+                    ListTile(
+                      title: Text(
+                        'Phiên bản ${v['version']} · ${_stateLabel(v['state'])} · làm ${_day(v['done_on'])}',
+                      ),
+                      subtitle: Text(
+                        [
+                          'Ghi lúc ${v['recorded_at']}',
+                          if (v['correction_reason'] != null)
+                            'Lý do: ${v['correction_reason']}',
+                          if ('${v['note'] ?? ''}'.isNotEmpty) '${v['note']}',
+                        ].join(' · '),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c),
+            child: const Text('Đóng'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _discard(OutboxRecord r) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Xóa bản ghi chưa đồng bộ'),
+        content: const Text(
+          'Bản ghi đã bị máy chủ từ chối và chỉ còn trên máy. Xóa thì không khôi phục được.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Giữ lại'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Xóa'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await widget.service.discardTask(r.id);
+    await _loadPending();
   }
 
   @override
@@ -220,6 +390,8 @@ class _HouseholdChecklistScreenState extends State<HouseholdChecklistScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (_offline || data['offline_cache'] == true)
+                  const OfflineBanner(),
                 _header(),
                 if (data['offline_cache'] == true)
                   const Text(
@@ -228,14 +400,32 @@ class _HouseholdChecklistScreenState extends State<HouseholdChecklistScreen> {
                 for (final r in _queued)
                   ListTile(
                     title: Text(
-                      'Việc ${r.payload['step_seq']} · ${r.status.label}',
+                      r.status == OutboxStatus.rejected
+                          ? 'Việc ${r.payload['step_seq']} · ${rejectMessage(r.errorCode)}'
+                          : 'Việc ${r.payload['step_seq']} · ${r.status.label}',
                     ),
                     subtitle: Text(
                       '${r.payload['done_on']} · ${r.payload['state'] == 'partial' ? 'Làm tiếp' : 'Hoàn tất'}${r.errorSummary.isEmpty ? '' : ' · ${r.errorSummary}'}',
                     ),
+                    trailing: r.status == OutboxStatus.rejected
+                        ? TextButton(
+                            onPressed: () => _discard(r),
+                            child: const Text('Xóa'),
+                          )
+                        : null,
                   ),
+                // AH-124: % tiến độ, số việc đến hạn và trễ; sang Kế hoạch mùa vụ.
                 Text(
-                  'Tiến độ: ${progress['percent'] == null ? '—' : '${progress['percent']}%'}',
+                  'Tiến độ: ${progress['percent'] == null ? '—' : '${progress['percent']}%'}'
+                  ' · Đến hạn: ${progress['due'] ?? 0} · Trễ: ${progress['overdue'] ?? 0}',
+                ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: _openPlan,
+                    icon: const Icon(Icons.calendar_month),
+                    label: const Text('Kế hoạch mùa vụ'),
+                  ),
                 ),
                 if (_error != null)
                   Text(
@@ -244,14 +434,20 @@ class _HouseholdChecklistScreenState extends State<HouseholdChecklistScreen> {
                       color: Theme.of(context).colorScheme.error,
                     ),
                   ),
-                for (final stage in _rows(progress['stages'])) ...[
-                  Text(
-                    '${stage['name']} · ${_labels[stage['status']]}',
-                    style: Theme.of(context).textTheme.titleMedium,
+                // AH-124: nhóm theo giai đoạn, mặc định đóng.
+                for (final stage in _rows(progress['stages']))
+                  ExpansionTile(
+                    key: PageStorageKey('stage-${stage['seq']}'),
+                    tilePadding: EdgeInsets.zero,
+                    title: Text(
+                      '${stage['name']} · ${_labels[stage['status']]} · ${_rows(stage['tasks']).length} việc',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    children: [
+                      for (final task in _rows(stage['tasks']))
+                        _task(task, data, records),
+                    ],
                   ),
-                  for (final task in _rows(stage['tasks']))
-                    _task(task, data, records),
-                ],
                 TextButton(
                   onPressed: _busy ? null : _reload,
                   child: const Text('Tải lại checklist'),
@@ -300,6 +496,28 @@ class _HouseholdChecklistScreenState extends State<HouseholdChecklistScreen> {
     );
   }
 
+  void _openPlan() {
+    final season = '${widget.season['season_ref']}';
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          appBar: AppBar(title: const Text('Kế hoạch mùa vụ')),
+          body: FutureBuilder(
+            future: widget.service.plan(widget.coop, widget.household, season),
+            builder: (context, snap) => snap.hasError
+                ? Center(child: Text('Không tải được kế hoạch: ${snap.error}'))
+                : !snap.hasData
+                ? const Center(child: CircularProgressIndicator())
+                : SingleChildScrollView(
+                    padding: const EdgeInsets.all(12),
+                    child: SeasonPlanView(plan: snap.data!),
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _header() {
     final snapshot = widget.season['sop_snapshot'] as Map;
     return Column(
@@ -339,6 +557,28 @@ class _HouseholdChecklistScreenState extends State<HouseholdChecklistScreen> {
           '${input['name']}: ${input['qty']} ${input['unit']}',
       ],
     ];
+    final logs = records.where((r) => r['step_seq'] == task['seq']).toList();
+    final journal = [
+      for (final r in logs)
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                '${_stateLabel(r['state'])} · ${_day(r['done_on'])}${(r['version'] as num? ?? 1) > 1 ? ' · Đã sửa' : ''}',
+              ),
+            ),
+            if (widget.canWrite)
+              TextButton(
+                onPressed: _busy ? null : () => _void(r),
+                child: Text(r['state'] == 'done' ? 'Bỏ tích' : 'Xóa'),
+              ),
+            TextButton(
+              onPressed: () => _history(r),
+              child: const Text('Lịch sử'),
+            ),
+          ],
+        ),
+    ];
     if (widget.canWrite && task['can_complete'] == true) {
       return Column(
         children: [
@@ -352,12 +592,99 @@ class _HouseholdChecklistScreenState extends State<HouseholdChecklistScreen> {
             onPressed: _busy ? null : () => _detail(task, data),
             child: Text('Ghi chi tiết ${task['name']}'),
           ),
+          ...journal,
         ],
       );
     }
-    return ListTile(
-      title: Text('${task['name']}'),
-      subtitle: Text(parts.join(' · ')),
+    return Column(
+      children: [
+        ListTile(
+          title: Text('${task['name']}'),
+          subtitle: Text(parts.join(' · ')),
+        ),
+        ...journal,
+      ],
     );
   }
+}
+
+/// Hộp thoại lý do bỏ tích/xóa (AH-126). Tự giữ controller để không dùng sau khi
+/// đã hủy trong lúc hộp thoại đang đóng. [submit] trả câu lỗi, hoặc null khi xong.
+class _VoidDialog extends StatefulWidget {
+  const _VoidDialog({required this.untick, required this.submit});
+  final bool untick;
+  final Future<String?> Function(String reason) submit;
+  @override
+  State<_VoidDialog> createState() => _VoidDialogState();
+}
+
+class _VoidDialogState extends State<_VoidDialog> {
+  final _reason = TextEditingController();
+  String? _error;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _reason.dispose();
+    super.dispose();
+  }
+
+  Future<void> _confirm() async {
+    final reason = _reason.text.trim();
+    if (reason.length < 10) {
+      setState(() => _error = 'Nhập lý do (ít nhất 10 ký tự).');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final error = await widget.submit(reason);
+    if (!mounted) return;
+    if (error == null) {
+      Navigator.pop(context, true);
+      return;
+    }
+    setState(() {
+      _busy = false;
+      _error = error;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text(widget.untick ? 'Bỏ tích việc đã xong' : 'Xóa bản ghi'),
+    content: SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${widget.untick ? 'Nếu đây là bản ghi duy nhất, việc trở về chưa xong. ' : ''}Bản ghi bị ẩn, không xóa hẳn; lịch sử vẫn xem được.',
+          ),
+          TextField(
+            key: const ValueKey('void-reason'),
+            controller: _reason,
+            enabled: !_busy,
+            maxLength: 500,
+            decoration: InputDecoration(
+              labelText: 'Lý do (ít nhất 10 ký tự)',
+              errorText: _error,
+              errorMaxLines: 3,
+            ),
+          ),
+        ],
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: _busy ? null : () => Navigator.pop(context, false),
+        child: const Text('Hủy'),
+      ),
+      FilledButton(
+        onPressed: _busy ? null : _confirm,
+        child: Text(widget.untick ? 'Bỏ tích' : 'Xóa'),
+      ),
+    ],
+  );
 }

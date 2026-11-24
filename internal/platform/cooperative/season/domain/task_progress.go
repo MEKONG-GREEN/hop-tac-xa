@@ -17,7 +17,13 @@ type TaskRecord struct {
 	SeasonEventID uuid.UUID    `json:"season_event_id"`
 	Step          Step         `json:"step"`
 	Details       *TaskDetails `json:"details,omitempty"`
+	// Adhoc: việc phát sinh ngoài quy trình (AH-163) — nhãn "Ngoài SOP", số việc riêng > AdhocStepSeqBase, không tính
+	// vào tiến độ.
+	Adhoc bool `json:"adhoc,omitempty"`
 }
+
+// AdhocStepSeqBase: số việc của việc phát sinh bắt đầu sau mọi số việc của quy trình (MaxPlanStepSeq).
+const AdhocStepSeqBase = MaxPlanStepSeq
 
 type TaskProgress struct {
 	ScheduleStep
@@ -36,13 +42,22 @@ type Checklist struct {
 	Stages   []StageProgress `json:"stages"`
 	Done     int             `json:"done"`
 	Skipped  int             `json:"skipped"`
-	Total    int             `json:"total"`
-	Percent  *string         `json:"percent"`
+	// Due, Overdue (AH-124): việc chưa xong đang Đến hạn / Trễ theo ngày Việt Nam; không tính việc Không ngày.
+	Due     int     `json:"due"`
+	Overdue int     `json:"overdue"`
+	Total   int     `json:"total"`
+	Percent *string `json:"percent"`
 }
 
 // BuildChecklist is a pure derivation from the pinned schedule and current logs.
 // completed is the existing harvested state; unknown/closed/cancelled fail closed.
 func BuildChecklist(plan SchedulePlan, records []TaskRecord, seasonStatus string) (Checklist, error) {
+	return BuildSeasonChecklist(plan, records, seasonStatus, nil)
+}
+
+// BuildSeasonChecklist như BuildChecklist; skipped là việc gốc đã bỏ khỏi quy trình của vụ (AH-113) — hiện "Bỏ qua",
+// không tích được, không tính vào mẫu số tiến độ. Việc đã xong trước khi bỏ vẫn là đã xong.
+func BuildSeasonChecklist(plan SchedulePlan, records []TaskRecord, seasonStatus string, skipped map[int]bool) (Checklist, error) {
 	byStep := map[int]TaskRecord{}
 	for _, r := range records {
 		day, err := ParseDay(r.DoneOn)
@@ -89,12 +104,20 @@ func BuildChecklist(plan SchedulePlan, records []TaskRecord, seasonStatus string
 						task.CompletionStatus = "done_late"
 					}
 				}
-			} else if ok && r.State == "skipped" {
+			} else if (ok && r.State == "skipped") || skipped[w.Seq] {
 				out.Skipped++
 				resolved++
 				task.CompletionStatus = "skipped"
 			}
-			task.CanComplete = (!ok || r.State == "partial") && (seasonStatus == "open" || (seasonStatus == "completed" && s.Seq == lastStage))
+			if task.DoneOn == nil && task.CompletionStatus != "skipped" && !w.Undated {
+				switch w.Status {
+				case ScheduleDue:
+					out.Due++
+				case ScheduleOverdue:
+					out.Overdue++
+				}
+			}
+			task.CanComplete = !skipped[w.Seq] && (!ok || r.State == "partial") && (seasonStatus == "open" || (seasonStatus == "completed" && s.Seq == lastStage))
 			out.Total++
 			stage.Tasks = append(stage.Tasks, task)
 		}
