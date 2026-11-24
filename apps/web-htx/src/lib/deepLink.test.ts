@@ -45,6 +45,11 @@ describe("deepLinkHref — liên kết thông báo sang trang web", () => {
     expect(deepLinkHref(`/cropcycle/farm-logs/${ID}`, "farm_log_reviewed")).toBe("/htx/nhat-ky");
   });
 
+  it("AH-279: cooperative_sharing → màn Liên kết & chia sẻ dữ liệu", () => {
+    expect(deepLinkHref(`/cooperatives/sharing/${ID}`, "cooperative_sharing")).toBe("/htx/chia-se");
+    expect(deepLinkHref("", "cooperative_sharing")).toBe("/htx/chia-se");
+    expect(KIND_LABEL.cooperative_sharing).toBe("Chia sẻ dữ liệu");
+  });
   it("HTX US-SEASON-01: season_opened → trang mùa vụ", () => {
     expect(deepLinkHref(`/cropcycle/seasons/${ID}`, "season_opened")).toBe("/htx/mua-vu");
   });

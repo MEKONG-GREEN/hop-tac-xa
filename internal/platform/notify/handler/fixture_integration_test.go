@@ -58,6 +58,14 @@ func (f *fakeDevices) Device(_ context.Context, _, id uuid.UUID) (syncport.Devic
 type fakeMembers struct {
 	mu      sync.Mutex
 	members map[uuid.UUID]uuid.UUID
+	reps    map[uuid.UUID]uuid.UUID // AH-279: Đại diện HTX → HTX
+}
+
+func (f *fakeMembers) IsActiveRepresentative(_ context.Context, _, coop, actor uuid.UUID) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	c, ok := f.reps[actor]
+	return ok && c == coop, nil
 }
 
 func (f *fakeMembers) IsActiveMember(_ context.Context, _, coop, actor uuid.UUID) (bool, error) {
@@ -118,13 +126,14 @@ func newFixture(t *testing.T, p channel.Pusher) *fixture {
 	f := &fixture{
 		t: t, iss: authztest.New(t), pool: env.Pool(t, migrations.PF, dbadmin.AppPlatform), admin: env.AdminPool(t, migrations.PF),
 		clk: clock.NewFixed(time.Date(2026, 10, 1, 3, 0, 0, 0, time.UTC)), tenant: ids.New(),
-		devices: &fakeDevices{devs: map[uuid.UUID]syncport.DeviceInfo{}}, members: &fakeMembers{members: map[uuid.UUID]uuid.UUID{}},
+		devices: &fakeDevices{devs: map[uuid.UUID]syncport.DeviceInfo{}}, members: &fakeMembers{members: map[uuid.UUID]uuid.UUID{}, reps: map[uuid.UUID]uuid.UUID{}},
 	}
 	if p == nil {
 		p = channel.DisabledPusher{Reason: channel.ReasonFCMNotConfigured}
 	}
 	f.mod = notify.New(f.pool, f.clk, notify.Deps{Devices: f.devices, Pusher: p})
 	f.mod.UseMembers(f.members)
+	f.mod.UseRepresentatives(f.members)
 	ops := env.Pool(t, migrations.PF, "platform_api")
 	eng := httpx.NewEngine(telemetry.NewLogger("test", io.Discard), 1<<20)
 	f.mod.RegisterApp(eng.Group("/v1", httpx.Authenticate(f.iss.Verifier()), idempotency.Middleware(ops)))

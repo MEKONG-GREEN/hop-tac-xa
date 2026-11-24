@@ -288,6 +288,17 @@ func (m *Module) UseCalendars(members port.CalendarMembers, notifier port.Calend
 
 func (m *Module) CalendarNoticeHandler() inbox.Handler { return m.season.HandleCalendarNotice }
 
+// UseSharingNotices nối danh bạ Đại diện HTX và cổng thông báo cho consumer port.SharingNoticeConsumer (AH-279).
+func (m *Module) UseSharingNotices(reps port.SharingRepresentatives, notifier port.SharingNotifier) {
+	m.member.SharingReps, m.member.SharingNotifier = reps, notifier
+}
+
+// SharingNoticeHandler là inbox.Handler của consumer port.SharingNoticeConsumer.
+func (m *Module) SharingNoticeHandler() inbox.Handler { return m.member.HandleSharingNotice }
+
+// SharingNoticeReady kiểm phụ thuộc của consumer khi khởi động.
+func (m *Module) SharingNoticeReady() error { return m.member.SharingNoticeReady() }
+
 func (m *Module) CalendarNoticeReady() error {
 	if m.season.CalendarMembers == nil || m.season.CalendarNotifier == nil {
 		return errors.New("calendar: configure accounts directory before starting calendar notice consumer")
