@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'support/test_env.dart';
 
-Future<String?> _flag(WidgetTester tester) => tester.runAsync(
+Future<String?> _flag(WidgetTester tester) => tester.runAsync<String?>(
   () =>
       containerOf(tester)
           .read(appControllerProvider)
