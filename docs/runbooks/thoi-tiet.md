@@ -64,7 +64,7 @@ Admin để cập nhật."
 | Hiện tượng | Nguyên nhân | Xử lý |
 |---|---|---|
 | Admin nhận thông báo khẩn "Không lấy được số liệu thời tiết" | Lỗi 3 lần liên tiếp (sự kiện `pf.weather.fetch.failing`, chỉ báo một lần cho mỗi đợt lỗi) | Xem log `job.weather_fetch`. Bấm Kiểm tra kết nối trên màn Kết nối thời tiết. Kiểm tra mạng ra Open-Meteo và `AG_NONPII_ALLOWLIST`. |
-| Lý do "vượt hạn mức" | Gói hết lượt (HTTP 429 hoặc "limit exceeded") | Job tự dừng tới 00:00 giờ Việt Nam. Muốn lấy lại sớm: giảm tần suất, hoặc nhập khóa gói thương mại rồi Lưu. |
+| Lý do "vượt hạn mức" | Gói hết lượt (HTTP 429 hoặc "limit exceeded") | Job tự giãn tần suất về 3 giờ/lần tới 00:00 hôm sau, giờ Việt Nam (FN-TT-03/EX-03); tần suất đã chọn từ 3 giờ trở lên thì giữ nguyên. Hết hạn mức thường xuyên: chọn tần suất thưa hơn, hoặc nhập khóa gói thương mại rồi Lưu. |
 | Lý do "khóa API không hợp lệ" | 401/403 từ nhà cung cấp | Nhập lại khóa, Kiểm tra kết nối, Lưu. |
 | `503 weather.secret_unavailable` khi Lưu | Thiếu `AG_WEATHER_SECRET_KEY`, hoặc khóa đã đổi | Đặt lại biến (cùng giá trị ở hai dịch vụ). Nếu đã đổi khóa thì nhập lại khóa API. |
 
