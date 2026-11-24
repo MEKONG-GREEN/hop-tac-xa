@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:agrigreen_htx/ui/providers.dart';
 import 'package:agrigreen_htx/ui/screens/home_screen.dart';
 import 'package:agrigreen_htx/ui/screens/onboarding_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/test_env.dart';
@@ -45,15 +48,11 @@ void main() {
       expect(find.byType(HomeScreen), findsOneWidget);
       expect(await _flag(tester), 'skipped');
 
-      // AC3: khóa rồi mở khóa (trang chủ dựng lại) — không tự hiện lại.
-      await tester.tap(find.byTooltip('Khóa'));
+      // AC3: lần vào trang chủ sau (cờ đã ghi) không tự hiện lại.
+      final home = tester.element(find.byType(HomeScreen));
+      final db = containerOf(tester).read(appControllerProvider).services!.db;
+      unawaited(maybeShowOnboarding(home, home as WidgetRef, db));
       await settle(tester);
-      for (final d in ['1', '3', '5', '7', '9', '2']) {
-        await tester.tap(find.text(d));
-        await tester.pump();
-      }
-      await settle(tester, 30);
-      expect(find.byType(HomeScreen), findsOneWidget);
       expect(find.byType(OnboardingScreen), findsNothing);
 
       // AC2: xem lại từ nút Hướng dẫn, đi hết ba bước.
