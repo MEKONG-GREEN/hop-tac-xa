@@ -20,6 +20,8 @@ type HouseholdIdentities interface {
 	Phone(ctx context.Context, ref uuid.UUID) (string, error)
 	// LookupPhone tra ref theo SĐT qua chỉ mục mù (mục đích registry.admin); không thấy → ErrIdentityNotFound.
 	LookupPhone(ctx context.Context, phone string) (uuid.UUID, error)
+	// LookupNationalID (AH-293) tra ref theo ĐỦ số CCCD/CMND qua chỉ mục mù; không thấy → ErrIdentityNotFound.
+	LookupNationalID(ctx context.Context, nationalID string) (uuid.UUID, error)
 }
 
 // NativeHouseholdIdentityReader returns only the native FN-04 projection

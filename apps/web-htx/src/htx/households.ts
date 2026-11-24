@@ -34,13 +34,16 @@ export function copyPayload(rows: readonly CopyDraft[]): { source_ref: string; f
  * Ô tìm nông hộ (AC-2): chỉ SĐT mới gửi lên máy chủ (tra chỉ mục mù). Họ tên chủ hộ nằm ở kho định danh
  * nên không tìm được theo tên — trả lý do để màn hình giải thích.
  */
-export function householdQuery(raw: string): { phone: string } | { error: string } | null {
+export function householdQuery(raw: string): { phone: string } | { national_id: string } | { error: string } | null {
   const s = raw.trim();
   if (!s) return null;
   const p = normalizePhone(s);
   if (p) return { phone: p };
-  if (/\d/.test(s)) return { error: "SĐT phải có dạng 0xxxxxxxxx (10 chữ số) hoặc +84…" };
-  return { error: "Chỉ tìm được theo SĐT: họ tên chủ hộ được lưu mã hoá trong kho định danh, máy chủ không lọc theo tên." };
+  // AH-293: CCCD 12 số / CMND 9 số — khớp đủ số qua chỉ mục mù, không tìm theo một phần số.
+  const id = s.replace(/[\s.-]/g, "");
+  if (/^(\d{12}|\d{9})$/.test(id)) return { national_id: id };
+  if (/\d/.test(s)) return { error: "Nhập SĐT dạng 0xxxxxxxxx (10 chữ số) hoặc +84…, hoặc đủ 12 số CCCD." };
+  return { error: "Chỉ tìm được theo SĐT hoặc đủ số CCCD: họ tên chủ hộ được lưu mã hoá trong kho định danh, máy chủ không lọc theo tên." };
 }
 
 /** Thông báo AC-2 của HTX US-HH-03 khi thiết bị không gọi được. */

@@ -490,7 +490,8 @@ export interface paths {
          * Nông hộ thành viên của HTX, kèm nhãn hiển thị đã che (không bao giờ có định danh đầy đủ)
          * @description HTX US-HH-01 AC-2: `phone` tìm ĐÚNG một SĐT qua chỉ mục mù của kho định danh (mục đích registry.admin, kho ghi sổ
          *     tra cứu) — trả tối đa một hộ của HTX này, SĐT lạ hoặc hộ HTX khác → danh sách rỗng; giá trị không phải SĐT → 422.
-         *     Không tìm theo họ tên: họ tên chỉ nằm ở kho định danh (R-04), pf không lọc được.
+         *     Không tìm theo họ tên: họ tên chỉ nằm ở kho định danh (R-04), pf không lọc được. AH-293: `national_id` tìm ĐÚNG đủ số
+         *     CCCD/CMND (không tìm gần đúng trên dữ liệu mã hóa).
          */
         get: operations["listCooperativeHouseholds"];
         put?: never;
@@ -30377,6 +30378,8 @@ export interface operations {
             query?: {
                 /** @description SĐT chủ hộ cần tìm (khớp chính xác sau chuẩn hóa) */
                 phone?: string;
+                /** @description AH-293: ĐỦ số CCCD (12 số) hoặc CMND (9 số) của chủ hộ, khớp chính xác qua chỉ mục mù; một phần số → 422; không dùng cùng phone; HTX được chia sẻ → 403 */
+                national_id?: string;
                 status?: "active" | "inactive";
                 cursor?: string;
                 limit?: number;
@@ -30403,6 +30406,7 @@ export interface operations {
             };
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
         };
     };
     listBilateralPairs: {

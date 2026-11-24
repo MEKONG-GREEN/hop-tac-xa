@@ -217,7 +217,7 @@ export function HouseholdsPanel({ coop, readOnly: readOnlyProp = false, showSeas
   const { api, principal } = useAuth();
   const id = coop.ref;
   const [query, setQuery] = useState("");
-  const [search, setSearch] = useState<{ phone: string } | null>(null);
+  const [search, setSearch] = useState<{ phone: string } | { national_id: string } | null>(null);
   const [queryError, setQueryError] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
   const [status,setStatus]=useState<""|"active"|"inactive">("");
@@ -235,7 +235,7 @@ export function HouseholdsPanel({ coop, readOnly: readOnlyProp = false, showSeas
   const canBulkOpen = showSeasons && !shared && coop.active && hasRole(principal, ROLES.platformAdmin, ROLES.htxMember) && matrixAllows(principal, "KHMV-FN-03", "C");
   const list = usePagedList((cursor) => householdsPage(api, id, cursor, 20,status||undefined), [api, id, version,status]);
   const found = useAsync(
-    () => (search ? unwrap(api.GET("/v1/cooperatives/{ref}/households", { params: { path: { ref: id }, query: { phone: search.phone,status:status||undefined } } })) : Promise.resolve(null)),
+    () => (search ? unwrap(api.GET("/v1/cooperatives/{ref}/households", { params: { path: { ref: id }, query: { ...search, status: status || undefined } } })) : Promise.resolve(null)),
     [api, id, search, version,status],
   );
   const lost = list.error ?? found.error;
@@ -302,7 +302,7 @@ export function HouseholdsPanel({ coop, readOnly: readOnlyProp = false, showSeas
         {!shared ? (
           <>
             <div className="field" style={{ flex: "1 1 260px" }}>
-              <label htmlFor={`hh-q-${id}`}>Tìm nông hộ theo SĐT</label>
+              <label htmlFor={`hh-q-${id}`}>Tìm nông hộ theo SĐT hoặc CCCD</label>
               <input id={`hh-q-${id}`} className="input" type="search" inputMode="tel" placeholder="0xxxxxxxxx" value={query} onChange={(e) => setQuery(e.target.value)} />
             </div>
             <button type="submit" className="btn btn-o btn-sm">
@@ -340,7 +340,7 @@ export function HouseholdsPanel({ coop, readOnly: readOnlyProp = false, showSeas
           {queryError}
         </p>
       ) : null}
-      {search && found.data && found.data.items.length === 0 ? <Empty>Không có nông hộ của HTX này với SĐT {search.phone}.</Empty> : null}
+      {search && found.data && found.data.items.length === 0 ? <Empty>Không có nông hộ của HTX này với {"phone" in search ? `SĐT ${search.phone}` : "số CCCD đã nhập"}.</Empty> : null}
       {(search ? found.error : list.error) ? (
         <ProblemAlert problem={(search ? found.error : list.error)!} onRetry={search ? found.reload : list.reload} />
       ) : null}
