@@ -14786,6 +14786,102 @@ paths:
         "409": {$ref: "#/components/responses/Problem"}
         "422": {$ref: "#/components/responses/Problem"}
         "503": {$ref: "#/components/responses/Problem"}
+  /v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/task-batch-candidates:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: household_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: season_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: listHouseholdTaskBatchCandidates
+      summary: Các vụ có thể ghi chung một việc với vụ này (AH-176)
+      description: Thành viên HTX/Admin (KHMV-FN-05 C). Vụ của HTX dùng cùng SOP gốc (KH-17), đang canh tác hoặc đã thu hoạch; mỗi vụ kèm số việc tương ứng (cùng tên và loại việc) và việc còn ghi được không, kèm mã lý do nếu không. Tối đa 200 vụ.
+      parameters:
+        - {name: step_seq, in: query, required: true, schema: {type: integer, minimum: 1, maximum: 1000}}
+      responses:
+        "200":
+          description: Danh sách vụ
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: "#/components/schemas/HouseholdTaskBatchCandidate"}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+  /v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/task-batches:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: household_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: season_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: recordHouseholdTaskBatch
+      summary: Ghi một việc cho nhiều vụ cùng lúc (AH-176)
+      description: Thành viên HTX/Admin (KHMV-FN-05 C); Đại diện chỉ xem. Vụ trong đường dẫn xác định SOP gốc và việc (step_seq). Mỗi vụ được chọn có một bản ghi riêng theo đúng quy tắc ghi chi tiết (AH-99) với ngày, kết quả, liều, ghi chú, GPS chung; vụ không cùng SOP gốc/không có việc, việc đã xong, vụ đã đổi hoặc không ghi được bị bỏ qua kèm mã và lý do. Ảnh chỉ dùng chung khi mọi vụ cùng hộ với vụ đường dẫn (ảnh mã hóa theo hộ). Idempotency-Key sinh khóa riêng cho từng vụ nên thử lại không tạo bản ghi trùng.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [step_seq, seasons, state, done_on, materials, gps]
+              properties:
+                step_seq: {type: integer, minimum: 1, maximum: 1000}
+                seasons:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [household_ref, season_ref, expected_season_event_id]
+                    properties:
+                      household_ref: {type: string, format: uuid}
+                      season_ref: {type: string, format: uuid}
+                      expected_season_event_id: {type: string, format: uuid}
+                state: {type: string, enum: [partial, done]}
+                done_on: {type: string, format: date}
+                note: {type: string, maxLength: 2000}
+                backfill_reason: {type: string, maxLength: 500}
+                zero_confirmed: {type: boolean, default: false}
+                file_refs: {type: array, maxItems: 5, items: {type: string, format: uuid}}
+                gps: {$ref: "#/components/schemas/CropGPS"}
+                channel: {type: string, enum: [app, web], default: app}
+                materials:
+                  type: array
+                  maxItems: 20
+                  items:
+                    type: object
+                    required: [dose_per_ha]
+                    properties:
+                      material_code: {type: string}
+                      name: {type: string}
+                      unit: {type: string}
+                      dose_per_ha: {type: string, pattern: '^(0|[1-9][0-9]{0,8})(\.[0-9]{1,4})?$'}
+      responses:
+        "200":
+          description: Kết quả từng vụ
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [results, recorded, skipped]
+                properties:
+                  results: {type: array, items: {$ref: "#/components/schemas/HouseholdTaskBatchResult"}}
+                  recorded: {type: integer}
+                  skipped: {type: integer}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
   /v1/extension/khtc/periods/{id}/report:
     get:
       summary: "Bản soạn Mẫu 1–5, ô số chỉ đọc và mốc dữ liệu"
@@ -29282,6 +29378,34 @@ components:
             instruction: {type: string, maxLength: 2000}
         window: {$ref: "#/components/schemas/CropSOPWindow"}
         materials: {type: array, items: {$ref: "#/components/schemas/CropSOPMaterial"}}
+    HouseholdTaskBatchCandidate:
+      type: object
+      required: [household_ref, season_ref, season_code, season_year, variety_code, status, current_event_id, eligible, is_source]
+      properties:
+        household_ref: {type: string, format: uuid}
+        season_ref: {type: string, format: uuid}
+        season_code: {type: string}
+        season_year: {type: integer}
+        variety_code: {type: string}
+        status: {type: string}
+        current_event_id: {type: string, format: uuid}
+        step_seq: {type: integer, description: "Số việc tương ứng trong vụ (có thể khác vụ nguồn giữa các phiên bản SOP)"}
+        eligible: {type: boolean}
+        is_source: {type: boolean}
+        code: {type: string, description: "Mã lý do không ghi được"}
+        reason: {type: string}
+    HouseholdTaskBatchResult:
+      type: object
+      required: [household_ref, season_ref, status]
+      properties:
+        household_ref: {type: string, format: uuid}
+        season_ref: {type: string, format: uuid}
+        status: {type: string, enum: [recorded, skipped]}
+        step_seq: {type: integer}
+        record: {$ref: "#/components/schemas/HouseholdTaskRecord"}
+        replayed: {type: boolean}
+        code: {type: string, description: "Mã lý do bỏ qua, vd cropcycle.task_already_resolved, cropcycle.batch_task_mismatch"}
+        reason: {type: string}
     KHTCReportSupplement:
       type: object
       required: [id, department, instruction, state, due_at, native_submission_ref, return_applied]

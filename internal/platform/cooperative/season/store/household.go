@@ -40,3 +40,14 @@ func HouseholdSeasons(ctx context.Context, tx pgx.Tx, coop, hh, after uuid.UUID,
 	}
 	return collectSeasons(rows)
 }
+
+// HouseholdSeasonsByTemplate liệt kê vụ nông hộ đang canh tác hoặc đã thu hoạch của HTX dùng cùng SOP gốc (AH-176).
+func HouseholdSeasonsByTemplate(ctx context.Context, tx pgx.Tx, coop, template uuid.UUID, limit int) ([]Season, error) {
+	rows, err := tx.Query(ctx, "SELECT "+seasonCols+` FROM pf_coop.season_current s
+	 WHERE s.entry_kind='household' AND s.cooperative_ref=$1 AND s.sop_template_ref=$2 AND s.status IN ('open','completed')
+	 ORDER BY s.household_ref, s.season_ref LIMIT $3`, coop, template, limit)
+	if err != nil {
+		return nil, err
+	}
+	return collectSeasons(rows)
+}

@@ -16,6 +16,7 @@ import { cachedTaskRead, queuedTasks, flushTasks, enqueueTask, discardTask, task
 import { snapshotLookup } from "./SeasonPlanEditor";
 import { HouseholdTaskJournal } from "./HouseholdTaskJournal";
 import { AdhocTaskForm } from "./AdhocTaskForm";
+import { TaskBatchForm } from "./TaskBatchForm";
 
 /** AH-114: chu kỳ tự thử lại đồng bộ khi còn nhật ký chờ gửi. */
 export const TASK_RETRY_MS = 120_000;
@@ -52,6 +53,7 @@ export function HouseholdChecklist({ coopRef, householdRef, seasonRef, season }:
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiProblem | null>(null);
   const [detail, setDetail] = useState<S["HouseholdTaskProgress"] | null>(null);
+  const [batch, setBatch] = useState<S["HouseholdTaskProgress"] | null>(null);
   const [queueRevision, setQueueRevision] = useState(0);
   const [adhoc, setAdhoc] = useState(false);
   const queue = useAsync(() => canWrite && principal && typeof indexedDB !== "undefined" ? queuedTasks(principal, coopRef, householdRef, seasonRef) : Promise.resolve([]), [principal, canWrite, coopRef, householdRef, seasonRef, queueRevision]);
@@ -132,6 +134,7 @@ export function HouseholdChecklist({ coopRef, householdRef, seasonRef, season }:
             {canWrite && task.can_complete ? <label><input type="checkbox" aria-label={`Hoàn thành ${task.name}`} checked={pending?.seq === task.seq} disabled={busy} onChange={() => { setError(null); setPending(pending?.seq === task.seq ? null : { seq: task.seq, name: task.name, event: data.current_event_id, key: newIdempotencyKey(), gps: captureGPS() }); }} /> {task.name}</label> : <span>{task.name}</span>}
             <span className="chip c-info">{LABEL[task.completion_status] ?? task.completion_status}</span>
             {canWrite && task.can_complete && season ? <button type="button" disabled={busy} onClick={() => { setPending(null); setDetail(task); }}>Ghi chi tiết {task.name}</button> : null}
+            {canWrite && task.can_complete && season ? <button type="button" disabled={busy} onClick={() => { setPending(null); setBatch(task); }}>Ghi nhiều vụ {task.name}</button> : null}
             {task.undated ? <span> · Chưa đặt ngày</span> : task.from_date ? <span> · {formatDate(task.from_date)}{task.to_date ? ` – ${formatDate(task.to_date)}` : " trở đi"}</span> : null}
             {record ? <span> · Làm xong {formatDate(record.done_on)}{record.gps_missing ? " · Thiếu GPS" : " · Đã ghi nhận vị trí"}{record.inputs.map((i) => ` · ${i.name}: ${i.qty} ${i.unit}`).join("")}</span> : null}
             <ul>{data.records.filter((r) => r.step_seq === task.seq && r.details).map((r) => <li key={r.id}>{formatDate(r.done_on)} · {r.state === "partial" ? "Chưa xong, làm tiếp" : "Đã xong"}{r.details?.backfilled ? " · Ghi bù" : ""}{r.details?.actual_materials.map((m) => ` · ${m.name}: ${m.dose_per_ha} ${m.unit}/ha · tổng ${m.quantity} ${m.unit}`).join("")} · {r.note} · {r.file_refs?.length ?? 0} ảnh</li>)}</ul>
@@ -144,6 +147,7 @@ export function HouseholdChecklist({ coopRef, householdRef, seasonRef, season }:
         : <button type="button" className="btn btn-o btn-sm" disabled={busy} onClick={() => setAdhoc(true)}>Ghi việc phát sinh</button> : null}
       <HouseholdTaskJournal path={path} checklist={data} writable={canWrite && (season?.status ?? "open") !== "cancelled"} onChanged={(c) => { setUpdated(c); load.reload(); }} />
     </> : null}
+    {batch ? <TaskBatchForm key={batch.seq} path={path} task={batch} onClose={() => setBatch(null)} onSaved={() => load.reload()} /> : null}
     {detail && season && data ? <HouseholdTaskDetail key={detail.seq} path={path} event={data.current_event_id} task={detail} season={season} onClose={() => setDetail(null)} onQueued={() => { setDetail(null); setQueueRevision((r) => r + 1); if (navigator.onLine) void syncQueued(); }} /> : null}
     {pending ? <div role="region" aria-label="Xác nhận hoàn thành" className="row" style={{ position: "sticky", bottom: 0, background: "var(--bg)", padding: 12, borderTop: "1px solid var(--line)", zIndex: 2 }}>
       <span>{pending.name} · Ngày làm xong: Hôm nay (giờ Việt Nam)</span>
