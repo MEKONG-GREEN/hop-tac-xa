@@ -61,12 +61,15 @@ func wiredConsumers(log *slog.Logger) []consumer {
 		out = append(out, consumer{
 			name: spec.Name, cluster: migrations.PF, module: spec.Module, events: spec.Events,
 			prepare: func(ctx context.Context) error {
-				if spec.Name != coopport.CalendarNoticeConsumer {
+				if spec.Name != coopport.CalendarNoticeConsumer && spec.Name != coopport.SharingNoticeConsumer {
 					return nil
 				}
 				m, err := lazy.get(ctx)
 				if err != nil {
 					return err
+				}
+				if spec.Name == coopport.SharingNoticeConsumer {
+					return m.Cooperative.SharingNoticeReady() // AH-279: danh bạ, pf/notify, pf/party (fail-closed)
 				}
 				return m.Cooperative.CalendarNoticeReady()
 			},

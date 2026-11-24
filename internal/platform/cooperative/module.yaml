@@ -36,6 +36,8 @@ provides:
     - Plots
     - Resolve
     - Seasons
+    - SharingNotifier
+    - SharingRepresentatives
     - StrawFactors
     - TaskReminderNotifier
   events:

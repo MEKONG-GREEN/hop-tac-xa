@@ -69,6 +69,9 @@ type Service struct {
 	Vault port.HouseholdIdentities
 	// Names (tùy chọn): tên người thao tác cho khung Log (FN-XA-03.03).
 	Names partyport.ActorNames
+	// SharingReps, SharingNotifier (AH-279): danh bạ Đại diện HTX và cổng thông báo của consumer sharing_notice.
+	SharingReps     port.SharingRepresentatives
+	SharingNotifier port.SharingNotifier
 }
 
 func (s *Service) now() time.Time { return s.Clock.Now().UTC() }

@@ -226,6 +226,8 @@ func Build(ctx context.Context, open PoolOpener, clk clock.Clock, ext External) 
 		nt.UseMembers(NotifyMembers{Dir: dir}) // AH-22: cổng thông báo Thành viên HTX kiểm người nhận
 		coop.UseCalendars(CalendarMembers{Dir: dir}, CalendarNotifier{Notifier: nt.MemberNotifier()})
 		coop.UseTaskReminders(CalendarNotifier{Notifier: nt.MemberNotifier()}) // AH-191: nhắc việc 07:00
+		nt.UseRepresentatives(NotifyMembers{Dir: dir})                         // AH-279: kiểm người nhận Đại diện HTX
+		coop.UseSharingNotices(SharingRepresentatives{Dir: dir}, SharingNotifier{Notifier: nt.RepresentativeNotifier()})
 	}
 	// Không có hồ sơ phiên ứng dụng nào đăng ký: quyền lấy từ vai realm (coop_manager, farmer, …) và sổ gán của pf/accounts.
 	sessionRegistry, err := authz.NewSessionRegistry()

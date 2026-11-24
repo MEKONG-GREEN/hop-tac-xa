@@ -10,10 +10,13 @@ import (
 	"github.com/MEKONG-GREEN/hop-tac-xa/contracts/htxroles"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/member/domain"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/member/store"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/port"
 	partyport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/party/port"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/authz"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/ids"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/outbox"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/problem"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/telemetry"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/tenant"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -252,6 +255,12 @@ func (s *Service) NativeChangeSharing(ctx context.Context, ref, target uuid.UUID
 			}
 		}
 		if e := store.InsertSharingEvent(ctx, tx, p.TenantID, out, action, "native-sharing:"+p.ActorRef.String()+":"+key); e != nil {
+			return e
+		}
+		// AH-279: thông báo cho Đại diện HTX của bên kia — phát sau commit qua outbox, consumer gửi pf/notify.
+		if e := outbox.Enqueue(ctx, tx, outbox.Event{ID: ids.New(), TenantID: p.TenantID, Type: port.EventNativeSharingChanged, SchemaVersion: 1,
+			OccurredAt: s.now(), TraceID: telemetry.TraceID(ctx), Producer: Producer, Payload: port.NativeSharingChangedV1{SourceID: ids.New(),
+				RequestRef: out.Ref, Revision: out.Revision, Action: action, RequesterRef: out.Requester, OwnerRef: out.Owner, ActorOrgRef: p.OrgRef, ActorRef: p.ActorRef}}); e != nil {
 			return e
 		}
 		raw, e := json.Marshal(out)

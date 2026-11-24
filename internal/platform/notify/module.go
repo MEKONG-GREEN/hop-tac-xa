@@ -212,6 +212,14 @@ func (m *Module) UseMembers(d port.MemberDirectory) { m.svc.Members = d }
 // transaction của bên gọi.
 func (m *Module) MemberNotifier() port.MemberNotifier { return app.MemberNotifier{Svc: m.svc} }
 
+// UseRepresentatives nối danh bạ kiểm Đại diện HTX cho cổng RepresentativeNotifier (AH-279).
+func (m *Module) UseRepresentatives(d port.RepresentativeDirectory) { m.svc.Representatives = d }
+
+// RepresentativeNotifier là cổng tạo thông báo trong ứng dụng cho Đại diện HTX (AH-279). Gọi ngoài DB transaction.
+func (m *Module) RepresentativeNotifier() port.RepresentativeNotifier {
+	return app.RepresentativeNotifier{Svc: m.svc}
+}
+
 // UseSyncEntities nối danh sách entity chiều xuống của pf/sync (kiểm entities[] của
 // POST /v1/sync/nudge, KN US-SYNC-02). Gốc lắp ráp gọi sau khi dựng pf/sync.
 func (m *Module) UseSyncEntities(entities []string) { m.svc.SyncEntities = entities }

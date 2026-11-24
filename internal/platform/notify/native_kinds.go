@@ -28,5 +28,6 @@ func nativeNotificationKinds() []string {
 		port.KindSeasonTaskDue,
 		port.KindSeasonLogMissing,
 		port.KindSeasonProcessChanged,
+		port.KindCooperativeSharing,
 	}
 }

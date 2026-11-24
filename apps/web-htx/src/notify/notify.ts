@@ -51,6 +51,8 @@ export const KIND_LABEL: Record<Notification["kind"], string> = {
   season_task_due: "Nhắc việc",
   season_log_missing: "Nhắc ghi nhật ký",
   season_process_changed: "Quy trình thay đổi",
+  // AH-279 (NTF-01): yêu cầu chia sẻ dữ liệu cho Đại diện HTX
+  cooperative_sharing: "Chia sẻ dữ liệu",
 };
 
 export function unreadCount(api: ApiClient): Promise<number> {

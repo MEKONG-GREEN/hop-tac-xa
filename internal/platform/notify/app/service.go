@@ -57,8 +57,10 @@ type Deps struct {
 	Farmers port.AreaFarmers
 	// Members (AH-22): kiểm người nhận của cổng MemberNotifier; nil → cổng trả 503 (fail-closed).
 	Members port.MemberDirectory
-	Pusher  channel.Pusher // chỉ worker cần
-	Mailer  channel.Mailer // nil → tắt email tóm tắt
+	// Representatives (AH-279): kiểm người nhận của cổng RepresentativeNotifier; nil → cổng trả 503.
+	Representatives port.RepresentativeDirectory
+	Pusher          channel.Pusher // chỉ worker cần
+	Mailer          channel.Mailer // nil → tắt email tóm tắt
 	// DigestTo: hộp thư công vụ nhận email tóm tắt chỉ đạo khẩn (AG_SMTP_DIGEST_TO).
 	DigestTo []string
 	// DigestRecipients, when configured, replaces DigestTo for every queue tenant.

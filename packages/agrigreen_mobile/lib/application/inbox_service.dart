@@ -56,6 +56,7 @@ class InboxItem {
     'season_task_due' => 'Nhắc việc',
     'season_log_missing' => 'Nhắc ghi nhật ký',
     'season_process_changed' => 'Quy trình thay đổi',
+    'cooperative_sharing' => 'Chia sẻ dữ liệu',
     _ => 'Thông báo',
   };
 }
