@@ -99,8 +99,12 @@ func LastLogDays(ctx context.Context, tx pgx.Tx, seasons []uuid.UUID) (map[uuid.
 	if len(seasons) == 0 {
 		return out, nil
 	}
+	refs := make([]string, 0, len(seasons))
+	for _, r := range seasons {
+		refs = append(refs, r.String())
+	}
 	rows, err := tx.Query(ctx, `SELECT season_ref, max((event_time AT TIME ZONE 'Asia/Ho_Chi_Minh')::date)
-	 FROM pf_coop.farm_log WHERE tenant_id=shared.current_tenant() AND season_ref=ANY($1) GROUP BY season_ref`, seasons)
+	 FROM pf_coop.farm_log WHERE tenant_id=shared.current_tenant() AND season_ref=ANY($1::uuid[]) GROUP BY season_ref`, refs)
 	if err != nil {
 		return nil, err
 	}
