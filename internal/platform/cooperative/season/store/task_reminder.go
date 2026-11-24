@@ -22,7 +22,8 @@ type TaskReminder struct {
 // ReminderTenants liệt kê tenant có vụ nông hộ đang canh tác hoặc còn lượt nhắc chưa xong (pool ag_ops_jobs).
 func ReminderTenants(ctx context.Context, pool *pgxpool.Pool) ([]uuid.UUID, error) {
 	rows, err := pool.Query(ctx, `SELECT tenant_id FROM pf_coop.season_current WHERE entry_kind='household' AND status='open'
-	 UNION SELECT tenant_id FROM pf_coop.task_reminder WHERE status='pending'`)
+	 UNION SELECT tenant_id FROM pf_coop.task_reminder WHERE status='pending'
+	 UNION SELECT tenant_id FROM pf_coop.log_missing_reminder WHERE status='pending'`)
 	if err != nil {
 		return nil, err
 	}
@@ -82,5 +83,70 @@ func ClaimTaskReminders(ctx context.Context, tx pgx.Tx, now, staleBefore time.Ti
 func FinishTaskReminders(ctx context.Context, tx pgx.Tx, notice uuid.UUID, steps []int, status, reason string, now time.Time) error {
 	_, err := tx.Exec(ctx, `UPDATE pf_coop.task_reminder SET status=$3, drop_reason=nullif($4,''), finished_at=$5
 	 WHERE tenant_id=shared.current_tenant() AND notice_id=$1 AND step_seq=ANY($2) AND status='pending'`, notice, steps, status, reason, now)
+	return err
+}
+
+// LogMissingReminder là một lượt nhắc "vụ quá 3 ngày chưa có nhật ký" (AH-192): một lượt cho mỗi mốc SinceDate.
+type LogMissingReminder struct {
+	SeasonRef, CooperativeRef, HouseholdRef, NoticeID uuid.UUID
+	SinceDate, BusinessDate                           time.Time
+	Days                                              int
+}
+
+// LastLogDays trả ngày (giờ Việt Nam) có bản ghi nhật ký gần nhất của từng vụ.
+func LastLogDays(ctx context.Context, tx pgx.Tx, seasons []uuid.UUID) (map[uuid.UUID]time.Time, error) {
+	out := map[uuid.UUID]time.Time{}
+	if len(seasons) == 0 {
+		return out, nil
+	}
+	rows, err := tx.Query(ctx, `SELECT season_ref, max((event_time AT TIME ZONE 'Asia/Ho_Chi_Minh')::date)
+	 FROM pf_coop.farm_log WHERE tenant_id=shared.current_tenant() AND season_ref=ANY($1) GROUP BY season_ref`, seasons)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var ref uuid.UUID
+		var day time.Time
+		if err := rows.Scan(&ref, &day); err != nil {
+			return nil, err
+		}
+		out[ref] = day
+	}
+	return out, rows.Err()
+}
+
+// InsertLogMissingReminders ghi lượt nhắc mới; mốc đã có lượt bị bỏ qua.
+func InsertLogMissingReminders(ctx context.Context, tx pgx.Tx, rs []LogMissingReminder) error {
+	for _, r := range rs {
+		if _, err := tx.Exec(ctx, `INSERT INTO pf_coop.log_missing_reminder (tenant_id, season_ref, since_date, notice_id, cooperative_ref,
+		 household_ref, days, business_date) VALUES (shared.current_tenant(),$1,$2,$3,$4,$5,$6,$7)
+		 ON CONFLICT (tenant_id, season_ref, since_date) DO NOTHING`,
+			r.SeasonRef, r.SinceDate, r.NoticeID, r.CooperativeRef, r.HouseholdRef, r.Days, r.BusinessDate); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ClaimLogMissingReminders nhận nguyên tử các lượt nhắc đang chờ (như ClaimTaskReminders).
+func ClaimLogMissingReminders(ctx context.Context, tx pgx.Tx, now, staleBefore time.Time) ([]LogMissingReminder, error) {
+	rows, err := tx.Query(ctx, `UPDATE pf_coop.log_missing_reminder SET claimed_at=$1
+	 WHERE tenant_id=shared.current_tenant() AND status='pending' AND (claimed_at IS NULL OR claimed_at<$2)
+	 RETURNING season_ref, cooperative_ref, household_ref, notice_id, since_date, business_date, days`, now, staleBefore)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (LogMissingReminder, error) {
+		var r LogMissingReminder
+		err := row.Scan(&r.SeasonRef, &r.CooperativeRef, &r.HouseholdRef, &r.NoticeID, &r.SinceDate, &r.BusinessDate, &r.Days)
+		return r, err
+	})
+}
+
+// FinishLogMissingReminder đóng một lượt nhắc: sent hoặc dropped kèm lý do.
+func FinishLogMissingReminder(ctx context.Context, tx pgx.Tx, notice uuid.UUID, status, reason string, now time.Time) error {
+	_, err := tx.Exec(ctx, `UPDATE pf_coop.log_missing_reminder SET status=$2, drop_reason=nullif($3,''), finished_at=$4
+	 WHERE tenant_id=shared.current_tenant() AND notice_id=$1 AND status='pending'`, notice, status, reason, now)
 	return err
 }

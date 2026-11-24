@@ -23,7 +23,18 @@ type TaskDueV1 struct {
 	Recipients     []uuid.UUID
 }
 
-// TaskReminderNotifier gửi NTF.2 tới Thành viên HTX; gọi ngoài giao dịch của pf/cooperative.
+// LogMissingV1 là NTF.3 (AH-192): vụ đã Days ngày chưa có nhật ký. Chỉ mã nông hộ, không PII.
+type LogMissingV1 struct {
+	SourceID       uuid.UUID
+	CooperativeRef uuid.UUID
+	SeasonRef      uuid.UUID
+	HouseholdCode  string
+	Days           int
+	Recipients     []uuid.UUID
+}
+
+// TaskReminderNotifier gửi NTF.2 (AH-191) và NTF.3 (AH-192) tới Thành viên HTX; gọi ngoài giao dịch của pf/cooperative.
 type TaskReminderNotifier interface {
 	TaskDue(ctx context.Context, tenant uuid.UUID, notice TaskDueV1) error
+	LogMissing(ctx context.Context, tenant uuid.UUID, notice LogMissingV1) error
 }
