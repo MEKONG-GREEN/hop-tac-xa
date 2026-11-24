@@ -51,7 +51,8 @@ mỗi nguồn có ADR riêng. Repo gốc thực hiện qua proxy `pf/extdata`; r
 7. **Lỗi nguồn.**
    - Sau 3 lần lỗi liên tiếp, worker phát `pf.weather.fetch.failing` một lần; `pf/notify` báo Admin
      (`weather_fetch_failing`).
-   - Vượt hạn mức (429, "limit exceeded") thì tạm dừng tới 00:00 giờ Việt Nam.
+   - Vượt hạn mức (429, "limit exceeded") thì giãn tần suất về 3 giờ/lần tới 00:00 hôm sau, giờ Việt Nam
+     (FN-TT-03/EX-03); tần suất Admin chọn từ 3 giờ trở lên thì giữ nguyên.
    - Trong lúc lỗi, thẻ vẫn hiện số liệu đã lưu kèm "Cập nhật lúc hh:mm dd/mm" (FN-TT-01/EX-01).
 8. **Số liệu ngày đã qua (FN-TT-03/BR-05, hiển thị ở FN-TT-02).**
    - Nhà cung cấp cho số liệu quan trắc: lưu `observed`, nhãn "Thực đo".
