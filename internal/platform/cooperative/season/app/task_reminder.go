@@ -46,6 +46,8 @@ type TenantLister func(ctx context.Context) ([]uuid.UUID, error)
 // ReminderResult là số liệu của một lượt nhắc.
 type ReminderResult struct {
 	Tenants, Seasons, Notices, Sent, Dropped, Failed int
+	// AH-192: nhắc vụ quá 3 ngày chưa có nhật ký.
+	LogNotices, LogSent, LogDropped int
 }
 
 // TaskRemindersReady kiểm phụ thuộc khi khởi động worker (danh bạ thành viên và cổng thông báo).
@@ -141,7 +143,25 @@ func (s *Service) remindTenant(ctx context.Context, tid uuid.UUID, res *Reminder
 				}
 				rows = append(rows, reminderCandidates(cur, list.Progress, today)...)
 			}
-			return store.InsertTaskReminders(ctx, tx, rows)
+			if err := store.InsertTaskReminders(ctx, tx, rows); err != nil {
+				return err
+			}
+			// AH-192: vụ quá LogMissingDays ngày chưa có nhật ký (tính từ bản ghi gần nhất hoặc ngày mở vụ).
+			refs := make([]uuid.UUID, 0, len(page))
+			for _, cur := range page {
+				refs = append(refs, cur.SeasonRef)
+			}
+			last, err := store.LastLogDays(ctx, tx, refs)
+			if err != nil {
+				return err
+			}
+			var missing []store.LogMissingReminder
+			for _, cur := range page {
+				if r, ok := logMissingCandidate(cur, last[cur.SeasonRef], today); ok {
+					missing = append(missing, r)
+				}
+			}
+			return store.InsertLogMissingReminders(ctx, tx, missing)
 		})
 		if err != nil {
 			return err
@@ -177,7 +197,99 @@ func (s *Service) remindTenant(ctx context.Context, tid uuid.UUID, res *Reminder
 			errs = append(errs, err)
 		}
 	}
+	var missing []store.LogMissingReminder
+	if err := s.inTx(ctx, tid, func(tx pgx.Tx) error {
+		var err error
+		missing, err = store.ClaimLogMissingReminders(ctx, tx, now, now.Add(-ReminderClaimTimeout))
+		return err
+	}); err != nil {
+		return errors.Join(append(errs, err)...)
+	}
+	for _, r := range missing {
+		res.LogNotices++
+		if err := s.sendLogMissing(ctx, tid, r, members, res); err != nil {
+			res.Failed++
+			errs = append(errs, err)
+		}
+	}
 	return errors.Join(errs...)
+}
+
+// LogMissingDays (AH-192, NTF-04): vụ "quá 3 ngày" chưa có nhật ký thì nhắc nhẹ một lần cho mỗi mốc.
+const LogMissingDays = 3
+
+// logMissingCandidate lập lượt nhắc khi vụ đang canh tác đã quá LogMissingDays ngày từ bản ghi gần nhất (hoặc ngày mở
+// vụ nếu chưa có). Mốc là ngày đó: có bản ghi mới thì mốc đổi, lần vượt ngưỡng sau là một lượt mới.
+func logMissingCandidate(cur store.Season, lastLog, today time.Time) (store.LogMissingReminder, bool) {
+	since := businessDay(cur.OpenedAt)
+	if !lastLog.IsZero() {
+		if d := domain.Day(lastLog.Year(), lastLog.Month(), lastLog.Day()); d.After(since) {
+			since = d
+		}
+	}
+	days := int(today.Sub(since).Hours() / 24)
+	if days <= LogMissingDays {
+		return store.LogMissingReminder{}, false
+	}
+	return store.LogMissingReminder{SeasonRef: cur.SeasonRef, CooperativeRef: cur.CooperativeRef, HouseholdRef: cur.HouseholdRef,
+		NoticeID: ids.New(), SinceDate: since, BusinessDate: today, Days: days}, true
+}
+
+// sendLogMissing kiểm lại lúc gửi (vụ còn canh tác, chưa có bản ghi mới) rồi gửi NTF.3 cho Thành viên HTX.
+func (s *Service) sendLogMissing(ctx context.Context, tid uuid.UUID, r store.LogMissingReminder, members map[uuid.UUID][]uuid.UUID, res *ReminderResult) error {
+	stale, code := false, ""
+	err := s.inTx(ctx, tid, func(tx pgx.Tx) error {
+		cur, err := store.SeasonByRef(ctx, tx, r.SeasonRef, false)
+		if err != nil {
+			return err
+		}
+		if cur == nil || cur.EntryKind != "household" || cur.Status != port.SeasonOpen {
+			stale = true
+			return nil
+		}
+		last, err := store.LastLogDays(ctx, tx, []uuid.UUID{r.SeasonRef})
+		if err != nil {
+			return err
+		}
+		if c, ok := logMissingCandidate(*cur, last[r.SeasonRef], s.today()); !ok || !c.SinceDate.Equal(r.SinceDate) {
+			stale = true
+			return nil
+		}
+		code, err = store.HouseholdNativeCode(ctx, tx, cur.HouseholdRef)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	finish := func(status, reason string) error {
+		return s.inTx(ctx, tid, func(tx pgx.Tx) error {
+			return store.FinishLogMissingReminder(ctx, tx, r.NoticeID, status, reason, s.now())
+		})
+	}
+	if stale {
+		res.LogDropped++
+		return finish("dropped", "logged_or_season_closed")
+	}
+	recipients, ok := members[r.CooperativeRef]
+	if !ok {
+		if recipients, err = s.coopMembers(ctx, tid, r.CooperativeRef); err != nil {
+			return err
+		}
+		members[r.CooperativeRef] = recipients
+	}
+	if len(recipients) == 0 {
+		res.LogDropped++
+		return finish("dropped", "no_active_member")
+	}
+	if code == "" {
+		code = "H-" + r.HouseholdRef.String()[:8]
+	}
+	if err := s.TaskNotifier.LogMissing(ctx, tid, port.LogMissingV1{SourceID: r.NoticeID, CooperativeRef: r.CooperativeRef, SeasonRef: r.SeasonRef,
+		HouseholdCode: code, Days: r.Days, Recipients: recipients}); err != nil {
+		return err // giữ pending; lượt sau gửi lại cùng SourceID
+	}
+	res.LogSent++
+	return finish("sent", "")
 }
 
 // sendReminder kiểm lại vụ và việc lúc gửi rồi gửi một thông báo cho cả nhóm (một vụ, một loại nhắc).

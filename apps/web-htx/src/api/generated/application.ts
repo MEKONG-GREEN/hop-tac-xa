@@ -10618,6 +10618,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/cooperatives/{ref}/household-seasons": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Danh sách vụ nông hộ của HTX kèm tiến độ (AH-140)
+         * @description Chỉ đọc (KHMV-FN-03-XEM R) — Đại diện HTX, Thành viên HTX, Admin; phạm vi theo HTX (KH-02), HTX khác bị từ chối. Mỗi vụ kèm trạng thái, % tiến độ, số việc đến hạn, trễ; lọc theo trạng thái và người mở vụ (Thành viên HTX). Phân trang theo season_ref.
+         */
+        get: operations["listCooperativeHouseholdSeasons"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/corrections": {
         parameters: {
             query?: never;
@@ -25593,6 +25615,35 @@ export interface components {
             /** @description Mã lý do bỏ qua, vd cropcycle.task_already_resolved, cropcycle.batch_task_mismatch */
             code?: string;
             reason?: string;
+        };
+        HouseholdSeasonOverviewItem: {
+            /** Format: uuid */
+            season_ref: string;
+            /** Format: uuid */
+            household_ref: string;
+            crop_code: string;
+            season_code: string;
+            season_year: number;
+            variety_code: string;
+            area_ha: string;
+            /** @enum {string} */
+            status: "open" | "completed" | "cancelled";
+            /** Format: uuid */
+            opened_by: string;
+            /** @description Tên hiển thị của người mở vụ (nếu có danh bạ) */
+            opened_by_label?: string;
+            /** Format: date-time */
+            opened_at: string;
+            /** @description Tiến độ của vụ; null khi không tính được */
+            progress: null | {
+                /** @description Decimal phần trăm; null khi mẫu số bằng 0 */
+                percent: string | null;
+                done: number;
+                total: number;
+                skipped: number;
+                due: number;
+                overdue: number;
+            };
         };
         KHTCReportSupplement: {
             /** Format: uuid */
@@ -51241,6 +51292,40 @@ export interface operations {
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    listCooperativeHouseholdSeasons: {
+        parameters: {
+            query?: {
+                status?: "open" | "completed" | "cancelled";
+                opened_by?: string;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Một trang vụ */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["HouseholdSeasonOverviewItem"][];
+                        next_cursor: string | null;
+                    };
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
         };
     };

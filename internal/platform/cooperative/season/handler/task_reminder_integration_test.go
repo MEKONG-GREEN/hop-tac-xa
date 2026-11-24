@@ -16,8 +16,10 @@ import (
 )
 
 type taskSender struct {
-	calls []port.TaskDueV1
-	fail  bool
+	calls   []port.TaskDueV1
+	missing []port.LogMissingV1
+	fail    bool
+	failLog bool
 }
 
 func (n *taskSender) TaskDue(_ context.Context, _ uuid.UUID, notice port.TaskDueV1) error {
@@ -25,6 +27,14 @@ func (n *taskSender) TaskDue(_ context.Context, _ uuid.UUID, notice port.TaskDue
 		return errors.New("notify unavailable")
 	}
 	n.calls = append(n.calls, notice)
+	return nil
+}
+
+func (n *taskSender) LogMissing(_ context.Context, _ uuid.UUID, notice port.LogMissingV1) error {
+	if n.failLog {
+		return errors.New("notify unavailable")
+	}
+	n.missing = append(n.missing, notice)
 	return nil
 }
 

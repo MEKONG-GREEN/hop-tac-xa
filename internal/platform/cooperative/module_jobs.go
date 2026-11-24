@@ -54,7 +54,8 @@ func (m *Module) Jobs(tenants seasonapp.TenantLister, clk clock.Clock, log *slog
 					outcome = "error"
 				}
 				log.Info("nhắc việc đến hạn/trễ", "event", "job."+port.JobTaskReminders, "tenants", r.Tenants, "seasons", r.Seasons,
-					"notices", r.Notices, "sent", r.Sent, "dropped", r.Dropped, "failed", r.Failed, "outcome", outcome)
+					"notices", r.Notices, "sent", r.Sent, "dropped", r.Dropped, "failed", r.Failed,
+					"log_notices", r.LogNotices, "log_sent", r.LogSent, "log_dropped", r.LogDropped, "outcome", outcome)
 			}
 			return err
 		},
