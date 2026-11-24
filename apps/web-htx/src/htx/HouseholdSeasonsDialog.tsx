@@ -178,8 +178,9 @@ export function HouseholdSeasonsDialog({ coopRef, household, calendarPrefill, on
       <p>{detail.sop_snapshot.anchor_name}: {detail.anchor_date} · {detail.gps_missing ? "Thiếu GPS" : "Đã ghi nhận vị trí"}</p>
       <p>SOP bản {detail.sop_snapshot.version_no} · Diện tích {formatDecimal(detail.area_ha, 2)} ha</p>
       <ol>{detail.sop_snapshot.steps.map((step, i) => <li key={i}>{step.name}</li>)}</ol>
-      <HouseholdChecklist key={`${detail.season_ref}:${detail.current_event_id}`} coopRef={coopRef} householdRef={household.household_ref} seasonRef={detail.season_ref} season={detail} />
-      <RunningSeasonPlan coopRef={coopRef} householdRef={household.household_ref} season={detail} onSeason={(s) => { setDetail(s); setRevision((v) => v + 1); }} />
+      <HouseholdChecklist key={`${detail.season_ref}:${detail.current_event_id}`} coopRef={coopRef} householdRef={household.household_ref} seasonRef={detail.season_ref} season={detail}
+        onOpenPlan={() => document.getElementById(`season-plan-${detail.season_ref}`)?.scrollIntoView({ behavior: "smooth", block: "start" })} />
+      <div id={`season-plan-${detail.season_ref}`}><RunningSeasonPlan coopRef={coopRef} householdRef={household.household_ref} season={detail} onSeason={(s) => { setDetail(s); setRevision((v) => v + 1); }} /></div>
       {detailPlan.loading ? <Loading label="Đang tải kế hoạch…" /> : detailPlan.error ? <ProblemAlert problem={detailPlan.error} onRetry={detailPlan.reload} /> : detailPlan.data ? <SeasonPlan plan={detailPlan.data} /> : null}
     </section> : null}
   </Dialog>;

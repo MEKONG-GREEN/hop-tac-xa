@@ -36,6 +36,7 @@ describe("AH-88 checklist", () => {
   it.each([true, "inflight"] as const)("hai chạm, hủy không ghi; retry giữ key/GPS (%s)", async (failure) => {
     Object.defineProperty(navigator, "geolocation", { configurable: true, value: { getCurrentPosition: (_ok: unknown, fail: () => void) => fail() } });
     const calls = setup("htx-member", failure);
+    fireEvent.click(await screen.findByRole("button", { name: /Chăm sóc/ }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "Hoàn thành Bón phân" }));
     expect(calls).toHaveLength(0);
     fireEvent.click(screen.getByRole("button", { name: "Hủy" }));
@@ -56,6 +57,7 @@ describe("AH-88 checklist", () => {
   });
   it("Đại diện không có ô tích dù dữ liệu cũ còn cờ cho ghi", async () => {
     const calls = setup("htx");
+    fireEvent.click(await screen.findByRole("button", { name: /Chăm sóc/ }));
     await screen.findByText("Bón phân");
     expect(screen.queryByRole("checkbox")).toBeNull();
     expect(calls).toHaveLength(0);

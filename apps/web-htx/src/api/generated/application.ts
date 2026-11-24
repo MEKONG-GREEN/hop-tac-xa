@@ -25426,6 +25426,10 @@ export interface components {
                 as_of_date: string;
                 done: number;
                 skipped: number;
+                /** @description AH-124: số việc chưa xong đang Đến hạn (không tính việc Không ngày) */
+                due: number;
+                /** @description AH-124: số việc chưa xong đang Trễ */
+                overdue: number;
                 total: number;
                 /** @description Decimal phần trăm; null khi mẫu số bằng 0 */
                 percent: string | null;
