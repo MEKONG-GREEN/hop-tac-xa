@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -42,7 +43,7 @@ func OpenHouseholdSeasons(ctx context.Context, tx pgx.Tx, after uuid.UUID, limit
 func HouseholdNativeCode(ctx context.Context, tx pgx.Tx, household uuid.UUID) (string, error) {
 	var code string
 	err := tx.QueryRow(ctx, `SELECT native_code FROM pf_coop.household WHERE tenant_id=shared.current_tenant() AND household_ref=$1`, household).Scan(&code)
-	if err == pgx.ErrNoRows {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return "", nil
 	}
 	return code, err
