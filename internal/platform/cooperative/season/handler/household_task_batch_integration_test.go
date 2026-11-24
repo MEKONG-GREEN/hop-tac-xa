@@ -35,12 +35,13 @@ func TestAH176_TaskBatch(t *testing.T) {
 	expect(t, f.managerA().get(path+"/task-batch-candidates?step_seq=3"), http.StatusForbidden, "đại diện không ghi")
 
 	s1, s2, h := path[len(f.householdPath())+1:], str(second.body, "season", "season_ref"), f.h1.String()
+	unknown := ids.New().String()
 	body := func(extra map[string]any) map[string]any {
 		b := map[string]any{"step_seq": 3, "state": "done", "done_on": "2026-09-29", "note": "Bón thúc đợt 1", "materials": []any{}, "zero_confirmed": true,
 			"gps": map[string]any{"source": "denied"}, "channel": "web", "seasons": []map[string]any{
 				{"household_ref": h, "season_ref": s1, "expected_season_event_id": event},
 				{"household_ref": h, "season_ref": s2, "expected_season_event_id": event2},
-				{"household_ref": h, "season_ref": ids.New().String(), "expected_season_event_id": event},
+				{"household_ref": h, "season_ref": unknown, "expected_season_event_id": event},
 			}}
 		for k, v := range extra {
 			b[k] = v
