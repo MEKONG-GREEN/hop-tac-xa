@@ -3,6 +3,8 @@ package handler_test
 import (
 	"net/http"
 	"testing"
+
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/ids"
 )
 
 // AH-70: dừng vụ đang canh tác kèm lý do — giải phóng diện tích, giữ dữ liệu, vụ đã dừng không ghi được; quyền.
@@ -22,7 +24,7 @@ func TestAH70_StopHouseholdSeason(t *testing.T) {
 	// AC2: thiếu lý do, phiên bản cũ; AC4: Đại diện không dừng được, HTX khác không thấy.
 	expect(t, c.post(path+"/stop", stop("ngắn", event)), http.StatusUnprocessableEntity, "lý do quá ngắn")
 	expect(t, c.post(path+"/stop", stop("Liên hệ 0912345678 để biết", event)), http.StatusUnprocessableEntity, "lý do chứa SĐT")
-	expect(t, c.post(path+"/stop", stop("Ngập úng mất trắng toàn bộ", key())), http.StatusConflict, "phiên bản vụ cũ")
+	expect(t, c.post(path+"/stop", stop("Ngập úng mất trắng toàn bộ", ids.New().String())), http.StatusConflict, "phiên bản vụ cũ")
 	expect(t, f.managerA().post(path+"/stop", stop("Ngập úng mất trắng toàn bộ", event)), http.StatusForbidden, "Đại diện")
 	expect(t, f.memberB().post(path+"/stop", stop("Ngập úng mất trắng toàn bộ", event)), http.StatusNotFound, "HTX khác")
 
