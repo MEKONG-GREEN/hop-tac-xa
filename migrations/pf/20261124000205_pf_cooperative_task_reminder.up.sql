@@ -35,3 +35,6 @@ GRANT SELECT, INSERT, UPDATE ON pf_coop.task_reminder TO r_cooperative;
 GRANT USAGE ON SCHEMA pf_coop TO ag_ops_jobs;
 GRANT SELECT (tenant_id, entry_kind, status) ON pf_coop.season_current TO ag_ops_jobs;
 GRANT SELECT (tenant_id, status) ON pf_coop.task_reminder TO ag_ops_jobs;
+
+-- FN-03/DATA-03: tham chiếu HTX mới tham gia chốt ghi/xóa Nút HTX (guard + view tham chiếu của owner).
+SELECT shared.publish_cooperative_references('pf_coop','pf_cooperative_pub','r_cooperative_pub');
