@@ -16,6 +16,7 @@
 //	mechanization_area_feed_check  mỗi giờ: dữ liệu diện tích vụ App HTX quá ngưỡng độ tươi → báo Admin CGH (CGH FN-07)
 //	metrics_snapshot      00:45 hằng ngày (sau anchor): ghi sổ chỉ số của hôm qua + ảnh chụp lớp GIS (pf/metrics, G3)
 //	mrv_review_escalation mỗi 15 phút: hồ sơ MRV chờ duyệt quá hạn → báo người duyệt, rồi quản trị TTKN tỉnh (KN US-MRV-06)
+//	cooperative_task_reminders 07:00 hằng ngày: nhắc Thành viên HTX việc vừa đến hạn/trễ của vụ nông hộ (AH-191, NTF.2; cần Keycloak)
 //	price_calendar        mỗi phút: mốc khóa nhập giá 12:00 (±1 phút) + nhắc nhập giá lần 1/2 (pf/price, Báo giá FN-AD-04.04, FN-XA-03.04)
 //
 // Khi có lịch, worker đăng ký các gauge (gauges.go) — ADR-0006: ag.sync.conflict.overdue
@@ -124,6 +125,8 @@ import (
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts"
 	accport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/accounts/port"
 	apiclientport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/apiclient/port"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative"
+	coopport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/port"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/masterdata"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/mechanization"
 	mechport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/mechanization/port"
@@ -609,6 +612,28 @@ func buildSchedule(ctx context.Context, log *slog.Logger, jobs string) (*opsSche
 		}
 		js = append(js, mods.Weather.Jobs(weather.Tenants(out.pools[migrations.PF]), log)...)
 	}
+	if selected(jobs, coopport.JobTaskReminders) && os.Getenv("AG_KC_ADMIN_URL") != "" {
+		// AH-191 (NTF.2): nhắc việc đến hạn/trễ 07:00 cho Thành viên HTX. Dựng module pf qua assembly.Build (danh bạ
+		// thành viên qua Keycloak, gửi qua pf/notify); tìm tenant bằng ag_ops_jobs, ghi bằng r_cooperative. Chưa cấu hình
+		// Keycloak → không có job; thiếu danh bạ/cổng thông báo → lỗi khởi động (fail-closed, không báo "đã gửi" giả).
+		mods, cpools, err := buildPlatform(ctx, direct)
+		prevClose := closeFn
+		closeFn = func() {
+			for _, p := range cpools {
+				p.Close()
+			}
+			prevClose()
+		}
+		if err != nil {
+			closeFn()
+			return nil, func() {}, err
+		}
+		if err := mods.Cooperative.TaskRemindersReady(); err != nil {
+			closeFn()
+			return nil, func() {}, err
+		}
+		js = append(js, mods.Cooperative.Jobs(cooperative.ReminderTenants(out.pools[migrations.PF]), clk, log)...)
+	}
 	if selected(jobs, accport.JobDormant) && os.Getenv("AG_KC_ADMIN_URL") != "" {
 		// D24 (W10.05): báo trước ngày 38, khóa ngày 45 tài khoản không hoạt động. Tìm tenant bằng ag_ops_jobs (cột
 		// tenant_id, enabled của pf_accounts.account), ghi bằng r_accounts; lần đăng nhập đọc ở Keycloak (AG_KC_*,
@@ -636,7 +661,7 @@ func buildSchedule(ctx context.Context, log *slog.Logger, jobs string) (*opsSche
 		closeFn()
 		return nil, func() {}, errors.New("-jobs không chọn job hợp lệ nào (anchor, idempotency, " + accport.JobDormant + ", " +
 			reports.JobSchedules + ", " + mechport.JobAreaFeedCheck + ", " + metricsport.JobMetricsSnapshot + ", " + mrvport.JobReviewEscalator +
-			", " + apiclientport.JobKeyExpiry + ", " + apiclientport.JobFeedBuild + ", " + apiclientport.JobFeedRetention + ", " + apiclientport.JobWebhookDispatch + ", " + weatherport.JobFetch + ")")
+			", " + apiclientport.JobKeyExpiry + ", " + apiclientport.JobFeedBuild + ", " + apiclientport.JobFeedRetention + ", " + apiclientport.JobWebhookDispatch + ", " + weatherport.JobFetch + ", " + coopport.JobTaskReminders + ")")
 	}
 	out.s = &schedule.Scheduler{Clock: clk, Log: log, Jobs: js}
 	return out, closeFn, nil

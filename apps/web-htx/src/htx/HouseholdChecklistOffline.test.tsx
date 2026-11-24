@@ -31,6 +31,7 @@ describe("AH-114 tích nhanh ngoại tuyến trên Web", () => {
     render(<AuthContextForTests.Provider value={{ status: "authenticated", api, principal } as AuthContextValue}>
       <HouseholdChecklist coopRef={principal.orgRef!} householdRef="household" seasonRef="season" season={season} />
     </AuthContextForTests.Provider>);
+    fireEvent.click(await screen.findByRole("button", { name: /Chăm sóc/ }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "Hoàn thành Phun thuốc cỏ" }));
     fireEvent.click(screen.getByRole("button", { name: "Xác nhận" }));
     expect(await screen.findByText("Đang ngoại tuyến — dữ liệu sẽ đồng bộ khi có mạng")).toBeTruthy();

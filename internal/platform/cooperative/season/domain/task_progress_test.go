@@ -74,3 +74,34 @@ func TestTaskProgressHarvestedOnlyLastStageAndPartial(t *testing.T) {
 		t.Fatal("future completion accepted")
 	}
 }
+
+// AH-124: đếm việc Đến hạn / Trễ chưa xong; việc Không ngày, đã xong, bỏ qua không tính.
+func TestTaskProgressDueOverdueCounts(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		w            *Window
+		asOf         string
+		records      []TaskRecord
+		due, overdue int
+	}{
+		{"đến hạn", win(WindowDateRange, AnchorNXG, ip(-1), ip(2)), "2024-03-02", nil, 1, 0},
+		{"trễ", win(WindowDateRange, AnchorNXG, ip(-1), ip(2)), "2024-03-10", nil, 0, 1},
+		{"làm dở vẫn trễ", win(WindowDateRange, AnchorNXG, ip(-1), ip(2)), "2024-03-10", []TaskRecord{{StepSeq: 2, State: "partial", DoneOn: "2024-03-05"}}, 0, 1},
+		{"đã xong", win(WindowDateRange, AnchorNXG, ip(-1), ip(2)), "2024-03-10", []TaskRecord{{StepSeq: 2, State: "done", DoneOn: "2024-03-05"}}, 0, 0},
+		{"bỏ qua", win(WindowDateRange, AnchorNXG, ip(-1), ip(2)), "2024-03-10", []TaskRecord{{StepSeq: 2, State: "skipped", DoneOn: "2024-03-05"}}, 0, 0},
+		{"không ngày", win(WindowNone, "", nil, nil), "2024-03-10", nil, 0, 0},
+		{"cửa sổ mở", win(WindowOpen, AnchorNXG, ip(1), nil), "2024-03-10", nil, 1, 0},
+	} {
+		p, err := CalculateSchedule(scheduleContent(tc.w), scheduleDay("2024-03-01"), scheduleDay(tc.asOf), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		c, err := BuildChecklist(p, tc.records, "open")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if c.Due != tc.due || c.Overdue != tc.overdue {
+			t.Fatalf("%s: due=%d overdue=%d", tc.name, c.Due, c.Overdue)
+		}
+	}
+}

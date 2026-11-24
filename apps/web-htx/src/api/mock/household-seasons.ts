@@ -78,7 +78,7 @@ function batchCandidates(src: Season, step: Season["sop_snapshot"]["steps"][numb
 function mockChecklist(s: Season, write: boolean): components["schemas"]["HouseholdChecklist"] {
   const plan = mockPlan(s.sop_snapshot, s.anchor_date, s.current_event_id);
   const records = taskRecords.get(s.season_ref) ?? [];
-  let total = 0, done = 0, skippedCount = 0;
+  let total = 0, done = 0, skippedCount = 0, due = 0, overdue = 0;
   const skipped = skippedSeqs(s.sop_snapshot);
   const last = Math.max(...plan.stages.map((s) => s.seq));
   const stages = plan.stages.map((stage) => {
@@ -88,6 +88,8 @@ function mockChecklist(s: Season, write: boolean): components["schemas"]["Househ
       const record = records.find((r) => r.step_seq === task.seq && r.state === "done");
       let status: components["schemas"]["HouseholdTaskProgress"]["completion_status"] = task.status;
       if (!record && skipped.includes(task.seq)) { skippedCount++; resolved++; return { ...task, completion_status: "skipped" as const, done_on: null, can_complete: false }; }
+      if (!record && !task.undated && task.status === "due") due++;
+      if (!record && !task.undated && task.status === "overdue") overdue++;
       if (record) { done++; resolved++; status = task.undated ? "done_on_time" : !task.from_date ? "done" : record.done_on < task.from_date ? "done_early" : task.to_date && record.done_on > task.to_date ? "done_late" : "done_on_time"; }
       return { ...task, completion_status: status, done_on: record?.done_on ?? null, can_complete: write && !record && (s.status === "open" || (s.status === "completed" && stage.seq === last)) };
     });
@@ -96,7 +98,7 @@ function mockChecklist(s: Season, write: boolean): components["schemas"]["Househ
   });
   const denominator = total - skippedCount;
   const scaled = denominator ? (BigInt(done) * 10000n + BigInt(denominator) / 2n) / BigInt(denominator) : null;
-  return { season_ref: s.season_ref, current_event_id: s.current_event_id, records, progress: { as_of_date: plan.as_of_date, total, done, skipped: skippedCount, percent: scaled == null ? null : `${scaled / 100n}.${(scaled % 100n).toString().padStart(2, "0")}`, stages } };
+  return { season_ref: s.season_ref, current_event_id: s.current_event_id, records, progress: { as_of_date: plan.as_of_date, total, done, skipped: skippedCount, due, overdue, percent: scaled == null ? null : `${scaled / 100n}.${(scaled % 100n).toString().padStart(2, "0")}`, stages } };
 }
 
 function mockPlan(snapshot: Season["sop_snapshot"], anchor: string, event: string | null): components["schemas"]["SeasonSchedule"] {

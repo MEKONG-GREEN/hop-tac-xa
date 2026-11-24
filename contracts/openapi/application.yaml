@@ -29338,11 +29338,13 @@ components:
         records: {type: array, items: {$ref: "#/components/schemas/HouseholdTaskRecord"}}
         progress:
           type: object
-          required: [as_of_date, done, skipped, total, percent, stages]
+          required: [as_of_date, done, skipped, total, due, overdue, percent, stages]
           properties:
             as_of_date: {type: string, format: date}
             done: {type: integer}
             skipped: {type: integer}
+            due: {type: integer, description: "AH-124: số việc chưa xong đang Đến hạn (không tính việc Không ngày)"}
+            overdue: {type: integer, description: "AH-124: số việc chưa xong đang Trễ"}
             total: {type: integer}
             percent: {type: [string, "null"], description: "Decimal phần trăm; null khi mẫu số bằng 0"}
             stages:

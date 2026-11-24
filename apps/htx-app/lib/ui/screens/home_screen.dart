@@ -18,6 +18,7 @@ import 'bulk_open_screen.dart';
 import 'collection_screen.dart';
 import 'news_screen.dart';
 import 'notifications_screen.dart';
+import 'onboarding_screen.dart';
 import 'plot_map_screen.dart';
 import 'plots_screen.dart';
 import 'review_screen.dart';
@@ -269,6 +270,16 @@ class HomeScreen extends ConsumerWidget {
                 }
               },
             ),
+          if (mode == HtxMode.member)
+            IconButton(
+              tooltip: 'Hướng dẫn sử dụng',
+              iconSize: 28,
+              icon: const Icon(Icons.help_outline),
+              onPressed: () {
+                final db = ref.read(appControllerProvider).services?.db;
+                if (db != null) openOnboarding(context, db);
+              },
+            ),
           IconButton(
             tooltip: 'Thông báo',
             iconSize: 28,
@@ -296,6 +307,7 @@ class HomeScreen extends ConsumerWidget {
         child: ListView(
           padding: const EdgeInsets.all(12),
           children: [
+            if (mode == HtxMode.member) const _OnboardingGate(),
             if (notice != null)
               // FN-TK-01/EX-03 (AH-222): vai vừa bị ngừng, còn một vai nên dùng
               // luôn vai đó; giữ câu báo tới khi người dùng đóng.
@@ -376,4 +388,26 @@ class HomeScreen extends ConsumerWidget {
         : null,
     onTap: onTap,
   );
+}
+
+/// AH-101: lần đầu Thành viên HTX vào trang chủ thì mở hướng dẫn một lần.
+class _OnboardingGate extends ConsumerStatefulWidget {
+  const _OnboardingGate();
+
+  @override
+  ConsumerState<_OnboardingGate> createState() => _OnboardingGateState();
+}
+
+class _OnboardingGateState extends ConsumerState<_OnboardingGate> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final db = ref.read(appControllerProvider).services?.db;
+      if (db != null && mounted) maybeShowOnboarding(context, ref, db);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }

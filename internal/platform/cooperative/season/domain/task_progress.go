@@ -42,8 +42,11 @@ type Checklist struct {
 	Stages   []StageProgress `json:"stages"`
 	Done     int             `json:"done"`
 	Skipped  int             `json:"skipped"`
-	Total    int             `json:"total"`
-	Percent  *string         `json:"percent"`
+	// Due, Overdue (AH-124): việc chưa xong đang Đến hạn / Trễ theo ngày Việt Nam; không tính việc Không ngày.
+	Due     int     `json:"due"`
+	Overdue int     `json:"overdue"`
+	Total   int     `json:"total"`
+	Percent *string `json:"percent"`
 }
 
 // BuildChecklist is a pure derivation from the pinned schedule and current logs.
@@ -105,6 +108,14 @@ func BuildSeasonChecklist(plan SchedulePlan, records []TaskRecord, seasonStatus 
 				out.Skipped++
 				resolved++
 				task.CompletionStatus = "skipped"
+			}
+			if task.DoneOn == nil && task.CompletionStatus != "skipped" && !w.Undated {
+				switch w.Status {
+				case ScheduleDue:
+					out.Due++
+				case ScheduleOverdue:
+					out.Overdue++
+				}
 			}
 			task.CanComplete = !skipped[w.Seq] && (!ok || r.State == "partial") && (seasonStatus == "open" || (seasonStatus == "completed" && s.Seq == lastStage))
 			out.Total++
