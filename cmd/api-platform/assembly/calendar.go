@@ -94,3 +94,13 @@ func (n CalendarNotifier) CalendarPublished(ctx context.Context, tid uuid.UUID, 
 	}
 	return n.Notifier.CalendarPublished(ctx, tid, notifyport.CalendarPublishedNotice{MemberNoticeBase: notifyport.MemberNoticeBase{SourceID: e.SourceID, CooperativeRef: e.CooperativeRef, Recipients: e.Recipients}, CalendarRef: e.CalendarRef, CropName: e.CropName, SeasonName: e.SeasonName, Year: e.Year, SowFrom: e.SowFrom, SowTo: e.SowTo})
 }
+
+// TaskDue gửi NTF.2 của job nhắc việc (AH-191). TaskRef là mã lượt nhắc của vụ: một thông báo gom các việc cùng vụ
+// cùng loại nhắc (KH-21), nên không trỏ tới một việc riêng.
+func (n CalendarNotifier) TaskDue(ctx context.Context, tid uuid.UUID, e coopport.TaskDueV1) error {
+	if n.Notifier == nil {
+		return errors.New("task reminder: notifier unavailable")
+	}
+	return n.Notifier.TaskDue(ctx, tid, notifyport.TaskDueNotice{MemberNoticeBase: notifyport.MemberNoticeBase{SourceID: e.SourceID, CooperativeRef: e.CooperativeRef, Recipients: e.Recipients},
+		SeasonRef: e.SeasonRef, TaskRef: e.SourceID, HouseholdCode: e.HouseholdCode, TaskName: e.TaskName, DueDate: e.DueDate, Overdue: e.Overdue})
+}
