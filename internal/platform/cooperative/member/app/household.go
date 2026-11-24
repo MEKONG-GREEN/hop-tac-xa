@@ -229,7 +229,8 @@ type HouseholdPage struct {
 //
 // phone khác rỗng: tìm đúng SĐT qua chỉ mục mù của kho định danh (HTX US-HH-01 AC-2) —
 // trả tối đa một hộ của HTX này. Họ tên chỉ nằm ở kho (R-04) nên không tìm theo tên.
-func (s *Service) ListHouseholds(ctx context.Context, coopRef, after uuid.UUID, limit int, phone string, states ...string) (HouseholdPage, error) {
+// nationalID (AH-293, AC-N2): tìm theo ĐỦ số CCCD/CMND qua chỉ mục mù của kho định danh; một phần số không khớp.
+func (s *Service) ListHouseholds(ctx context.Context, coopRef, after uuid.UUID, limit int, phone, nationalID string, states ...string) (HouseholdPage, error) {
 	p, err := authz.Require(ctx, householdReaderRoles...)
 	if err != nil {
 		return HouseholdPage{}, err
@@ -263,8 +264,11 @@ func (s *Service) ListHouseholds(ctx context.Context, coopRef, after uuid.UUID, 
 	if err != nil {
 		return HouseholdPage{}, err
 	}
-	phone = strings.TrimSpace(phone)
-	if shared && phone != "" {
+	phone, nationalID = strings.TrimSpace(phone), strings.TrimSpace(nationalID)
+	if phone != "" && nationalID != "" {
+		return HouseholdPage{}, problem.Validation.WithField("national_id", "Tìm theo SĐT hoặc CCCD, không cùng lúc")
+	}
+	if shared && (phone != "" || nationalID != "") {
 		return HouseholdPage{}, problem.Forbidden
 	}
 	byPhone := uuid.Nil
@@ -273,6 +277,12 @@ func (s *Service) ListHouseholds(ctx context.Context, coopRef, after uuid.UUID, 
 		if byPhone, err = s.householdByPhone(ctx, phone); err != nil {
 			return HouseholdPage{}, err
 		}
+	}
+	if nationalID != "" {
+		if byPhone, err = s.householdByNationalID(ctx, nationalID); err != nil {
+			return HouseholdPage{}, err
+		}
+		phone = nationalID // cùng nhánh lọc một hộ bên dưới
 	}
 	coop, err := s.coopOrg(ctx, p.TenantID, coopRef)
 	if err != nil {

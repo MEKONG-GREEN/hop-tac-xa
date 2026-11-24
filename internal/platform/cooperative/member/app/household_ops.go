@@ -202,6 +202,25 @@ func (s *Service) HouseholdPhone(ctx context.Context, ref uuid.UUID) (string, er
 
 // householdByPhone tìm nông hộ theo SĐT qua chỉ mục mù của kho định danh (HTX US-HH-01
 // AC-2, mục đích registry.admin — kho ghi sổ tra cứu). Không thấy → Nil, nil.
+// householdByNationalID (AH-293) tra ref theo đủ số CCCD/CMND; không thấy → Nil (danh sách rỗng).
+func (s *Service) householdByNationalID(ctx context.Context, nationalID string) (uuid.UUID, error) {
+	if s.Vault == nil {
+		return uuid.Nil, ErrDependency.WithDetail("chưa nối kho định danh")
+	}
+	ref, err := s.Vault.LookupNationalID(ctx, nationalID)
+	switch {
+	case errors.Is(err, port.ErrIdentityNotFound):
+		return uuid.Nil, nil
+	case err != nil:
+		var pr *problem.Problem
+		if errors.As(err, &pr) && pr.Status == http.StatusUnprocessableEntity {
+			return uuid.Nil, problem.Validation.WithField("national_id", "Nhập đủ 12 số CCCD hoặc 9 số CMND")
+		}
+		return uuid.Nil, vaultError(err)
+	}
+	return ref, nil
+}
+
 func (s *Service) householdByPhone(ctx context.Context, phone string) (uuid.UUID, error) {
 	if s.Vault == nil {
 		return uuid.Nil, ErrDependency.WithDetail("chưa nối kho định danh")

@@ -141,6 +141,19 @@ func (h households) Phone(ctx context.Context, ref uuid.UUID) (string, error) {
 	return id.Phone, err
 }
 
+// LookupNationalID (AH-293): chỉ đường gốc HTX (Admin, Đại diện, Thành viên) qua kho định danh; không có tra cứu chung.
+func (h households) LookupNationalID(ctx context.Context, nationalID string) (uuid.UUID, error) {
+	q, ok := h.c.(client.HouseholdNationalIDLookup)
+	if !ok {
+		return uuid.Nil, port.ErrIdentityNotFound
+	}
+	ref, err := q.LookupHouseholdNationalID(ctx, client.PurposeContact, nationalID)
+	if errors.Is(err, client.ErrNotFound) {
+		return uuid.Nil, port.ErrIdentityNotFound
+	}
+	return ref, err
+}
+
 func (h households) LookupPhone(ctx context.Context, phone string) (uuid.UUID, error) {
 	if p, ok := authz.FromContext(ctx); ok && p.KN == nil && (p.Has(htxroles.Admin) || p.Has(htxroles.Representative) || p.Has(htxroles.Member)) {
 		if q, ok := h.c.(client.HouseholdPhoneLookup); ok {

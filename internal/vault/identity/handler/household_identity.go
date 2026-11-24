@@ -43,6 +43,21 @@ func (h Handler) lookupHouseholdPhone(c *gin.Context) {
 	c.JSON(http.StatusOK, client.LookupResponse{Ref: ref.String()})
 }
 
+// lookupHouseholdNationalID: AH-293 — tìm hộ theo đủ số CCCD/CMND (chỉ mục mù), chỉ trả mã hộ.
+func (h Handler) lookupHouseholdNationalID(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	var req client.LookupRequest
+	if !bind(c, &req) {
+		return
+	}
+	ref, err := h.Svc.LookupHouseholdNationalID(c.Request.Context(), purposeOf(c, req.Purpose), req.Value)
+	if err != nil {
+		httpx.Fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, client.LookupResponse{Ref: ref.String()})
+}
+
 func (h Handler) writeHouseholdIdentity(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	command, err := uuid.Parse(c.Param("command"))

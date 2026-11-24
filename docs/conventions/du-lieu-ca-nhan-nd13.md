@@ -44,6 +44,18 @@ Ghi sổ lỗi thì không trả dữ liệu (đóng khi lỗi).
   đồng bộ, DTO, request) mang thẻ `pii:"true"` (AH-9).
 - Log truy cập HTTP chỉ ghi mẫu route, không ghi query string (`shared/httpx`).
 
+## AH-293 — CCCD, SĐT (NFR#5, LEGAL-01)
+
+- Lưu: CCCD, SĐT của nông hộ chỉ ở kho định danh (`vault.identity.phone_ct`, `national_id_ct`, AES-256-GCM theo khóa
+  từng chủ thể); pf không có cột rõ (AC-N1).
+- Tìm: `GET /v1/cooperatives/{ref}/households?phone=` hoặc `?national_id=` khớp ĐỦ số qua chỉ mục mù
+  (`/v1/household-identities/phone-lookup`, `/national-id-lookup` của kho); một phần số → 422, không tìm gần đúng (AC-N2).
+  HTX được chia sẻ không tra cứu được (403). Lưu ý: số tra cứu đi trong query string — cấu hình proxy/ingress không ghi
+  query string vào log truy cập.
+- Che ở máy chủ: Thành viên HTX và Đại diện HTX xem hộ của HTX được chia sẻ nhận SĐT 4 đầu/3 cuối, CCCD 3 đầu/3 cuối
+  (`vault/identity/app.householdMask`); Admin, Đại diện HTX xem hộ HTX mình thấy đầy đủ ở hồ sơ hộ (AC-N3). Danh sách hộ
+  luôn chỉ có SĐT đã che, không có CCCD.
+
 ## Chờ quyết định
 
 1. **Toạ độ GPS khi lưu** (Q-32): mã hóa theo hộ (mất truy vấn không gian trực tiếp, cần cột phụ đã làm thô cho bản

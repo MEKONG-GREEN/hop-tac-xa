@@ -256,7 +256,7 @@ func (h Handler) listHouseholds(c *gin.Context) {
 	if !ok {
 		return
 	}
-	page, err := h.Svc.ListHouseholds(c.Request.Context(), ref, after, queryLimit(c), c.Query("phone"), c.Query("status"))
+	page, err := h.Svc.ListHouseholds(c.Request.Context(), ref, after, queryLimit(c), c.Query("phone"), c.Query("national_id"), c.Query("status"))
 	if err != nil {
 		httpx.Fail(c, err)
 		return
