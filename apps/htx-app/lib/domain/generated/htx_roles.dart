@@ -282,6 +282,7 @@ const htxRoleMatrixJson = '''
     "POST /v1/cooperatives/:ref/households/:household_ref/season-plan-preview",
     "POST /v1/cooperatives/:ref/households/:household_ref/seasons/:season_ref/task-completions",
     "POST /v1/cooperatives/:ref/households/:household_ref/seasons/:season_ref/task-records",
+    "POST /v1/cooperatives/:ref/households/:household_ref/seasons/:season_ref/stop",
     "POST /v1/cooperatives/:ref/households/:household_ref/seasons/:season_ref/task-batches",
     "POST /v1/cooperatives/:ref/households/:household_ref/seasons/:season_ref/adhoc-records",
     "POST /v1/cooperatives/:ref/households/:household_ref/seasons/:season_ref/task-records/:log_ref/corrections",

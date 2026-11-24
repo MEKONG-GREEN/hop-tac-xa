@@ -4,7 +4,7 @@ import { CATALOGS, findCoop } from "./data";
 import type { MockPersona } from "./personas";
 import { householdMockSOPs } from "./cropcycle";
 import { householdMockRows } from "./htx-gaps";
-import { allocateHouseholdMock, scaledArea } from "./household-season-state";
+import { allocateHouseholdMock, releaseHouseholdMock, scaledArea } from "./household-season-state";
 import { hasRole, json, nowIso, paginate, problem, problemOf, validation, type Route } from "./http";
 import { applyPlanChange, applyPlanChanges, effectiveSteps, skippedSeqs, type PlanError } from "./season-plan-custom";
 
@@ -19,6 +19,7 @@ const planReceipts = new Map<string, { season: Season; summary: string }>();
 // AH-126: các phiên bản của nhật ký việc theo log_ref (lịch sử chỉ ghi thêm).
 const taskHistory = new Map<string, TaskRecord[]>();
 const editReceipts = new Map<string, TaskRecord>();
+const stopReceipts = new Map<string, Season>();
 const planProblem = (e: PlanError) => e.field ? validation([{ field: e.field, reason: e.reason }]) : problem(e.status, e.code, e.reason);
 
 const journalWriter = (p: MockPersona) => hasRole(p, "platform_admin") || (hasRole(p, "htx_member") && !hasRole(p, "coop_manager"));
@@ -189,6 +190,26 @@ export const householdSeasonRoutes: Route[] = [{
     const current = (taskRecords.get(s.season_ref) ?? []).find((r) => r.log_ref === params[3]);
     const items = taskHistory.get(params[3]!) ?? (current ? [{ ...current, version: current.version ?? 1 }] : []);
     return items.length ? json({ items }) : problem(404, "cropcycle.task_record_not_found", "Không tìm thấy bản ghi");
+  },
+}, {
+  // AH-70: dừng vụ đang canh tác kèm lý do; giải phóng diện tích.
+  method: "POST", pattern: /^\/v1\/cooperatives\/([\w-]+)\/households\/([\w-]+)\/seasons\/([\w-]+)\/stop$/,
+  handler: ({ params, persona, body, request }) => {
+    if (!journalWriter(persona)) return problem(403, "forbidden", "Vai của bạn chỉ được xem");
+    const s = seasons.find((s) => s.cooperative_ref === params[0] && s.household_ref === params[1] && s.season_ref === params[2]);
+    if (!s || (!hasRole(persona, "platform_admin") && persona.me.org?.ref !== s.cooperative_ref)) return problem(404, "cropcycle.season_not_found", "Không tìm thấy vụ");
+    const receipt = `${persona.me.actor_ref}:stop:${request.headers.get("Idempotency-Key")}`;
+    const replay = stopReceipts.get(receipt);
+    if (replay) return json(replay);
+    const b = body as { expected_season_event_id: string; reason: string };
+    const reason = (b.reason ?? "").trim().replace(/\s+/g, " ");
+    if (reason.length < 10 || reason.length > 500) return validation([{ field: "reason", reason: "Nhập lý do dừng vụ (10–500 ký tự)" }]);
+    if (s.status !== "open") return problem(409, "cropcycle.season_state", "Chỉ dừng được vụ đang canh tác");
+    if (b.expected_season_event_id !== s.current_event_id) return problem(409, "cropcycle.task_season_changed", "Vụ đã thay đổi");
+    s.status = "cancelled"; s.current_event_id = uuidv7(); s.version += 1; s.stop_reason = reason; s.stopped_at = nowIso();
+    releaseHouseholdMock(s.cooperative_ref, s.household_ref, s.area_ha);
+    stopReceipts.set(receipt, structuredClone(s));
+    return json(s);
   },
 }, {
   method: "POST", pattern: /^\/v1\/cooperatives\/([\w-]+)\/households\/([\w-]+)\/seasons\/([\w-]+)\/plan-changes$/,

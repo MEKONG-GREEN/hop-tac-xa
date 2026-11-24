@@ -156,12 +156,17 @@ func householdSeasonOut(r app.SeasonResult) gin.H {
 		v := domain.FormatDay(s.HarvestOpenDate)
 		harvest = &v
 	}
-	return gin.H{"season_ref": s.SeasonRef, "entry_kind": "household", "household_ref": s.HouseholdRef,
+	out := gin.H{"season_ref": s.SeasonRef, "entry_kind": "household", "household_ref": s.HouseholdRef,
 		"cooperative_ref": s.CooperativeRef, "commune_code": s.CommuneCode, "crop_code": s.CropCode,
 		"season_code": s.SeasonCode, "season_year": s.SeasonYear, "variety_code": s.VarietyCode, "area_ha": s.AreaHa.String(),
 		"anchor_date": domain.FormatDay(s.SowingDate), "expected_harvest_date": forecast, "harvest_open_date": harvest,
 		"sop_snapshot": s.SOPSnapshot, "status": s.Status, "current_event_id": s.CurrentEventID, "version": s.Version,
 		"gps_missing": !r.Event.GPS.HasPoint(), "gps": gpsOut(r.Event.GPS), "opened_by": s.OpenedBy, "opened_at": ts(s.OpenedAt), "copied_from": uuidOrNil(s.CopiedFrom)}
+	// AH-70: lý do dừng vụ (sự kiện hiện tại của vụ đã dừng).
+	if s.Status == "cancelled" && r.Event.Action == "cancelled" {
+		out["stop_reason"], out["stopped_at"] = r.Event.Reason, ts(r.Event.EventTime)
+	}
+	return out
 }
 
 func uuidOrNil(u uuid.UUID) *uuid.UUID {
