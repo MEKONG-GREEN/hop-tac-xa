@@ -21,6 +21,7 @@ import { householdAreaError, requestGPS, useSeasonMetadata, useSopChoices } from
 import { HouseholdChecklist } from "./HouseholdChecklist";
 import { SeasonPlanEditor, type PlanChange, type PlanStage } from "./SeasonPlanEditor";
 import { RunningSeasonPlan } from "./SeasonPlanCustomizer";
+import { StopSeasonForm } from "./StopSeasonForm";
 import { SelfMadePlanBuilder, type SelfMadePlan } from "./SelfMadePlanBuilder";
 import type { CalendarPrefill } from "./seasonCalendarModel";
 
@@ -29,11 +30,15 @@ export { householdAreaError } from "./seasonOptions";
 type S = components["schemas"];
 type GPS = S["CropGPS"];
 
+const SEASON_STATUS: Record<string, string> = { open: "Đang canh tác", completed: "Đã thu hoạch", cancelled: "Đã dừng vụ" };
+
 export function HouseholdSeasonsDialog({ coopRef, household, calendarPrefill, onClose, onSaved }: {
   coopRef: string; household: HouseholdListItem; calendarPrefill?: CalendarPrefill; onClose: () => void; onSaved: () => void;
 }) {
   const { api, principal } = useAuth();
   const canCreate = hasRole(principal, ROLES.platformAdmin, ROLES.htxMember) && matrixAllows(principal, "KHMV-FN-03", "C");
+  // AH-70: dừng vụ — KHMV-FN-03 D; Đại diện không có nút.
+  const canStop = hasRole(principal, ROLES.platformAdmin, ROLES.htxMember) && matrixAllows(principal, "KHMV-FN-03", "D");
   const [opening, setOpening] = useState(!!calendarPrefill);
   const [crop, setCrop] = useState(calendarPrefill?.crop_code ?? "");
   const [variety, setVariety] = useState("");
@@ -169,14 +174,16 @@ export function HouseholdSeasonsDialog({ coopRef, household, calendarPrefill, on
     {opening && planReady && preview.data ? <SeasonPlanEditor stages={openStages} lookup={openLookup} onChange={changeOpening} disabled={busy} /> : null}
     {list.error ? <ProblemAlert problem={list.error} onRetry={list.reload} /> : null}
     {list.loading ? <Loading /> : null}
-    <ul>{list.items.map((s) => <li key={s.season_ref}><button className="btn btn-o" onClick={() => setDetail(s)}>{s.season_code} {s.season_year} · {s.crop_code} · {formatDecimal(s.area_ha, 2)} ha · {s.status === "open" ? "Đang canh tác" : s.status}</button>
+    <ul>{list.items.map((s) => <li key={s.season_ref}><button className="btn btn-o" onClick={() => setDetail(s)}>{s.season_code} {s.season_year} · {s.crop_code} · {formatDecimal(s.area_ha, 2)} ha · {SEASON_STATUS[s.status] ?? s.status}</button>
       {canCreate && hasCapacity && s.status !== "cancelled" ? <button type="button" className="btn btn-o btn-sm" disabled={busy} onClick={() => { setCopyFrom(s); setCrop(s.crop_code); setVariety(s.variety_code); setVersion(s.sop_snapshot.version_id); resetPlan(); setOpening(true); edit(); }}>Sao chép vụ này</button> : null}</li>)}</ul>
     {!list.loading && !list.items.length ? <p>Chưa có vụ theo hộ.</p> : null}
     <LoadMore hasMore={list.hasMore} loading={list.loading} onClick={list.loadMore} />
     {detail ? <section aria-label="Chi tiết vụ">
       <h3>{detail.season_code} {detail.season_year} · {detail.sop_snapshot.name}</h3>
       <p>{detail.sop_snapshot.anchor_name}: {detail.anchor_date} · {detail.gps_missing ? "Thiếu GPS" : "Đã ghi nhận vị trí"}</p>
-      <p>SOP bản {detail.sop_snapshot.version_no} · Diện tích {formatDecimal(detail.area_ha, 2)} ha</p>
+      <p>SOP bản {detail.sop_snapshot.version_no} · Diện tích {formatDecimal(detail.area_ha, 2)} ha · {SEASON_STATUS[detail.status] ?? detail.status}</p>
+      {detail.status === "cancelled" && detail.stop_reason ? <p role="status">Đã dừng vụ: {detail.stop_reason}</p> : null}
+      {canStop && detail.status === "open" ? <StopSeasonForm key={detail.current_event_id} coopRef={coopRef} season={detail} onStopped={(s) => { setDetail(s); setRevision((v) => v + 1); onSaved(); }} /> : null}
       <ol>{detail.sop_snapshot.steps.map((step, i) => <li key={i}>{step.name}</li>)}</ol>
       <HouseholdChecklist key={`${detail.season_ref}:${detail.current_event_id}`} coopRef={coopRef} householdRef={household.household_ref} seasonRef={detail.season_ref} season={detail}
         onOpenPlan={() => document.getElementById(`season-plan-${detail.season_ref}`)?.scrollIntoView({ behavior: "smooth", block: "start" })} />

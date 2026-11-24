@@ -10594,6 +10594,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dừng (hủy) vụ nông hộ đang canh tác kèm lý do (AH-70)
+         * @description Thành viên HTX/Admin (KHMV-FN-03 D); Đại diện chỉ xem. Chỉ vụ "Đang canh tác"; lý do 10–500 ký tự, không SĐT/CCCD; expected_season_event_id phải là phiên bản hiện tại. Vụ chuyển "Đã dừng vụ" (cancelled), diện tích được giải phóng, nhật ký và kế hoạch giữ nguyên ở chế độ chỉ đọc; vụ đã dừng không quay lại "Đang canh tác". Phát lại cùng Idempotency-Key trả kết quả cũ.
+         */
+        post: operations["stopHouseholdSeason"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/extension/khtc/periods/{id}/report": {
         parameters: {
             query?: never;
@@ -25234,6 +25258,13 @@ export interface components {
              * @description Vụ nguồn khi mở bằng sao chép (AH-139)
              */
             copied_from?: string | null;
+            /** @description Lý do dừng vụ, chỉ có khi status = cancelled (AH-70) */
+            stop_reason?: string;
+            /**
+             * Format: date-time
+             * @description Thời điểm dừng vụ (AH-70)
+             */
+            stopped_at?: string;
             /** @description Thiếu hoặc từ chối GPS, không suy diễn tọa độ thành xác minh ranh đất */
             gps_missing: boolean;
             gps: components["schemas"]["CropGPS"];
@@ -51141,6 +51172,52 @@ export interface operations {
             409: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
+        };
+    };
+    stopHouseholdSeason: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    expected_season_event_id: string;
+                    reason: string;
+                    /**
+                     * @default web
+                     * @enum {string}
+                     */
+                    channel?: "app" | "web";
+                };
+            };
+        };
+        responses: {
+            /** @description Vụ đã dừng (kèm lý do) */
+            200: {
+                headers: {
+                    "Idempotent-Replayed"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HouseholdSeason"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
         };
     };
     extensionKhtcReportGet: {
