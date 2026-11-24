@@ -6,6 +6,7 @@ import 'package:agrigreen_htx/application/app_services.dart';
 import 'package:agrigreen_htx/ui/app.dart';
 import 'package:agrigreen_htx/ui/providers.dart';
 import 'package:agrigreen_htx/ui/screens/home_screen.dart';
+import 'package:agrigreen_htx/ui/screens/onboarding_screen.dart';
 import 'package:agrigreen_mobile/core/clock.dart';
 import 'package:agrigreen_mobile/core/config.dart';
 import 'package:agrigreen_mobile/core/ids.dart';
@@ -182,6 +183,10 @@ class TestEnv {
 
   final List<String> roles;
   final bool nativeRealm;
+
+  /// AH-101: tự mở hướng dẫn lần đầu. Tắt mặc định để các kiểm thử khác vào
+  /// thẳng trang chủ; kiểm thử hướng dẫn bật lại.
+  bool onboarding = false;
   final FakeServer server;
 
   /// CSDL của app; mặc định trong bộ nhớ (mất khi đóng).
@@ -415,6 +420,7 @@ Widget appUnderTest(TestEnv env) => ProviderScope(
   overrides: [
     platformProvider.overrideWithValue(env.platform),
     oidcProvider.overrideWithValue(env.oidc),
+    onboardingAutoShowProvider.overrideWithValue(env.onboarding),
     passwordLoginProvider.overrideWithValue(
       env.nativeRealm ? env.password : null,
     ),
