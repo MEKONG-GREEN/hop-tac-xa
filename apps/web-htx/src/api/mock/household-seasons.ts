@@ -192,6 +192,31 @@ export const householdSeasonRoutes: Route[] = [{
     return items.length ? json({ items }) : problem(404, "cropcycle.task_record_not_found", "Không tìm thấy bản ghi");
   },
 }, {
+  // AH-175: sửa mốc gốc, diện tích, giống/SOP của vụ đang canh tác kèm lý do.
+  method: "POST", pattern: /^\/v1\/cooperatives\/([\w-]+)\/households\/([\w-]+)\/seasons\/([\w-]+)\/corrections$/,
+  handler: ({ params, persona, body }) => {
+    if (!journalWriter(persona)) return problem(403, "forbidden", "Vai của bạn chỉ được xem");
+    const s = seasons.find((s) => s.cooperative_ref === params[0] && s.household_ref === params[1] && s.season_ref === params[2]);
+    if (!s || (!hasRole(persona, "platform_admin") && persona.me.org?.ref !== s.cooperative_ref)) return problem(404, "cropcycle.season_not_found", "Không tìm thấy vụ");
+    const b = body as { expected_season_event_id: string; reason: string; anchor_date?: string; area_ha?: string; variety_code?: string; sop_version_id?: string };
+    const reason = (b.reason ?? "").trim();
+    if (reason.length < 10 || reason.length > 500) return validation([{ field: "reason", reason: "Nhập lý do sửa vụ (10–500 ký tự)" }]);
+    if (s.status !== "open") return problem(409, "cropcycle.season_state", "Chỉ sửa được vụ đang canh tác");
+    if (b.expected_season_event_id !== s.current_event_id) return problem(409, "cropcycle.concurrent_edit", "Vụ đã được sửa ở nơi khác");
+    if (b.area_ha !== undefined && (!/^(0|[1-9][0-9]{0,9})(\.[0-9]{1,2})?$/.test(b.area_ha) || scaledArea(b.area_ha) <= 0n)) return validation([{ field: "area_ha", reason: "Diện tích phải lớn hơn 0" }]);
+    const changeVariety = b.variety_code !== undefined && b.variety_code !== s.variety_code;
+    if (changeVariety || b.sop_version_id) {
+      if ((taskRecords.get(s.season_ref) ?? []).length) return problem(409, "cropcycle.season_has_logs", "Vụ đã có nhật ký: không đổi giống, SOP");
+      if (changeVariety && !b.sop_version_id) return validation([{ field: "sop_version_id", reason: "Đổi giống phải chọn SOP theo giống mới" }]);
+    }
+    if (b.area_ha !== undefined && b.area_ha !== s.area_ha) { releaseHouseholdMock(s.cooperative_ref, s.household_ref, s.area_ha); allocateHouseholdMock(s.cooperative_ref, s.household_ref, b.area_ha); s.area_ha = b.area_ha; }
+    if (b.anchor_date) s.anchor_date = b.anchor_date;
+    if (changeVariety) s.variety_code = b.variety_code!;
+    s.current_event_id = uuidv7(); s.version += 1;
+    planHistory.set(s.season_ref, [{ event_id: s.current_event_id, actor_ref: persona.me.actor_ref, event_time: nowIso(), summary: reason }, ...(planHistory.get(s.season_ref) ?? [])]);
+    return json(s);
+  },
+}, {
   // AH-70: dừng vụ đang canh tác kèm lý do; giải phóng diện tích.
   method: "POST", pattern: /^\/v1\/cooperatives\/([\w-]+)\/households\/([\w-]+)\/seasons\/([\w-]+)\/stop$/,
   handler: ({ params, persona, body, request }) => {

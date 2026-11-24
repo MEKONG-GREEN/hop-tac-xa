@@ -10640,6 +10640,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/corrections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sửa mốc gốc, diện tích, giống/SOP của vụ đang canh tác (AH-175)
+         * @description Thành viên HTX/Admin (KHMV-FN-03 U); Đại diện chỉ xem. Chỉ vụ "Đang canh tác"; lý do 10–500 ký tự; ít nhất một nội dung đổi; expected_season_event_id phải là phiên bản hiện tại. Mốc gốc không ràng buộc khoảng ngày (Q-13), ngày dự kiến của việc chưa xong tính lại, việc đã xong giữ ngày. Diện tích > 0, hai chữ số thập phân, không vượt diện tích đất trừ các vụ đang canh tác khác (409 household_area_exceeded kèm remaining_area_ha). Đổi giống/SOP chỉ khi vụ chưa có nhật ký (409 season_has_logs, KH-10); đổi giống bắt buộc chọn SOP đang áp dụng theo giống mới, thay bản chụp, giữ sản lượng dự kiến. Mỗi lần sửa ghi một sự kiện corrected (xem plan-history).
+         */
+        post: operations["editHouseholdSeason"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/extension/khtc/periods/{id}/report": {
         parameters: {
             query?: never;
@@ -51303,6 +51327,58 @@ export interface operations {
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
+        };
+    };
+    editHouseholdSeason: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    expected_season_event_id: string;
+                    reason: string;
+                    /** Format: date */
+                    anchor_date?: string;
+                    area_ha?: string;
+                    variety_code?: string;
+                    /** Format: uuid */
+                    sop_version_id?: string;
+                    /**
+                     * @default web
+                     * @enum {string}
+                     */
+                    channel?: "app" | "web";
+                };
+            };
+        };
+        responses: {
+            /** @description Vụ sau khi sửa */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HouseholdSeason"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
         };
     };
     extensionKhtcReportGet: {
