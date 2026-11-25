@@ -83,7 +83,7 @@ func seasonSummaryOut(v app.SeasonSummaryView) gin.H {
 	}
 	return gin.H{"status": v.Status, "area_ha": v.Data.AreaHa, "mass_t": v.Data.MassT, "mass_kg": v.Data.MassKg,
 		"yield_t_per_ha": v.Data.YieldTPerHa, "harvest_date": v.Data.HarvestDate, "materials": materials,
-		"tasks": gin.H{"early": t.Early, "on_time": t.OnTime, "late": t.Late, "skipped": t.Skipped, "not_done": t.NotDone, "total": t.Total},
+		"tasks":            gin.H{"early": t.Early, "on_time": t.OnTime, "late": t.Late, "skipped": t.Skipped, "not_done": t.NotDone, "total": t.Total},
 		"summary_step_seq": v.Data.SummaryStepSeq, "can_close": v.CanClose, "blockers": v.Blockers, "unresolved_steps": v.UnresolvedSteps,
 		"harvest_reminder": v.HarvestReminder, "cost_vnd": cost, "note": v.Note, "closed_at": closedAt, "closed_by": v.ClosedBy}
 }

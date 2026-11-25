@@ -9,7 +9,7 @@ import { Empty, LoadMore, Loading } from "@/components/ui";
 import { formatDecimal } from "@/lib/decimal";
 import { useAsync } from "@/lib/useAsync";
 
-const STATUS: Record<string, string> = { open: "Đang canh tác", completed: "Đã thu hoạch", cancelled: "Đã dừng vụ" };
+const STATUS: Record<string, string> = { open: "Đang canh tác", completed: "Đã thu hoạch", cancelled: "Đã dừng vụ", closed: "Đã hoàn thành vụ" };
 
 /**
  * AH-140 (FN-03.12, FN-03-BR-08): danh sách vụ nông hộ của HTX kèm trạng thái, % tiến độ, số việc đến hạn, trễ — chỉ
@@ -17,7 +17,7 @@ const STATUS: Record<string, string> = { open: "Đang canh tác", completed: "Đ
  */
 export function HouseholdSeasonProgress({ coopRef, householdLabel }: { coopRef: string; householdLabel: (ref: string) => string }) {
   const { api } = useAuth();
-  const [status, setStatus] = useState<"" | "open" | "completed" | "cancelled">("open");
+  const [status, setStatus] = useState<"" | "open" | "completed" | "cancelled" | "closed">("open");
   const [member, setMember] = useState("");
   // Danh sách Thành viên để lọc: danh bạ người nhận lịch thời vụ (Đại diện/Admin); không đọc được thì để trống.
   const members = useAsync(async () => {
@@ -43,6 +43,7 @@ export function HouseholdSeasonProgress({ coopRef, householdLabel }: { coopRef: 
           <option value="">Tất cả</option>
           <option value="open">Đang canh tác</option>
           <option value="completed">Đã thu hoạch</option>
+          <option value="closed">Đã hoàn thành vụ</option>
           <option value="cancelled">Đã dừng vụ</option>
         </select>
       </label>

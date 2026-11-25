@@ -27,6 +27,50 @@ const harvestReceipts = new Map<string, { body: string; result: components["sche
 // AH-189: lịch sử khai báo theo vụ (chỉ ghi thêm) và biên nhận sửa/hủy.
 const harvestHistory = new Map<string, components["schemas"]["HouseholdHarvestVersion"][]>();
 const harvestEditReceipts = new Map<string, { body: string; result: unknown }>();
+// AH-152: tổng kết cố định của vụ đã hoàn thành và biên nhận hoàn thành vụ.
+type SeasonSummary = components["schemas"]["HouseholdSeasonSummary"];
+const closedSummaries = new Map<string, SeasonSummary>();
+const closeReceipts = new Map<string, { body: string; result: { season: Season; summary: SeasonSummary } }>();
+const PII = /(?:\+?84|0)\d{9,10}|\b\d{12}\b/;
+
+/** AH-152: tổng kết tự tính — năng suất, vật tư theo liều thực tế, số việc (không tính việc tổng kết vụ). */
+function mockSummary(s: Season): SeasonSummary {
+  const closed = closedSummaries.get(s.season_ref);
+  if (s.status === "closed" && closed) return structuredClone(closed);
+  const checklist = mockChecklist(s, false);
+  const summaryStep = effectiveSteps(s.sop_snapshot).find((t) => t.season_summary)?.seq ?? null;
+  const last = Math.max(...checklist.progress.stages.map((st) => st.seq));
+  const tasks = { early: 0, on_time: 0, late: 0, skipped: 0, not_done: 0, total: 0 };
+  const unresolved: number[] = [];
+  let lastCount = 0;
+  for (const st of checklist.progress.stages) for (const t of st.tasks) {
+    if (t.seq === summaryStep) continue;
+    tasks.total++;
+    let ok = true;
+    if (t.completion_status === "done_early") tasks.early++;
+    else if (t.completion_status === "done_late") tasks.late++;
+    else if (t.done_on) tasks.on_time++;
+    else if (t.completion_status === "skipped") tasks.skipped++;
+    else { tasks.not_done++; ok = false; }
+    if (st.seq === last) { lastCount++; if (!ok) unresolved.push(t.seq); }
+  }
+  const sums = new Map<string, { name: string; unit: string; qty: Decimal }>();
+  for (const r of checklist.records) for (const i of r.inputs) {
+    const q = Decimal.parse(i.qty);
+    if (!q || q.sign() <= 0) continue;
+    const k = `${i.name}\u0000${i.unit}`;
+    const cur = sums.get(k);
+    sums.set(k, { name: i.name, unit: i.unit, qty: cur ? cur.qty.add(q) : q });
+  }
+  const materials = [...sums.values()].sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : a.unit < b.unit ? -1 : 1).map((m) => ({ name: m.name, unit: m.unit, qty: m.qty.toString() }));
+  const blockers: SeasonSummary["blockers"] = [];
+  if (s.status !== "completed" || !s.harvest) blockers.push("harvest_required");
+  if (unresolved.length) blockers.push("last_stage_unresolved");
+  const h = s.harvest;
+  return { status: s.status, area_ha: s.area_ha, mass_t: h?.mass_t ?? null, mass_kg: h?.mass_kg ?? null, yield_t_per_ha: h?.yield_t_per_ha ?? null, harvest_date: h?.harvest_date ?? null,
+    materials, tasks, summary_step_seq: summaryStep, can_close: s.status === "completed" && !blockers.length, blockers, unresolved_steps: unresolved,
+    harvest_reminder: s.status === "open" && lastCount > 0 && !unresolved.length, cost_vnd: null, note: null, closed_at: null, closed_by: null };
+}
 const planProblem = (e: PlanError) => e.field ? validation([{ field: e.field, reason: e.reason }]) : problem(e.status, e.code, e.reason);
 
 const journalWriter = (p: MockPersona) => hasRole(p, "platform_admin") || (hasRole(p, "htx_member") && !hasRole(p, "coop_manager"));
@@ -172,7 +216,7 @@ export const householdSeasonRoutes: Route[] = [{
   handler: ({ params, persona, url }) => {
     if (!hasRole(persona, "platform_admin", "htx_member", "coop_manager") || (!hasRole(persona, "platform_admin") && persona.me.org?.ref !== params[0])) return problem(404, "cropcycle.household_not_found", "Không tìm thấy HTX");
     const status = url.searchParams.get("status") ?? "", openedBy = url.searchParams.get("opened_by") ?? "";
-    if (status && !["open", "completed", "cancelled"].includes(status)) return validation([{ field: "status", reason: "trạng thái không hợp lệ" }]);
+    if (status && !["open", "completed", "cancelled", "closed"].includes(status)) return validation([{ field: "status", reason: "trạng thái không hợp lệ" }]);
     const rows = seasons.filter((x) => x.cooperative_ref === params[0] && (!status || x.status === status) && (!openedBy || x.opened_by === openedBy))
       .sort((a, b) => a.season_ref.localeCompare(b.season_ref))
       .map((x) => {
@@ -301,9 +345,10 @@ export const householdSeasonRoutes: Route[] = [{
     if (massError) return validation([{ field: "mass_t", reason: massError }]);
     const reason = (b.reason ?? "").trim().replace(/\s+/g, " ");
     if (reason && (reason.length < 10 || reason.length > 500)) return validation([{ field: "reason", reason: "Nhập lý do (10–500 ký tự)" }]);
+    if (s.status === "closed" && !reason) return validation([{ field: "reason", reason: "Vụ đã hoàn thành: nhập lý do sửa (10–500 ký tự)" }]);
     const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(new Date());
     if (!b.harvest_date || b.harvest_date < s.anchor_date || b.harvest_date > today) return validation([{ field: "harvest_date", reason: `Ngày thu hoạch từ mốc gốc (${s.anchor_date}) đến hôm nay` }]);
-    if (s.status !== "completed" || !s.harvest) return problem(409, "cropcycle.season_state", "Chỉ sửa sản lượng của vụ đã khai báo");
+    if ((s.status !== "completed" && s.status !== "closed") || !s.harvest) return problem(409, "cropcycle.season_state", "Chỉ sửa sản lượng của vụ đã khai báo");
     if (b.expected_harvest_id !== s.harvest.harvest_id) return problem(409, "cropcycle.concurrent_edit", "Khai báo đã được sửa ở nơi khác", { current_harvest_id: s.harvest.harvest_id });
     const value = Decimal.parse(b.mass_t!)!;
     if (value.isZero() && !b.zero_confirmed) return problem(409, "cropcycle.harvest_zero_confirmation_required", "Sản lượng bằng 0: xác nhận lại trước khi lưu");
@@ -350,6 +395,50 @@ export const householdSeasonRoutes: Route[] = [{
     const s = seasons.find((s) => s.cooperative_ref === params[0] && s.household_ref === params[1] && s.season_ref === params[2]);
     if (!s || (!hasRole(persona, "platform_admin") && persona.me.org?.ref !== s.cooperative_ref)) return problem(404, "cropcycle.season_not_found", "Không tìm thấy vụ");
     return json({ items: harvestHistory.get(s.season_ref) ?? [] });
+  },
+}, {
+  // AH-152: tổng kết "Ghi lại vụ".
+  method: "GET", pattern: /^\/v1\/cooperatives\/([\w-]+)\/households\/([\w-]+)\/seasons\/([\w-]+)\/summary$/,
+  handler: ({ params, persona }) => {
+    const s = seasons.find((s) => s.cooperative_ref === params[0] && s.household_ref === params[1] && s.season_ref === params[2]);
+    if (!s || (!hasRole(persona, "platform_admin") && persona.me.org?.ref !== s.cooperative_ref)) return problem(404, "cropcycle.season_not_found", "Không tìm thấy vụ");
+    return json(mockSummary(s));
+  },
+}, {
+  // AH-152: hoàn thành vụ "Đã thu hoạch" kèm chi phí, ghi chú; việc tổng kết vụ tự Xong; bản chụp cố định.
+  method: "POST", pattern: /^\/v1\/cooperatives\/([\w-]+)\/households\/([\w-]+)\/seasons\/([\w-]+)\/close$/,
+  handler: ({ params, persona, body, request }) => {
+    if (!journalWriter(persona)) return problem(403, "forbidden", "Vai của bạn chỉ được xem");
+    const s = seasons.find((s) => s.cooperative_ref === params[0] && s.household_ref === params[1] && s.season_ref === params[2]);
+    if (!s || (!hasRole(persona, "platform_admin") && persona.me.org?.ref !== s.cooperative_ref)) return problem(404, "cropcycle.season_not_found", "Không tìm thấy vụ");
+    const b = (body ?? {}) as { expected_season_event_id?: string; cost_vnd?: string; note?: string };
+    const cost = (b.cost_vnd ?? "").trim(), note = (b.note ?? "").trim();
+    const receipt = `${persona.me.actor_ref}:close:${request.headers.get("Idempotency-Key")}`;
+    const fingerprint = JSON.stringify([s.season_ref, cost, note]);
+    const replay = closeReceipts.get(receipt);
+    if (replay) return replay.body === fingerprint ? json(replay.result) : problem(422, "idempotency_key_reused", "Khóa đã dùng cho nội dung khác");
+    if (cost && !/^[0-9]{1,12}$/.test(cost)) return validation([{ field: "cost_vnd", reason: "Chi phí là số nguyên VND không âm, tối đa 12 chữ số" }]);
+    if (note.length > 1000) return validation([{ field: "note", reason: "Ghi chú tối đa 1000 ký tự" }]);
+    if (PII.test(note)) return validation([{ field: "note", reason: "Ghi chú không được chứa SĐT hoặc CCCD" }]);
+    if (s.status === "open") return problem(409, "cropcycle.season_harvest_required", "Chưa khai báo sản lượng: khai báo sản lượng trước khi hoàn thành vụ");
+    if (s.status !== "completed") return problem(409, "cropcycle.season_state", "Chỉ hoàn thành vụ đã khai báo sản lượng");
+    if (b.expected_season_event_id !== s.current_event_id) return problem(409, "cropcycle.task_season_changed", "Vụ đã thay đổi");
+    const summary = mockSummary(s);
+    if (summary.unresolved_steps.length) return problem(409, "cropcycle.season_last_stage_unresolved", "Còn việc giai đoạn cuối chưa Xong hoặc Bỏ qua", { unresolved_steps: summary.unresolved_steps });
+    const at = nowIso(), today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(new Date(at));
+    const records = taskRecords.get(s.season_ref) ?? [];
+    if (summary.summary_step_seq != null && !records.some((r) => r.step_seq === summary.summary_step_seq && r.state === "done")) {
+      const id = uuidv7();
+      taskRecords.set(s.season_ref, [...records, { id, log_ref: id, step_seq: summary.summary_step_seq, state: "done", done_on: today, sop_version_id: s.sop_snapshot.version_id,
+        inputs: [], gps_missing: true, gps: { source: "no_device" }, actor_ref: persona.me.actor_ref, event_time: at, recorded_at: at, file_refs: [] }]);
+    }
+    s.status = "closed"; s.current_event_id = uuidv7(); s.version += 1; s.closed_at = at; s.closed_by = persona.me.actor_ref;
+    const fixed: SeasonSummary = { ...summary, status: "closed", can_close: false, blockers: [], unresolved_steps: [], harvest_reminder: false,
+      cost_vnd: cost || null, note: note || null, closed_at: at, closed_by: persona.me.actor_ref };
+    closedSummaries.set(s.season_ref, fixed);
+    const result = { season: structuredClone(s), summary: structuredClone(fixed) };
+    closeReceipts.set(receipt, { body: fingerprint, result });
+    return json(result, 201);
   },
 }, {
   // AH-70: dừng vụ đang canh tác kèm lý do; giải phóng diện tích.
