@@ -24,6 +24,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/MEKONG-GREEN/hop-tac-xa/contracts/htxroles"
+	memberstore "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/member/store"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/port"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/season/domain"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/season/store"
@@ -111,6 +112,10 @@ func (s *Service) DeclareHouseholdHarvest(ctx context.Context, in HouseholdHarve
 	key := "household-harvest:" + a.p.ActorRef.String() + ":" + in.IdemKey
 	var out HouseholdHarvestResult
 	err = s.inTx(ctx, a.p.TenantID, func(tx pgx.Tx) error {
+		// Thứ tự khóa hộ → vụ như mở, sửa vụ (AH-175) và hủy khai báo (AH-189): tránh deadlock với trigger diện tích.
+		if err := memberstore.LockHousehold(ctx, tx, in.HouseholdRef); err != nil {
+			return err
+		}
 		cur, err := householdTaskSeason(ctx, tx, a.p.TenantID, in.CooperativeRef, in.HouseholdRef, in.SeasonRef, true)
 		if err != nil {
 			return err

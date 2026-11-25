@@ -409,4 +409,121 @@ void main() {
     expect(find.text('Khai báo sản lượng'), findsNothing);
     await finish(tester);
   });
+
+  // AH-189: vụ "Đã thu hoạch" — Thành viên sửa sản lượng, mọi vai xem lịch sử.
+  TestEnv harvestedEnv(String role) {
+    final env = estimateEnv(role);
+    final get = env.server.onGet!;
+    final send = env.server.onSend!;
+    Map<String, Object?> season(String mass, String day) => {
+      'season_ref': 'season-87',
+      'household_ref': householdRef,
+      'season_code': 'DX',
+      'season_year': 2026,
+      'crop_code': 'LUA',
+      'area_ha': '1.25',
+      'status': 'completed',
+      'anchor_date': '2026-06-01',
+      'current_event_id': 'event-87',
+      'harvest': {
+        'harvest_id': 'h1',
+        'mass_t': mass,
+        'harvest_date': day,
+        'yield_t_per_ha': '6.72',
+      },
+    };
+    env.server.onGet = (path, query) async {
+      if (path ==
+          '/v1/cooperatives/$coopRef/households/$householdRef/seasons') {
+        return {
+          'items': [season('8.40', '2026-09-20')],
+          'next_cursor': null,
+        };
+      }
+      if (path.endsWith('/seasons/season-87/harvest/history')) {
+        return {
+          'items': [
+            {
+              'kind': 'declared',
+              'mass_t': '8.40',
+              'harvest_date': '2026-09-20',
+              'reason': null,
+            },
+            {
+              'kind': 'corrected',
+              'mass_t': '9.10',
+              'harvest_date': '2026-09-21',
+              'reason': 'Cân lại tại kho HTX',
+            },
+          ],
+        };
+      }
+      return get(path, query);
+    };
+    env.server.onSend = (method, path, body) async {
+      if (path.endsWith('/seasons/season-87/harvest/corrections')) {
+        return {
+          'season': season('9.10', '2026-09-21'),
+          'harvest': {'mass_t': '9.10'},
+        };
+      }
+      return send(method, path, body);
+    };
+    return env;
+  }
+
+  testWidgets('AH-189 Thành viên sửa sản lượng, xem lịch sử', (tester) async {
+    final env = harvestedEnv('htx_member');
+    await loginToHome(tester, env);
+    await openTile(tester, 'Nông hộ');
+    await tapText(tester, 'Hộ thử nghiệm');
+    expect(find.textContaining('Đã thu hoạch'), findsOneWidget);
+    await tapOn(tester, find.byTooltip('Sản lượng'));
+    expect(find.text('8,40 tấn'), findsOneWidget);
+    expect(find.text('Khai báo sản lượng'), findsNothing);
+    await tapText(tester, 'Sửa sản lượng');
+    final mass = find.widgetWithText(TextField, 'Tổng sản lượng (tấn)');
+    final reason = find.widgetWithText(TextField, 'Lý do sửa (không bắt buộc)');
+    await tester.enterText(mass, '9,1');
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Ngày thu hoạch cuối (dd/mm/yyyy)'),
+      '21/09/2026',
+    );
+    await tester.enterText(reason, 'ngắn');
+    await tapText(tester, 'Lưu sửa');
+    expect(find.textContaining('Lý do sửa từ 10'), findsOneWidget);
+    await tester.enterText(reason, 'Cân lại tại kho HTX');
+    await tapText(tester, 'Lưu sửa');
+    final call = env.server.sendCalls.singleWhere(
+      (c) => c.$2.endsWith('/harvest/corrections'),
+    );
+    expect(call.$4, {
+      'expected_harvest_id': 'h1',
+      'mass_t': '9.1',
+      'harvest_date': '2026-09-21',
+      'zero_confirmed': false,
+      'reason': 'Cân lại tại kho HTX',
+      'channel': 'app',
+    });
+    expect(find.text('9,10 tấn'), findsOneWidget);
+    await tapText(tester, 'Xem lịch sử khai báo');
+    expect(find.textContaining('Sửa: 9,10 tấn'), findsOneWidget);
+    expect(find.text('Lý do: Cân lại tại kho HTX'), findsOneWidget);
+    expect(find.text('Hủy khai báo'), findsNothing);
+    await finish(tester);
+  });
+
+  testWidgets('AH-189 Đại diện không có nút sửa, vẫn xem lịch sử', (
+    tester,
+  ) async {
+    final env = harvestedEnv('coop_manager');
+    await loginToHome(tester, env);
+    await openTile(tester, 'Nông hộ');
+    await tapText(tester, 'Hộ thử nghiệm');
+    await tapOn(tester, find.byTooltip('Sản lượng'));
+    expect(find.text('Sửa sản lượng'), findsNothing);
+    await tapText(tester, 'Xem lịch sử khai báo');
+    expect(find.textContaining('Khai báo: 8,40 tấn'), findsOneWidget);
+    await finish(tester);
+  });
 }

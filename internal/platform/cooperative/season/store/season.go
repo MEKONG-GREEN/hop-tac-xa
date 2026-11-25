@@ -228,6 +228,9 @@ func ApplySeasonEvent(cur *Season, e SeasonEvent) Season {
 		s.CompletedAt = &t
 	case "cancelled":
 		s.Status = "cancelled"
+	case "reopened":
+		// AH-189: hủy khai báo sản lượng — vụ về "Đang canh tác", bỏ khai báo hiện hành.
+		s.Status, s.HarvestID, s.CompletedAt = "open", uuid.Nil, nil
 	}
 	s.EntryKind, s.CropCode = e.EntryKind, e.CropCode
 	s.SOPSnapshot = append(json.RawMessage(nil), e.SOPSnapshot...)
