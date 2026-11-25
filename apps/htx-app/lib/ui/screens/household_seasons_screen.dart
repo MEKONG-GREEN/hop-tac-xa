@@ -14,11 +14,22 @@ import 'open_season_screen.dart' show parseDisplayDay;
 import 'household_checklist_screen.dart';
 import 'household_yield_estimate_screen.dart';
 
-/// AH-87: dòng tóm tắt lúa dự kiến trong danh sách vụ.
+String _statusLabel(Object? status) => switch (status) {
+  'open' => 'Đang canh tác',
+  'completed' => 'Đã thu hoạch',
+  'cancelled' => 'Đã dừng vụ',
+  _ => '$status',
+};
+
+/// AH-87, AH-100: dòng tóm tắt lúa dự kiến và sản lượng thực tế trong danh sách vụ.
 String _estimateLine(HouseholdJson s) {
+  String t(Object? v) => '${'$v'.replaceAll('.', ',')} tấn';
   final e = s['yield_estimate'];
-  if (e is! Map || e['rice_t'] == null) return '';
-  return '\nLúa dự kiến ${'${e['rice_t']}'.replaceAll('.', ',')} tấn';
+  final h = s['harvest'];
+  var out = '';
+  if (e is Map && e['rice_t'] != null) out += '\nLúa dự kiến ${t(e['rice_t'])}';
+  if (h is Map && h['mass_t'] != null) out += ' · thực tế ${t(h['mass_t'])}';
+  return out;
 }
 
 class _HouseholdSeasonsData {
@@ -161,13 +172,13 @@ class _HouseholdSeasonsScreenState
                             '${s['season_code']} ${s['season_year']} · ${s['crop_code']}',
                           ),
                           subtitle: Text(
-                            '${s['area_ha']} ha · ${s['status'] == 'open' ? 'Đang canh tác' : s['status']}'
+                            '${s['area_ha']} ha · ${_statusLabel(s['status'])}'
                             '${_estimateLine(s)}',
                           ),
                           onTap: () => _show(d.coop, s),
                           // AH-87: sản lượng lúa, rơm, ngày thu hoạch dự kiến.
                           trailing: IconButton(
-                            tooltip: 'Sản lượng dự kiến',
+                            tooltip: 'Sản lượng',
                             icon: const Icon(Icons.agriculture_outlined),
                             onPressed: () async {
                               await Navigator.of(context).push<void>(

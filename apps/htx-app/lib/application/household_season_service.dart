@@ -485,6 +485,41 @@ class HouseholdSeasonService {
     }
   }
 
+  /// AH-100: Thành viên HTX khai báo tổng sản lượng (tấn) và ngày thu hoạch cuối của vụ
+  /// đang canh tác. Cần mạng; [key] giữ nguyên khi thử lại cùng nội dung. Trả
+  /// `{season, harvest, auto_completed_steps}`.
+  Future<HouseholdJson> declareHarvest(
+    String coop,
+    String household,
+    String season, {
+    required String expectedEventId,
+    required String massT,
+    required String harvestDate,
+    required bool zeroConfirmed,
+    required HouseholdJson gps,
+    required String key,
+  }) async {
+    final error = tonnesError(massT);
+    if (error != null || massT.trim().isEmpty) {
+      throw ArgumentError(error ?? 'Nhập tổng sản lượng (tấn).');
+    }
+    final result = await api.sendJson(
+      method: 'POST',
+      path:
+          '/v1/cooperatives/$coop/households/$household/seasons/$season/harvest',
+      idempotencyKey: key,
+      body: {
+        'expected_season_event_id': expectedEventId,
+        'mass_t': tonnesValue(massT),
+        'harvest_date': harvestDate,
+        'zero_confirmed': zeroConfirmed,
+        'gps': gps,
+        'channel': 'app',
+      },
+    );
+    return result.cast<String, Object?>();
+  }
+
   /// AH-87: Thành viên HTX nhập, sửa hoặc xóa (null) sản lượng lúa, rơm dự kiến của vụ
   /// đang canh tác. Cần mạng; [key] giữ nguyên khi thử lại cùng nội dung.
   Future<HouseholdJson> saveYieldEstimate(

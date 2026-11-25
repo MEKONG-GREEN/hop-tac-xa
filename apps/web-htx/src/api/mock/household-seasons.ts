@@ -23,6 +23,7 @@ const taskHistory = new Map<string, TaskRecord[]>();
 const editReceipts = new Map<string, TaskRecord>();
 const stopReceipts = new Map<string, Season>();
 const estimateReceipts = new Map<string, { season: string; body: string; estimate: YieldEstimate }>();
+const harvestReceipts = new Map<string, { body: string; result: components["schemas"]["HouseholdHarvestResult"] }>();
 const planProblem = (e: PlanError) => e.field ? validation([{ field: e.field, reason: e.reason }]) : problem(e.status, e.code, e.reason);
 
 const journalWriter = (p: MockPersona) => hasRole(p, "platform_admin") || (hasRole(p, "htx_member") && !hasRole(p, "coop_manager"));
@@ -246,6 +247,39 @@ export const householdSeasonRoutes: Route[] = [{
     s.yield_estimate = recomputeEstimate({ ...cur, seq: cur.seq + 1, entered_rice_t: norm(b.rice_t), entered_straw_t: norm(b.straw_t), updated_at: nowIso(), updated_by: persona.me.actor_ref });
     estimateReceipts.set(receipt, { season: s.season_ref, body: fingerprint, estimate: structuredClone(s.yield_estimate) });
     return json({ yield_estimate: s.yield_estimate });
+  },
+}, {
+  // AH-100: khai báo sản lượng của vụ theo hộ; vụ "Đã thu hoạch", việc Thu hoạch (kể cả Bỏ qua) tự Xong theo ngày đó.
+  method: "POST", pattern: /^\/v1\/cooperatives\/([\w-]+)\/households\/([\w-]+)\/seasons\/([\w-]+)\/harvest$/,
+  handler: ({ params, persona, body, request }) => {
+    if (!journalWriter(persona)) return problem(403, "forbidden", "Vai của bạn chỉ được xem");
+    const s = seasons.find((s) => s.cooperative_ref === params[0] && s.household_ref === params[1] && s.season_ref === params[2]);
+    if (!s || (!hasRole(persona, "platform_admin") && persona.me.org?.ref !== s.cooperative_ref)) return problem(404, "cropcycle.season_not_found", "Không tìm thấy vụ");
+    const b = (body ?? {}) as { expected_season_event_id?: string; mass_t?: string; harvest_date?: string; zero_confirmed?: boolean; gps?: Season["gps"]; channel?: string };
+    const receipt = `${persona.me.actor_ref}:harvest:${request.headers.get("Idempotency-Key")}`;
+    const fingerprint = JSON.stringify([s.season_ref, b.mass_t, b.harvest_date]);
+    const replay = harvestReceipts.get(receipt);
+    if (replay) return replay.body === fingerprint ? json(replay.result) : problem(422, "idempotency_conflict", "Khóa đã dùng cho nội dung khác");
+    const massError = typeof b.mass_t === "string" ? tonnesError(b.mass_t) : "Nhập số tấn";
+    if (massError) return validation([{ field: "mass_t", reason: massError }]);
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(new Date());
+    if (!b.harvest_date || !/^\d{4}-\d{2}-\d{2}$/.test(b.harvest_date) || b.harvest_date < s.anchor_date || b.harvest_date > today) return validation([{ field: "harvest_date", reason: `Ngày thu hoạch từ mốc gốc (${s.anchor_date}) đến hôm nay` }]);
+    if (s.status !== "open") return problem(409, "cropcycle.season_state", "Chỉ khai báo cho vụ đang canh tác; vụ đã khai báo thì dùng Sửa sản lượng");
+    if (b.expected_season_event_id !== s.current_event_id) return problem(409, "cropcycle.task_season_changed", "Vụ đã thay đổi");
+    const tonnesValue = Decimal.parse(b.mass_t!)!;
+    if (tonnesValue.isZero() && !b.zero_confirmed) return problem(409, "cropcycle.harvest_zero_confirmation_required", "Sản lượng bằng 0: xác nhận lại trước khi lưu");
+    const at = nowIso();
+    const harvest: components["schemas"]["HouseholdHarvest"] = { harvest_id: uuidv7(), mass_t: tonnes(tonnesValue), mass_kg: tonnesValue.mul(Decimal.fromInt(1000)).toString(),
+      harvest_date: b.harvest_date, yield_t_per_ha: tonnes(tonnesValue.divRound(Decimal.parse(s.area_ha)!, 8)), zero_confirmed: tonnesValue.isZero(), declared_by: persona.me.actor_ref, declared_at: at };
+    const records = taskRecords.get(s.season_ref) ?? [];
+    const auto = effectiveSteps(s.sop_snapshot).filter((t) => t.activity_code === "thu_hoach" && !records.some((r) => r.step_seq === t.seq && r.state === "done")).map((t) => t.seq);
+    taskRecords.set(s.season_ref, [...records, ...auto.map((seq) => { const id = uuidv7(); return { id, log_ref: id, step_seq: seq, state: "done" as const, done_on: b.harvest_date!, sop_version_id: s.sop_snapshot.version_id,
+      inputs: [], gps_missing: b.gps?.lon == null || b.gps?.lat == null, gps: b.gps ?? { source: "no_device" }, actor_ref: persona.me.actor_ref, event_time: at, recorded_at: at, file_refs: [] }; })]);
+    s.status = "completed"; s.current_event_id = uuidv7(); s.version += 1; s.harvest = harvest;
+    releaseHouseholdMock(s.cooperative_ref, s.household_ref, s.area_ha);
+    const result = { season: structuredClone(s), harvest, auto_completed_steps: auto };
+    harvestReceipts.set(receipt, { body: fingerprint, result });
+    return json(result, 201);
   },
 }, {
   // AH-70: dừng vụ đang canh tác kèm lý do; giải phóng diện tích.

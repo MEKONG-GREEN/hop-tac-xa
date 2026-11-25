@@ -901,8 +901,76 @@ paths:
         "409": {$ref: "#/components/responses/Problem"}
         "422": {$ref: "#/components/responses/Problem"}
         "503": {$ref: "#/components/responses/Problem"}
+# @ag-order: 10023
+  /v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/harvest:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: household_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: season_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: declareHouseholdHarvest
+      summary: Khai báo sản lượng thu hoạch của một vụ theo hộ (AH-100)
+      description: Thành viên HTX/Admin (KHMV-FN-06 C); Đại diện HTX chỉ xem (403). Chỉ vụ "Đang canh tác" (khác → 409 season_state, dùng Sửa sản lượng); expected_season_event_id phải là phiên bản hiện tại (409 task_season_changed). Tổng sản lượng cả vụ theo tấn, ≥ 0, tối đa 2 chữ số lẻ (KH-26); bằng 0 cần zero_confirmed (409 harvest_zero_confirmation_required, KH-19); không còn ngưỡng bất thường (KH-09). Mốc gốc ≤ harvest_date ≤ hôm nay (GMT+7). Vụ chuyển "Đã thu hoạch" (status completed), diện tích được giải phóng, ngày thu hoạch thành mốc NTT; mọi việc Thu hoạch chưa Xong (kể cả Bỏ qua) tự Xong theo ngày đó (auto_completed_steps). Phát lại cùng Idempotency-Key trả kết quả cũ (200).
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_season_event_id, mass_t, harvest_date, gps]
+              properties:
+                expected_season_event_id: {type: string, format: uuid}
+                mass_t: {type: string, pattern: '^[0-9]+(\.[0-9]{1,2})?$'}
+                harvest_date: {type: string, format: date}
+                zero_confirmed: {type: boolean, default: false}
+                gps: {$ref: "#/components/schemas/CropGPS"}
+                channel: {type: string, enum: [app, web], default: app}
+      responses:
+        "201":
+          description: Đã khai báo; vụ "Đã thu hoạch"
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/HouseholdHarvestResult"}
+        "200":
+          description: Phát lại cùng Idempotency-Key
+          headers:
+            Idempotent-Replayed: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/HouseholdHarvestResult"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
 components:
   schemas:
+# @ag-order: 10023
+    HouseholdHarvest:
+      type: object
+      description: "Khai báo sản lượng hiện hành của vụ theo hộ (AH-100)"
+      required: [harvest_id, mass_t, mass_kg, harvest_date, yield_t_per_ha, zero_confirmed, declared_by, declared_at]
+      properties:
+        harvest_id: {type: string, format: uuid}
+        mass_t: {type: string, description: "Tổng sản lượng cả vụ (tấn, 2 chữ số lẻ)"}
+        mass_kg: {type: string}
+        harvest_date: {type: string, format: date}
+        yield_t_per_ha: {type: string, description: "Năng suất = sản lượng ÷ diện tích vụ (tấn/ha)"}
+        zero_confirmed: {type: boolean}
+        declared_by: {type: string, format: uuid}
+        declared_at: {type: string, format: date-time}
+# @ag-order: 10024
+    HouseholdHarvestResult:
+      type: object
+      required: [season, harvest, auto_completed_steps]
+      properties:
+        season: {$ref: "#/components/schemas/HouseholdSeason"}
+        harvest: {$ref: "#/components/schemas/HouseholdHarvest"}
+        auto_completed_steps: {type: array, items: {type: integer}, description: "Số việc Thu hoạch vừa được tự Xong"}
 # @ag-order: 10022
     HouseholdYieldEstimate:
       type: object
@@ -1095,6 +1163,7 @@ components:
         copied_from: {type: [string, "null"], format: uuid, description: "Vụ nguồn khi mở bằng sao chép (AH-139)"}
         stop_reason: {type: string, description: "Lý do dừng vụ, chỉ có khi status = cancelled (AH-70)"}
         yield_estimate: {$ref: "#/components/schemas/HouseholdYieldEstimate"}
+        harvest: {$ref: "#/components/schemas/HouseholdHarvest"}
         stopped_at: {type: string, format: date-time, description: "Thời điểm dừng vụ (AH-70)"}
         gps_missing: {type: boolean, description: "Thiếu hoặc từ chối GPS, không suy diễn tọa độ thành xác minh ranh đất"}
         gps: {$ref: "#/components/schemas/CropGPS"}

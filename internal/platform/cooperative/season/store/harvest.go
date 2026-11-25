@@ -61,7 +61,7 @@ func InsertHarvest(ctx context.Context, tx pgx.Tx, h *Harvest) error {
 	     $19::boolean, $20::text, `+gpsInsertSQL("$21", "$22")+`, $23::numeric, $24::text, $25::text, $26::numeric, $27::boolean, $28::timestamptz,
 	     $29::uuid, $30::text, $31::uuid, $32::text, $33::text, $34::text)
 	  RETURNING seq, recorded_at`,
-		h.ID, h.TenantID, "harvest:"+h.SeasonRef.String(), h.SeasonRef, h.PlotRef, nilIfZero(h.HouseholdRef), h.CooperativeRef, h.CommuneCode,
+		h.ID, h.TenantID, "harvest:"+h.SeasonRef.String(), h.SeasonRef, nilIfZero(h.PlotRef), nilIfZero(h.HouseholdRef), h.CooperativeRef, h.CommuneCode,
 		h.SeasonCode, h.SeasonYear, h.VarietyCode, day(h.HarvestDate), h.MassKg.String(), h.AreaHa.String(), h.YieldTPerHa.String(),
 		decPtr(h.MoisturePct), nilIfEmpty(h.AnomalyKind), decPtr(h.AnomalyThreshold), h.AnomalyConfirmed, h.Source,
 		decPtr(h.GPS.Lon), decPtr(h.GPS.Lat), decPtr(h.GPS.AccuracyM), h.GPS.Source, h.LocationStatus, decPtr(h.DistanceM), h.OnBehalf, h.EventTime.UTC(),
@@ -75,16 +75,17 @@ const harvestCols = `id, tenant_id, seq, season_ref, plot_ref, household_ref, co
 
 func scanHarvest(row pgx.Row) (Harvest, error) {
 	var h Harvest
-	var hh *uuid.UUID
+	var hh, plot *uuid.UUID
 	var massS, area, yield string
 	var moist, thr, lon, lat, acc, dist *string
-	if err := row.Scan(&h.ID, &h.TenantID, &h.Seq, &h.SeasonRef, &h.PlotRef, &hh, &h.CooperativeRef, &h.CommuneCode, &h.SeasonCode, &h.SeasonYear,
+	if err := row.Scan(&h.ID, &h.TenantID, &h.Seq, &h.SeasonRef, &plot, &hh, &h.CooperativeRef, &h.CommuneCode, &h.SeasonCode, &h.SeasonYear,
 		&h.VarietyCode, &h.HarvestDate, &massS, &area, &yield, &moist, &h.AnomalyKind,
 		&thr, &h.AnomalyConfirmed, &h.Source, &lon, &lat, &acc, &h.GPS.Source, &h.LocationStatus,
 		&dist, &h.OnBehalf, &h.EventTime, &h.RecordedAt, &h.SupersedesID, &h.CorrectionReason, &h.ActorRef, &h.DeviceID, &h.IdemKey); err != nil {
 		return h, err
 	}
-	h.HouseholdRef = deref(hh)
+	// Vụ theo hộ (AH-100) không có thửa: plot_ref NULL.
+	h.HouseholdRef, h.PlotRef = deref(hh), deref(plot)
 	var err error
 	if h.MassKg, err = mass.ParseKg(massS); err != nil {
 		return h, err

@@ -166,6 +166,10 @@ func householdSeasonOut(r app.SeasonResult) gin.H {
 	if r.Estimate != nil {
 		out["yield_estimate"] = yieldEstimateOut(r.Estimate)
 	}
+	// AH-100: sản lượng thực tế đã khai báo (vụ "Đã thu hoạch").
+	if r.Harvest != nil {
+		out["harvest"] = householdHarvestOut(r.Harvest)
+	}
 	// AH-70: lý do dừng vụ (sự kiện hiện tại của vụ đã dừng).
 	if s.Status == "cancelled" && r.Event.Action == "cancelled" {
 		out["stop_reason"], out["stopped_at"] = r.Event.Reason, ts(r.Event.EventTime)

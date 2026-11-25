@@ -24,6 +24,7 @@ import { RunningSeasonPlan } from "./SeasonPlanCustomizer";
 import { StopSeasonForm } from "./StopSeasonForm";
 import { EditSeasonForm } from "./EditSeasonForm";
 import { YieldEstimatePanel } from "./YieldEstimatePanel";
+import { HarvestDeclarationForm } from "./HarvestDeclarationForm";
 import { SelfMadePlanBuilder, type SelfMadePlan } from "./SelfMadePlanBuilder";
 import type { CalendarPrefill } from "./seasonCalendarModel";
 
@@ -45,6 +46,8 @@ export function HouseholdSeasonsDialog({ coopRef, household, calendarPrefill, on
   const canEdit = hasRole(principal, ROLES.platformAdmin, ROLES.htxMember) && matrixAllows(principal, "KHMV-FN-03", "U");
   // AH-87: sản lượng dự kiến — KHMV-FN-04 U; Đại diện chỉ xem.
   const canEstimate = hasRole(principal, ROLES.platformAdmin, ROLES.htxMember) && matrixAllows(principal, "KHMV-FN-04", "U");
+  // AH-100: khai báo sản lượng — KHMV-FN-06 C; Đại diện không có nút.
+  const canHarvest = hasRole(principal, ROLES.platformAdmin, ROLES.htxMember) && matrixAllows(principal, "KHMV-FN-06", "C");
   const [opening, setOpening] = useState(!!calendarPrefill);
   const [crop, setCrop] = useState(calendarPrefill?.crop_code ?? "");
   const [variety, setVariety] = useState("");
@@ -191,6 +194,8 @@ export function HouseholdSeasonsDialog({ coopRef, household, calendarPrefill, on
       {detail.status === "cancelled" && detail.stop_reason ? <p role="status">Đã dừng vụ: {detail.stop_reason}</p> : null}
       <YieldEstimatePanel key={`estimate:${detail.season_ref}:${detail.yield_estimate?.seq ?? 0}`} coopRef={coopRef} season={detail} canEdit={canEstimate}
         onChanged={(e) => { setDetail({ ...detail, yield_estimate: e }); setRevision((v) => v + 1); onSaved(); }} />
+      {canHarvest && detail.status === "open" ? <HarvestDeclarationForm key={`harvest:${detail.current_event_id}`} coopRef={coopRef} season={detail}
+        onDeclared={(r) => { setDetail(r.season); setRevision((v) => v + 1); onSaved(); }} /> : null}
       {canEdit && detail.status === "open" ? <EditSeasonForm key={`edit:${detail.current_event_id}`} coopRef={coopRef} season={detail} onSaved={(s) => { setDetail(s); setRevision((v) => v + 1); onSaved(); }} /> : null}
       {canStop && detail.status === "open" ? <StopSeasonForm key={detail.current_event_id} coopRef={coopRef} season={detail} onStopped={(s) => { setDetail(s); setRevision((v) => v + 1); onSaved(); }} /> : null}
       <ol>{detail.sop_snapshot.steps.map((step, i) => <li key={i}>{step.name}</li>)}</ol>

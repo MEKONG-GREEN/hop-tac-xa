@@ -7,7 +7,7 @@ import { newIdempotencyKey } from "@/api/idempotency";
 import type { ApiProblem } from "@/api/problem";
 import { useAuth } from "@/auth/AuthProvider";
 import { ProblemAlert } from "@/components/ProblemAlert";
-import { formatDateVi, formatDecimalVi, normalizeNumberInput } from "@/lib/exactDecimal";
+import { Decimal, formatDateVi, formatDecimalVi, normalizeNumberInput } from "@/lib/exactDecimal";
 import { toApiProblem } from "@/lib/useAsync";
 
 type Season = components["schemas"]["HouseholdSeason"];
@@ -19,6 +19,14 @@ export function tonnesInputError(raw: string): string | null {
   if (v === "") return null;
   if (!/^[0-9]+(\.[0-9]{1,2})?$/.test(v)) return "Nhập số tấn không âm, tối đa 2 chữ số thập phân.";
   return null;
+}
+
+/** AH-100 AC2: chênh lệch thực tế − dự kiến (tấn, decimal, có dấu). */
+export function actualVsExpected(actual: string, expected: string): string {
+  const a = Decimal.parse(actual), e = Decimal.parse(expected);
+  if (!a || !e) return "";
+  const d = a.sub(e).round(2);
+  return `${d.sign() > 0 ? "+" : ""}${formatDecimalVi(d.toString(), { minDecimals: 2, maxDecimals: 2 })}`;
 }
 
 const t = (v: string | null | undefined) => (v == null ? "—" : `${formatDecimalVi(v, { minDecimals: 2, maxDecimals: 2 })} tấn`);
@@ -65,6 +73,10 @@ export function YieldEstimatePanel({ coopRef, season, canEdit, onChanged }: {
       {e.is_rice ? <div><dt>Rơm dự kiến</dt><dd>{t(e.straw_t)} <span className="small mute">{e.entered_straw_t ? `(Thành viên nhập; hệ thống tính ${t(e.computed_straw_t)})` : `(hệ thống tính, hệ số rơm ${formatDecimalVi(e.straw_pct ?? "0")} %)`}</span></dd></div> : null}
     </dl> : <p className="small mute">Chưa tính được sản lượng dự kiến (không đọc được tham số); thử tải lại sau.</p>}
     <p>Ngày thu hoạch dự kiến: {harvest}</p>
+    {season.harvest ? <div role="status">
+      <strong>Sản lượng thực tế: {t(season.harvest.mass_t)}</strong> · ngày thu hoạch {formatDateVi(season.harvest.harvest_date)} · năng suất {formatDecimalVi(season.harvest.yield_t_per_ha, { minDecimals: 2, maxDecimals: 2 })} tấn/ha
+      {e ? <span> · so với dự kiến {t(e.rice_t)}: {actualVsExpected(season.harvest.mass_t, e.rice_t)} tấn</span> : null}
+    </div> : null}
     {editable && !editing ? <button type="button" className="btn btn-o btn-sm" onClick={start}>Sửa sản lượng dự kiến</button> : null}
     {editable && editing ? <form className="stack" aria-label="Sửa sản lượng dự kiến" onSubmit={(ev) => void submit(ev)}>
       <p className="small mute">Để trống để dùng giá trị hệ thống tính.</p>
