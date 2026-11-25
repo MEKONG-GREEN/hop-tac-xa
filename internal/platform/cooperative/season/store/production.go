@@ -44,7 +44,7 @@ func ProductionGroups(ctx context.Context, tx pgx.Tx, f DashFilter, byCoop, bySe
 	}
 	args := append(f.Scope.args(), nilIfZero(f.CooperativeRef), f.SeasonCode, f.SeasonYear, f.VarietyCode)
 	rows, err := tx.Query(ctx, `SELECT `+strings.Join(cols, ", ")+`, count(*), count(*) FILTER (WHERE y.status = 'open'),
-	    count(*) FILTER (WHERE y.status = 'completed'), count(DISTINCT y.household_ref),
+	    count(*) FILTER (WHERE y.status IN ('completed', 'closed')), count(DISTINCT y.household_ref),
 	    coalesce(sum(y.area_ha), 0)::text, coalesce(sum(y.expected_kg), 0)::text, coalesce(sum(y.actual_kg), 0)::text,
 	    coalesce(sum(y.area_ha) FILTER (WHERE y.actual_kg IS NOT NULL), 0)::text,
 	    coalesce(sum(y.sop_steps), 0), coalesce(sum(y.sop_steps_done), 0), coalesce(sum(y.approved_logs), 0), coalesce(sum(y.pending_logs), 0)

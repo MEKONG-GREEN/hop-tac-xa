@@ -26,6 +26,7 @@ import { EditSeasonForm } from "./EditSeasonForm";
 import { YieldEstimatePanel } from "./YieldEstimatePanel";
 import { HarvestDeclarationForm } from "./HarvestDeclarationForm";
 import { HarvestEditPanel } from "./HarvestEditPanel";
+import { SeasonSummaryPanel } from "./SeasonSummaryPanel";
 import { SelfMadePlanBuilder, type SelfMadePlan } from "./SelfMadePlanBuilder";
 import type { CalendarPrefill } from "./seasonCalendarModel";
 
@@ -34,7 +35,7 @@ export { householdAreaError } from "./seasonOptions";
 type S = components["schemas"];
 type GPS = S["CropGPS"];
 
-const SEASON_STATUS: Record<string, string> = { open: "Đang canh tác", completed: "Đã thu hoạch", cancelled: "Đã dừng vụ" };
+const SEASON_STATUS: Record<string, string> = { open: "Đang canh tác", completed: "Đã thu hoạch", cancelled: "Đã dừng vụ", closed: "Đã hoàn thành vụ" };
 
 export function HouseholdSeasonsDialog({ coopRef, household, calendarPrefill, onClose, onSaved }: {
   coopRef: string; household: HouseholdListItem; calendarPrefill?: CalendarPrefill; onClose: () => void; onSaved: () => void;
@@ -52,6 +53,8 @@ export function HouseholdSeasonsDialog({ coopRef, household, calendarPrefill, on
   // AH-189: sửa (U), hủy (D) khai báo; Đại diện chỉ xem lịch sử.
   const canHarvestEdit = hasRole(principal, ROLES.platformAdmin, ROLES.htxMember) && matrixAllows(principal, "KHMV-FN-06", "U");
   const canHarvestVoid = hasRole(principal, ROLES.platformAdmin, ROLES.htxMember) && matrixAllows(principal, "KHMV-FN-06", "D");
+  // AH-152: hoàn thành vụ — KHMV-FN-06 U; Đại diện chỉ xem tổng kết.
+  const canClose = canHarvestEdit;
   const [opening, setOpening] = useState(!!calendarPrefill);
   const [crop, setCrop] = useState(calendarPrefill?.crop_code ?? "");
   const [variety, setVariety] = useState("");
@@ -198,8 +201,10 @@ export function HouseholdSeasonsDialog({ coopRef, household, calendarPrefill, on
       {detail.status === "cancelled" && detail.stop_reason ? <p role="status">Đã dừng vụ: {detail.stop_reason}</p> : null}
       <YieldEstimatePanel key={`estimate:${detail.season_ref}:${detail.yield_estimate?.seq ?? 0}`} coopRef={coopRef} season={detail} canEdit={canEstimate}
         onChanged={(e) => { setDetail({ ...detail, yield_estimate: e }); setRevision((v) => v + 1); onSaved(); }} />
-      {detail.status === "completed" && detail.harvest ? <HarvestEditPanel key={`harvest-edit:${detail.harvest.harvest_id}`} coopRef={coopRef} season={detail}
+      {(detail.status === "completed" || detail.status === "closed") && detail.harvest ? <HarvestEditPanel key={`harvest-edit:${detail.harvest.harvest_id}`} coopRef={coopRef} season={detail}
         canEdit={canHarvestEdit} canVoid={canHarvestVoid} onSeason={(s) => { setDetail(s); setRevision((v) => v + 1); onSaved(); }} /> : null}
+      <SeasonSummaryPanel key={`summary:${detail.season_ref}`} coopRef={coopRef} season={detail} canClose={canClose}
+        onSeason={(s) => { setDetail(s); setRevision((v) => v + 1); onSaved(); }} />
       {canHarvest && detail.status === "open" ? <HarvestDeclarationForm key={`harvest:${detail.current_event_id}`} coopRef={coopRef} season={detail}
         onDeclared={(r) => { setDetail(r.season); setRevision((v) => v + 1); onSaved(); }} /> : null}
       {canEdit && detail.status === "open" ? <EditSeasonForm key={`edit:${detail.current_event_id}`} coopRef={coopRef} season={detail} onSaved={(s) => { setDetail(s); setRevision((v) => v + 1); onSaved(); }} /> : null}

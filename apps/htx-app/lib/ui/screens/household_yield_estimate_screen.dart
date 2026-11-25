@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../application/household_season_service.dart';
 import 'household_harvest_card.dart';
+import 'household_season_summary_card.dart';
 
 String _tons(Object? v) => v == null ? '—' : '${'$v'.replaceAll('.', ',')} tấn';
 String _day(Object? raw) => '$raw'.split('-').reversed.join('/');
@@ -185,7 +186,9 @@ class _HouseholdYieldEstimateScreenState
               trailing: Text(_tons(actual['mass_t'])),
             ),
           // AH-189: sửa sản lượng (Thành viên) và lịch sử khai báo (mọi vai xem được vụ).
-          if (widget.canWrite && s['status'] == 'completed' && actual != null)
+          if (widget.canWrite &&
+              (s['status'] == 'completed' || s['status'] == 'closed') &&
+              actual != null)
             HouseholdHarvestEditCard(
               key: ValueKey('edit:${actual['harvest_id']}'),
               service: widget.service,
@@ -203,6 +206,17 @@ class _HouseholdYieldEstimateScreenState
                     child: const Text('Xem lịch sử khai báo'),
                   )
                 : HouseholdHarvestHistory(items: _history!),
+          // AH-152: "Ghi lại vụ" — tổng kết, nhắc khai báo, hoàn thành vụ.
+          HouseholdSeasonSummaryCard(
+            key: ValueKey('summary:${s['season_ref']}'),
+            service: widget.service,
+            coop: widget.coop,
+            season: s,
+            canWrite: widget.canWrite,
+            onClosed: (result) => setState(
+              () => _season = (result['season'] as Map).cast<String, Object?>(),
+            ),
+          ),
           if (widget.canWrite && s['status'] == 'open' && !_editing)
             HouseholdHarvestCard(
               service: widget.service,

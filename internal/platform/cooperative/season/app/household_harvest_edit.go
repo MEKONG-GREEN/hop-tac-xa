@@ -38,8 +38,8 @@ const (
 	moveAutoHarvestReason    = "Đổi theo ngày thu hoạch đã sửa"
 )
 
-// harvestEditable: trạng thái vụ được sửa sản lượng. AH-152 thêm trạng thái "Đã hoàn thành vụ" (bắt buộc lý do).
-var harvestEditable = map[string]bool{port.SeasonCompleted: true}
+// harvestEditable: trạng thái vụ được sửa sản lượng — "Đã thu hoạch" và "Đã hoàn thành vụ" (AH-152, bắt buộc lý do).
+var harvestEditable = map[string]bool{port.SeasonCompleted: true, port.SeasonClosed: true}
 
 // harvestEditReasonRequired: sửa ở trạng thái khác "Đã thu hoạch" (vụ đã đóng) bắt buộc lý do.
 func harvestEditReasonRequired(status string) bool { return status != port.SeasonCompleted }

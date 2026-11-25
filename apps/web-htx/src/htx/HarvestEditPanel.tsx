@@ -18,7 +18,7 @@ type Version = S["HouseholdHarvestVersion"];
 const vnToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(new Date());
 const KIND: Record<Version["kind"], string> = { declared: "Khai báo", corrected: "Sửa", voided: "Hủy khai báo" };
 
-/** Kiểm sớm lý do (AH-189): tùy chọn khi sửa vụ "Đã thu hoạch", bắt buộc khi hủy. */
+/** Kiểm sớm lý do (AH-189): tùy chọn khi sửa vụ "Đã thu hoạch", bắt buộc khi hủy và khi sửa vụ đã hoàn thành (AH-152). */
 export function reasonError(reason: string, required: boolean): string | null {
   const r = reason.trim();
   if (!r && !required) return null;
@@ -49,6 +49,8 @@ export function HarvestEditPanel({ coopRef, season, canEdit, canVoid, onSeason }
 }) {
   const { api } = useAuth();
   const harvest = season.harvest!;
+  // AH-152: vụ "Đã hoàn thành vụ" — sửa bắt buộc lý do, không hủy khai báo.
+  const closed = season.status === "closed";
   const path = { ref: coopRef, household_ref: season.household_ref, season_ref: season.season_ref };
   const [mode, setMode] = useState<"" | "edit" | "void">("");
   const [mass, setMass] = useState(harvest.mass_t);
@@ -73,7 +75,7 @@ export function HarvestEditPanel({ coopRef, season, canEdit, canVoid, onSeason }
   const submitEdit = async (e: FormEvent) => {
     e.preventDefault(); if (busy) return;
     const errs = harvestErrors({ mass, date }, season.anchor_date, vnToday());
-    const r = reasonError(reason, false);
+    const r = reasonError(reason, closed);
     if (r) errs.push(r);
     setErrors(errs); if (errs.length) return;
     const zero = isZeroTonnes(mass);
@@ -102,13 +104,13 @@ export function HarvestEditPanel({ coopRef, season, canEdit, canVoid, onSeason }
   return <section className="card stack" aria-label="Sửa, hủy khai báo sản lượng">
     <div className="row">
       {canEdit && !mode ? <button type="button" className="btn btn-o btn-sm" onClick={() => setMode("edit")}>Sửa sản lượng</button> : null}
-      {canVoid && !mode ? <button type="button" className="btn btn-o btn-sm" onClick={() => setMode("void")}>Hủy khai báo</button> : null}
+      {canVoid && !closed && !mode ? <button type="button" className="btn btn-o btn-sm" onClick={() => setMode("void")}>Hủy khai báo</button> : null}
       <button type="button" className="btn btn-sm" onClick={() => void loadHistory()}>Xem lịch sử khai báo</button>
     </div>
     {mode === "edit" ? <form className="stack" aria-label="Sửa sản lượng" onSubmit={(e) => void submitEdit(e)}>
       <label className="field">Tổng sản lượng (tấn)<input className="input" inputMode="decimal" value={mass} disabled={busy} onChange={(e) => { setMass(e.target.value); setConfirm(false); }} /></label>
       <label className="field">Ngày thu hoạch cuối<input className="input" type="date" min={season.anchor_date} max={vnToday()} value={date} disabled={busy} onChange={(e) => setDate(e.target.value)} /></label>
-      <label className="field">Lý do sửa (không bắt buộc)<textarea className="input" maxLength={500} value={reason} disabled={busy} onChange={(e) => setReason(e.target.value)} /></label>
+      <label className="field">{closed ? "Lý do sửa (bắt buộc với vụ đã hoàn thành)" : "Lý do sửa (không bắt buộc)"}<textarea className="input" maxLength={500} value={reason} disabled={busy} onChange={(e) => setReason(e.target.value)} /></label>
       {errors.map((m) => <p key={m} role="alert">{m}</p>)}
       {confirm ? <p role="status">Sản lượng bằng 0. Bấm &quot;Xác nhận lưu&quot; nếu đúng.</p> : null}
       <div className="row">

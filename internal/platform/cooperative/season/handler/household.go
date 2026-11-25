@@ -170,6 +170,10 @@ func householdSeasonOut(r app.SeasonResult) gin.H {
 	if r.Harvest != nil {
 		out["harvest"] = householdHarvestOut(r.Harvest)
 	}
+	// AH-152: thời điểm và người hoàn thành vụ.
+	if r.Closed != nil {
+		out["closed_at"], out["closed_by"] = ts(r.Closed.EventTime), r.Closed.ActorRef
+	}
 	// AH-70: lý do dừng vụ (sự kiện hiện tại của vụ đã dừng).
 	if s.Status == "cancelled" && r.Event.Action == "cancelled" {
 		out["stop_reason"], out["stopped_at"] = r.Event.Reason, ts(r.Event.EventTime)

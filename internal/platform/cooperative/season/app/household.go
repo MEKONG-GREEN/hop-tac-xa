@@ -510,7 +510,7 @@ func (s *Service) ListHouseholdSeasons(ctx context.Context, coop, hh, after uuid
 	if err != nil {
 		return HouseholdSeasonPage{}, err
 	}
-	if status != "" && status != port.SeasonOpen && status != "completed" && status != "cancelled" {
+	if status != "" && status != port.SeasonOpen && status != "completed" && status != "cancelled" && status != port.SeasonClosed {
 		return HouseholdSeasonPage{}, problem.Validation.WithField("status", "trạng thái không hợp lệ")
 	}
 	limit = clampLimit(limit)

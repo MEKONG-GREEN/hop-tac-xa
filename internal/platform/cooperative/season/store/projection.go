@@ -40,7 +40,7 @@ func RefreshCoopArea(ctx context.Context, tx pgx.Tx, tid, coop uuid.UUID, season
 	         coalesce(sum(area_ha) FILTER (WHERE status IN ('open', 'completed')), 0),
 	         count(*) FILTER (WHERE status IN ('open', 'completed')),
 	         count(*) FILTER (WHERE status = 'open'),
-	         count(*) FILTER (WHERE status = 'completed')
+	         count(*) FILTER (WHERE status IN ('completed', 'closed'))
 	  FROM pf_coop.season_current WHERE cooperative_ref = $2::uuid AND season_code = $3::text AND season_year = $4::int
 	  ON CONFLICT (tenant_id, cooperative_ref, season_code, season_year) DO UPDATE SET
 	    area_ha = EXCLUDED.area_ha, seasons = EXCLUDED.seasons, open_seasons = EXCLUDED.open_seasons,
@@ -261,7 +261,7 @@ func Dashboard(ctx context.Context, tx pgx.Tx, f DashFilter, group string) ([]Da
 	}
 	args := append(f.Scope.args(), nilIfZero(f.CooperativeRef), f.SeasonCode, f.SeasonYear, f.VarietyCode)
 	rows, err := tx.Query(ctx, `SELECT `+key+` AS k, count(*), count(*) FILTER (WHERE y.status = 'open'),
-	    count(*) FILTER (WHERE y.status = 'completed'), count(DISTINCT y.household_ref),
+	    count(*) FILTER (WHERE y.status IN ('completed', 'closed')), count(DISTINCT y.household_ref),
 	    coalesce(sum(y.area_ha), 0)::text, coalesce(sum(y.expected_kg), 0)::text, coalesce(sum(y.actual_kg), 0)::text,
 	    coalesce(sum(y.area_ha) FILTER (WHERE y.actual_kg IS NOT NULL), 0)::text,
 	    coalesce(sum(y.sop_steps), 0), coalesce(sum(y.sop_steps_done), 0), coalesce(sum(y.approved_logs), 0), coalesce(sum(y.pending_logs), 0)

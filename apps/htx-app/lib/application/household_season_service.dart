@@ -9,6 +9,7 @@ import 'package:agrigreen_mobile/data/reference/reference_repository.dart';
 import 'package:agrigreen_mobile/domain/outbox_record.dart';
 
 import '../domain/season_plan.dart';
+import '../domain/season_summary.dart';
 
 typedef HouseholdJson = Map<String, Object?>;
 
@@ -567,6 +568,50 @@ class HouseholdSeasonService {
         .whereType<Map<Object?, Object?>>()
         .map((m) => m.cast<String, Object?>())
         .toList();
+  }
+
+  /// AH-152: tổng kết "Ghi lại vụ" — tự tính khi vụ chưa hoàn thành, bản chụp cố định
+  /// khi đã hoàn thành.
+  Future<HouseholdJson> seasonSummary(
+    String coop,
+    String household,
+    String season,
+  ) async {
+    final value = await api.getJson(
+      '/v1/cooperatives/$coop/households/$household/seasons/$season/summary',
+    );
+    return value.cast<String, Object?>();
+  }
+
+  /// AH-152: hoàn thành vụ "Đã thu hoạch" kèm chi phí (VND, tùy chọn) và ghi chú (tùy
+  /// chọn). Cần mạng; [key] giữ nguyên khi thử lại cùng nội dung. Trả `{season, summary}`.
+  Future<HouseholdJson> closeSeason(
+    String coop,
+    String household,
+    String season, {
+    required String expectedEventId,
+    required String costVnd,
+    required String note,
+    required HouseholdJson gps,
+    required String key,
+  }) async {
+    final error = costError(costVnd) ?? noteError(note);
+    if (error != null) throw ArgumentError(error);
+    final cost = normalizeCost(costVnd);
+    final result = await api.sendJson(
+      method: 'POST',
+      path:
+          '/v1/cooperatives/$coop/households/$household/seasons/$season/close',
+      idempotencyKey: key,
+      body: {
+        'expected_season_event_id': expectedEventId,
+        if (cost.isNotEmpty) 'cost_vnd': cost,
+        if (note.trim().isNotEmpty) 'note': note.trim(),
+        'gps': gps,
+        'channel': 'app',
+      },
+    );
+    return result.cast<String, Object?>();
   }
 
   /// AH-87: Thành viên HTX nhập, sửa hoặc xóa (null) sản lượng lúa, rơm dự kiến của vụ

@@ -39,7 +39,7 @@ func (s *Service) HouseholdSeasonOverview(ctx context.Context, coop uuid.UUID, s
 	if err != nil {
 		return SeasonOverviewPage{}, err
 	}
-	if status != "" && status != port.SeasonOpen && status != "completed" && status != port.SeasonCancelled {
+	if status != "" && status != port.SeasonOpen && status != "completed" && status != port.SeasonCancelled && status != port.SeasonClosed {
 		return SeasonOverviewPage{}, problem.Validation.WithField("status", "trạng thái không hợp lệ")
 	}
 	limit = clampLimit(limit)

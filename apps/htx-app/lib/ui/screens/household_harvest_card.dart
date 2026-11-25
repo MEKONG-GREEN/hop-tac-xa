@@ -272,10 +272,14 @@ class _HouseholdHarvestEditCardState extends State<HouseholdHarvestEditCard> {
       vnToday(),
     );
     final reason = _reason.text.trim();
+    // AH-152: vụ "Đã hoàn thành vụ" bắt buộc lý do sửa.
+    final closed = s['status'] == 'closed';
     if (error == null &&
-        reason.isNotEmpty &&
+        (reason.isNotEmpty || closed) &&
         (reason.length < 10 || reason.length > 500)) {
-      error = 'Lý do sửa từ 10 đến 500 ký tự (hoặc để trống).';
+      error = closed
+          ? 'Vụ đã hoàn thành: nhập lý do sửa từ 10 đến 500 ký tự.'
+          : 'Lý do sửa từ 10 đến 500 ký tự (hoặc để trống).';
     }
     setState(() => _error = error);
     if (error != null) return;
@@ -352,8 +356,10 @@ class _HouseholdHarvestEditCardState extends State<HouseholdHarvestEditCard> {
         TextField(
           controller: _reason,
           enabled: !_busy,
-          decoration: const InputDecoration(
-            labelText: 'Lý do sửa (không bắt buộc)',
+          decoration: InputDecoration(
+            labelText: widget.season['status'] == 'closed'
+                ? 'Lý do sửa (bắt buộc)'
+                : 'Lý do sửa (không bắt buộc)',
           ),
         ),
         if (zero && _confirmZero)

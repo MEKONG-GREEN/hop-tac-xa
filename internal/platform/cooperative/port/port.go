@@ -39,6 +39,8 @@ const (
 	SeasonOpen      = "open"
 	SeasonCompleted = "completed"
 	SeasonCancelled = "cancelled"
+	// SeasonClosed: "Đã hoàn thành vụ" — vụ theo hộ đã khai báo sản lượng và hoàn tất tổng kết (AH-152); đóng.
+	SeasonClosed = "closed"
 )
 
 // Trạng thái duyệt nhật ký (ccport.Log*).
