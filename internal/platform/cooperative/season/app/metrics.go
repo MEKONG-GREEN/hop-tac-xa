@@ -65,7 +65,11 @@ func (m MetricsSource) AsOfAt(ctx context.Context, key metricsport.Key, d clock.
 		if key == MetricYieldTPerHa {
 			q = `WITH last AS (
 			    SELECT DISTINCT ON (stream_key) id, recorded_at, mass_kg, area_ha, commune_code, season_code, season_year
-			    FROM pf_coop.harvest_declaration WHERE recorded_at < $1 ORDER BY stream_key, seq DESC)
+			    FROM pf_coop.harvest_declaration h WHERE recorded_at < $1
+			      -- AH-189: chuỗi có dòng hủy (tính tới mốc) sau một khai báo thì khai báo đó không còn tính.
+			      AND NOT EXISTS (SELECT 1 FROM pf_coop.harvest_declaration v WHERE v.tenant_id = h.tenant_id
+			        AND v.stream_key = h.stream_key AND v.voided AND v.seq >= h.seq AND v.recorded_at < $1)
+			    ORDER BY stream_key, seq DESC)
 			  SELECT count(*), coalesce(sum(mass_kg), 0)::text, coalesce(sum(area_ha), 0)::text,
 			         (array_agg(id ORDER BY recorded_at DESC, id DESC))[1], max(recorded_at)
 			  FROM last WHERE upper(season_code) = $2 AND season_year = $3 AND ($4::text[] IS NULL OR commune_code = ANY($4))`

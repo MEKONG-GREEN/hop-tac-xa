@@ -520,6 +520,55 @@ class HouseholdSeasonService {
     return result.cast<String, Object?>();
   }
 
+  /// AH-189: sửa sản lượng, ngày thu hoạch của vụ đã khai báo. Lý do tùy chọn ở vụ
+  /// "Đã thu hoạch". Cần mạng; [key] giữ nguyên khi thử lại cùng nội dung.
+  Future<HouseholdJson> correctHarvest(
+    String coop,
+    String household,
+    String season, {
+    required String expectedHarvestId,
+    required String massT,
+    required String harvestDate,
+    required bool zeroConfirmed,
+    required String reason,
+    required String key,
+  }) async {
+    final error = tonnesError(massT);
+    if (error != null || massT.trim().isEmpty) {
+      throw ArgumentError(error ?? 'Nhập tổng sản lượng (tấn).');
+    }
+    final result = await api.sendJson(
+      method: 'POST',
+      path:
+          '/v1/cooperatives/$coop/households/$household/seasons/$season/harvest/corrections',
+      idempotencyKey: key,
+      body: {
+        'expected_harvest_id': expectedHarvestId,
+        'mass_t': tonnesValue(massT),
+        'harvest_date': harvestDate,
+        'zero_confirmed': zeroConfirmed,
+        if (reason.trim().isNotEmpty) 'reason': reason.trim(),
+        'channel': 'app',
+      },
+    );
+    return result.cast<String, Object?>();
+  }
+
+  /// AH-189: lịch sử khai báo sản lượng (khai báo, sửa, hủy) theo thứ tự ghi.
+  Future<List<HouseholdJson>> harvestHistory(
+    String coop,
+    String household,
+    String season,
+  ) async {
+    final value = await api.getJson(
+      '/v1/cooperatives/$coop/households/$household/seasons/$season/harvest/history',
+    );
+    return ((value['items'] as List?) ?? const [])
+        .whereType<Map<Object?, Object?>>()
+        .map((m) => m.cast<String, Object?>())
+        .toList();
+  }
+
   /// AH-87: Thành viên HTX nhập, sửa hoặc xóa (null) sản lượng lúa, rơm dự kiến của vụ
   /// đang canh tác. Cần mạng; [key] giữ nguyên khi thử lại cùng nội dung.
   Future<HouseholdJson> saveYieldEstimate(

@@ -47,6 +47,8 @@ type Harvest struct {
 	ActorRef         uuid.UUID
 	DeviceID         *string
 	IdemKey          string
+	// Voided: dòng hủy khai báo của vụ theo hộ (AH-189), bản bù của khai báo hiện hành.
+	Voided bool
 }
 
 // InsertHarvest ghi một khai báo sản lượng; DB tính seq và băm.
@@ -55,23 +57,31 @@ func InsertHarvest(ctx context.Context, tx pgx.Tx, h *Harvest) error {
 	    (id, tenant_id, stream_key, season_ref, plot_ref, household_ref, cooperative_ref, commune_code, season_code, season_year,
 	     variety_code, harvest_date, mass_kg, area_ha, yield_t_per_ha, moisture_pct, anomaly_kind, anomaly_threshold,
 	     anomaly_confirmed, source, gps, gps_accuracy_m, gps_source, location_status, distance_m, on_behalf, event_time,
-	     supersedes_id, correction_reason, actor_ref, device_id, idem_key, rule_version)
+	     supersedes_id, correction_reason, actor_ref, device_id, idem_key, rule_version, voided)
 	  VALUES ($1::uuid, $2::uuid, $3::text, $4::uuid, $5::uuid, $6::uuid, $7::uuid, $8::text, $9::text, $10::int,
 	     $11::text, $12::date, $13::numeric, $14::numeric, $15::numeric, $16::numeric, $17::text, $18::numeric,
 	     $19::boolean, $20::text, `+gpsInsertSQL("$21", "$22")+`, $23::numeric, $24::text, $25::text, $26::numeric, $27::boolean, $28::timestamptz,
-	     $29::uuid, $30::text, $31::uuid, $32::text, $33::text, $34::text)
+	     $29::uuid, $30::text, $31::uuid, $32::text, $33::text, $34::text, $35::boolean)
 	  RETURNING seq, recorded_at`,
 		h.ID, h.TenantID, "harvest:"+h.SeasonRef.String(), h.SeasonRef, nilIfZero(h.PlotRef), nilIfZero(h.HouseholdRef), h.CooperativeRef, h.CommuneCode,
 		h.SeasonCode, h.SeasonYear, h.VarietyCode, day(h.HarvestDate), h.MassKg.String(), h.AreaHa.String(), h.YieldTPerHa.String(),
 		decPtr(h.MoisturePct), nilIfEmpty(h.AnomalyKind), decPtr(h.AnomalyThreshold), h.AnomalyConfirmed, h.Source,
 		decPtr(h.GPS.Lon), decPtr(h.GPS.Lat), decPtr(h.GPS.AccuracyM), h.GPS.Source, h.LocationStatus, decPtr(h.DistanceM), h.OnBehalf, h.EventTime.UTC(),
-		h.SupersedesID, h.CorrectionReason, h.ActorRef, h.DeviceID, h.IdemKey, domain.RuleVersion).Scan(&h.Seq, &h.RecordedAt)
+		h.SupersedesID, h.CorrectionReason, h.ActorRef, h.DeviceID, h.IdemKey, domain.RuleVersion, voidedArg(h.Voided)).Scan(&h.Seq, &h.RecordedAt)
+}
+
+// voidedArg: NULL cho mọi dòng không phải dòng hủy (giữ băm của dòng cũ theo epoch cột).
+func voidedArg(v bool) any {
+	if !v {
+		return nil
+	}
+	return true
 }
 
 const harvestCols = `id, tenant_id, seq, season_ref, plot_ref, household_ref, cooperative_ref, commune_code, season_code, season_year,
   variety_code, harvest_date, mass_kg::text, area_ha::text, yield_t_per_ha::text, moisture_pct::text, coalesce(anomaly_kind, ''),
   anomaly_threshold::text, anomaly_confirmed, source, ` + gpsSelect + `, gps_accuracy_m::text, gps_source, location_status,
-  distance_m::text, on_behalf, event_time, recorded_at, supersedes_id, correction_reason, actor_ref, device_id, idem_key`
+  distance_m::text, on_behalf, event_time, recorded_at, supersedes_id, correction_reason, actor_ref, device_id, idem_key, coalesce(voided, false)`
 
 func scanHarvest(row pgx.Row) (Harvest, error) {
 	var h Harvest
@@ -81,7 +91,7 @@ func scanHarvest(row pgx.Row) (Harvest, error) {
 	if err := row.Scan(&h.ID, &h.TenantID, &h.Seq, &h.SeasonRef, &plot, &hh, &h.CooperativeRef, &h.CommuneCode, &h.SeasonCode, &h.SeasonYear,
 		&h.VarietyCode, &h.HarvestDate, &massS, &area, &yield, &moist, &h.AnomalyKind,
 		&thr, &h.AnomalyConfirmed, &h.Source, &lon, &lat, &acc, &h.GPS.Source, &h.LocationStatus,
-		&dist, &h.OnBehalf, &h.EventTime, &h.RecordedAt, &h.SupersedesID, &h.CorrectionReason, &h.ActorRef, &h.DeviceID, &h.IdemKey); err != nil {
+		&dist, &h.OnBehalf, &h.EventTime, &h.RecordedAt, &h.SupersedesID, &h.CorrectionReason, &h.ActorRef, &h.DeviceID, &h.IdemKey, &h.Voided); err != nil {
 		return h, err
 	}
 	// Vụ theo hộ (AH-100) không có thửa: plot_ref NULL.
@@ -154,4 +164,22 @@ func SetSeasonHarvest(ctx context.Context, tx pgx.Tx, season, harvest uuid.UUID)
 	_, err := tx.Exec(ctx, `UPDATE pf_coop.season_current SET harvest_id = $2::uuid, updated_at = now(),
 	    sync_seq = nextval('pf_coop.season_sync_seq') WHERE season_ref = $1::uuid`, season, harvest)
 	return err
+}
+
+// HarvestHistory đọc mọi phiên bản khai báo sản lượng của một vụ theo thứ tự ghi (AH-189).
+func HarvestHistory(ctx context.Context, tx pgx.Tx, season uuid.UUID) ([]Harvest, error) {
+	rows, err := tx.Query(ctx, "SELECT "+harvestCols+" FROM pf_coop.harvest_declaration WHERE stream_key = 'harvest:' || $1::text ORDER BY seq", season)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Harvest{}
+	for rows.Next() {
+		h, err := scanHarvest(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, h)
+	}
+	return out, rows.Err()
 }

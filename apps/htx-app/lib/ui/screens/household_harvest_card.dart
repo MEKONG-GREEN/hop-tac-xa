@@ -210,3 +210,215 @@ class _HouseholdHarvestCardState extends State<HouseholdHarvestCard> {
     );
   }
 }
+
+/// AH-189 (FN-06.3): sửa sản lượng, ngày thu hoạch của vụ "Đã thu hoạch" (cần mạng). Lý
+/// do tùy chọn; sản lượng 0 phải xác nhận lại. Hủy khai báo chỉ có trên web.
+class HouseholdHarvestEditCard extends StatefulWidget {
+  const HouseholdHarvestEditCard({
+    super.key,
+    required this.service,
+    required this.coop,
+    required this.season,
+    required this.onSaved,
+  });
+  final HouseholdSeasonService service;
+  final String coop;
+  final HouseholdJson season;
+  final void Function(HouseholdJson result) onSaved;
+  @override
+  State<HouseholdHarvestEditCard> createState() =>
+      _HouseholdHarvestEditCardState();
+}
+
+class _HouseholdHarvestEditCardState extends State<HouseholdHarvestEditCard> {
+  final _ids = UuidV7Generator();
+  final _mass = TextEditingController();
+  final _day = TextEditingController();
+  final _reason = TextEditingController();
+  bool _open = false, _busy = false, _confirmZero = false;
+  String? _error;
+  (String, String)? _key;
+
+  HouseholdJson get _harvest =>
+      (widget.season['harvest'] as Map).cast<String, Object?>();
+
+  @override
+  void dispose() {
+    _mass.dispose();
+    _day.dispose();
+    _reason.dispose();
+    super.dispose();
+  }
+
+  void _start() {
+    _mass.text = '${_harvest['mass_t']}'.replaceAll('.', ',');
+    _day.text = '${_harvest['harvest_date']}'.split('-').reversed.join('/');
+    _reason.clear();
+    setState(() {
+      _open = true;
+      _confirmZero = false;
+      _error = null;
+      _key = null;
+    });
+  }
+
+  Future<void> _save() async {
+    if (_busy) return;
+    final s = widget.season;
+    var error = harvestFormError(
+      _mass.text,
+      _day.text,
+      '${s['anchor_date']}',
+      vnToday(),
+    );
+    final reason = _reason.text.trim();
+    if (error == null &&
+        reason.isNotEmpty &&
+        (reason.length < 10 || reason.length > 500)) {
+      error = 'Lý do sửa từ 10 đến 500 ký tự (hoặc để trống).';
+    }
+    setState(() => _error = error);
+    if (error != null) return;
+    final zero = _zero(_mass.text);
+    if (zero && !_confirmZero) {
+      setState(() => _confirmZero = true);
+      return;
+    }
+    final day = _iso(parseDisplayDay(_day.text)!);
+    final mass = tonnesValue(_mass.text)!;
+    final fingerprint = '$mass|$day|$reason';
+    if (_key?.$1 != fingerprint) _key = (fingerprint, _ids.newId());
+    setState(() => _busy = true);
+    try {
+      final result = await widget.service.correctHarvest(
+        widget.coop,
+        '${s['household_ref']}',
+        '${s['season_ref']}',
+        expectedHarvestId: '${_harvest['harvest_id']}',
+        massT: mass,
+        harvestDate: day,
+        zeroConfirmed: zero,
+        reason: reason,
+        key: _key!.$2,
+      );
+      if (!mounted) return;
+      setState(() {
+        _open = false;
+        _key = null;
+      });
+      widget.onSaved(result);
+    } catch (e) {
+      if (!mounted) return;
+      setState(
+        () => _error = e is ApiException
+            ? (e.code == 'cropcycle.concurrent_edit'
+                  ? 'Khai báo vừa được sửa ở nơi khác. Quay lại và mở lại màn này.'
+                  : e.detail ?? 'Không lưu được.')
+            : e is ArgumentError
+            ? '${e.message}'
+            : 'Chưa lưu được. Kiểm tra mạng rồi thử lại; dữ liệu được giữ.',
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_open) {
+      return OutlinedButton(
+        onPressed: _start,
+        child: const Text('Sửa sản lượng'),
+      );
+    }
+    final zero = _zero(_mass.text);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: _mass,
+          enabled: !_busy,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(labelText: 'Tổng sản lượng (tấn)'),
+          onChanged: (_) => setState(() => _confirmZero = false),
+        ),
+        TextField(
+          controller: _day,
+          enabled: !_busy,
+          decoration: const InputDecoration(
+            labelText: 'Ngày thu hoạch cuối (dd/mm/yyyy)',
+          ),
+        ),
+        TextField(
+          controller: _reason,
+          enabled: !_busy,
+          decoration: const InputDecoration(
+            labelText: 'Lý do sửa (không bắt buộc)',
+          ),
+        ),
+        if (zero && _confirmZero)
+          const Text('Sản lượng bằng 0. Bấm "Xác nhận lưu" nếu đúng.'),
+        if (_error != null)
+          Text(
+            _error!,
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
+        Row(
+          children: [
+            FilledButton(
+              onPressed: _busy ? null : _save,
+              child: Text(
+                _busy
+                    ? 'Đang lưu…'
+                    : zero && _confirmZero
+                    ? 'Xác nhận lưu'
+                    : 'Lưu sửa',
+              ),
+            ),
+            TextButton(
+              onPressed: _busy
+                  ? null
+                  : () => setState(() {
+                      _open = false;
+                      _error = null;
+                      _key = null;
+                    }),
+              child: const Text('Hủy'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// AH-189: lịch sử khai báo (khai báo, sửa, hủy) — ai xem được vụ đều xem được.
+class HouseholdHarvestHistory extends StatelessWidget {
+  const HouseholdHarvestHistory({super.key, required this.items});
+  final List<HouseholdJson> items;
+  static const _kind = {
+    'declared': 'Khai báo',
+    'corrected': 'Sửa',
+    'voided': 'Hủy khai báo',
+  };
+  @override
+  Widget build(BuildContext context) {
+    String t(Object? v) => '${'$v'.replaceAll('.', ',')} tấn';
+    String d(Object? v) => '$v'.split('-').reversed.join('/');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final v in items)
+          ListTile(
+            dense: true,
+            title: Text(
+              '${_kind[v['kind']] ?? v['kind']}: ${t(v['mass_t'])} · ngày ${d(v['harvest_date'])}',
+            ),
+            subtitle: v['reason'] == null
+                ? null
+                : Text('Lý do: ${v['reason']}'),
+          ),
+      ],
+    );
+  }
+}

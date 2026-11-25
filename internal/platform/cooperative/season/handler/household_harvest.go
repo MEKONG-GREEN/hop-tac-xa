@@ -77,3 +77,109 @@ func householdHarvestOut(h *store.Harvest) gin.H {
 		"harvest_date": domain.FormatDay(h.HarvestDate), "yield_t_per_ha": h.YieldTPerHa.StringFixed(2), "zero_confirmed": h.AnomalyKind == domain.AnomalyZero,
 		"declared_by": h.ActorRef, "declared_at": ts(h.EventTime)}
 }
+
+// correctHouseholdHarvest: AH-189 — sửa sản lượng, ngày thu hoạch của vụ đã khai báo (bản bù, giữ lịch sử).
+func (h Handler) correctHouseholdHarvest(c *gin.Context) {
+	coop, hh, season, ok := taskPath(c)
+	if !ok {
+		return
+	}
+	var req struct {
+		ExpectedHarvestID string `json:"expected_harvest_id"`
+		MassT             string `json:"mass_t"`
+		HarvestDate       string `json:"harvest_date"`
+		ZeroConfirmed     bool   `json:"zero_confirmed"`
+		Reason            string `json:"reason"`
+		Channel           string `json:"channel"`
+	}
+	decoder := json.NewDecoder(c.Request.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil || decoder.Decode(&struct{}{}) != io.EOF {
+		httpx.Fail(c, problem.Validation.WithField("body", "Dữ liệu sửa sản lượng không hợp lệ"))
+		return
+	}
+	expected, err := uuid.Parse(req.ExpectedHarvestID)
+	if err != nil {
+		httpx.Fail(c, problem.Validation.WithField("expected_harvest_id", "Phiên bản khai báo không hợp lệ"))
+		return
+	}
+	var day time.Time
+	if req.HarvestDate != "" {
+		if day, err = domain.ParseDay(req.HarvestDate); err != nil {
+			httpx.Fail(c, problem.Validation.WithField("harvest_date", "Ngày thu hoạch dạng YYYY-MM-DD"))
+			return
+		}
+	}
+	r, err := h.Svc.CorrectHouseholdHarvest(c.Request.Context(), app.HouseholdHarvestEditInput{CooperativeRef: coop, HouseholdRef: hh, SeasonRef: season,
+		ExpectedHarvestID: expected, MassT: req.MassT, HarvestDate: day, ZeroConfirmed: req.ZeroConfirmed, Reason: req.Reason, Channel: req.Channel, IdemKey: idem(c)})
+	if err != nil {
+		httpx.Fail(c, err)
+		return
+	}
+	if r.Replayed {
+		c.Header("Idempotent-Replayed", "true")
+	}
+	c.JSON(http.StatusOK, gin.H{"season": householdSeasonOut(r.Season), "harvest": householdHarvestOut(&r.Harvest)})
+}
+
+// voidHouseholdHarvest: AH-189 — hủy khai báo của vụ "Đã thu hoạch" kèm lý do; vụ về "Đang canh tác".
+func (h Handler) voidHouseholdHarvest(c *gin.Context) {
+	coop, hh, season, ok := taskPath(c)
+	if !ok {
+		return
+	}
+	var req struct {
+		ExpectedHarvestID string `json:"expected_harvest_id"`
+		Reason            string `json:"reason"`
+		Channel           string `json:"channel"`
+	}
+	decoder := json.NewDecoder(c.Request.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil || decoder.Decode(&struct{}{}) != io.EOF {
+		httpx.Fail(c, problem.Validation.WithField("body", "Dữ liệu hủy khai báo không hợp lệ"))
+		return
+	}
+	expected, err := uuid.Parse(req.ExpectedHarvestID)
+	if err != nil {
+		httpx.Fail(c, problem.Validation.WithField("expected_harvest_id", "Phiên bản khai báo không hợp lệ"))
+		return
+	}
+	r, err := h.Svc.VoidHouseholdHarvest(c.Request.Context(), app.HouseholdHarvestVoidInput{CooperativeRef: coop, HouseholdRef: hh, SeasonRef: season,
+		ExpectedHarvestID: expected, Reason: req.Reason, Channel: req.Channel, IdemKey: idem(c)})
+	if err != nil {
+		httpx.Fail(c, err)
+		return
+	}
+	if r.Replayed {
+		c.Header("Idempotent-Replayed", "true")
+	}
+	c.JSON(http.StatusOK, householdSeasonOut(r))
+}
+
+// householdHarvestHistory: AH-189 — mọi phiên bản khai báo của vụ (khai báo, sửa, hủy) theo thứ tự ghi.
+func (h Handler) householdHarvestHistory(c *gin.Context) {
+	coop, hh, season, ok := taskPath(c)
+	if !ok {
+		return
+	}
+	rows, err := h.Svc.HouseholdHarvestHistory(c.Request.Context(), coop, hh, season)
+	if err != nil {
+		httpx.Fail(c, err)
+		return
+	}
+	items := make([]gin.H, 0, len(rows))
+	for i := range rows {
+		r := rows[i]
+		kind := "declared"
+		switch {
+		case r.Voided:
+			kind = "voided"
+		case r.SupersedesID != nil:
+			kind = "corrected"
+		}
+		item := householdHarvestOut(&r)
+		item["kind"], item["supersedes_id"], item["reason"] = kind, r.SupersedesID, r.CorrectionReason
+		items = append(items, item)
+	}
+	c.JSON(http.StatusOK, gin.H{"items": items})
+}

@@ -35,6 +35,23 @@ class _HouseholdYieldEstimateScreenState
   final _straw = TextEditingController();
   HouseholdJson? _estimate;
   late HouseholdJson _season;
+  List<HouseholdJson>? _history;
+
+  Future<void> _loadHistory() async {
+    try {
+      final items = await widget.service.harvestHistory(
+        widget.coop,
+        '${_season['household_ref']}',
+        '${_season['season_ref']}',
+      );
+      if (mounted) setState(() => _history = items);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = 'Cần mạng để xem lịch sử khai báo.');
+      }
+    }
+  }
+
   bool _editing = false, _busy = false;
   String? _error, _riceError, _strawError;
   (String, String)? _key;
@@ -167,6 +184,25 @@ class _HouseholdYieldEstimateScreenState
               ),
               trailing: Text(_tons(actual['mass_t'])),
             ),
+          // AH-189: sửa sản lượng (Thành viên) và lịch sử khai báo (mọi vai xem được vụ).
+          if (widget.canWrite && s['status'] == 'completed' && actual != null)
+            HouseholdHarvestEditCard(
+              key: ValueKey('edit:${actual['harvest_id']}'),
+              service: widget.service,
+              coop: widget.coop,
+              season: s,
+              onSaved: (result) => setState(() {
+                _season = (result['season'] as Map).cast<String, Object?>();
+                _history = null;
+              }),
+            ),
+          if (actual != null)
+            _history == null
+                ? TextButton(
+                    onPressed: _loadHistory,
+                    child: const Text('Xem lịch sử khai báo'),
+                  )
+                : HouseholdHarvestHistory(items: _history!),
           if (widget.canWrite && s['status'] == 'open' && !_editing)
             HouseholdHarvestCard(
               service: widget.service,
