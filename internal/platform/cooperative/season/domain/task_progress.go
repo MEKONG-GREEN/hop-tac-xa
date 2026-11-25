@@ -20,6 +20,9 @@ type TaskRecord struct {
 	// Adhoc: việc phát sinh ngoài quy trình (AH-163) — nhãn "Ngoài SOP", số việc riêng > AdhocStepSeqBase, không tính
 	// vào tiến độ.
 	Adhoc bool `json:"adhoc,omitempty"`
+	// AutoHarvest: việc Thu hoạch tự Xong theo ngày thu hoạch khi khai báo sản lượng của vụ (AH-100 AC1), kể cả việc đã
+	// Bỏ qua; không phải người dùng tự tích.
+	AutoHarvest bool `json:"auto_harvest,omitempty"`
 }
 
 // AdhocStepSeqBase: số việc của việc phát sinh bắt đầu sau mọi số việc của quy trình (MaxPlanStepSeq).

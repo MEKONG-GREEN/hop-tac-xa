@@ -133,7 +133,7 @@ func recomputeEstimateOnEditTx(ctx context.Context, tx pgx.Tx, tid uuid.UUID, be
 	return err
 }
 
-// attachEstimates gắn sản lượng dự kiến vào kết quả vụ theo hộ. Vụ chưa có dòng trong sổ được tính tại chỗ theo
+// attachEstimates gắn sản lượng dự kiến (và khai báo sản lượng, nếu có) vào kết quả vụ theo hộ. Vụ chưa có dòng trong sổ được tính tại chỗ theo
 // tham số hiện hành; không đọc được tham số thì để trống (không bịa số).
 func (s *Service) attachEstimates(ctx context.Context, tid uuid.UUID, items []SeasonResult) error {
 	if len(items) == 0 {
@@ -146,8 +146,23 @@ func (s *Service) attachEstimates(ctx context.Context, tid uuid.UUID, items []Se
 	var stored map[uuid.UUID]store.YieldEstimateEvent
 	if err := s.inTx(ctx, tid, func(tx pgx.Tx) error {
 		var err error
-		stored, err = store.CurrentYieldEstimates(ctx, tx, refs)
-		return err
+		if stored, err = store.CurrentYieldEstimates(ctx, tx, refs); err != nil {
+			return err
+		}
+		// AH-100: khai báo sản lượng hiện hành để so thực tế với dự kiến.
+		for i := range items {
+			if items[i].Season.HarvestID == uuid.Nil {
+				continue
+			}
+			h, err := store.HarvestByID(ctx, tx, items[i].Season.HarvestID)
+			if err != nil {
+				return err
+			}
+			if h != nil && h.SeasonRef == items[i].Season.SeasonRef {
+				items[i].Harvest = h
+			}
+		}
+		return nil
 	}); err != nil {
 		return err
 	}

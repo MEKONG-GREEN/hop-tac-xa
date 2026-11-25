@@ -377,7 +377,8 @@ func (s *Service) correctHarvest(ctx context.Context, a access, in CorrectHarves
 	}); err != nil {
 		return HarvestResult{}, err
 	}
-	if old == nil || !a.sees(old.CommuneCode, old.CooperativeRef, old.HouseholdRef) {
+	// Khai báo của vụ theo hộ (AH-100, không có thửa) chỉ sửa qua API vụ theo hộ, không qua luồng thửa cũ.
+	if old == nil || old.PlotRef == uuid.Nil || !a.sees(old.CommuneCode, old.CooperativeRef, old.HouseholdRef) {
 		return HarvestResult{}, ErrHarvestNotFound
 	}
 	if err := a.canWrite(old.CooperativeRef, old.HouseholdRef); err != nil {

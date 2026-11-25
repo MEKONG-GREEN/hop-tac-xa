@@ -50,6 +50,7 @@ func (h Handler) RegisterApp(rg *gin.RouterGroup) {
 	rg.POST("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/stop", h.stopHouseholdSeason)
 	rg.POST("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/corrections", h.editHouseholdSeason)
 	rg.POST("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/yield-estimates", h.saveYieldEstimate)
+	rg.POST("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/harvest", h.declareHouseholdHarvest)
 	rg.GET("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/plan-history", h.householdPlanHistory)
 	rg.POST("/cooperatives/:ref/households/:household_ref/seasons", h.openHouseholdSeason)
 	rg.GET("/cooperatives/:ref/households/:household_ref/seasons", h.listHouseholdSeasons)

@@ -10689,6 +10689,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/harvest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Khai báo sản lượng thu hoạch của một vụ theo hộ (AH-100)
+         * @description Thành viên HTX/Admin (KHMV-FN-06 C); Đại diện HTX chỉ xem (403). Chỉ vụ "Đang canh tác" (khác → 409 season_state, dùng Sửa sản lượng); expected_season_event_id phải là phiên bản hiện tại (409 task_season_changed). Tổng sản lượng cả vụ theo tấn, ≥ 0, tối đa 2 chữ số lẻ (KH-26); bằng 0 cần zero_confirmed (409 harvest_zero_confirmation_required, KH-19); không còn ngưỡng bất thường (KH-09). Mốc gốc ≤ harvest_date ≤ hôm nay (GMT+7). Vụ chuyển "Đã thu hoạch" (status completed), diện tích được giải phóng, ngày thu hoạch thành mốc NTT; mọi việc Thu hoạch chưa Xong (kể cả Bỏ qua) tự Xong theo ngày đó (auto_completed_steps). Phát lại cùng Idempotency-Key trả kết quả cũ (200).
+         */
+        post: operations["declareHouseholdHarvest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/extension/khtc/periods/{id}/report": {
         parameters: {
             query?: never;
@@ -25332,6 +25356,7 @@ export interface components {
             /** @description Lý do dừng vụ, chỉ có khi status = cancelled (AH-70) */
             stop_reason?: string;
             yield_estimate?: components["schemas"]["HouseholdYieldEstimate"];
+            harvest?: components["schemas"]["HouseholdHarvest"];
             /**
              * Format: date-time
              * @description Thời điểm dừng vụ (AH-70)
@@ -25693,6 +25718,29 @@ export interface components {
             updated_at: string | null;
             /** Format: uuid */
             updated_by: string | null;
+        };
+        /** @description Khai báo sản lượng hiện hành của vụ theo hộ (AH-100) */
+        HouseholdHarvest: {
+            /** Format: uuid */
+            harvest_id: string;
+            /** @description Tổng sản lượng cả vụ (tấn, 2 chữ số lẻ) */
+            mass_t: string;
+            mass_kg: string;
+            /** Format: date */
+            harvest_date: string;
+            /** @description Năng suất = sản lượng ÷ diện tích vụ (tấn/ha) */
+            yield_t_per_ha: string;
+            zero_confirmed: boolean;
+            /** Format: uuid */
+            declared_by: string;
+            /** Format: date-time */
+            declared_at: string;
+        };
+        HouseholdHarvestResult: {
+            season: components["schemas"]["HouseholdSeason"];
+            harvest: components["schemas"]["HouseholdHarvest"];
+            /** @description Số việc Thu hoạch vừa được tự Xong */
+            auto_completed_steps: number[];
         };
         KHTCReportSupplement: {
             /** Format: uuid */
@@ -51475,6 +51523,66 @@ export interface operations {
             409: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
+        };
+    };
+    declareHouseholdHarvest: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    expected_season_event_id: string;
+                    mass_t: string;
+                    /** Format: date */
+                    harvest_date: string;
+                    /** @default false */
+                    zero_confirmed?: boolean;
+                    gps: components["schemas"]["CropGPS"];
+                    /**
+                     * @default app
+                     * @enum {string}
+                     */
+                    channel?: "app" | "web";
+                };
+            };
+        };
+        responses: {
+            /** @description Phát lại cùng Idempotency-Key */
+            200: {
+                headers: {
+                    "Idempotent-Replayed"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HouseholdHarvestResult"];
+                };
+            };
+            /** @description Đã khai báo; vụ "Đã thu hoạch" */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HouseholdHarvestResult"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
         };
     };
     extensionKhtcReportGet: {

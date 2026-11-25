@@ -241,6 +241,8 @@ void main() {
               'area_ha': '1.25',
               'status': 'open',
               'expected_harvest_date': '2027-01-20',
+              'anchor_date': '2026-06-01',
+              'current_event_id': 'event-87',
               'yield_estimate': {
                 'seq': 1,
                 'is_rice': true,
@@ -262,6 +264,27 @@ void main() {
       return get(path, query);
     };
     env.server.onSend = (method, path, body) async {
+      if (path.endsWith('/seasons/season-87/harvest')) {
+        return {
+          'season': {
+            'season_ref': 'season-87',
+            'household_ref': householdRef,
+            'season_code': 'DX',
+            'season_year': 2026,
+            'crop_code': 'LUA',
+            'area_ha': '1.25',
+            'status': 'completed',
+            'expected_harvest_date': '2027-01-20',
+            'harvest': {
+              'mass_t': '8.40',
+              'harvest_date': '2026-09-20',
+              'yield_t_per_ha': '6.72',
+            },
+          },
+          'harvest': {'mass_t': '8.40'},
+          'auto_completed_steps': [5],
+        };
+      }
       if (path.endsWith('/seasons/season-87/yield-estimates')) {
         return {
           'yield_estimate': {
@@ -292,7 +315,7 @@ void main() {
     await openTile(tester, 'Nông hộ');
     await tapText(tester, 'Hộ thử nghiệm');
     expect(find.textContaining('Lúa dự kiến 7,50 tấn'), findsOneWidget);
-    await tapOn(tester, find.byTooltip('Sản lượng dự kiến'));
+    await tapOn(tester, find.byTooltip('Sản lượng'));
     expect(find.text('7,50 tấn'), findsOneWidget);
     expect(find.text('2,63 tấn'), findsOneWidget);
     expect(find.text('20/01/2027'), findsOneWidget);
@@ -324,9 +347,66 @@ void main() {
     await loginToHome(tester, env);
     await openTile(tester, 'Nông hộ');
     await tapText(tester, 'Hộ thử nghiệm');
-    await tapOn(tester, find.byTooltip('Sản lượng dự kiến'));
+    await tapOn(tester, find.byTooltip('Sản lượng'));
     expect(find.text('7,50 tấn'), findsOneWidget);
     expect(find.text('Sửa sản lượng dự kiến'), findsNothing);
+    await finish(tester);
+  });
+
+  testWidgets('AH-100 Thành viên khai báo sản lượng, 0 cần xác nhận', (
+    tester,
+  ) async {
+    final env = estimateEnv('htx_member');
+    await loginToHome(tester, env);
+    await openTile(tester, 'Nông hộ');
+    await tapText(tester, 'Hộ thử nghiệm');
+    await tapOn(tester, find.byTooltip('Sản lượng'));
+    await tapText(tester, 'Khai báo sản lượng');
+    final mass = find.widgetWithText(TextField, 'Tổng sản lượng (tấn)');
+    final day = find.widgetWithText(
+      TextField,
+      'Ngày thu hoạch cuối (dd/mm/yyyy)',
+    );
+    await tester.enterText(day, '20/09/2026');
+    await tester.enterText(mass, '-1');
+    await tapText(tester, 'Lưu khai báo');
+    expect(
+      find.text('Nhập số tấn không âm, tối đa 2 chữ số thập phân.'),
+      findsOneWidget,
+    );
+    await tester.enterText(day, '31/05/2026');
+    await tester.enterText(mass, '8,4');
+    await tapText(tester, 'Lưu khai báo');
+    expect(find.textContaining('từ mốc gốc'), findsOneWidget);
+    await tester.enterText(day, '20/09/2026');
+    await tester.enterText(mass, '0');
+    await tapText(tester, 'Lưu khai báo');
+    expect(find.text('Xác nhận lưu'), findsOneWidget);
+    expect(
+      env.server.sendCalls.where((c) => c.$2.endsWith('/harvest')),
+      isEmpty,
+    );
+    await tester.enterText(mass, '8,4');
+    await tapText(tester, 'Lưu khai báo');
+    final call = env.server.sendCalls.singleWhere(
+      (c) => c.$2.endsWith('/harvest'),
+    );
+    expect(call.$4?['mass_t'], '8.4');
+    expect(call.$4?['harvest_date'], '2026-09-20');
+    expect(call.$4?['zero_confirmed'], false);
+    expect(call.$4?['expected_season_event_id'], 'event-87');
+    expect(find.text('8,40 tấn'), findsOneWidget);
+    expect(find.text('Khai báo sản lượng'), findsNothing);
+    await finish(tester);
+  });
+
+  testWidgets('AH-100 Đại diện không có nút khai báo', (tester) async {
+    final env = estimateEnv('coop_manager');
+    await loginToHome(tester, env);
+    await openTile(tester, 'Nông hộ');
+    await tapText(tester, 'Hộ thử nghiệm');
+    await tapOn(tester, find.byTooltip('Sản lượng'));
+    expect(find.text('Khai báo sản lượng'), findsNothing);
     await finish(tester);
   });
 }

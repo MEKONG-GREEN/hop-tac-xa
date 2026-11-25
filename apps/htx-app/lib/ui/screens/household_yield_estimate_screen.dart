@@ -3,6 +3,7 @@ import 'package:agrigreen_mobile/data/sync/sync_api.dart';
 import 'package:flutter/material.dart';
 
 import '../../application/household_season_service.dart';
+import 'household_harvest_card.dart';
 
 String _tons(Object? v) => v == null ? '—' : '${'$v'.replaceAll('.', ',')} tấn';
 String _day(Object? raw) => '$raw'.split('-').reversed.join('/');
@@ -33,6 +34,7 @@ class _HouseholdYieldEstimateScreenState
   final _rice = TextEditingController();
   final _straw = TextEditingController();
   HouseholdJson? _estimate;
+  late HouseholdJson _season;
   bool _editing = false, _busy = false;
   String? _error, _riceError, _strawError;
   (String, String)? _key;
@@ -40,6 +42,7 @@ class _HouseholdYieldEstimateScreenState
   @override
   void initState() {
     super.initState();
+    _season = widget.season;
     final e = widget.season['yield_estimate'];
     _estimate = e is Map ? e.cast<String, Object?>() : null;
   }
@@ -112,11 +115,14 @@ class _HouseholdYieldEstimateScreenState
   @override
   Widget build(BuildContext context) {
     final e = _estimate;
-    final s = widget.season;
+    final s = _season;
     final harvest = s['expected_harvest_date'];
     final canEdit = widget.canWrite && s['status'] == 'open' && e != null;
+    final actual = s['harvest'] is Map
+        ? (s['harvest'] as Map).cast<String, Object?>()
+        : null;
     return Scaffold(
-      appBar: AppBar(title: const Text('Sản lượng dự kiến')),
+      appBar: AppBar(title: const Text('Sản lượng')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -151,6 +157,29 @@ class _HouseholdYieldEstimateScreenState
             title: const Text('Ngày thu hoạch dự kiến'),
             trailing: Text(harvest == null ? 'Chưa có' : _day(harvest)),
           ),
+          // AH-100 AC2: sản lượng thực tế cạnh dự kiến.
+          if (actual != null)
+            ListTile(
+              title: const Text('Sản lượng thực tế'),
+              subtitle: Text(
+                'Thu hoạch ${_day(actual['harvest_date'])} · năng suất '
+                '${'${actual['yield_t_per_ha']}'.replaceAll('.', ',')} tấn/ha',
+              ),
+              trailing: Text(_tons(actual['mass_t'])),
+            ),
+          if (widget.canWrite && s['status'] == 'open' && !_editing)
+            HouseholdHarvestCard(
+              service: widget.service,
+              coop: widget.coop,
+              season: s,
+              onDeclared: (result) => setState(() {
+                final season = (result['season'] as Map)
+                    .cast<String, Object?>();
+                _season = season;
+                final e = season['yield_estimate'];
+                if (e is Map) _estimate = e.cast<String, Object?>();
+              }),
+            ),
           if (canEdit && !_editing)
             OutlinedButton(
               onPressed: _start,
