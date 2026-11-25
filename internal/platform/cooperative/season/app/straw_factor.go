@@ -14,6 +14,7 @@ import (
 
 	"github.com/MEKONG-GREEN/hop-tac-xa/contracts/htxroles"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/port"
+	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/season/domain"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/cooperative/season/store"
 	mdport "github.com/MEKONG-GREEN/hop-tac-xa/internal/platform/masterdata/port"
 	"github.com/MEKONG-GREEN/hop-tac-xa/internal/shared/authz"
@@ -232,7 +233,7 @@ func (s *Service) StrawFactorAt(ctx context.Context, code string, at time.Time) 
 		return decimal.Zero, err
 	}
 	if e == nil {
-		return decimal.NewFromInt(35), nil
+		return domain.DefaultStrawPct, nil
 	}
 	return e.Percentage, nil
 }

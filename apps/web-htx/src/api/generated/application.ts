@@ -10665,6 +10665,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/yield-estimates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Nhập, sửa hoặc xóa sản lượng lúa, rơm dự kiến của vụ theo hộ (AH-87)
+         * @description Thành viên HTX/Admin (KHMV-FN-04 U); Đại diện HTX chỉ xem (403). Chỉ vụ "Đang canh tác". Body là toàn bộ giá trị người dùng nhập cho vụ; null (hoặc bỏ trường) = dùng giá trị hệ thống tính (KH-05). Tấn ≥ 0, tối đa 2 chữ số lẻ (KH-26), không quá giới hạn cột lưu. Gửi straw_t cho vụ không phải lúa bị từ chối cả lệnh (422 theo trường straw_t). Rơm hệ thống tính lại theo lúa đang có hiệu lực, hệ số rơm đã chụp lúc mở vụ; rơm người dùng nhập không đổi. expected_seq là seq hiện hành (0 khi vụ chưa có bản ghi); lệch thì 409 yield_estimate_changed. Phát lại cùng Idempotency-Key trả kết quả cũ.
+         */
+        post: operations["saveHouseholdYieldEstimate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/extension/khtc/periods/{id}/report": {
         parameters: {
             query?: never;
@@ -25307,6 +25331,7 @@ export interface components {
             copied_from?: string | null;
             /** @description Lý do dừng vụ, chỉ có khi status = cancelled (AH-70) */
             stop_reason?: string;
+            yield_estimate?: components["schemas"]["HouseholdYieldEstimate"];
             /**
              * Format: date-time
              * @description Thời điểm dừng vụ (AH-70)
@@ -25645,6 +25670,29 @@ export interface components {
                 due: number;
                 overdue: number;
             };
+        };
+        /** @description Sản lượng lúa, rơm dự kiến của vụ theo hộ (AH-87, KH-05). Giá trị có hiệu lực = giá trị nhập, nếu không có thì giá trị hệ thống tính. Tấn 2 chữ số lẻ, làm tròn half-up. */
+        HouseholdYieldEstimate: {
+            /** @description Phiên bản hiện hành; 0 = vụ mở trước AH-87, tính tại chỗ theo tham số hiện hành */
+            seq: number;
+            is_rice: boolean;
+            area_ha: string;
+            /** @description Năng suất quy ước đã chụp (t/ha) */
+            conventional_yield_t_per_ha: string;
+            /** @description Hệ số rơm (%) đã chụp; null với vụ không phải lúa */
+            straw_pct: string | null;
+            computed_rice_t: string;
+            computed_straw_t: string | null;
+            entered_rice_t: string | null;
+            entered_straw_t: string | null;
+            /** @description Lúa dự kiến có hiệu lực (tấn) */
+            rice_t: string;
+            /** @description Rơm dự kiến có hiệu lực (tấn); null với vụ không phải lúa */
+            straw_t: string | null;
+            /** Format: date-time */
+            updated_at: string | null;
+            /** Format: uuid */
+            updated_by: string | null;
         };
         KHTCReportSupplement: {
             /** Format: uuid */
@@ -51374,6 +51422,50 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HouseholdSeason"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    saveHouseholdYieldEstimate: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    expected_seq: number;
+                    rice_t?: string | null;
+                    straw_t?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Sản lượng dự kiến sau khi ghi */
+            200: {
+                headers: {
+                    "Idempotent-Replayed"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        yield_estimate: components["schemas"]["HouseholdYieldEstimate"];
+                    };
                 };
             };
             400: components["responses"]["Problem"];

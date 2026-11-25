@@ -162,6 +162,10 @@ func householdSeasonOut(r app.SeasonResult) gin.H {
 		"anchor_date": domain.FormatDay(s.SowingDate), "expected_harvest_date": forecast, "harvest_open_date": harvest,
 		"sop_snapshot": s.SOPSnapshot, "status": s.Status, "current_event_id": s.CurrentEventID, "version": s.Version,
 		"gps_missing": !r.Event.GPS.HasPoint(), "gps": gpsOut(r.Event.GPS), "opened_by": s.OpenedBy, "opened_at": ts(s.OpenedAt), "copied_from": uuidOrNil(s.CopiedFrom)}
+	// AH-87: sản lượng lúa, rơm dự kiến (ngày thu hoạch dự kiến là expected_harvest_date ở trên).
+	if r.Estimate != nil {
+		out["yield_estimate"] = yieldEstimateOut(r.Estimate)
+	}
 	// AH-70: lý do dừng vụ (sự kiện hiện tại của vụ đã dừng).
 	if s.Status == "cancelled" && r.Event.Action == "cancelled" {
 		out["stop_reason"], out["stopped_at"] = r.Event.Reason, ts(r.Event.EventTime)

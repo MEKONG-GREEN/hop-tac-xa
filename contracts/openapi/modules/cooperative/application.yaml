@@ -858,8 +858,70 @@ paths:
         "404": {$ref: "#/components/responses/Problem"}
         "409": {$ref: "#/components/responses/Problem"}
         "422": {$ref: "#/components/responses/Problem"}
+# @ag-order: 10022
+  /v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/yield-estimates:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: household_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: season_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: saveHouseholdYieldEstimate
+      summary: Nhập, sửa hoặc xóa sản lượng lúa, rơm dự kiến của vụ theo hộ (AH-87)
+      description: Thành viên HTX/Admin (KHMV-FN-04 U); Đại diện HTX chỉ xem (403). Chỉ vụ "Đang canh tác". Body là toàn bộ giá trị người dùng nhập cho vụ; null (hoặc bỏ trường) = dùng giá trị hệ thống tính (KH-05). Tấn ≥ 0, tối đa 2 chữ số lẻ (KH-26), không quá giới hạn cột lưu. Gửi straw_t cho vụ không phải lúa bị từ chối cả lệnh (422 theo trường straw_t). Rơm hệ thống tính lại theo lúa đang có hiệu lực, hệ số rơm đã chụp lúc mở vụ; rơm người dùng nhập không đổi. expected_seq là seq hiện hành (0 khi vụ chưa có bản ghi); lệch thì 409 yield_estimate_changed. Phát lại cùng Idempotency-Key trả kết quả cũ.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_seq]
+              properties:
+                expected_seq: {type: integer, minimum: 0}
+                rice_t: {type: [string, "null"], pattern: '^[0-9]+(\.[0-9]{1,2})?$'}
+                straw_t: {type: [string, "null"], pattern: '^[0-9]+(\.[0-9]{1,2})?$'}
+      responses:
+        "200":
+          description: Sản lượng dự kiến sau khi ghi
+          headers:
+            Idempotent-Replayed: {schema: {type: string}}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [yield_estimate]
+                properties:
+                  yield_estimate: {$ref: "#/components/schemas/HouseholdYieldEstimate"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+        "503": {$ref: "#/components/responses/Problem"}
 components:
   schemas:
+# @ag-order: 10022
+    HouseholdYieldEstimate:
+      type: object
+      description: "Sản lượng lúa, rơm dự kiến của vụ theo hộ (AH-87, KH-05). Giá trị có hiệu lực = giá trị nhập, nếu không có thì giá trị hệ thống tính. Tấn 2 chữ số lẻ, làm tròn half-up."
+      required: [seq, is_rice, area_ha, conventional_yield_t_per_ha, straw_pct, computed_rice_t, computed_straw_t, entered_rice_t, entered_straw_t, rice_t, straw_t, updated_at, updated_by]
+      properties:
+        seq: {type: integer, minimum: 0, description: "Phiên bản hiện hành; 0 = vụ mở trước AH-87, tính tại chỗ theo tham số hiện hành"}
+        is_rice: {type: boolean}
+        area_ha: {type: string}
+        conventional_yield_t_per_ha: {type: string, description: "Năng suất quy ước đã chụp (t/ha)"}
+        straw_pct: {type: [string, "null"], description: "Hệ số rơm (%) đã chụp; null với vụ không phải lúa"}
+        computed_rice_t: {type: string}
+        computed_straw_t: {type: [string, "null"]}
+        entered_rice_t: {type: [string, "null"]}
+        entered_straw_t: {type: [string, "null"]}
+        rice_t: {type: string, description: "Lúa dự kiến có hiệu lực (tấn)"}
+        straw_t: {type: [string, "null"], description: "Rơm dự kiến có hiệu lực (tấn); null với vụ không phải lúa"}
+        updated_at: {type: [string, "null"], format: date-time}
+        updated_by: {type: [string, "null"], format: uuid}
 # @ag-order: 10017
     HouseholdTaskBatchCandidate:
       type: object
@@ -1032,6 +1094,7 @@ components:
         version: {type: integer, minimum: 1}
         copied_from: {type: [string, "null"], format: uuid, description: "Vụ nguồn khi mở bằng sao chép (AH-139)"}
         stop_reason: {type: string, description: "Lý do dừng vụ, chỉ có khi status = cancelled (AH-70)"}
+        yield_estimate: {$ref: "#/components/schemas/HouseholdYieldEstimate"}
         stopped_at: {type: string, format: date-time, description: "Thời điểm dừng vụ (AH-70)"}
         gps_missing: {type: boolean, description: "Thiếu hoặc từ chối GPS, không suy diễn tọa độ thành xác minh ranh đất"}
         gps: {$ref: "#/components/schemas/CropGPS"}

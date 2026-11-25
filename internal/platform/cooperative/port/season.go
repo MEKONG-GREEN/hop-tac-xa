@@ -37,6 +37,9 @@ const (
 	// ParamYieldAnomalyMaxTPerHa: ngưỡng năng suất bất thường (t/ha) chung; mặc định 12. Theo giống: khóa
 	// ParamYieldAnomalyMaxTPerHa + ":" + mã giống (HTX US-YIELD-03 AC-2).
 	ParamYieldAnomalyMaxTPerHa = "cropcycle.yield_anomaly_max_t_per_ha"
+	// ParamConventionalYieldTPerHa: năng suất lúa quy ước (t/ha) cho sản lượng dự kiến vụ theo hộ (KH-05, AH-87);
+	// mặc định 6.
+	ParamConventionalYieldTPerHa = "cropcycle.conventional_yield_t_per_ha"
 )
 
 // GpsLogConsumer là consumer của worker ghi log GPS (pf/geo GpsLog) cho vụ, nhật ký, khai sản lượng SAU khi

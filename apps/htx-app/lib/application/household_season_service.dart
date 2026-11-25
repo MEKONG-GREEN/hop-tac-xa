@@ -63,6 +63,23 @@ String? householdAreaError(String raw) {
   return null;
 }
 
+/// AH-87 (KH-26): số tấn người dùng nhập — không âm, tối đa 2 chữ số thập phân.
+/// Ô trống hợp lệ (dùng giá trị hệ thống tính). Máy chủ kiểm lại.
+String? tonnesError(String raw) {
+  final v = raw.trim().replaceAll(',', '.');
+  if (v.isEmpty) return null;
+  if (!RegExp(r'^[0-9]{1,30}(\.[0-9]{1,2})?$').hasMatch(v)) {
+    return 'Nhập số tấn không âm, tối đa 2 chữ số thập phân.';
+  }
+  return null;
+}
+
+/// Chuẩn hóa ô tấn trước khi gửi: trống → null, dấu phẩy → dấu chấm.
+String? tonnesValue(String raw) {
+  final v = raw.trim().replaceAll(',', '.');
+  return v.isEmpty ? null : v;
+}
+
 /// Season commands remain online-only. Detailed journals use the native
 /// outbox capability; cached checklists live in SQLCipher and are actor scoped.
 class HouseholdSeasonService {
@@ -466,6 +483,31 @@ class HouseholdSeasonService {
     } catch (_) {
       return {'source': 'no_device'};
     }
+  }
+
+  /// AH-87: Thành viên HTX nhập, sửa hoặc xóa (null) sản lượng lúa, rơm dự kiến của vụ
+  /// đang canh tác. Cần mạng; [key] giữ nguyên khi thử lại cùng nội dung.
+  Future<HouseholdJson> saveYieldEstimate(
+    String coop,
+    String household,
+    String season, {
+    required int expectedSeq,
+    required String? riceT,
+    required String? strawT,
+    required String key,
+  }) async {
+    for (final v in [riceT, strawT]) {
+      final error = v == null ? null : tonnesError(v);
+      if (error != null) throw ArgumentError(error);
+    }
+    final result = await api.sendJson(
+      method: 'POST',
+      path:
+          '/v1/cooperatives/$coop/households/$household/seasons/$season/yield-estimates',
+      idempotencyKey: key,
+      body: {'expected_seq': expectedSeq, 'rice_t': riceT, 'straw_t': strawT},
+    );
+    return (result['yield_estimate'] as Map).cast<String, Object?>();
   }
 
   Future<HouseholdJson> open(

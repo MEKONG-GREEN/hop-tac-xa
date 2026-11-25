@@ -221,4 +221,112 @@ void main() {
       await finish(tester);
     },
   );
+
+  // AH-87: sản lượng lúa, rơm, ngày thu hoạch dự kiến của vụ theo hộ.
+  TestEnv estimateEnv(String role) {
+    final env = householdEnv(role);
+    final get = env.server.onGet!;
+    final send = env.server.onSend!;
+    env.server.onGet = (path, query) async {
+      if (path ==
+          '/v1/cooperatives/$coopRef/households/$householdRef/seasons') {
+        return {
+          'items': [
+            {
+              'season_ref': 'season-87',
+              'household_ref': householdRef,
+              'season_code': 'DX',
+              'season_year': 2026,
+              'crop_code': 'LUA',
+              'area_ha': '1.25',
+              'status': 'open',
+              'expected_harvest_date': '2027-01-20',
+              'yield_estimate': {
+                'seq': 1,
+                'is_rice': true,
+                'area_ha': '1.25',
+                'conventional_yield_t_per_ha': '6',
+                'straw_pct': '35',
+                'computed_rice_t': '7.50',
+                'computed_straw_t': '2.63',
+                'entered_rice_t': null,
+                'entered_straw_t': null,
+                'rice_t': '7.50',
+                'straw_t': '2.63',
+              },
+            },
+          ],
+          'next_cursor': null,
+        };
+      }
+      return get(path, query);
+    };
+    env.server.onSend = (method, path, body) async {
+      if (path.endsWith('/seasons/season-87/yield-estimates')) {
+        return {
+          'yield_estimate': {
+            'seq': 2,
+            'is_rice': true,
+            'area_ha': '1.25',
+            'conventional_yield_t_per_ha': '6',
+            'straw_pct': '35',
+            'computed_rice_t': '7.50',
+            'computed_straw_t': '3.50',
+            'entered_rice_t': '10.00',
+            'entered_straw_t': null,
+            'rice_t': '10.00',
+            'straw_t': '3.50',
+          },
+        };
+      }
+      return send(method, path, body);
+    };
+    return env;
+  }
+
+  testWidgets('AH-87 Thành viên xem và nhập lúa dự kiến, kiểm số tấn', (
+    tester,
+  ) async {
+    final env = estimateEnv('htx_member');
+    await loginToHome(tester, env);
+    await openTile(tester, 'Nông hộ');
+    await tapText(tester, 'Hộ thử nghiệm');
+    expect(find.textContaining('Lúa dự kiến 7,50 tấn'), findsOneWidget);
+    await tapOn(tester, find.byTooltip('Sản lượng dự kiến'));
+    expect(find.text('7,50 tấn'), findsOneWidget);
+    expect(find.text('2,63 tấn'), findsOneWidget);
+    expect(find.text('20/01/2027'), findsOneWidget);
+    await tapText(tester, 'Sửa sản lượng dự kiến');
+    final rice = find.widgetWithText(TextField, 'Lúa dự kiến (tấn)');
+    await tester.enterText(rice, '-1');
+    await tapText(tester, 'Lưu');
+    expect(
+      find.text('Nhập số tấn không âm, tối đa 2 chữ số thập phân.'),
+      findsOneWidget,
+    );
+    expect(
+      env.server.sendCalls.where((c) => c.$2.endsWith('/yield-estimates')),
+      isEmpty,
+    );
+    await tester.enterText(rice, '10');
+    await tapText(tester, 'Lưu');
+    final call = env.server.sendCalls.singleWhere(
+      (c) => c.$2.endsWith('/yield-estimates'),
+    );
+    expect(call.$4, {'expected_seq': 1, 'rice_t': '10', 'straw_t': null});
+    expect(find.text('10,00 tấn'), findsOneWidget);
+    expect(find.text('3,50 tấn'), findsOneWidget);
+    await finish(tester);
+  });
+
+  testWidgets('AH-87 Đại diện chỉ xem sản lượng dự kiến', (tester) async {
+    final env = estimateEnv('coop_manager');
+    await loginToHome(tester, env);
+    await openTile(tester, 'Nông hộ');
+    await tapText(tester, 'Hộ thử nghiệm');
+    await tapOn(tester, find.byTooltip('Sản lượng dự kiến'));
+    expect(find.text('7,50 tấn'), findsOneWidget);
+    expect(find.text('Sửa sản lượng dự kiến'), findsNothing);
+    await finish(tester);
+  });
 }

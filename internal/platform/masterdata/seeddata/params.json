@@ -33,6 +33,7 @@
     {"key": "cropcycle.yield_anomaly_max_t_per_ha:IR50404", "value": "11.25", "unit": "t/ha", "effective_from": "2026-01-01", "source_doc": "Nguyên mẫu mdm/varieties + fieldOps: yield_max 9 × 1,25"},
     {"key": "cropcycle.yield_anomaly_min_t_per_ha:JASMINE85", "value": "1.8", "unit": "t/ha", "effective_from": "2026-01-01", "source_doc": "Nguyên mẫu mdm/varieties + fieldOps: yield_min 4.5 × 0,4"},
     {"key": "cropcycle.yield_anomaly_max_t_per_ha:JASMINE85", "value": "9.375", "unit": "t/ha", "effective_from": "2026-01-01", "source_doc": "Nguyên mẫu mdm/varieties + fieldOps: yield_max 7.5 × 1,25"},
+    {"key": "cropcycle.conventional_yield_t_per_ha", "value": "6", "unit": "t/ha", "effective_from": "2026-01-01", "source_doc": "KH-05 (13/11/2026) — năng suất quy ước 6 tấn/ha của BRD Thu gom phụ phẩm; AH-87"},
     {"key": "geo.hub_capacity_warn_pct", "value": "80", "unit": "%", "effective_from": "2026-01-01", "source_doc": "GIS BRD v1.3 — cảnh báo sức chứa hub/kho (mặc định G2)"},
     {"key": "geo.hub_capacity_full_pct", "value": "95", "unit": "%", "effective_from": "2026-01-01", "source_doc": "GIS BRD v1.3 — kho/Hub đã đầy (mặc định G2, GIS US-HUB-01)"},
     {"key": "geo.plot_layer_min_zoom", "value": "13", "unit": "zoom", "effective_from": "2026-01-01", "source_doc": "GIS BRD v1.3 BR-24 — polygon lô/thửa từ zoom cận cảnh (mặc định G2)"},

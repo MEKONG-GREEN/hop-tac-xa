@@ -196,6 +196,11 @@ func (s *Service) OpenHouseholdSeason(ctx context.Context, in HouseholdOpenInput
 	}
 	key := "household-open:" + a.p.ActorRef.String() + ":" + in.IdemKey
 	now := s.now()
+	// AH-87: năng suất quy ước và cờ lúa đọc qua port trước giao dịch, chụp vào sổ sản lượng dự kiến lúc mở vụ.
+	estParams, err := s.yieldEstimateParams(ctx, in.CropCode, now)
+	if err != nil {
+		return SeasonResult{}, err
+	}
 	r, err := s.writeSeason(ctx, a.p.TenantID, key, func(tx pgx.Tx) (SeasonResult, error) {
 		if err := memberstore.LockHousehold(ctx, tx, in.HouseholdRef); err != nil {
 			return SeasonResult{}, err
@@ -348,6 +353,13 @@ func (s *Service) OpenHouseholdSeason(ctx context.Context, in HouseholdOpenInput
 		if err := store.SaveSeason(ctx, tx, a.p.TenantID, cur); err != nil {
 			return SeasonResult{}, err
 		}
+		est, err := computeEstimateTx(ctx, tx, cur, estParams, nil, nil)
+		if err != nil {
+			return SeasonResult{}, err
+		}
+		if _, err := appendEstimateTx(ctx, tx, a.p.TenantID, cur, store.YieldEstimateComputed, est, a.p.ActorRef, now, "yield-estimate:"+key); err != nil {
+			return SeasonResult{}, err
+		}
 		if err := afterSeasonChange(ctx, tx, a.p.TenantID, cur, now); err != nil {
 			return SeasonResult{}, err
 		}
@@ -372,7 +384,11 @@ func (s *Service) OpenHouseholdSeason(ctx context.Context, in HouseholdOpenInput
 		!sameHouseholdGPS(e.GPS, in.GPS) || (in.SOPVersionID != uuid.Nil && in.SOPVersionID != e.SOPVersionID) || e.CopiedFrom != in.CopyFrom {
 		return SeasonResult{}, problem.IdempotencyConflict
 	}
-	return r, nil
+	items := []SeasonResult{r}
+	if err := s.attachEstimates(ctx, a.p.TenantID, items); err != nil {
+		return SeasonResult{}, err
+	}
+	return items[0], nil
 }
 
 func sameHouseholdGPS(a, b domain.GPS) bool {
@@ -521,7 +537,10 @@ func (s *Service) ListHouseholdSeasons(ctx context.Context, coop, hh, after uuid
 		}
 		return nil
 	})
-	return page, err
+	if err != nil {
+		return HouseholdSeasonPage{}, err
+	}
+	return page, s.attachEstimates(ctx, a.p.TenantID, page.Items)
 }
 
 func (s *Service) GetHouseholdSeason(ctx context.Context, coop, hh, ref uuid.UUID) (SeasonResult, error) {
@@ -548,5 +567,12 @@ func (s *Service) GetHouseholdSeason(ctx context.Context, coop, hh, ref uuid.UUI
 		result = SeasonResult{Season: *cur, Event: *ev}
 		return nil
 	})
-	return result, err
+	if err != nil {
+		return SeasonResult{}, err
+	}
+	items := []SeasonResult{result}
+	if err := s.attachEstimates(ctx, a.p.TenantID, items); err != nil {
+		return SeasonResult{}, err
+	}
+	return items[0], nil
 }

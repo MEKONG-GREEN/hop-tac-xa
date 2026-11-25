@@ -52,6 +52,8 @@ type SeasonResult struct {
 	Season   store.Season
 	Event    store.SeasonEvent
 	Replayed bool
+	// Estimate: sản lượng lúa, rơm dự kiến của vụ theo hộ (AH-87); nil với vụ theo thửa hoặc khi không tính được.
+	Estimate *YieldEstimateView
 }
 
 // OpenSeason mở vụ (KHMV-FN-03 C: Thành viên HTX, Admin; nông dân tự mở).

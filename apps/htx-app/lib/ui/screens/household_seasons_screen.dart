@@ -12,6 +12,14 @@ import '../providers.dart';
 import 'households_screen.dart';
 import 'open_season_screen.dart' show parseDisplayDay;
 import 'household_checklist_screen.dart';
+import 'household_yield_estimate_screen.dart';
+
+/// AH-87: dòng tóm tắt lúa dự kiến trong danh sách vụ.
+String _estimateLine(HouseholdJson s) {
+  final e = s['yield_estimate'];
+  if (e is! Map || e['rice_t'] == null) return '';
+  return '\nLúa dự kiến ${'${e['rice_t']}'.replaceAll('.', ',')} tấn';
+}
 
 class _HouseholdSeasonsData {
   const _HouseholdSeasonsData(this.coop, this.household, this.seasons);
@@ -153,9 +161,28 @@ class _HouseholdSeasonsScreenState
                             '${s['season_code']} ${s['season_year']} · ${s['crop_code']}',
                           ),
                           subtitle: Text(
-                            '${s['area_ha']} ha · ${s['status'] == 'open' ? 'Đang canh tác' : s['status']}',
+                            '${s['area_ha']} ha · ${s['status'] == 'open' ? 'Đang canh tác' : s['status']}'
+                            '${_estimateLine(s)}',
                           ),
                           onTap: () => _show(d.coop, s),
+                          // AH-87: sản lượng lúa, rơm, ngày thu hoạch dự kiến.
+                          trailing: IconButton(
+                            tooltip: 'Sản lượng dự kiến',
+                            icon: const Icon(Icons.agriculture_outlined),
+                            onPressed: () async {
+                              await Navigator.of(context).push<void>(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => HouseholdYieldEstimateScreen(
+                                    service: ref.services.crop.householdSeasons,
+                                    coop: d.coop,
+                                    season: s,
+                                    canWrite: mode == HtxMode.member,
+                                  ),
+                                ),
+                              );
+                              if (mounted) _reload();
+                            },
+                          ),
                         ),
                       ),
                   ],
