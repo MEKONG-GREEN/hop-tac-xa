@@ -20,6 +20,9 @@ function setup(persona: string, calendarPrefill?: CalendarPrefill) {
     const path = new URL(req.url).pathname;
     if (path.endsWith("/checklist")) return Response.json({ season_ref: "new-season", current_event_id: "event", progress: { as_of_date: "2026-11-18", stages: [], done: 0, skipped: 0, total: 0, percent: null }, records: [] });
     if (path.endsWith("/plan")) return Response.json({ as_of_date: "2026-11-18", stages: [] });
+    if (path.endsWith("/summary")) return Response.json({ status: "open", area_ha: "0.25", mass_t: null, mass_kg: null, yield_t_per_ha: null, harvest_date: null, materials: [],
+      tasks: { early: 0, on_time: 0, late: 0, skipped: 0, not_done: 0, total: 0 }, summary_step_seq: null, can_close: false, blockers: ["harvest_required"], unresolved_steps: [],
+      harvest_reminder: false, cost_vnd: null, note: null, closed_at: null, closed_by: null });
     if (req.method === "POST") {
       const body = await req.json() as Record<string, unknown>;
       if (path.endsWith("/season-plan-preview")) {
