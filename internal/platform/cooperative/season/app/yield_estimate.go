@@ -161,6 +161,12 @@ func (s *Service) attachEstimates(ctx context.Context, tid uuid.UUID, items []Se
 			if h != nil && h.SeasonRef == items[i].Season.SeasonRef {
 				items[i].Harvest = h
 			}
+			// AH-152: tổng kết cố định của vụ đã hoàn thành.
+			if items[i].Season.Status == port.SeasonClosed {
+				if items[i].Closed, err = store.CurrentSeasonSummary(ctx, tx, items[i].Season.SeasonRef); err != nil {
+					return err
+				}
+			}
 		}
 		return nil
 	}); err != nil {

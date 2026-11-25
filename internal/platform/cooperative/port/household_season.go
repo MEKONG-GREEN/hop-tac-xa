@@ -23,3 +23,19 @@ type HouseholdSeasonOpenedV1 struct {
 	ActorRef       uuid.UUID `json:"actor_ref"`
 	EventTime      string    `json:"event_time"`
 }
+
+const EventHouseholdSeasonClosed = "pf.cooperative.household_season.closed"
+
+// HouseholdSeasonClosedV1: vụ theo hộ "Đã hoàn thành vụ" (AH-152). Không mang số liệu tổng kết (đọc qua API).
+//
+//ag:event pf.cooperative.household_season.closed v1
+type HouseholdSeasonClosedV1 struct {
+	SeasonRef      uuid.UUID `json:"season_ref"`
+	EventID        uuid.UUID `json:"event_id"`
+	HouseholdRef   uuid.UUID `json:"household_ref"`
+	CooperativeRef uuid.UUID `json:"cooperative_ref"`
+	HarvestID      uuid.UUID `json:"harvest_id"`
+	ClosedOn       string    `json:"closed_on"`
+	ActorRef       uuid.UUID `json:"actor_ref"`
+	EventTime      string    `json:"event_time"`
+}

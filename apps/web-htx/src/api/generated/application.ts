@@ -10785,6 +10785,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Tổng kết "Ghi lại vụ" của vụ theo hộ (AH-152)
+         * @description Người xem được vụ đều xem được (Đại diện HTX chỉ xem). Vụ chưa hoàn thành — tự tính năng suất, tổng vật tư theo liều thực tế, số việc sớm / đúng hạn / trễ / bỏ qua / chưa làm (không tính việc tổng kết vụ), kèm điều kiện hoàn thành vụ. Vụ "Đã hoàn thành vụ" — bản chụp cố định lúc hoàn thành (KH-27) kèm chi phí, ghi chú; sửa sản lượng sau đó không đổi bản chụp.
+         */
+        get: operations["householdSeasonSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Hoàn thành vụ theo hộ (AH-152)
+         * @description Thành viên HTX/Admin (KHMV-FN-06 U); Đại diện HTX chỉ xem (403). Chỉ vụ "Đã thu hoạch" — vụ đang canh tác chưa khai báo sản lượng → 409 season_harvest_required; mọi việc giai đoạn cuối (trừ việc tổng kết vụ) phải Xong hoặc Bỏ qua → 409 season_last_stage_unresolved kèm unresolved_steps; vụ đã hoàn thành, đã dừng → 409 season_state; expected_season_event_id lệch → 409 concurrent_edit. Chi phí tùy chọn (số nguyên VND ≥ 0, tối đa 12 chữ số); ghi chú tùy chọn ≤ 1000 ký tự, không SĐT/CCCD. Ghi bản chụp tổng kết cố định, việc tổng kết vụ (nếu có) thành Xong, vụ chuyển "Đã hoàn thành vụ" — không quay lại; chặn ghi việc; sửa sản lượng bắt buộc lý do; không hủy khai báo.
+         */
+        post: operations["closeHouseholdSeason"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/extension/khtc/periods/{id}/report": {
         parameters: {
             query?: never;
@@ -25416,7 +25464,7 @@ export interface components {
             harvest_open_date: string | null;
             sop_snapshot: components["schemas"]["HouseholdSeasonSOPSnapshot"];
             /** @enum {string} */
-            status: "open" | "completed" | "cancelled";
+            status: "open" | "completed" | "cancelled" | "closed";
             /** Format: uuid */
             current_event_id: string;
             version: number;
@@ -25434,6 +25482,16 @@ export interface components {
              * @description Thời điểm dừng vụ (AH-70)
              */
             stopped_at?: string;
+            /**
+             * Format: date-time
+             * @description Thời điểm hoàn thành vụ, chỉ có khi status = closed (AH-152)
+             */
+            closed_at?: string;
+            /**
+             * Format: uuid
+             * @description Người hoàn thành vụ (AH-152)
+             */
+            closed_by?: string;
             /** @description Thiếu hoặc từ chối GPS, không suy diễn tọa độ thành xác minh ranh đất */
             gps_missing: boolean;
             gps: components["schemas"]["CropGPS"];
@@ -25750,7 +25808,7 @@ export interface components {
             variety_code: string;
             area_ha: string;
             /** @enum {string} */
-            status: "open" | "completed" | "cancelled";
+            status: "open" | "completed" | "cancelled" | "closed";
             /** Format: uuid */
             opened_by: string;
             /** @description Tên hiển thị của người mở vụ (nếu có danh bạ) */
@@ -25820,6 +25878,44 @@ export interface components {
             /** Format: uuid */
             supersedes_id: string | null;
             reason: string | null;
+        };
+        /** @description Tổng kết vụ theo hộ (AH-152). Tấn 2 chữ số lẻ; vật tư cộng theo (tên, đơn vị) từ các bản ghi việc đang hiệu lực. */
+        HouseholdSeasonSummary: {
+            /** @enum {string} */
+            status: "open" | "completed" | "cancelled" | "closed";
+            area_ha: string;
+            mass_t: string | null;
+            mass_kg: string | null;
+            yield_t_per_ha: string | null;
+            /** Format: date */
+            harvest_date: string | null;
+            materials: {
+                name: string;
+                unit: string;
+                qty: string;
+            }[];
+            tasks: {
+                early: number;
+                on_time: number;
+                late: number;
+                skipped: number;
+                not_done: number;
+                total: number;
+            };
+            /** @description Việc tổng kết vụ của quy trình (nếu có) */
+            summary_step_seq: number | null;
+            can_close: boolean;
+            blockers: ("harvest_required" | "last_stage_unresolved")[];
+            /** @description Việc giai đoạn cuối chưa Xong hoặc Bỏ qua */
+            unresolved_steps: number[];
+            /** @description Vụ đang canh tác đã xong giai đoạn cuối — nhắc khai báo sản lượng */
+            harvest_reminder: boolean;
+            cost_vnd: string | null;
+            note: string | null;
+            /** Format: date-time */
+            closed_at: string | null;
+            /** Format: uuid */
+            closed_by: string | null;
         };
         KHTCReportSupplement: {
             /** Format: uuid */
@@ -50544,7 +50640,7 @@ export interface operations {
     listHouseholdSeasons: {
         parameters: {
             query?: {
-                status?: "open" | "completed" | "cancelled";
+                status?: "open" | "completed" | "cancelled" | "closed";
                 cursor?: string;
                 limit?: number;
             };
@@ -51477,7 +51573,7 @@ export interface operations {
     listCooperativeHouseholdSeasons: {
         parameters: {
             query?: {
-                status?: "open" | "completed" | "cancelled";
+                status?: "open" | "completed" | "cancelled" | "closed";
                 opened_by?: string;
                 cursor?: string;
                 limit?: number;
@@ -51791,6 +51887,85 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+        };
+    };
+    householdSeasonSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tổng kết */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HouseholdSeasonSummary"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+        };
+    };
+    closeHouseholdSeason: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                ref: string;
+                household_ref: string;
+                season_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    expected_season_event_id: string;
+                    /** @description Chi phí cả vụ (VND, số nguyên); bỏ trống = không nhập */
+                    cost_vnd?: string;
+                    note?: string;
+                    gps?: components["schemas"]["CropGPS"];
+                    /**
+                     * @default web
+                     * @enum {string}
+                     */
+                    channel?: "app" | "web";
+                };
+            };
+        };
+        responses: {
+            /** @description Vụ đã hoàn thành */
+            201: {
+                headers: {
+                    "Idempotent-Replayed"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        season: components["schemas"]["HouseholdSeason"];
+                        summary: components["schemas"]["HouseholdSeasonSummary"];
+                    };
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
         };
     };
     extensionKhtcReportGet: {

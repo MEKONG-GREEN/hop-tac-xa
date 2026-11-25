@@ -288,6 +288,7 @@ const htxRoleMatrixJson = '''
     "POST /v1/cooperatives/:ref/households/:household_ref/seasons/:season_ref/harvest",
     "POST /v1/cooperatives/:ref/households/:household_ref/seasons/:season_ref/harvest/corrections",
     "POST /v1/cooperatives/:ref/households/:household_ref/seasons/:season_ref/harvest/void",
+    "POST /v1/cooperatives/:ref/households/:household_ref/seasons/:season_ref/close",
     "POST /v1/cooperatives/:ref/households/:household_ref/seasons/:season_ref/task-batches",
     "POST /v1/cooperatives/:ref/households/:household_ref/seasons/:season_ref/adhoc-records",
     "POST /v1/cooperatives/:ref/households/:household_ref/seasons/:season_ref/task-records/:log_ref/corrections",

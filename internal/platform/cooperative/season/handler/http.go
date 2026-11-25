@@ -54,6 +54,9 @@ func (h Handler) RegisterApp(rg *gin.RouterGroup) {
 	rg.POST("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/harvest/corrections", h.correctHouseholdHarvest)
 	rg.POST("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/harvest/void", h.voidHouseholdHarvest)
 	rg.GET("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/harvest/history", h.householdHarvestHistory)
+	// AH-152: tổng kết "Ghi lại vụ" và hoàn thành vụ theo hộ.
+	rg.GET("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/summary", h.householdSeasonSummary)
+	rg.POST("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/close", h.closeHouseholdSeason)
 	rg.GET("/cooperatives/:ref/households/:household_ref/seasons/:season_ref/plan-history", h.householdPlanHistory)
 	rg.POST("/cooperatives/:ref/households/:household_ref/seasons", h.openHouseholdSeason)
 	rg.GET("/cooperatives/:ref/households/:household_ref/seasons", h.listHouseholdSeasons)

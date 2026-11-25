@@ -353,7 +353,7 @@ paths:
       description: Thành viên và Đại diện đọc cùng HTX; Admin chọn HTX. Vụ của hộ đã ngừng tham gia vẫn đọc được trong HTX của vụ.
       operationId: listHouseholdSeasons
       parameters:
-        - {name: status, in: query, schema: {type: string, enum: [open, completed, cancelled]}}
+        - {name: status, in: query, schema: {type: string, enum: [open, completed, cancelled, closed]}}
         - {name: cursor, in: query, schema: {type: string}}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
       responses:
@@ -662,7 +662,7 @@ paths:
       summary: Danh sách vụ nông hộ của HTX kèm tiến độ (AH-140)
       description: Chỉ đọc (KHMV-FN-03-XEM R) — Đại diện HTX, Thành viên HTX, Admin; phạm vi theo HTX (KH-02), HTX khác bị từ chối. Mỗi vụ kèm trạng thái, % tiến độ, số việc đến hạn, trễ; lọc theo trạng thái và người mở vụ (Thành viên HTX). Phân trang theo season_ref.
       parameters:
-        - {name: status, in: query, schema: {type: string, enum: [open, completed, cancelled]}}
+        - {name: status, in: query, schema: {type: string, enum: [open, completed, cancelled, closed]}}
         - {name: opened_by, in: query, schema: {type: string, format: uuid}}
         - {name: cursor, in: query, schema: {type: string, format: uuid}}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100}}
@@ -1054,8 +1054,112 @@ paths:
         "401": {$ref: "#/components/responses/Problem"}
         "403": {$ref: "#/components/responses/Problem"}
         "404": {$ref: "#/components/responses/Problem"}
+# @ag-order: 10028
+  /v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/summary:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: household_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: season_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: householdSeasonSummary
+      summary: Tổng kết "Ghi lại vụ" của vụ theo hộ (AH-152)
+      description: Người xem được vụ đều xem được (Đại diện HTX chỉ xem). Vụ chưa hoàn thành — tự tính năng suất, tổng vật tư theo liều thực tế, số việc sớm / đúng hạn / trễ / bỏ qua / chưa làm (không tính việc tổng kết vụ), kèm điều kiện hoàn thành vụ. Vụ "Đã hoàn thành vụ" — bản chụp cố định lúc hoàn thành (KH-27) kèm chi phí, ghi chú; sửa sản lượng sau đó không đổi bản chụp.
+      responses:
+        "200":
+          description: Tổng kết
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/HouseholdSeasonSummary"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+# @ag-order: 10029
+  /v1/cooperatives/{ref}/households/{household_ref}/seasons/{season_ref}/close:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: household_ref, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: season_ref, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: closeHouseholdSeason
+      summary: Hoàn thành vụ theo hộ (AH-152)
+      description: Thành viên HTX/Admin (KHMV-FN-06 U); Đại diện HTX chỉ xem (403). Chỉ vụ "Đã thu hoạch" — vụ đang canh tác chưa khai báo sản lượng → 409 season_harvest_required; mọi việc giai đoạn cuối (trừ việc tổng kết vụ) phải Xong hoặc Bỏ qua → 409 season_last_stage_unresolved kèm unresolved_steps; vụ đã hoàn thành, đã dừng → 409 season_state; expected_season_event_id lệch → 409 concurrent_edit. Chi phí tùy chọn (số nguyên VND ≥ 0, tối đa 12 chữ số); ghi chú tùy chọn ≤ 1000 ký tự, không SĐT/CCCD. Ghi bản chụp tổng kết cố định, việc tổng kết vụ (nếu có) thành Xong, vụ chuyển "Đã hoàn thành vụ" — không quay lại; chặn ghi việc; sửa sản lượng bắt buộc lý do; không hủy khai báo.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_season_event_id]
+              properties:
+                expected_season_event_id: {type: string, format: uuid}
+                cost_vnd: {type: string, pattern: '^[0-9]{0,12}$', description: "Chi phí cả vụ (VND, số nguyên); bỏ trống = không nhập"}
+                note: {type: string, maxLength: 1000}
+                gps: {$ref: "#/components/schemas/CropGPS"}
+                channel: {type: string, enum: [app, web], default: web}
+      responses:
+        "201":
+          description: Vụ đã hoàn thành
+          headers:
+            Idempotent-Replayed: {schema: {type: string}}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [season, summary]
+                properties:
+                  season: {$ref: "#/components/schemas/HouseholdSeason"}
+                  summary: {$ref: "#/components/schemas/HouseholdSeasonSummary"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "409": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
 components:
   schemas:
+# @ag-order: 10028
+    HouseholdSeasonSummary:
+      type: object
+      description: "Tổng kết vụ theo hộ (AH-152). Tấn 2 chữ số lẻ; vật tư cộng theo (tên, đơn vị) từ các bản ghi việc đang hiệu lực."
+      required: [status, area_ha, mass_t, mass_kg, yield_t_per_ha, harvest_date, materials, tasks, summary_step_seq, can_close, blockers, unresolved_steps, harvest_reminder, cost_vnd, note, closed_at, closed_by]
+      properties:
+        status: {type: string, enum: [open, completed, cancelled, closed]}
+        area_ha: {type: string}
+        mass_t: {type: [string, "null"]}
+        mass_kg: {type: [string, "null"]}
+        yield_t_per_ha: {type: [string, "null"]}
+        harvest_date: {type: [string, "null"], format: date}
+        materials:
+          type: array
+          items:
+            type: object
+            required: [name, unit, qty]
+            properties:
+              name: {type: string}
+              unit: {type: string}
+              qty: {type: string}
+        tasks:
+          type: object
+          required: [early, on_time, late, skipped, not_done, total]
+          properties:
+            early: {type: integer, minimum: 0}
+            on_time: {type: integer, minimum: 0}
+            late: {type: integer, minimum: 0}
+            skipped: {type: integer, minimum: 0}
+            not_done: {type: integer, minimum: 0}
+            total: {type: integer, minimum: 0}
+        summary_step_seq: {type: [integer, "null"], description: "Việc tổng kết vụ của quy trình (nếu có)"}
+        can_close: {type: boolean}
+        blockers: {type: array, items: {type: string, enum: [harvest_required, last_stage_unresolved]}}
+        unresolved_steps: {type: array, items: {type: integer}, description: "Việc giai đoạn cuối chưa Xong hoặc Bỏ qua"}
+        harvest_reminder: {type: boolean, description: "Vụ đang canh tác đã xong giai đoạn cuối — nhắc khai báo sản lượng"}
+        cost_vnd: {type: [string, "null"]}
+        note: {type: [string, "null"]}
+        closed_at: {type: [string, "null"], format: date-time}
+        closed_by: {type: [string, "null"], format: uuid}
 # @ag-order: 10025
     HouseholdHarvestVersion:
       allOf:
@@ -1274,7 +1378,7 @@ components:
         expected_harvest_date: {type: [string, "null"], format: date}
         harvest_open_date: {type: [string, "null"], format: date}
         sop_snapshot: {$ref: "#/components/schemas/HouseholdSeasonSOPSnapshot"}
-        status: {type: string, enum: [open, completed, cancelled]}
+        status: {type: string, enum: [open, completed, cancelled, closed]}
         current_event_id: {type: string, format: uuid}
         version: {type: integer, minimum: 1}
         copied_from: {type: [string, "null"], format: uuid, description: "Vụ nguồn khi mở bằng sao chép (AH-139)"}
@@ -1282,6 +1386,8 @@ components:
         yield_estimate: {$ref: "#/components/schemas/HouseholdYieldEstimate"}
         harvest: {$ref: "#/components/schemas/HouseholdHarvest"}
         stopped_at: {type: string, format: date-time, description: "Thời điểm dừng vụ (AH-70)"}
+        closed_at: {type: string, format: date-time, description: "Thời điểm hoàn thành vụ, chỉ có khi status = closed (AH-152)"}
+        closed_by: {type: string, format: uuid, description: "Người hoàn thành vụ (AH-152)"}
         gps_missing: {type: boolean, description: "Thiếu hoặc từ chối GPS, không suy diễn tọa độ thành xác minh ranh đất"}
         gps: {$ref: "#/components/schemas/CropGPS"}
         opened_by: {type: string, format: uuid}
@@ -1494,7 +1600,7 @@ components:
         season_year: {type: integer}
         variety_code: {type: string}
         area_ha: {type: string}
-        status: {type: string, enum: [open, completed, cancelled]}
+        status: {type: string, enum: [open, completed, cancelled, closed]}
         opened_by: {type: string, format: uuid}
         opened_by_label: {type: string, description: "Tên hiển thị của người mở vụ (nếu có danh bạ)"}
         opened_at: {type: string, format: date-time}

@@ -228,6 +228,9 @@ func ApplySeasonEvent(cur *Season, e SeasonEvent) Season {
 		s.CompletedAt = &t
 	case "cancelled":
 		s.Status = "cancelled"
+	case "closed":
+		// AH-152: "Đã hoàn thành vụ" — giữ khai báo hiện hành (harvest_id), không quay lại.
+		s.Status = "closed"
 	case "reopened":
 		// AH-189: hủy khai báo sản lượng — vụ về "Đang canh tác", bỏ khai báo hiện hành.
 		s.Status, s.HarvestID, s.CompletedAt = "open", uuid.Nil, nil
@@ -462,7 +465,7 @@ func SeasonProgress(ctx context.Context, tx pgx.Tx, asOf time.Time) ([]ProgressR
 		t := asOf.UTC()
 		at = &t
 	}
-	rows, err := tx.Query(ctx, `SELECT commune_code, season_code, season_year, household_ref, area_ha, status = 'completed', expected_harvest_date
+	rows, err := tx.Query(ctx, `SELECT commune_code, season_code, season_year, household_ref, area_ha, status IN ('completed', 'closed'), expected_harvest_date
 	  FROM pf_coop.season_current
 	  WHERE status <> 'cancelled' AND ($1::timestamptz IS NULL OR opened_at <= $1::timestamptz)
 	  ORDER BY season_ref`, at)
