@@ -130,6 +130,16 @@ func RefreshYield(ctx context.Context, tx pgx.Tx, season uuid.UUID) error {
  sop_mandatory_done=(SELECT count(*) FROM jsonb_array_elements(s.sop_snapshot->'steps') x WHERE (x->>'mandatory')::boolean AND EXISTS
    (SELECT 1 FROM pf_coop.household_task_current t WHERE t.season_ref=s.season_ref AND t.state='done' AND t.sop_step_seq=(x->>'seq')::integer))
  FROM pf_coop.season_current s WHERE s.season_ref=$1 AND y.season_ref=s.season_ref AND y.tenant_id=s.tenant_id AND s.entry_kind='household'`, season)
+	if err != nil {
+		return err
+	}
+	// AH-87 (KH-05): sản lượng dự kiến của vụ theo hộ = lúa dự kiến Thành viên HTX nhập, nếu không có thì giá trị hệ
+	// thống tính. Vụ mở trước AH-87 (chưa có dòng trong sổ) giữ cách tính cũ tới lần ghi đầu tiên.
+	_, err = tx.Exec(ctx, `UPDATE pf_coop.yield_summary y SET
+ expected_kg=round(coalesce(e.entered_rice_t,e.computed_rice_t)*1000,3)
+ FROM (SELECT tenant_id,season_ref,entered_rice_t,computed_rice_t FROM pf_coop.household_yield_estimate_event
+       WHERE stream_key='yield_estimate:'||$1::text ORDER BY seq DESC LIMIT 1) e
+ WHERE y.season_ref=e.season_ref AND y.tenant_id=e.tenant_id`, season)
 	return err
 }
 

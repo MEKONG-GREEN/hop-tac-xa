@@ -5,6 +5,8 @@ import type { MockPersona } from "./personas";
 import { householdMockSOPs } from "./cropcycle";
 import { householdMockRows } from "./htx-gaps";
 import { allocateHouseholdMock, releaseHouseholdMock, scaledArea } from "./household-season-state";
+import { initialEstimate, recomputeEstimate, tonnes, tonnesError, type YieldEstimate } from "./household-yield-estimate";
+import { Decimal } from "@/lib/exactDecimal";
 import { hasRole, json, nowIso, paginate, problem, problemOf, validation, type Route } from "./http";
 import { applyPlanChange, applyPlanChanges, effectiveSteps, skippedSeqs, type PlanError } from "./season-plan-custom";
 
@@ -20,6 +22,7 @@ const planReceipts = new Map<string, { season: Season; summary: string }>();
 const taskHistory = new Map<string, TaskRecord[]>();
 const editReceipts = new Map<string, TaskRecord>();
 const stopReceipts = new Map<string, Season>();
+const estimateReceipts = new Map<string, { season: string; body: string; estimate: YieldEstimate }>();
 const planProblem = (e: PlanError) => e.field ? validation([{ field: e.field, reason: e.reason }]) : problem(e.status, e.code, e.reason);
 
 const journalWriter = (p: MockPersona) => hasRole(p, "platform_admin") || (hasRole(p, "htx_member") && !hasRole(p, "coop_manager"));
@@ -212,9 +215,37 @@ export const householdSeasonRoutes: Route[] = [{
     if (b.area_ha !== undefined && b.area_ha !== s.area_ha) { releaseHouseholdMock(s.cooperative_ref, s.household_ref, s.area_ha); allocateHouseholdMock(s.cooperative_ref, s.household_ref, b.area_ha); s.area_ha = b.area_ha; }
     if (b.anchor_date) s.anchor_date = b.anchor_date;
     if (changeVariety) s.variety_code = b.variety_code!;
+    // AH-87: đổi diện tích thì tính lại sản lượng dự kiến (tham số đã chụp, giữ giá trị nhập).
+    if (s.yield_estimate && Decimal.parse(s.yield_estimate.area_ha)?.eq(Decimal.parse(s.area_ha)!) === false) {
+      s.yield_estimate = recomputeEstimate({ ...s.yield_estimate, seq: s.yield_estimate.seq + 1, area_ha: tonnes(Decimal.parse(s.area_ha)!), updated_at: nowIso(), updated_by: persona.me.actor_ref });
+    }
     s.current_event_id = uuidv7(); s.version += 1;
     planHistory.set(s.season_ref, [{ event_id: s.current_event_id, actor_ref: persona.me.actor_ref, event_time: nowIso(), summary: reason }, ...(planHistory.get(s.season_ref) ?? [])]);
     return json(s);
+  },
+}, {
+  // AH-87: Thành viên HTX nhập, sửa, xóa (null) sản lượng lúa, rơm dự kiến của vụ đang canh tác.
+  method: "POST", pattern: /^\/v1\/cooperatives\/([\w-]+)\/households\/([\w-]+)\/seasons\/([\w-]+)\/yield-estimates$/,
+  handler: ({ params, persona, body, request }) => {
+    if (!journalWriter(persona)) return problem(403, "forbidden", "Vai của bạn chỉ được xem");
+    const s = seasons.find((s) => s.cooperative_ref === params[0] && s.household_ref === params[1] && s.season_ref === params[2]);
+    if (!s || (!hasRole(persona, "platform_admin") && persona.me.org?.ref !== s.cooperative_ref)) return problem(404, "cropcycle.season_not_found", "Không tìm thấy vụ");
+    const b = (body ?? {}) as { expected_seq?: number; rice_t?: string | null; straw_t?: string | null };
+    const receipt = `${persona.me.actor_ref}:estimate:${request.headers.get("Idempotency-Key")}`;
+    const fingerprint = JSON.stringify([b.expected_seq, b.rice_t || null, b.straw_t || null]);
+    const replay = estimateReceipts.get(receipt);
+    if (replay) return replay.season === s.season_ref && replay.body === fingerprint ? json({ yield_estimate: replay.estimate }) : problem(422, "idempotency_conflict", "Khóa đã dùng cho nội dung khác");
+    if (typeof b.expected_seq !== "number" || b.expected_seq < 0) return validation([{ field: "expected_seq", reason: "Bắt buộc" }]);
+    const errors = (["rice_t", "straw_t"] as const).flatMap((f) => { const v = b[f]; const e = v ? tonnesError(v) : null; return e ? [{ field: f, reason: e }] : []; });
+    if (errors.length) return validation(errors);
+    if (s.status !== "open") return problem(409, "cropcycle.season_state", "Chỉ sửa sản lượng dự kiến khi vụ đang canh tác");
+    const cur = s.yield_estimate;
+    if (!cur || cur.seq !== b.expected_seq) return problem(409, "cropcycle.yield_estimate_changed", "Sản lượng dự kiến vừa thay đổi; tải lại trước khi sửa", { current_seq: cur?.seq ?? 0 });
+    if (!cur.is_rice && b.straw_t) return validation([{ field: "straw_t", reason: "Vụ không phải lúa: không có sản lượng rơm dự kiến" }]);
+    const norm = (v?: string | null) => v ? tonnes(Decimal.parse(v)!) : null;
+    s.yield_estimate = recomputeEstimate({ ...cur, seq: cur.seq + 1, entered_rice_t: norm(b.rice_t), entered_straw_t: norm(b.straw_t), updated_at: nowIso(), updated_by: persona.me.actor_ref });
+    estimateReceipts.set(receipt, { season: s.season_ref, body: fingerprint, estimate: structuredClone(s.yield_estimate) });
+    return json({ yield_estimate: s.yield_estimate });
   },
 }, {
   // AH-70: dừng vụ đang canh tác kèm lý do; giải phóng diện tích.
@@ -465,7 +496,8 @@ export const householdSeasonRoutes: Route[] = [{
       const made: Season = { season_ref: uuidv7(), entry_kind: "household", household_ref: household.household_ref, cooperative_ref: coop.api.ref, commune_code: household.commune_code,
         crop_code: b.crop_code, season_code: b.season_code, season_year: b.season_year, variety_code: b.variety_code, area_ha: b.area_ha, anchor_date: b.anchor_date,
         expected_harvest_date: null, harvest_open_date: null, status: "open", current_event_id: uuidv7(), version: 1, opened_by: persona.me.actor_ref, opened_at: nowIso(),
-        gps: b.gps ?? { source: "denied" }, gps_missing: b.gps?.lon == null || b.gps?.lat == null, sop_snapshot: own, copied_from: null };
+        gps: b.gps ?? { source: "denied" }, gps_missing: b.gps?.lon == null || b.gps?.lat == null, sop_snapshot: own, copied_from: null,
+        yield_estimate: initialEstimate(b.crop_code, b.area_ha, persona.me.actor_ref, nowIso()) };
       seasons.push(made); allocateHouseholdMock(coop.api.ref, household.household_ref, b.area_ha);
       return json({ season: made }, 201);
     }
@@ -480,6 +512,7 @@ export const householdSeasonRoutes: Route[] = [{
       expected_harvest_date: null, harvest_open_date: null, status: "open", current_event_id: uuidv7(), version: 1, opened_by: persona.me.actor_ref, opened_at: nowIso(),
       gps: b.gps ?? { source: "denied" }, gps_missing: b.gps?.lon == null || b.gps?.lat == null,
       sop_snapshot: snapshot, copied_from: source?.season_ref ?? null,
+      yield_estimate: initialEstimate(b.crop_code, b.area_ha, persona.me.actor_ref, nowIso()),
     };
     seasons.push(s); allocateHouseholdMock(coop.api.ref, household.household_ref, b.area_ha);
     return json({ season: s }, 201);
