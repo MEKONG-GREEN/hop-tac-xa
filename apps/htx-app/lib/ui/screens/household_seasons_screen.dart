@@ -18,6 +18,7 @@ String _statusLabel(Object? status) => switch (status) {
   'open' => 'Đang canh tác',
   'completed' => 'Đã thu hoạch',
   'cancelled' => 'Đã dừng vụ',
+  'closed' => 'Đã hoàn thành vụ',
   _ => '$status',
 };
 

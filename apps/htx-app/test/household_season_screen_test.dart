@@ -526,4 +526,150 @@ void main() {
     expect(find.textContaining('Khai báo: 8,40 tấn'), findsOneWidget);
     await finish(tester);
   });
+
+  // AH-152: "Ghi lại vụ" — tổng kết, hoàn thành vụ (xác nhận hai bước), Đại diện chỉ xem.
+  TestEnv summaryEnv(String role, {String status = 'completed'}) {
+    final env = harvestedEnv(role);
+    final get = env.server.onGet!;
+    final send = env.server.onSend!;
+    var current = status;
+    Map<String, Object?> summary(String st) => {
+      'status': st,
+      'area_ha': '1.25',
+      'mass_t': status == 'open' ? null : '8.40',
+      'yield_t_per_ha': status == 'open' ? null : '6.72',
+      'harvest_date': status == 'open' ? null : '2026-09-20',
+      'materials': [
+        {'name': 'URE', 'unit': 'kg', 'qty': '62.5'},
+      ],
+      'tasks': {
+        'early': 1,
+        'on_time': 2,
+        'late': 1,
+        'skipped': 1,
+        'not_done': 0,
+        'total': 5,
+      },
+      'summary_step_seq': 6,
+      'can_close': st == 'completed',
+      'blockers': st == 'completed' ? <String>[] : ['harvest_required'],
+      'unresolved_steps': <int>[],
+      'harvest_reminder': st == 'open',
+      'cost_vnd': st == 'closed' ? '15000000' : null,
+      'note': st == 'closed' ? 'Vụ được mùa' : null,
+      'closed_at': st == 'closed' ? '2026-09-29T03:00:00Z' : null,
+      'closed_by': null,
+    };
+    env.server.onGet = (path, query) async {
+      if (path.endsWith('/seasons/season-87/summary')) return summary(current);
+      if (status == 'open' &&
+          path ==
+              '/v1/cooperatives/$coopRef/households/$householdRef/seasons') {
+        final r = (await get(path, query))!;
+        final items = (r['items'] as List)
+            .map((e) => {...(e as Map), 'status': 'open', 'harvest': null})
+            .toList();
+        return {...r, 'items': items};
+      }
+      return get(path, query);
+    };
+    env.server.onSend = (method, path, body) async {
+      if (path.endsWith('/seasons/season-87/close')) {
+        current = 'closed';
+        return {
+          'season': {
+            'season_ref': 'season-87',
+            'household_ref': householdRef,
+            'status': 'closed',
+            'anchor_date': '2026-06-01',
+            'current_event_id': 'event-88',
+            'area_ha': '1.25',
+            'harvest': {
+              'harvest_id': 'h1',
+              'mass_t': '8.40',
+              'harvest_date': '2026-09-20',
+              'yield_t_per_ha': '6.72',
+            },
+          },
+          'summary': summary('closed'),
+        };
+      }
+      return send(method, path, body);
+    };
+    return env;
+  }
+
+  testWidgets('AH-152 Thành viên xem tổng kết và hoàn thành vụ', (
+    tester,
+  ) async {
+    final env = summaryEnv('htx_member');
+    await loginToHome(tester, env);
+    await openTile(tester, 'Nông hộ');
+    await tapText(tester, 'Hộ thử nghiệm');
+    await tapOn(tester, find.byTooltip('Sản lượng'));
+    expect(find.text('Ghi lại vụ'), findsOneWidget);
+    expect(find.text('6,72 tấn/ha'), findsOneWidget);
+    expect(find.text('URE: 62,5 kg'), findsOneWidget);
+    expect(
+      find.text(
+        'Sớm 1 · Đúng hạn 2 · Trễ 1 · Bỏ qua 1 · Chưa làm 0 (tổng 5 việc)',
+      ),
+      findsOneWidget,
+    );
+    await tapText(tester, 'Hoàn thành vụ');
+    final cost = find.widgetWithText(
+      TextField,
+      'Chi phí cả vụ (đồng, không bắt buộc)',
+    );
+    final note = find.widgetWithText(TextField, 'Ghi chú (không bắt buộc)');
+    await tester.enterText(cost, '15.000.000');
+    await tester.enterText(note, 'Gọi 0912345678');
+    await tapText(tester, 'Lưu hoàn thành vụ');
+    expect(find.text('Ghi chú không được chứa SĐT hoặc CCCD.'), findsOneWidget);
+    await tester.enterText(note, 'Vụ được mùa');
+    await tapText(tester, 'Lưu hoàn thành vụ');
+    expect(find.textContaining('không quay lại'), findsOneWidget);
+    expect(env.server.sendCalls.where((c) => c.$2.endsWith('/close')), isEmpty);
+    await tapText(tester, 'Xác nhận hoàn thành vụ');
+    final call = env.server.sendCalls.singleWhere(
+      (c) => c.$2.endsWith('/close'),
+    );
+    expect(call.$4, {
+      'expected_season_event_id': 'event-87',
+      'cost_vnd': '15000000',
+      'note': 'Vụ được mùa',
+      'gps': {'source': 'denied'},
+      'channel': 'app',
+    });
+    expect(find.text('Ghi lại vụ · Đã hoàn thành vụ'), findsOneWidget);
+    expect(find.text('15.000.000 đ'), findsOneWidget);
+    expect(find.text('Hoàn thành vụ'), findsOneWidget);
+    await finish(tester);
+  });
+
+  testWidgets('AH-152 Đại diện chỉ xem tổng kết, không có nút hoàn thành', (
+    tester,
+  ) async {
+    final env = summaryEnv('coop_manager');
+    await loginToHome(tester, env);
+    await openTile(tester, 'Nông hộ');
+    await tapText(tester, 'Hộ thử nghiệm');
+    await tapOn(tester, find.byTooltip('Sản lượng'));
+    expect(find.text('Ghi lại vụ'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Hoàn thành vụ'), findsNothing);
+    await finish(tester);
+  });
+
+  testWidgets('AH-152 nhắc khai báo sản lượng khi đã xong giai đoạn cuối', (
+    tester,
+  ) async {
+    final env = summaryEnv('htx_member', status: 'open');
+    await loginToHome(tester, env);
+    await openTile(tester, 'Nông hộ');
+    await tapText(tester, 'Hộ thử nghiệm');
+    await tapOn(tester, find.byTooltip('Sản lượng'));
+    expect(find.byKey(const ValueKey('harvest-reminder')), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Hoàn thành vụ'), findsNothing);
+    await finish(tester);
+  });
 }
