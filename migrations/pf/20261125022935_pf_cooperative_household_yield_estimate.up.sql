@@ -48,3 +48,6 @@ CREATE POLICY p_scope ON pf_coop.household_yield_estimate_event AS RESTRICTIVE F
 ALTER TABLE pf_coop.household_yield_estimate_event OWNER TO own_cooperative;
 REVOKE ALL ON pf_coop.household_yield_estimate_event FROM PUBLIC;
 GRANT SELECT, INSERT ON pf_coop.household_yield_estimate_event TO r_cooperative;
+
+-- DATA-03 (AH-283): tham chiếu HTX mới tham gia chốt ghi/xóa Nút HTX.
+SELECT shared.publish_cooperative_references('pf_coop','pf_cooperative_pub','r_cooperative_pub');
