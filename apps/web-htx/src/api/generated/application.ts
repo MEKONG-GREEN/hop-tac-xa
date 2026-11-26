@@ -15431,7 +15431,7 @@ export interface components {
             supersedes_id?: string | null;
             /** @description Bắt buộc khi op = correct */
             correction_reason?: string | null;
-            /** @description Tối đa 256 KiB; máy chủ pf/sync chỉ lưu SHA-256. Entity household_task_record dùng hợp đồng AH-99 trong docs/dev/sync-contract.md; máy chủ kiểm actor, tenant, HTX và quyền hiện tại. */
+            /** @description Tối đa 256 KiB; máy chủ pf/sync chỉ lưu SHA-256. Entity household_task_record dùng hợp đồng AH-99, household_harvest dùng hợp đồng AH-190 trong docs/dev/sync-contract.md; máy chủ kiểm actor, tenant, HTX và quyền hiện tại. */
             payload: {
                 [key: string]: unknown;
             };

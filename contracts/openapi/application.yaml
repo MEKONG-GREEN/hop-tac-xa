@@ -20628,7 +20628,7 @@ components:
         event_time: {type: string, format: date-time, description: "Có múi giờ; không vượt quá giờ máy chủ + 5 phút"}
         supersedes_id: {type: [string, "null"], format: uuid, description: "Bắt buộc khi op = correct"}
         correction_reason: {type: [string, "null"], minLength: 10, maxLength: 500, description: "Bắt buộc khi op = correct"}
-        payload: {type: object, additionalProperties: true, description: "Tối đa 256 KiB; máy chủ pf/sync chỉ lưu SHA-256. Entity household_task_record dùng hợp đồng AH-99 trong docs/dev/sync-contract.md; máy chủ kiểm actor, tenant, HTX và quyền hiện tại."}
+        payload: {type: object, additionalProperties: true, description: "Tối đa 256 KiB; máy chủ pf/sync chỉ lưu SHA-256. Entity household_task_record dùng hợp đồng AH-99, household_harvest dùng hợp đồng AH-190 trong docs/dev/sync-contract.md; máy chủ kiểm actor, tenant, HTX và quyền hiện tại."}
     SyncReportSubmissionPayload:
       type: object
       description: |
