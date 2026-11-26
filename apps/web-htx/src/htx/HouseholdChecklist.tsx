@@ -25,7 +25,7 @@ type S = components["schemas"];
 const LABEL: Record<string, string> = { upcoming: "Chưa đến hạn", due: "Đến hạn", overdue: "Trễ hạn", waiting_anchor: "Chờ mốc", done: "Đã xong", done_early: "Xong sớm", done_on_time: "Xong đúng hạn", done_late: "Xong trễ", skipped: "Bỏ qua", not_started: "Chưa thực hiện", in_progress: "Đang thực hiện" };
 
 // A bounded, best-effort capture. Cancellation of the confirmation never posts.
-function captureGPS(): Promise<S["CropGPS"]> {
+export function captureGPS(): Promise<S["CropGPS"]> {
   if (!navigator.geolocation) return Promise.resolve({ source: "no_device" });
   return new Promise((resolve) => {
     let finished = false;

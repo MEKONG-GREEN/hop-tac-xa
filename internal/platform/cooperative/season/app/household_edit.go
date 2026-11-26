@@ -212,6 +212,10 @@ func (s *Service) EditHouseholdSeason(ctx context.Context, in EditSeasonInput) (
 		if err := store.SaveSeason(ctx, tx, a.p.TenantID, season); err != nil {
 			return SeasonResult{}, err
 		}
+		// AH-87: đổi diện tích hoặc giống thì tính lại sản lượng dự kiến hệ thống (tham số đã chụp, giữ giá trị nhập).
+		if err := recomputeEstimateOnEditTx(ctx, tx, a.p.TenantID, *cur, season, a.p.ActorRef, now, key); err != nil {
+			return SeasonResult{}, err
+		}
 		if err := afterSeasonChange(ctx, tx, a.p.TenantID, season, now); err != nil {
 			return SeasonResult{}, err
 		}
@@ -233,7 +237,11 @@ func (s *Service) EditHouseholdSeason(ctx context.Context, in EditSeasonInput) (
 	if r.Event.ActorRef != a.p.ActorRef || r.Event.SeasonRef != in.SeasonRef || r.Event.CorrectionReason == nil || *r.Event.CorrectionReason != in.Reason {
 		return SeasonResult{}, problem.IdempotencyConflict
 	}
-	return r, nil
+	items := []SeasonResult{r}
+	if err := s.attachEstimates(ctx, a.p.TenantID, items); err != nil {
+		return SeasonResult{}, err
+	}
+	return items[0], nil
 }
 
 // householdHarvestDates tính lại ngày thu hoạch dự kiến theo mốc gốc và phiên bản SOP (hoặc việc Thu hoạch cuối của

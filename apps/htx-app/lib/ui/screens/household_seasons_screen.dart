@@ -1,5 +1,6 @@
 import 'package:agrigreen_mobile/core/ids.dart';
 import 'package:agrigreen_mobile/data/sync/sync_api.dart';
+import 'package:agrigreen_mobile/domain/outbox_record.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -12,12 +13,46 @@ import '../providers.dart';
 import 'households_screen.dart';
 import 'open_season_screen.dart' show parseDisplayDay;
 import 'household_checklist_screen.dart';
+import 'household_yield_estimate_screen.dart';
+
+String _statusLabel(Object? status) => switch (status) {
+  'open' => 'Đang canh tác',
+  'completed' => 'Đã thu hoạch',
+  'cancelled' => 'Đã dừng vụ',
+  'closed' => 'Đã hoàn thành vụ',
+  _ => '$status',
+};
+
+/// AH-190: nhãn bản khai sản lượng còn trên máy.
+String _offlineLine(OutboxRecord? r) => r == null
+    ? ''
+    : r.status == OutboxStatus.rejected
+    ? ' · Khai báo sản lượng không đồng bộ được'
+    : ' · Sản lượng chờ đồng bộ';
+
+/// AH-87, AH-100: dòng tóm tắt lúa dự kiến và sản lượng thực tế trong danh sách vụ.
+String _estimateLine(HouseholdJson s) {
+  String t(Object? v) => '${'$v'.replaceAll('.', ',')} tấn';
+  final e = s['yield_estimate'];
+  final h = s['harvest'];
+  var out = '';
+  if (e is Map && e['rice_t'] != null) out += '\nLúa dự kiến ${t(e['rice_t'])}';
+  if (h is Map && h['mass_t'] != null) out += ' · thực tế ${t(h['mass_t'])}';
+  return out;
+}
 
 class _HouseholdSeasonsData {
-  const _HouseholdSeasonsData(this.coop, this.household, this.seasons);
+  const _HouseholdSeasonsData(
+    this.coop,
+    this.household,
+    this.seasons, [
+    this.offlineHarvests = const {},
+  ]);
   final String coop;
   final HouseholdItem household;
   final List<HouseholdJson> seasons;
+  // AH-190: bản khai sản lượng còn trên máy theo vụ.
+  final Map<String, OutboxRecord> offlineHarvests;
 }
 
 class HouseholdSeasonsScreen extends ConsumerStatefulWidget {
@@ -48,10 +83,12 @@ class _HouseholdSeasonsScreenState
         .where((h) => h.ref == widget.household.ref)
         .firstOrNull;
     if (h == null) throw StateError('Không còn tìm thấy hộ trong HTX.');
+    final service = services.crop.householdSeasons;
     return _HouseholdSeasonsData(
       coop,
       h,
-      await services.crop.householdSeasons.seasons(coop, h.ref),
+      await service.seasons(coop, h.ref),
+      await service.pendingHarvests(coop, h.ref),
     );
   }
 
@@ -153,9 +190,29 @@ class _HouseholdSeasonsScreenState
                             '${s['season_code']} ${s['season_year']} · ${s['crop_code']}',
                           ),
                           subtitle: Text(
-                            '${s['area_ha']} ha · ${s['status'] == 'open' ? 'Đang canh tác' : s['status']}',
+                            '${s['area_ha']} ha · ${_statusLabel(s['status'])}'
+                            '${_offlineLine(d.offlineHarvests[s['season_ref']])}'
+                            '${_estimateLine(s)}',
                           ),
                           onTap: () => _show(d.coop, s),
+                          // AH-87: sản lượng lúa, rơm, ngày thu hoạch dự kiến.
+                          trailing: IconButton(
+                            tooltip: 'Sản lượng',
+                            icon: const Icon(Icons.agriculture_outlined),
+                            onPressed: () async {
+                              await Navigator.of(context).push<void>(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => HouseholdYieldEstimateScreen(
+                                    service: ref.services.crop.householdSeasons,
+                                    coop: d.coop,
+                                    season: s,
+                                    canWrite: mode == HtxMode.member,
+                                  ),
+                                ),
+                              );
+                              if (mounted) _reload();
+                            },
+                          ),
                         ),
                       ),
                   ],

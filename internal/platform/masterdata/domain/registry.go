@@ -69,6 +69,7 @@ var ParamRegistry = []ParamSpec{
 	{Key: port.ParamSowingWindowAfter, Name: "Cửa sổ gieo sạ sau ngày kế hoạch", Unit: "ngày", Kind: ParamKindDecimal, Min: "0", Max: "120"},
 	{Key: port.ParamYieldAnomalyMinPrefix, Name: "Năng suất thấp bất thường", Unit: "t/ha", Kind: ParamKindDecimal, Min: "0", Max: "30", Dimensional: true},
 	{Key: port.ParamYieldAnomalyMaxPrefix, Name: "Năng suất cao bất thường", Unit: "t/ha", Kind: ParamKindDecimal, Min: "0", Max: "30", Dimensional: true},
+	{Key: port.ParamConventionalYield, Name: "Năng suất lúa quy ước (sản lượng dự kiến vụ theo hộ)", Unit: "t/ha", Kind: ParamKindDecimal, Min: "0", Max: "30"},
 	{Key: port.ParamHubCapacityWarn, Name: "Ngưỡng cảnh báo sức chứa hub/kho", Unit: "%", Kind: ParamKindDecimal, Min: "0", Max: "100"},
 	{Key: port.ParamHubCapacityFull, Name: "Ngưỡng đã đầy sức chứa hub/kho", Unit: "%", Kind: ParamKindDecimal, Min: "0", Max: "100"},
 	{Key: port.ParamPlotLayerMinZoom, Name: "Mức zoom tối thiểu hiện polygon lô/thửa", Unit: "zoom", Kind: ParamKindDecimal, Min: "0", Max: "22"},

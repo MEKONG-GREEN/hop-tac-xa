@@ -42,6 +42,9 @@ const (
 	// định khi giống chưa có ngưỡng (nguyên mẫu: min = yield_min × 0,4; max = yield_max × 1,25).
 	ParamYieldAnomalyMinPrefix = "cropcycle.yield_anomaly_min_t_per_ha"
 	ParamYieldAnomalyMaxPrefix = "cropcycle.yield_anomaly_max_t_per_ha"
+	// ParamConventionalYield: năng suất lúa quy ước (t/ha) cho sản lượng dự kiến vụ theo hộ (KH-05, AH-87); cùng số
+	// dự báo của phân hệ Thu gom phụ phẩm.
+	ParamConventionalYield = "cropcycle.conventional_yield_t_per_ha"
 	// ParamHubCapacityWarn / Full: ngưỡng % lấp đầy hub/kho — "sắp đầy" / "đã đầy" (GIS US-HUB-01,
 	// US-CFG-01). Cùng khóa pf/geo đọc (geo/port.ParamHubCapacityWarnPct / FullPct); phải tăng dần
 	// trong 0–100 % (kiểm lúc đề xuất và lúc duyệt). Khóa cũ "geo.hub_capacity_critical_pct" của

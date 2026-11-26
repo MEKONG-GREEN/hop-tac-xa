@@ -65,7 +65,7 @@ func rebuild(ctx context.Context, tx pgx.Tx, tid uuid.UUID) (RebuildResult, erro
 		return res, err
 	}
 	for _, h := range harvests { // khai báo sau cùng (bản ghi bù) là hiện hành
-		if sn := seasons[h.SeasonRef]; sn != nil && sn.Status == port.SeasonCompleted {
+		if sn := seasons[h.SeasonRef]; sn != nil && (sn.Status == port.SeasonCompleted || sn.Status == port.SeasonClosed) && !h.Voided {
 			sn.HarvestID = h.ID
 		}
 	}

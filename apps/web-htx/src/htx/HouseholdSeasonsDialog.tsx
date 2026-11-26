@@ -23,6 +23,10 @@ import { SeasonPlanEditor, type PlanChange, type PlanStage } from "./SeasonPlanE
 import { RunningSeasonPlan } from "./SeasonPlanCustomizer";
 import { StopSeasonForm } from "./StopSeasonForm";
 import { EditSeasonForm } from "./EditSeasonForm";
+import { YieldEstimatePanel } from "./YieldEstimatePanel";
+import { HarvestDeclarationForm } from "./HarvestDeclarationForm";
+import { HarvestEditPanel } from "./HarvestEditPanel";
+import { SeasonSummaryPanel } from "./SeasonSummaryPanel";
 import { SelfMadePlanBuilder, type SelfMadePlan } from "./SelfMadePlanBuilder";
 import type { CalendarPrefill } from "./seasonCalendarModel";
 
@@ -31,7 +35,7 @@ export { householdAreaError } from "./seasonOptions";
 type S = components["schemas"];
 type GPS = S["CropGPS"];
 
-const SEASON_STATUS: Record<string, string> = { open: "Đang canh tác", completed: "Đã thu hoạch", cancelled: "Đã dừng vụ" };
+const SEASON_STATUS: Record<string, string> = { open: "Đang canh tác", completed: "Đã thu hoạch", cancelled: "Đã dừng vụ", closed: "Đã hoàn thành vụ" };
 
 export function HouseholdSeasonsDialog({ coopRef, household, calendarPrefill, onClose, onSaved }: {
   coopRef: string; household: HouseholdListItem; calendarPrefill?: CalendarPrefill; onClose: () => void; onSaved: () => void;
@@ -42,6 +46,15 @@ export function HouseholdSeasonsDialog({ coopRef, household, calendarPrefill, on
   const canStop = hasRole(principal, ROLES.platformAdmin, ROLES.htxMember) && matrixAllows(principal, "KHMV-FN-03", "D");
   // AH-175: sửa vụ — KHMV-FN-03 U; Đại diện không có nút.
   const canEdit = hasRole(principal, ROLES.platformAdmin, ROLES.htxMember) && matrixAllows(principal, "KHMV-FN-03", "U");
+  // AH-87: sản lượng dự kiến — KHMV-FN-04 U; Đại diện chỉ xem.
+  const canEstimate = hasRole(principal, ROLES.platformAdmin, ROLES.htxMember) && matrixAllows(principal, "KHMV-FN-04", "U");
+  // AH-100: khai báo sản lượng — KHMV-FN-06 C; Đại diện không có nút.
+  const canHarvest = hasRole(principal, ROLES.platformAdmin, ROLES.htxMember) && matrixAllows(principal, "KHMV-FN-06", "C");
+  // AH-189: sửa (U), hủy (D) khai báo; Đại diện chỉ xem lịch sử.
+  const canHarvestEdit = hasRole(principal, ROLES.platformAdmin, ROLES.htxMember) && matrixAllows(principal, "KHMV-FN-06", "U");
+  const canHarvestVoid = hasRole(principal, ROLES.platformAdmin, ROLES.htxMember) && matrixAllows(principal, "KHMV-FN-06", "D");
+  // AH-152: hoàn thành vụ — KHMV-FN-06 U; Đại diện chỉ xem tổng kết.
+  const canClose = canHarvestEdit;
   const [opening, setOpening] = useState(!!calendarPrefill);
   const [crop, setCrop] = useState(calendarPrefill?.crop_code ?? "");
   const [variety, setVariety] = useState("");
@@ -186,6 +199,14 @@ export function HouseholdSeasonsDialog({ coopRef, household, calendarPrefill, on
       <p>{detail.sop_snapshot.anchor_name}: {detail.anchor_date} · {detail.gps_missing ? "Thiếu GPS" : "Đã ghi nhận vị trí"}</p>
       <p>SOP bản {detail.sop_snapshot.version_no} · Diện tích {formatDecimal(detail.area_ha, 2)} ha · {SEASON_STATUS[detail.status] ?? detail.status}</p>
       {detail.status === "cancelled" && detail.stop_reason ? <p role="status">Đã dừng vụ: {detail.stop_reason}</p> : null}
+      <YieldEstimatePanel key={`estimate:${detail.season_ref}:${detail.yield_estimate?.seq ?? 0}`} coopRef={coopRef} season={detail} canEdit={canEstimate}
+        onChanged={(e) => { setDetail({ ...detail, yield_estimate: e }); setRevision((v) => v + 1); onSaved(); }} />
+      {(detail.status === "completed" || detail.status === "closed") && detail.harvest ? <HarvestEditPanel key={`harvest-edit:${detail.harvest.harvest_id}`} coopRef={coopRef} season={detail}
+        canEdit={canHarvestEdit} canVoid={canHarvestVoid} onSeason={(s) => { setDetail(s); setRevision((v) => v + 1); onSaved(); }} /> : null}
+      <SeasonSummaryPanel key={`summary:${detail.season_ref}`} coopRef={coopRef} season={detail} canClose={canClose}
+        onSeason={(s) => { setDetail(s); setRevision((v) => v + 1); onSaved(); }} />
+      {canHarvest && detail.status === "open" ? <HarvestDeclarationForm key={`harvest:${detail.current_event_id}`} coopRef={coopRef} season={detail}
+        onDeclared={(r) => { setDetail(r.season); setRevision((v) => v + 1); onSaved(); }} /> : null}
       {canEdit && detail.status === "open" ? <EditSeasonForm key={`edit:${detail.current_event_id}`} coopRef={coopRef} season={detail} onSaved={(s) => { setDetail(s); setRevision((v) => v + 1); onSaved(); }} /> : null}
       {canStop && detail.status === "open" ? <StopSeasonForm key={detail.current_event_id} coopRef={coopRef} season={detail} onStopped={(s) => { setDetail(s); setRevision((v) => v + 1); onSaved(); }} /> : null}
       <ol>{detail.sop_snapshot.steps.map((step, i) => <li key={i}>{step.name}</li>)}</ol>

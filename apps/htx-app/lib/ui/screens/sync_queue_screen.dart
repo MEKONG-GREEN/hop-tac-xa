@@ -49,6 +49,8 @@ String recordSummary(OutboxRecord r) {
       '${p['outcome'] == 'confirmed' ? 'Xác nhận' : 'Tranh chấp'} bảng kê · bản ${p['revision']}',
     PushEntity.householdTaskRecord =>
       'Việc ${p['step_seq']} · ${p['done_on']} · ${p['state'] == 'partial' ? 'Làm tiếp' : 'Hoàn tất'}',
+    PushEntity.householdHarvest =>
+      '${'${p['mass_t']}'.replaceAll('.', ',')} tấn · thu hoạch ${'${p['harvest_date']}'.split('-').reversed.join('/')}',
     PushEntity.supportRequest =>
       supportCategories[p['category']] ?? '${p['category']}',
     _ => '',

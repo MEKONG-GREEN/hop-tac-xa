@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.agrigreen.vn/events/pf.cooperative.household_season.closed/v1",
+  "title": "pf.cooperative.household_season.closed — payload",
+  "x-event-type": "pf.cooperative.household_season.closed",
+  "x-schema-version": 1,
+  "x-producer": "pf/cooperative",
+  "type": "object",
+  "required": [
+    "season_ref",
+    "event_id",
+    "household_ref",
+    "cooperative_ref",
+    "harvest_id",
+    "closed_on",
+    "actor_ref",
+    "event_time"
+  ],
+  "properties": {
+    "season_ref": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "event_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "household_ref": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "cooperative_ref": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "harvest_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "closed_on": {
+      "type": "string",
+      "format": "date"
+    },
+    "actor_ref": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "event_time": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false
+}

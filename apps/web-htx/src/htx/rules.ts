@@ -38,6 +38,7 @@ export const SEASON_STATUS: Record<string, { text: string; cls: string }> = {
   open: { text: "Đang canh tác", cls: "c-info" },
   completed: { text: "Đã hoàn thành vụ", cls: "c-ok" },
   cancelled: { text: "Đã hủy", cls: "c-mute" },
+  closed: { text: "Đã hoàn thành vụ", cls: "c-ok" },
 };
 
 export const LOG_STATUS: Record<string, { text: string; cls: string }> = {
