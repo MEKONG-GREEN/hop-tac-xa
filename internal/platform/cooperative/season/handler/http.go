@@ -32,6 +32,8 @@ func (h Handler) RegisterApp(rg *gin.RouterGroup) {
 	rg.GET("/cooperatives/:ref/season-calendars", h.calendars)
 	rg.GET("/cooperatives/:ref/season-calendar-recipients", h.calendarRecipients)
 	rg.GET("/cooperatives/:ref/household-seasons", h.householdSeasonOverview)
+	// AH-153: sản lượng thực tế so với dự kiến của vụ nông hộ trong HTX (chỉ đọc).
+	rg.GET("/cooperatives/:ref/household-yields", h.householdYields)
 	rg.POST("/cooperatives/:ref/season-calendars", h.writeCalendar("published"))
 	rg.POST("/cooperatives/:ref/season-calendars/:calendar_ref/revisions", h.writeCalendar("edited"))
 	rg.POST("/cooperatives/:ref/season-calendars/:calendar_ref/cancel", h.writeCalendar("cancelled"))

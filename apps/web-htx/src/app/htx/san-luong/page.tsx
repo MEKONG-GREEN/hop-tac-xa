@@ -11,6 +11,7 @@ import { ProblemAlert } from "@/components/ProblemAlert";
 import { Empty, Loading, PageHead } from "@/components/ui";
 import { ResultList } from "@/htx/common";
 import { harvestRowError, parseDecimalInput, previewYield, toCsv, todayVN } from "@/htx/rules";
+import { HouseholdYieldPanel } from "@/htx/HouseholdYieldPanel";
 import { CoopPicker, ReadOnlyNotice, useCoopFields, useHtxScope, type HtxScope } from "@/htx/scope";
 import { useSeasonIndex } from "@/htx/seasons";
 import { formatDecimal } from "@/lib/decimal";
@@ -277,6 +278,7 @@ export default function HarvestPage() {
   const reload = () => setVersion((v) => v + 1);
   // Ma trận KHMV-FN-06 (AH-39): Thành viên HTX và Admin khai sản lượng (cả nhập hàng loạt); Đại diện HTX chỉ xem.
   const canDeclare = scope.can("KHMV-FN-06", "C");
+  const fields = useCoopFields(scope.coopRef);
   return (
     <>
       <PageHead
@@ -301,6 +303,8 @@ export default function HarvestPage() {
         {index.loading && index.seasons.length === 0 ? <Loading /> : null}
         {scope.coopRef || !canDeclare ? <QuickGrid key={scope.coopRef} scope={scope} seasons={index.seasons} onSaved={reload} /> : null}
       </div>
+      {/* AH-153: vụ nông hộ — thực tế so với dự kiến (chỉ đọc). */}
+      {scope.coopRef && scope.can("KHMV-FN-06", "R") ? <HouseholdYieldPanel coopRef={scope.coopRef} householdLabel={fields.householdLabel} /> : null}
     </>
   );
 }

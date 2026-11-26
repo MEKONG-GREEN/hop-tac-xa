@@ -1118,8 +1118,78 @@ paths:
         "404": {$ref: "#/components/responses/Problem"}
         "409": {$ref: "#/components/responses/Problem"}
         "422": {$ref: "#/components/responses/Problem"}
+# @ag-order: 10030
+  /v1/cooperatives/{ref}/household-yields:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: listHouseholdYields
+      summary: Sản lượng thực tế so với dự kiến của vụ nông hộ trong HTX (AH-153)
+      description: Chỉ đọc (KHMV-FN-06 R) — Đại diện HTX, Thành viên HTX, Admin; phạm vi theo HTX (KH-02), HTX khác bị từ chối (404 household_not_found). state=pending là vụ "Đang canh tác" (chờ khai báo), sắp theo ngày thu hoạch dự kiến tăng dần (vụ chưa có ngày ở cuối); state=declared là vụ "Đã thu hoạch" và "Đã hoàn thành vụ", sắp theo ngày thu hoạch giảm dần. Vụ đã dừng không có. Dự kiến = giá trị Thành viên nhập, không có thì hệ thống tính (AH-87); thực tế = khai báo hiện hành (tấn, 2 chữ số lẻ). Chênh lệch = thực tế − dự kiến; % so với dự kiến, 1 chữ số lẻ (trống khi thiếu một bên hoặc dự kiến bằng 0). totals cộng trên toàn bộ bộ lọc, không chỉ trang.
+      parameters:
+        - {name: state, in: query, required: true, schema: {type: string, enum: [pending, declared]}}
+        - {name: opened_by, in: query, schema: {type: string, format: uuid}, description: "Thành viên HTX mở vụ"}
+        - {name: season_code, in: query, schema: {type: string, maxLength: 32}}
+        - {name: season_year, in: query, schema: {type: integer, minimum: 2000, maximum: 2100}}
+        - {name: cursor, in: query, schema: {type: string}, description: "Cursor mờ từ next_cursor"}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+      responses:
+        "200":
+          description: Một trang vụ kèm tổng hợp
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor, totals]
+                properties:
+                  items: {type: array, items: {$ref: "#/components/schemas/HouseholdYieldItem"}}
+                  next_cursor: {type: [string, "null"]}
+                  totals: {$ref: "#/components/schemas/HouseholdYieldTotals"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
 components:
   schemas:
+# @ag-order: 10030
+    HouseholdYieldItem:
+      type: object
+      required: [season_ref, household_ref, crop_code, season_code, season_year, variety_code, area_ha, status, opened_by, expected_harvest_date, overdue, expected_t, expected_straw_t, expected_source, actual_t, harvest_date, yield_t_per_ha, zero_confirmed, diff_t, diff_pct]
+      properties:
+        season_ref: {type: string, format: uuid}
+        household_ref: {type: string, format: uuid}
+        crop_code: {type: string}
+        season_code: {type: string}
+        season_year: {type: integer}
+        variety_code: {type: string}
+        area_ha: {type: string}
+        status: {type: string, enum: [open, completed, closed]}
+        opened_by: {type: string, format: uuid}
+        opened_by_label: {type: string, description: "Tên hiển thị của người mở vụ (nếu có danh bạ)"}
+        expected_harvest_date: {type: [string, "null"], format: date}
+        overdue: {type: boolean, description: "Vụ chờ khai báo đã quá ngày thu hoạch dự kiến"}
+        expected_t: {type: [string, "null"], description: "Sản lượng dự kiến (tấn)"}
+        expected_straw_t: {type: [string, "null"], description: "Rơm dự kiến (tấn, chỉ vụ lúa)"}
+        expected_source: {type: [string, "null"], enum: [entered, computed, null]}
+        actual_t: {type: [string, "null"], description: "Sản lượng thực tế (tấn)"}
+        harvest_date: {type: [string, "null"], format: date}
+        yield_t_per_ha: {type: [string, "null"]}
+        zero_confirmed: {type: boolean}
+        diff_t: {type: [string, "null"], description: "Thực tế − dự kiến (tấn)"}
+        diff_pct: {type: [string, "null"], description: "Chênh lệch so với dự kiến (%)"}
+# @ag-order: 10030
+    HouseholdYieldTotals:
+      type: object
+      required: [pending, declared, declared_without_estimate, pending_expected_t, expected_t, actual_t, diff_t, diff_pct]
+      properties:
+        pending: {type: integer, minimum: 0}
+        declared: {type: integer, minimum: 0}
+        declared_without_estimate: {type: integer, minimum: 0}
+        pending_expected_t: {type: string, description: "Tổng dự kiến của vụ chờ khai báo (tấn)"}
+        expected_t: {type: string, description: "Tổng dự kiến của vụ đã khai báo có đủ hai giá trị (tấn)"}
+        actual_t: {type: string}
+        diff_t: {type: string}
+        diff_pct: {type: [string, "null"]}
 # @ag-order: 10028
     HouseholdSeasonSummary:
       type: object
