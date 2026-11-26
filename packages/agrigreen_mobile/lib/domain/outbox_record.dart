@@ -19,6 +19,9 @@ abstract final class PushEntity {
   static const farmLog = 'farm_log';
   static const householdTaskRecord = 'household_task_record';
 
+  /// AH-190: khai báo sản lượng của vụ theo hộ ghi lúc mất mạng.
+  static const householdHarvest = 'household_harvest';
+
   /// G2 pf/cropcycle: nhật ký hàng loạt — một đầu lô (HTX US-LOG-03).
   static const farmLogBatch = 'farm_log_batch';
 
@@ -52,6 +55,7 @@ abstract final class PushEntity {
     seasonOpen,
     farmLog,
     householdTaskRecord,
+    householdHarvest,
     farmLogBatch,
     harvest,
     supportRequest,

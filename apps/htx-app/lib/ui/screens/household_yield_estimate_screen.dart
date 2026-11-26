@@ -1,5 +1,6 @@
 import 'package:agrigreen_mobile/core/ids.dart';
 import 'package:agrigreen_mobile/data/sync/sync_api.dart';
+import 'package:agrigreen_mobile/domain/outbox_record.dart';
 import 'package:flutter/material.dart';
 
 import '../../application/household_season_service.dart';
@@ -56,6 +57,9 @@ class _HouseholdYieldEstimateScreenState
   bool _editing = false, _busy = false;
   String? _error, _riceError, _strawError;
   (String, String)? _key;
+  // AH-190: bản khai sản lượng còn trên máy; số điền sẵn khi khai lại.
+  OutboxRecord? _offline;
+  (String, String)? _redo;
 
   @override
   void initState() {
@@ -63,6 +67,37 @@ class _HouseholdYieldEstimateScreenState
     _season = widget.season;
     final e = widget.season['yield_estimate'];
     _estimate = e is Map ? e.cast<String, Object?>() : null;
+    _loadOffline();
+  }
+
+  Future<void> _loadOffline() async {
+    final r = await widget.service.pendingHarvest(
+      widget.coop,
+      '${_season['household_ref']}',
+      '${_season['season_ref']}',
+    );
+    if (mounted) setState(() => _offline = r);
+  }
+
+  Future<void> _discardOffline() async {
+    final r = _offline;
+    if (r == null) return;
+    await widget.service.discardHarvest(r.id);
+    if (mounted) setState(() => _offline = null);
+  }
+
+  Future<void> _redoOffline() async {
+    final r = _offline;
+    if (r == null) return;
+    await widget.service.discardHarvest(r.id);
+    if (!mounted) return;
+    setState(() {
+      _redo = (
+        '${r.payload['mass_t']}'.replaceAll('.', ','),
+        '${r.payload['harvest_date']}'.split('-').reversed.join('/'),
+      );
+      _offline = null;
+    });
   }
 
   @override
@@ -217,11 +252,28 @@ class _HouseholdYieldEstimateScreenState
               () => _season = (result['season'] as Map).cast<String, Object?>(),
             ),
           ),
-          if (widget.canWrite && s['status'] == 'open' && !_editing)
+          if (widget.canWrite && _offline != null)
+            HouseholdHarvestPending(
+              record: _offline!,
+              canRedo: s['status'] == 'open',
+              onDiscard: _discardOffline,
+              onRedo: _redoOffline,
+            ),
+          if (widget.canWrite &&
+              s['status'] == 'open' &&
+              !_editing &&
+              _offline == null)
             HouseholdHarvestCard(
+              key: ValueKey('harvest:${_redo?.$1}:${_redo?.$2}'),
               service: widget.service,
               coop: widget.coop,
               season: s,
+              initialMass: _redo?.$1,
+              initialDay: _redo?.$2,
+              onQueued: (record) => setState(() {
+                _offline = record;
+                _redo = null;
+              }),
               onDeclared: (result) => setState(() {
                 final season = (result['season'] as Map)
                     .cast<String, Object?>();
