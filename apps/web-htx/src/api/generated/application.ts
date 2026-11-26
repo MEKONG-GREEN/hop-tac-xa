@@ -10833,6 +10833,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/cooperatives/{ref}/household-yields": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Sản lượng thực tế so với dự kiến của vụ nông hộ trong HTX (AH-153)
+         * @description Chỉ đọc (KHMV-FN-06 R) — Đại diện HTX, Thành viên HTX, Admin; phạm vi theo HTX (KH-02), HTX khác bị từ chối (404 household_not_found). state=pending là vụ "Đang canh tác" (chờ khai báo), sắp theo ngày thu hoạch dự kiến tăng dần (vụ chưa có ngày ở cuối); state=declared là vụ "Đã thu hoạch" và "Đã hoàn thành vụ", sắp theo ngày thu hoạch giảm dần. Vụ đã dừng không có. Dự kiến = giá trị Thành viên nhập, không có thì hệ thống tính (AH-87); thực tế = khai báo hiện hành (tấn, 2 chữ số lẻ). Chênh lệch = thực tế − dự kiến; % so với dự kiến, 1 chữ số lẻ (trống khi thiếu một bên hoặc dự kiến bằng 0). totals cộng trên toàn bộ bộ lọc, không chỉ trang.
+         */
+        get: operations["listHouseholdYields"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/extension/khtc/periods/{id}/report": {
         parameters: {
             query?: never;
@@ -25916,6 +25938,55 @@ export interface components {
             closed_at: string | null;
             /** Format: uuid */
             closed_by: string | null;
+        };
+        HouseholdYieldItem: {
+            /** Format: uuid */
+            season_ref: string;
+            /** Format: uuid */
+            household_ref: string;
+            crop_code: string;
+            season_code: string;
+            season_year: number;
+            variety_code: string;
+            area_ha: string;
+            /** @enum {string} */
+            status: "open" | "completed" | "closed";
+            /** Format: uuid */
+            opened_by: string;
+            /** @description Tên hiển thị của người mở vụ (nếu có danh bạ) */
+            opened_by_label?: string;
+            /** Format: date */
+            expected_harvest_date: string | null;
+            /** @description Vụ chờ khai báo đã quá ngày thu hoạch dự kiến */
+            overdue: boolean;
+            /** @description Sản lượng dự kiến (tấn) */
+            expected_t: string | null;
+            /** @description Rơm dự kiến (tấn, chỉ vụ lúa) */
+            expected_straw_t: string | null;
+            /** @enum {string|null} */
+            expected_source: "entered" | "computed" | null;
+            /** @description Sản lượng thực tế (tấn) */
+            actual_t: string | null;
+            /** Format: date */
+            harvest_date: string | null;
+            yield_t_per_ha: string | null;
+            zero_confirmed: boolean;
+            /** @description Thực tế − dự kiến (tấn) */
+            diff_t: string | null;
+            /** @description Chênh lệch so với dự kiến (%) */
+            diff_pct: string | null;
+        };
+        HouseholdYieldTotals: {
+            pending: number;
+            declared: number;
+            declared_without_estimate: number;
+            /** @description Tổng dự kiến của vụ chờ khai báo (tấn) */
+            pending_expected_t: string;
+            /** @description Tổng dự kiến của vụ đã khai báo có đủ hai giá trị (tấn) */
+            expected_t: string;
+            actual_t: string;
+            diff_t: string;
+            diff_pct: string | null;
         };
         KHTCReportSupplement: {
             /** Format: uuid */
@@ -51965,6 +52036,45 @@ export interface operations {
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    listHouseholdYields: {
+        parameters: {
+            query: {
+                state: "pending" | "declared";
+                /** @description Thành viên HTX mở vụ */
+                opened_by?: string;
+                season_code?: string;
+                season_year?: number;
+                /** @description Cursor mờ từ next_cursor */
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Một trang vụ kèm tổng hợp */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["HouseholdYieldItem"][];
+                        next_cursor: string | null;
+                        totals: components["schemas"]["HouseholdYieldTotals"];
+                    };
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
         };
     };
