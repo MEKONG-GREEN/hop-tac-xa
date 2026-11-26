@@ -330,6 +330,17 @@ Chỉ người gọi là CẤP LÁ của một profile (`kn_cnts`: vai `kn_xa` p
 
 `catalog_item` (pf/masterdata) từ W11.42 gồm cả 12 danh mục CNTS `cnts_*` (giá trị hiện hành; `attrs` như `GET /v1/masterdata/catalogs/{catalog}`).
 
+## Khai báo sản lượng vụ theo hộ — AH-190
+
+`household_harvest`, `op=create`, chỉ thiết bị app (thiết bị `web` bị chặn như các entity hiện trường khác). Payload
+nghiêm ngặt: `recorded_by`, `tenant_id` (phải khớp token hiện tại), `cooperative_ref`, `household_ref`, `season_ref`,
+`mass_t` (tấn, tối đa 2 chữ số lẻ), `harvest_date` (`YYYY-MM-DD`), tùy chọn `zero_confirmed`, `gps`. Máy chủ gọi lại
+khai báo một vụ của AH-100 với quyền hiện tại (KHMV-FN-06 C, phạm vi HTX): kiểm số, ngày (mốc gốc ≤ ngày ≤ hôm nay theo
+máy chủ), xác nhận khi bằng 0. Bản khai ngoại tuyến không mang phiên bản vụ; chỉ kiểm vụ còn "Đang canh tác" — vụ đã
+khai báo, dừng, hoàn thành trong lúc offline → `rejected` `cropcycle.season_state`, app giữ bản khai kèm lý do.
+`idem_key` của bản ghi là Idempotency-Key (gửi lại → `duplicate`); `id` (UUIDv7) là mã khai báo. `event_time` theo giờ
+thiết bị (KH-15), `recorded_at` do máy chủ ghi; sổ ghi kênh/nguồn `sync` và mã thiết bị. Sửa, hủy khai báo vẫn online.
+
 ## Nhật ký việc theo hộ — AH-99
 
 `household_task_record`, `op=create`, dùng luồng vụ theo hộ của AH-88. Không mở

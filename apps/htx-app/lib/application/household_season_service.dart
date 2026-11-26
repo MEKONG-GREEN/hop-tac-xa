@@ -232,6 +232,90 @@ class HouseholdSeasonService {
     });
   }
 
+  /// AH-190 AC1: khai báo sản lượng lúc mất mạng — lưu trên máy "Chờ đồng bộ", tự
+  /// gửi khi có mạng. Khóa idempotency là khóa của bản ghi trên máy nên gửi lại không
+  /// tạo trùng. Payload đúng hợp đồng `household_harvest` (máy chủ kiểm lại đầy đủ).
+  Future<OutboxRecord> queueHarvest(
+    String coop,
+    String household,
+    String season, {
+    required String massT,
+    required String harvestDate,
+    required bool zeroConfirmed,
+    required HouseholdJson gps,
+  }) async {
+    final error = tonnesError(massT);
+    if (error != null || massT.trim().isEmpty) {
+      throw ArgumentError(error ?? 'Nhập tổng sản lượng (tấn).');
+    }
+    final queue = outbox;
+    final identity = await journalContext?.call();
+    if (queue == null || identity == null) {
+      throw StateError('Chưa nối hàng đợi đồng bộ.');
+    }
+    if (identity['org_ref'] != coop) {
+      throw StateError('Vụ không thuộc HTX hiện tại.');
+    }
+    if (await pendingHarvest(coop, household, season) != null) {
+      throw StateError('Vụ đã có bản khai sản lượng đang chờ đồng bộ.');
+    }
+    return queue.enqueue(
+      entity: PushEntity.householdHarvest,
+      payload: {
+        'recorded_by': identity['recorded_by'],
+        'tenant_id': identity['tenant_id'],
+        'cooperative_ref': coop,
+        'household_ref': household,
+        'season_ref': season,
+        'mass_t': tonnesValue(massT),
+        'harvest_date': harvestDate,
+        'zero_confirmed': zeroConfirmed,
+        'gps': gps,
+      },
+    );
+  }
+
+  /// Bản khai sản lượng của vụ còn trên máy (chờ gửi, xung đột hoặc bị từ chối) của
+  /// tài khoản hiện tại; null nếu không có.
+  Future<OutboxRecord?> pendingHarvest(
+    String coop,
+    String household,
+    String season,
+  ) async => (await pendingHarvests(coop, household))[season];
+
+  /// Bản khai sản lượng còn trên máy theo vụ của một hộ (cho nhãn "Chờ đồng bộ").
+  Future<Map<String, OutboxRecord>> pendingHarvests(
+    String coop,
+    String household,
+  ) async {
+    HouseholdJson? identity;
+    try {
+      identity = await journalContext?.call();
+    } on StateError {
+      return {};
+    }
+    final current = identity;
+    if (current == null || outbox == null || current['org_ref'] != coop) {
+      return {};
+    }
+    final out = <String, OutboxRecord>{};
+    for (final r in await outbox!.list(entity: PushEntity.householdHarvest)) {
+      if (r.payload['recorded_by'] == current['recorded_by'] &&
+          r.payload['tenant_id'] == current['tenant_id'] &&
+          r.payload['cooperative_ref'] == coop &&
+          r.payload['household_ref'] == household &&
+          r.status != OutboxStatus.sent &&
+          r.status != OutboxStatus.superseded) {
+        out['${r.payload['season_ref']}'] = r;
+      }
+    }
+    return out;
+  }
+
+  /// AH-190 AC2: xóa bản khai bị máy chủ từ chối theo ý người dùng.
+  Future<bool> discardHarvest(String id) async =>
+      (await outbox?.discardRejected(id)) ?? false;
+
   /// AH-114 AC4: xóa bản ghi bị máy chủ từ chối (vd vụ đã đóng) theo ý người dùng.
   Future<bool> discardTask(String id) async =>
       (await outbox?.discardRejected(id)) ?? false;

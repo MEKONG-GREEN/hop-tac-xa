@@ -1,5 +1,6 @@
 import 'package:agrigreen_mobile/core/ids.dart';
 import 'package:agrigreen_mobile/data/sync/sync_api.dart';
+import 'package:agrigreen_mobile/domain/outbox_record.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -22,6 +23,13 @@ String _statusLabel(Object? status) => switch (status) {
   _ => '$status',
 };
 
+/// AH-190: nhãn bản khai sản lượng còn trên máy.
+String _offlineLine(OutboxRecord? r) => r == null
+    ? ''
+    : r.status == OutboxStatus.rejected
+    ? ' · Khai báo sản lượng không đồng bộ được'
+    : ' · Sản lượng chờ đồng bộ';
+
 /// AH-87, AH-100: dòng tóm tắt lúa dự kiến và sản lượng thực tế trong danh sách vụ.
 String _estimateLine(HouseholdJson s) {
   String t(Object? v) => '${'$v'.replaceAll('.', ',')} tấn';
@@ -34,10 +42,17 @@ String _estimateLine(HouseholdJson s) {
 }
 
 class _HouseholdSeasonsData {
-  const _HouseholdSeasonsData(this.coop, this.household, this.seasons);
+  const _HouseholdSeasonsData(
+    this.coop,
+    this.household,
+    this.seasons, [
+    this.offlineHarvests = const {},
+  ]);
   final String coop;
   final HouseholdItem household;
   final List<HouseholdJson> seasons;
+  // AH-190: bản khai sản lượng còn trên máy theo vụ.
+  final Map<String, OutboxRecord> offlineHarvests;
 }
 
 class HouseholdSeasonsScreen extends ConsumerStatefulWidget {
@@ -68,10 +83,12 @@ class _HouseholdSeasonsScreenState
         .where((h) => h.ref == widget.household.ref)
         .firstOrNull;
     if (h == null) throw StateError('Không còn tìm thấy hộ trong HTX.');
+    final service = services.crop.householdSeasons;
     return _HouseholdSeasonsData(
       coop,
       h,
-      await services.crop.householdSeasons.seasons(coop, h.ref),
+      await service.seasons(coop, h.ref),
+      await service.pendingHarvests(coop, h.ref),
     );
   }
 
@@ -174,6 +191,7 @@ class _HouseholdSeasonsScreenState
                           ),
                           subtitle: Text(
                             '${s['area_ha']} ha · ${_statusLabel(s['status'])}'
+                            '${_offlineLine(d.offlineHarvests[s['season_ref']])}'
                             '${_estimateLine(s)}',
                           ),
                           onTap: () => _show(d.coop, s),

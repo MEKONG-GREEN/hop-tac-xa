@@ -325,7 +325,7 @@ func nonNilInputs(s []domain.Input) []domain.Input {
 
 // Entities thực hiện syncport.Sink.
 func (SyncSink) Entities() []string {
-	return []string{port.EntitySeasonOpen, port.EntityFarmLog, port.EntityLogBatch, port.EntityHarvest, "household_task_record"}
+	return []string{port.EntitySeasonOpen, port.EntityFarmLog, port.EntityLogBatch, port.EntityHarvest, "household_task_record", EntityHouseholdHarvest}
 }
 
 // GPSPayload là vị trí gửi lên (số thập phân dạng chuỗi).
@@ -481,6 +481,9 @@ func (snk SyncSink) Accept(ctx context.Context, scope authz.Scope, rec syncport.
 	s := snk.Svc
 	if rec.Entity == "household_task_record" {
 		return snk.householdTask(ctx, rec)
+	}
+	if rec.Entity == EntityHouseholdHarvest {
+		return snk.householdHarvest(ctx, rec)
 	}
 	if p, ok := authz.FromContext(ctx); ok && htxroles.IsMemberOnly(p.Has) {
 		return rejected(rec.ID, problem.Forbidden.WithDetail("Đồng bộ từ app cho Thành viên HTX chưa mở (AH-303)"))

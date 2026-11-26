@@ -51,8 +51,14 @@ type HouseholdHarvestInput struct {
 	Channel, IdemKey                                         string
 	// Source ghi vào sổ sản lượng (app, web, excel); trống = theo Channel (AH-177).
 	Source string
-	// AnyEvent cho phép bỏ trống ExpectedEventID (dòng nhập từ Excel — AH-177): khi đó chỉ kiểm vụ còn "Đang canh tác".
+	// AnyEvent cho phép bỏ trống ExpectedEventID (dòng nhập từ Excel — AH-177, bản khai ngoại tuyến — AH-190): khi đó
+	// chỉ kiểm vụ còn "Đang canh tác".
 	AnyEvent bool
+	// Bản khai ngoại tuyến (AH-190, KH-15): thời điểm theo giờ thiết bị (máy chủ vẫn lưu giờ nhận), mã thiết bị, mã bản
+	// ghi trên máy (UUIDv7) làm mã khai báo.
+	EventTime time.Time
+	DeviceID  *string
+	RecordID  uuid.UUID
 }
 
 // HouseholdHarvestResult là kết quả khai báo; AutoCompleted là số việc Thu hoạch vừa được tự Xong.
@@ -73,6 +79,23 @@ func (s *Service) DeclareHouseholdHarvest(ctx context.Context, in HouseholdHarve
 	if err != nil {
 		return HouseholdHarvestResult{}, err
 	}
+	if in.Channel == ChannelSync || !in.EventTime.IsZero() || in.DeviceID != nil || in.RecordID != uuid.Nil {
+		return HouseholdHarvestResult{}, problem.Validation.WithField("channel", "app hoặc web")
+	}
+	return s.declareHouseholdHarvest(ctx, a, in)
+}
+
+// DeclareOfflineHouseholdHarvest khai báo bản ghi ngoại tuyến đẩy lên qua hàng đợi đồng bộ (AH-190): cùng quyền, phạm
+// vi, kiểm tra như khai báo online; kênh sync, giờ thiết bị, mã thiết bị, mã bản ghi trên máy.
+func (s *Service) DeclareOfflineHouseholdHarvest(ctx context.Context, in HouseholdHarvestInput) (HouseholdHarvestResult, error) {
+	if _, err := s.matrixAccess(ctx, fnHarvest, htxroles.Create); err != nil {
+		return HouseholdHarvestResult{}, err
+	}
+	a, err := s.householdAccess(ctx, in.CooperativeRef, true)
+	if err != nil {
+		return HouseholdHarvestResult{}, err
+	}
+	in.Channel, in.Source, in.AnyEvent, in.ExpectedEventID = ChannelSync, ChannelSync, true, uuid.Nil
 	return s.declareHouseholdHarvest(ctx, a, in)
 }
 
@@ -98,14 +121,20 @@ func (s *Service) declareHouseholdHarvest(ctx context.Context, a access, in Hous
 	if in.Channel == "" {
 		in.Channel = ChannelApp
 	}
-	if in.Channel != ChannelApp && in.Channel != ChannelWeb {
+	if in.Channel != ChannelApp && in.Channel != ChannelWeb && in.Channel != ChannelSync {
 		return HouseholdHarvestResult{}, problem.Validation.WithField("channel", "app hoặc web")
 	}
 	if in.Source == "" {
 		in.Source = in.Channel
 	}
-	if in.Source != SourceApp && in.Source != SourceWeb && in.Source != SourceExcel {
+	if in.Source != SourceApp && in.Source != SourceWeb && in.Source != SourceExcel && in.Source != ChannelSync {
 		return HouseholdHarvestResult{}, problem.Validation.WithField("source", "app, web hoặc excel")
+	}
+	if !in.EventTime.IsZero() && (in.EventTime.Year() < 2000 || in.EventTime.After(s.now().Add(5*time.Minute))) {
+		return HouseholdHarvestResult{}, problem.Validation.WithField("event_time", "Thời gian ghi không hợp lệ")
+	}
+	if in.RecordID != uuid.Nil && in.RecordID.Version() != 7 {
+		return HouseholdHarvestResult{}, problem.Validation.WithField("record_id", "Mã bản ghi phải là UUIDv7")
 	}
 	if err := in.GPS.Normalize(); err != nil {
 		return HouseholdHarvestResult{}, fieldProblem(err)
@@ -171,8 +200,15 @@ func (s *Service) declareHouseholdHarvest(ctx context.Context, a access, in Hous
 			loc = "unverified"
 		}
 		now := s.now()
+		if !in.EventTime.IsZero() {
+			now = in.EventTime
+		}
+		id := ids.New()
+		if in.RecordID != uuid.Nil {
+			id = in.RecordID
+		}
 		h := store.Harvest{
-			ID: ids.New(), TenantID: a.p.TenantID, SeasonRef: cur.SeasonRef, HouseholdRef: cur.HouseholdRef,
+			ID: id, DeviceID: in.DeviceID, TenantID: a.p.TenantID, SeasonRef: cur.SeasonRef, HouseholdRef: cur.HouseholdRef,
 			CooperativeRef: cur.CooperativeRef, CommuneCode: cur.CommuneCode, SeasonCode: cur.SeasonCode, SeasonYear: cur.SeasonYear,
 			VarietyCode: cur.VarietyCode, HarvestDate: in.HarvestDate, MassKg: kg, AreaHa: cur.AreaHa, YieldTPerHa: yield,
 			Source: in.Source, GPS: in.GPS, LocationStatus: loc, OnBehalf: a.onBehalf(), EventTime: now, ActorRef: a.p.ActorRef, IdemKey: key,
@@ -191,7 +227,7 @@ func (s *Service) declareHouseholdHarvest(ctx context.Context, a access, in Hous
 		ev.ID, ev.Seq, ev.Action, ev.HarvestID, ev.Reason = ids.New(), 0, "completed", h.ID, ""
 		ev.SupersedesID, ev.CorrectionReason = nil, nil
 		ev.GPS, ev.LocationStatus, ev.DistanceM = in.GPS, loc, nil
-		ev.OnBehalf, ev.Channel, ev.EventTime, ev.ActorRef, ev.DeviceID, ev.IdemKey = a.onBehalf(), in.Channel, now, a.p.ActorRef, nil, key
+		ev.OnBehalf, ev.Channel, ev.EventTime, ev.ActorRef, ev.DeviceID, ev.IdemKey = a.onBehalf(), in.Channel, now, a.p.ActorRef, in.DeviceID, key
 		if err := store.InsertSeasonEvent(ctx, tx, &ev); err != nil {
 			return err
 		}
