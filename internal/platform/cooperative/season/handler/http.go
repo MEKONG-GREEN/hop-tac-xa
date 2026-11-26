@@ -34,6 +34,11 @@ func (h Handler) RegisterApp(rg *gin.RouterGroup) {
 	rg.GET("/cooperatives/:ref/household-seasons", h.householdSeasonOverview)
 	// AH-153: sản lượng thực tế so với dự kiến của vụ nông hộ trong HTX (chỉ đọc).
 	rg.GET("/cooperatives/:ref/household-yields", h.householdYields)
+	// AH-177: khai báo sản lượng nhiều vụ nông hộ (bảng nhập nhanh, tệp Excel) và tệp mẫu.
+	rg.POST("/cooperatives/:ref/harvest-batches", h.householdHarvestBatch)
+	httpx.AllowBody(rg, http.MethodPost, "/cooperatives/:ref/harvest-imports", app.MaxImportBytes)
+	rg.POST("/cooperatives/:ref/harvest-imports", h.householdHarvestImport)
+	rg.GET("/cooperatives/:ref/harvest-template", h.householdHarvestTemplate)
 	rg.POST("/cooperatives/:ref/season-calendars", h.writeCalendar("published"))
 	rg.POST("/cooperatives/:ref/season-calendars/:calendar_ref/revisions", h.writeCalendar("edited"))
 	rg.POST("/cooperatives/:ref/season-calendars/:calendar_ref/cancel", h.writeCalendar("cancelled"))

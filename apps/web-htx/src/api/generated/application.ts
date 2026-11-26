@@ -10855,6 +10855,72 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/cooperatives/{ref}/harvest-batches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Khai báo sản lượng nhiều vụ nông hộ — bảng nhập nhanh (AH-177)
+         * @description Thành viên HTX/Admin (KHMV-FN-06 C); Đại diện HTX 403. Tối đa 200 dòng. Mỗi dòng áp quy tắc khai báo một vụ (AH-100) trong giao dịch riêng; dòng lỗi bị bỏ qua kèm lý do (thiếu/sai số, số âm, quá 2 chữ số lẻ, thiếu/sai ngày, ngày ngoài mốc gốc–hôm nay, bằng 0 chưa xác nhận, vụ không "Đang canh tác", vụ không thuộc HTX, vụ trùng trong lượt, phiên bản vụ đã đổi); dòng hợp lệ vẫn lưu. Một Idempotency-Key cho mỗi lần gửi; mỗi dòng dùng khóa con theo mã vụ — gửi lại cùng nội dung trả duplicate.
+         */
+        post: operations["householdHarvestBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperatives/{ref}/harvest-imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Nhập sản lượng vụ nông hộ từ tệp Excel mẫu (AH-177)
+         * @description Thành viên HTX/Admin (KHMV-FN-06 C). Thân request là nội dung tệp .xlsx (hoặc CSV UTF-8), tối đa 2 MB và 200 dòng. Tệp được đọc, kiểm trọn trước khi ghi; sai mẫu (thiếu cột Mã vụ, Sản lượng (tấn), Ngày thu hoạch cuối; công thức; Excel đời cũ; rỗng) → 422 cropcycle.import_invalid. Dòng chưa nhập gì bị bỏ qua; mỗi dòng còn lại xử lý như harvest-batches (không kiểm phiên bản vụ).
+         */
+        post: operations["householdHarvestImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cooperatives/{ref}/harvest-template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Tệp mẫu .xlsx khai báo sản lượng vụ nông hộ (AH-177)
+         * @description Thành viên HTX/Admin (KHMV-FN-06 C). Sinh sẵn vụ chờ khai báo (tối đa 200, theo ngày thu hoạch dự kiến) — scope=harvest_recorded (mặc định, KH-20) chỉ vụ đã ghi việc Thu hoạch, scope=all mọi vụ đang canh tác. Cột Mã vụ, Mã hộ (không chứa dữ liệu cá nhân), Mùa vụ, Cây trồng, Giống, Diện tích, Ngày thu hoạch dự kiến và ô trống Sản lượng (tấn), Ngày thu hoạch cuối, Xác nhận 0.
+         */
+        get: operations["householdHarvestTemplate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/extension/khtc/periods/{id}/report": {
         parameters: {
             query?: never;
@@ -25959,6 +26025,13 @@ export interface components {
             expected_harvest_date: string | null;
             /** @description Vụ chờ khai báo đã quá ngày thu hoạch dự kiến */
             overdue: boolean;
+            /** @description Vụ đã ghi việc Thu hoạch (AH-177) */
+            harvest_recorded: boolean;
+            /**
+             * Format: uuid
+             * @description Phiên bản vụ, gửi lại khi nhập hàng loạt (AH-177)
+             */
+            current_event_id: string;
             /** @description Sản lượng dự kiến (tấn) */
             expected_t: string | null;
             /** @description Rơm dự kiến (tấn, chỉ vụ lúa) */
@@ -29767,6 +29840,32 @@ export interface components {
                         season_ref?: string;
                         /** Format: uuid */
                         harvest_id?: string;
+                    }[];
+                };
+            };
+        };
+        /** @description Kết quả theo dòng */
+        HouseholdHarvestBatch: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    accepted: number;
+                    duplicate: number;
+                    rejected: number;
+                    rows: {
+                        line: number;
+                        /** @enum {string} */
+                        status: "accepted" | "duplicate" | "rejected";
+                        /** Format: uuid */
+                        season_ref: string | null;
+                        code: string | null;
+                        reason: string | null;
+                        /** @description Sản lượng bằng 0 cần xác nhận */
+                        needs_confirm: boolean;
+                        /** Format: uuid */
+                        harvest_id: string | null;
                     }[];
                 };
             };
@@ -52047,6 +52146,8 @@ export interface operations {
                 opened_by?: string;
                 season_code?: string;
                 season_year?: number;
+                /** @description Nhóm chờ khai báo chỉ lấy vụ đã ghi việc Thu hoạch (AH-177, KH-20) */
+                harvest_recorded_only?: boolean;
                 /** @description Cursor mờ từ next_cursor */
                 cursor?: string;
                 limit?: number;
@@ -52070,6 +52171,98 @@ export interface operations {
                         next_cursor: string | null;
                         totals: components["schemas"]["HouseholdYieldTotals"];
                     };
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    householdHarvestBatch: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    rows: {
+                        line?: number;
+                        season_ref: string;
+                        /** @description Phiên bản vụ lúc mở bảng; trống thì không kiểm */
+                        expected_season_event_id?: string;
+                        /** @description Tấn, tối đa 2 chữ số lẻ */
+                        mass_t: string;
+                        /** @description YYYY-MM-DD hoặc dd/mm/yyyy */
+                        harvest_date: string;
+                        /** @default false */
+                        zero_confirmed?: boolean;
+                    }[];
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["HouseholdHarvestBatch"];
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    householdHarvestImport: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                "text/csv": string;
+            };
+        };
+        responses: {
+            200: components["responses"]["HouseholdHarvestBatch"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    householdHarvestTemplate: {
+        parameters: {
+            query?: {
+                scope?: "harvest_recorded" | "all";
+            };
+            header?: never;
+            path: {
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tệp mẫu */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
                 };
             };
             401: components["responses"]["Problem"];

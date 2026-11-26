@@ -89,6 +89,7 @@ func (h Handler) householdYields(c *gin.Context) {
 		}
 		q.SeasonYear = n
 	}
+	q.HarvestRecordedOnly = c.Query("harvest_recorded_only") == "true"
 	after, ok := decodeYieldCursor(c.Query("cursor"))
 	if !ok {
 		httpx.Fail(c, problem.Validation.WithField("cursor", "không hợp lệ"))
@@ -111,7 +112,7 @@ func (h Handler) householdYields(c *gin.Context) {
 		}
 		item := gin.H{"season_ref": s.SeasonRef, "household_ref": s.HouseholdRef, "crop_code": s.CropCode, "season_code": s.SeasonCode,
 			"season_year": s.SeasonYear, "variety_code": s.VarietyCode, "area_ha": s.AreaHa.String(), "status": s.Status,
-			"opened_by": s.OpenedBy, "expected_harvest_date": expectedDate, "overdue": it.Overdue,
+			"opened_by": s.OpenedBy, "expected_harvest_date": expectedDate, "overdue": it.Overdue, "harvest_recorded": it.HarvestRecorded, "current_event_id": s.CurrentEventID,
 			"expected_t": tonnesPtr(it.ExpectedT), "expected_straw_t": nil, "expected_source": nil,
 			"actual_t": tonnesPtr(it.ActualT), "harvest_date": nil, "yield_t_per_ha": nil, "zero_confirmed": false,
 			"diff_t": tonnesPtr(it.DiffT), "diff_pct": pctPtr(it.DiffPct)}
