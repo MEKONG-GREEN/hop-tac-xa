@@ -25,8 +25,10 @@ type HouseholdYieldQuery struct {
 	OpenedBy       uuid.UUID
 	SeasonCode     string
 	SeasonYear     int
-	After          *store.YieldCursor
-	Limit          int
+	// HarvestRecordedOnly: nhóm chờ khai báo chỉ lấy vụ đã ghi việc Thu hoạch (AH-177, KH-20).
+	HarvestRecordedOnly bool
+	After               *store.YieldCursor
+	Limit               int
 }
 
 // HouseholdYieldItem là một vụ kèm dự kiến, thực tế và chênh lệch.
@@ -38,6 +40,8 @@ type HouseholdYieldItem struct {
 	DiffT         *decimal.Decimal
 	DiffPct       *decimal.Decimal
 	Overdue       bool
+	// HarvestRecorded: vụ đã ghi việc Thu hoạch (AH-177).
+	HarvestRecorded bool
 }
 
 // HouseholdYieldTotals cộng trên toàn bộ bộ lọc (không chỉ trang). Tổng dự kiến/thực tế của nhóm đã khai báo chỉ tính
@@ -76,14 +80,23 @@ func (s *Service) HouseholdYields(ctx context.Context, q HouseholdYieldQuery) (H
 		return HouseholdYieldPage{}, problem.Validation.WithField("season_code", "mã mùa vụ không hợp lệ")
 	}
 	limit := clampLimit(q.Limit)
-	f := store.YieldFilter{CooperativeRef: q.CooperativeRef, Declared: q.State == "declared", OpenedBy: q.OpenedBy, SeasonCode: q.SeasonCode, SeasonYear: q.SeasonYear}
+	f := store.YieldFilter{CooperativeRef: q.CooperativeRef, Declared: q.State == "declared", OpenedBy: q.OpenedBy, SeasonCode: q.SeasonCode, SeasonYear: q.SeasonYear,
+		HarvestRecordedOnly: q.HarvestRecordedOnly}
 	page := HouseholdYieldPage{Items: []HouseholdYieldItem{}}
 	var rows []store.Season
 	var facts []store.YieldFact
 	var stored map[uuid.UUID]store.YieldEstimateEvent
+	var recorded map[uuid.UUID]bool
 	err = s.inTx(ctx, a.p.TenantID, func(tx pgx.Tx) error {
 		var err error
 		if rows, err = store.HouseholdYieldSeasons(ctx, tx, f, q.After, limit+1); err != nil {
+			return err
+		}
+		pageRefs := make([]uuid.UUID, len(rows))
+		for i, r := range rows {
+			pageRefs[i] = r.SeasonRef
+		}
+		if recorded, err = store.HarvestRecorded(ctx, tx, pageRefs); err != nil {
 			return err
 		}
 		if facts, err = store.HouseholdYieldFacts(ctx, tx, f); err != nil {
@@ -112,7 +125,7 @@ func (s *Service) HouseholdYields(ctx context.Context, q HouseholdYieldQuery) (H
 	}
 	today := businessDay(s.now())
 	for _, r := range items {
-		it := HouseholdYieldItem{SeasonResult: r}
+		it := HouseholdYieldItem{SeasonResult: r, HarvestRecorded: recorded[r.Season.SeasonRef]}
 		if r.Estimate != nil {
 			e := r.Estimate.Rice()
 			it.ExpectedT = &e

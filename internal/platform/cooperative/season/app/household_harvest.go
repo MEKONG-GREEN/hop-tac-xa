@@ -49,6 +49,10 @@ type HouseholdHarvestInput struct {
 	ZeroConfirmed                                            bool
 	GPS                                                      domain.GPS
 	Channel, IdemKey                                         string
+	// Source ghi vào sổ sản lượng (app, web, excel); trống = theo Channel (AH-177).
+	Source string
+	// AnyEvent cho phép bỏ trống ExpectedEventID (dòng nhập từ Excel — AH-177): khi đó chỉ kiểm vụ còn "Đang canh tác".
+	AnyEvent bool
 }
 
 // HouseholdHarvestResult là kết quả khai báo; AutoCompleted là số việc Thu hoạch vừa được tự Xong.
@@ -69,6 +73,11 @@ func (s *Service) DeclareHouseholdHarvest(ctx context.Context, in HouseholdHarve
 	if err != nil {
 		return HouseholdHarvestResult{}, err
 	}
+	return s.declareHouseholdHarvest(ctx, a, in)
+}
+
+// declareHouseholdHarvest khai báo một vụ sau khi đã kiểm quyền và phạm vi HTX (dùng chung cho nhập hàng loạt AH-177).
+func (s *Service) declareHouseholdHarvest(ctx context.Context, a access, in HouseholdHarvestInput) (HouseholdHarvestResult, error) {
 	if in.IdemKey == "" {
 		return HouseholdHarvestResult{}, problem.IdempotencyRequired
 	}
@@ -81,7 +90,7 @@ func (s *Service) DeclareHouseholdHarvest(ctx context.Context, in HouseholdHarve
 		return HouseholdHarvestResult{}, problem.Validation.WithField("mass_t", "sản lượng không hợp lệ")
 	}
 	switch {
-	case in.ExpectedEventID == uuid.Nil:
+	case in.ExpectedEventID == uuid.Nil && !in.AnyEvent:
 		return HouseholdHarvestResult{}, problem.Validation.WithField("expected_season_event_id", "Phiên bản vụ không hợp lệ")
 	case in.HarvestDate.IsZero():
 		return HouseholdHarvestResult{}, problem.Validation.WithField("harvest_date", "Nhập ngày thu hoạch cuối (YYYY-MM-DD)")
@@ -91,6 +100,12 @@ func (s *Service) DeclareHouseholdHarvest(ctx context.Context, in HouseholdHarve
 	}
 	if in.Channel != ChannelApp && in.Channel != ChannelWeb {
 		return HouseholdHarvestResult{}, problem.Validation.WithField("channel", "app hoặc web")
+	}
+	if in.Source == "" {
+		in.Source = in.Channel
+	}
+	if in.Source != SourceApp && in.Source != SourceWeb && in.Source != SourceExcel {
+		return HouseholdHarvestResult{}, problem.Validation.WithField("source", "app, web hoặc excel")
 	}
 	if err := in.GPS.Normalize(); err != nil {
 		return HouseholdHarvestResult{}, fieldProblem(err)
@@ -124,7 +139,7 @@ func (s *Service) DeclareHouseholdHarvest(ctx context.Context, in HouseholdHarve
 			return err
 		} else if old != nil {
 			if old.SeasonRef != in.SeasonRef || old.ActorRef != a.p.ActorRef || !old.MassKg.Decimal().Equal(kg.Decimal()) ||
-				domain.FormatDay(old.HarvestDate) != domain.FormatDay(in.HarvestDate) || old.Source != in.Channel {
+				domain.FormatDay(old.HarvestDate) != domain.FormatDay(in.HarvestDate) || old.Source != in.Source {
 				return problem.IdempotencyConflict
 			}
 			ev, err := store.SeasonEventByID(ctx, tx, cur.CurrentEventID)
@@ -137,7 +152,7 @@ func (s *Service) DeclareHouseholdHarvest(ctx context.Context, in HouseholdHarve
 		if cur.Status != port.SeasonOpen {
 			return ErrSeasonState.WithDetail("Chỉ khai báo sản lượng cho vụ đang canh tác; vụ đã khai báo thì dùng Sửa sản lượng")
 		}
-		if cur.CurrentEventID != in.ExpectedEventID {
+		if in.ExpectedEventID != uuid.Nil && cur.CurrentEventID != in.ExpectedEventID {
 			return ErrTaskChanged.With("current_event_id", cur.CurrentEventID)
 		}
 		today := s.today()
@@ -160,7 +175,7 @@ func (s *Service) DeclareHouseholdHarvest(ctx context.Context, in HouseholdHarve
 			ID: ids.New(), TenantID: a.p.TenantID, SeasonRef: cur.SeasonRef, HouseholdRef: cur.HouseholdRef,
 			CooperativeRef: cur.CooperativeRef, CommuneCode: cur.CommuneCode, SeasonCode: cur.SeasonCode, SeasonYear: cur.SeasonYear,
 			VarietyCode: cur.VarietyCode, HarvestDate: in.HarvestDate, MassKg: kg, AreaHa: cur.AreaHa, YieldTPerHa: yield,
-			Source: in.Channel, GPS: in.GPS, LocationStatus: loc, OnBehalf: a.onBehalf(), EventTime: now, ActorRef: a.p.ActorRef, IdemKey: key,
+			Source: in.Source, GPS: in.GPS, LocationStatus: loc, OnBehalf: a.onBehalf(), EventTime: now, ActorRef: a.p.ActorRef, IdemKey: key,
 		}
 		if tonnes.IsZero() {
 			h.AnomalyKind, h.AnomalyConfirmed = domain.AnomalyZero, true

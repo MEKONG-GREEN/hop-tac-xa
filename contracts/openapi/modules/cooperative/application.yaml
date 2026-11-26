@@ -1131,6 +1131,7 @@ paths:
         - {name: opened_by, in: query, schema: {type: string, format: uuid}, description: "Thành viên HTX mở vụ"}
         - {name: season_code, in: query, schema: {type: string, maxLength: 32}}
         - {name: season_year, in: query, schema: {type: integer, minimum: 2000, maximum: 2100}}
+        - {name: harvest_recorded_only, in: query, schema: {type: boolean, default: false}, description: "Nhóm chờ khai báo chỉ lấy vụ đã ghi việc Thu hoạch (AH-177, KH-20)"}
         - {name: cursor, in: query, schema: {type: string}, description: "Cursor mờ từ next_cursor"}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
       responses:
@@ -1149,12 +1150,120 @@ paths:
         "403": {$ref: "#/components/responses/Problem"}
         "404": {$ref: "#/components/responses/Problem"}
         "422": {$ref: "#/components/responses/Problem"}
+# @ag-order: 10031
+  /v1/cooperatives/{ref}/harvest-batches:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: householdHarvestBatch
+      summary: Khai báo sản lượng nhiều vụ nông hộ — bảng nhập nhanh (AH-177)
+      description: Thành viên HTX/Admin (KHMV-FN-06 C); Đại diện HTX 403. Tối đa 200 dòng. Mỗi dòng áp quy tắc khai báo một vụ (AH-100) trong giao dịch riêng; dòng lỗi bị bỏ qua kèm lý do (thiếu/sai số, số âm, quá 2 chữ số lẻ, thiếu/sai ngày, ngày ngoài mốc gốc–hôm nay, bằng 0 chưa xác nhận, vụ không "Đang canh tác", vụ không thuộc HTX, vụ trùng trong lượt, phiên bản vụ đã đổi); dòng hợp lệ vẫn lưu. Một Idempotency-Key cho mỗi lần gửi; mỗi dòng dùng khóa con theo mã vụ — gửi lại cùng nội dung trả duplicate.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [rows]
+              properties:
+                rows:
+                  type: array
+                  minItems: 1
+                  maxItems: 200
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [season_ref, mass_t, harvest_date]
+                    properties:
+                      line: {type: integer, minimum: 1}
+                      season_ref: {type: string}
+                      expected_season_event_id: {type: string, description: "Phiên bản vụ lúc mở bảng; trống thì không kiểm"}
+                      mass_t: {type: string, description: "Tấn, tối đa 2 chữ số lẻ"}
+                      harvest_date: {type: string, description: "YYYY-MM-DD hoặc dd/mm/yyyy"}
+                      zero_confirmed: {type: boolean, default: false}
+      responses:
+        "200": {$ref: "#/components/responses/HouseholdHarvestBatch"}
+        "400": {$ref: "#/components/responses/Problem"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+# @ag-order: 10032
+  /v1/cooperatives/{ref}/harvest-imports:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: householdHarvestImport
+      summary: Nhập sản lượng vụ nông hộ từ tệp Excel mẫu (AH-177)
+      description: Thành viên HTX/Admin (KHMV-FN-06 C). Thân request là nội dung tệp .xlsx (hoặc CSV UTF-8), tối đa 2 MB và 200 dòng. Tệp được đọc, kiểm trọn trước khi ghi; sai mẫu (thiếu cột Mã vụ, Sản lượng (tấn), Ngày thu hoạch cuối; công thức; Excel đời cũ; rỗng) → 422 cropcycle.import_invalid. Dòng chưa nhập gì bị bỏ qua; mỗi dòng còn lại xử lý như harvest-batches (không kiểm phiên bản vụ).
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: {schema: {type: string, format: binary}}
+          text/csv: {schema: {type: string}}
+      responses:
+        "200": {$ref: "#/components/responses/HouseholdHarvestBatch"}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "413": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
+# @ag-order: 10033
+  /v1/cooperatives/{ref}/harvest-template:
+    parameters:
+      - {name: ref, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: householdHarvestTemplate
+      summary: Tệp mẫu .xlsx khai báo sản lượng vụ nông hộ (AH-177)
+      description: Thành viên HTX/Admin (KHMV-FN-06 C). Sinh sẵn vụ chờ khai báo (tối đa 200, theo ngày thu hoạch dự kiến) — scope=harvest_recorded (mặc định, KH-20) chỉ vụ đã ghi việc Thu hoạch, scope=all mọi vụ đang canh tác. Cột Mã vụ, Mã hộ (không chứa dữ liệu cá nhân), Mùa vụ, Cây trồng, Giống, Diện tích, Ngày thu hoạch dự kiến và ô trống Sản lượng (tấn), Ngày thu hoạch cuối, Xác nhận 0.
+      parameters:
+        - {name: scope, in: query, schema: {type: string, enum: [harvest_recorded, all], default: harvest_recorded}}
+      responses:
+        "200":
+          description: Tệp mẫu
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: {schema: {type: string, format: binary}}
+        "401": {$ref: "#/components/responses/Problem"}
+        "403": {$ref: "#/components/responses/Problem"}
+        "404": {$ref: "#/components/responses/Problem"}
+        "422": {$ref: "#/components/responses/Problem"}
 components:
+  responses:
+# @ag-order: 10031
+    HouseholdHarvestBatch:
+      description: Kết quả theo dòng
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [accepted, duplicate, rejected, rows]
+            properties:
+              accepted: {type: integer, minimum: 0}
+              duplicate: {type: integer, minimum: 0}
+              rejected: {type: integer, minimum: 0}
+              rows:
+                type: array
+                items:
+                  type: object
+                  required: [line, status, season_ref, code, reason, needs_confirm, harvest_id]
+                  properties:
+                    line: {type: integer}
+                    status: {type: string, enum: [accepted, duplicate, rejected]}
+                    season_ref: {type: [string, "null"], format: uuid}
+                    code: {type: [string, "null"]}
+                    reason: {type: [string, "null"]}
+                    needs_confirm: {type: boolean, description: "Sản lượng bằng 0 cần xác nhận"}
+                    harvest_id: {type: [string, "null"], format: uuid}
   schemas:
 # @ag-order: 10030
     HouseholdYieldItem:
       type: object
-      required: [season_ref, household_ref, crop_code, season_code, season_year, variety_code, area_ha, status, opened_by, expected_harvest_date, overdue, expected_t, expected_straw_t, expected_source, actual_t, harvest_date, yield_t_per_ha, zero_confirmed, diff_t, diff_pct]
+      required: [season_ref, household_ref, crop_code, season_code, season_year, variety_code, area_ha, status, opened_by, expected_harvest_date, overdue, harvest_recorded, current_event_id, expected_t, expected_straw_t, expected_source, actual_t, harvest_date, yield_t_per_ha, zero_confirmed, diff_t, diff_pct]
       properties:
         season_ref: {type: string, format: uuid}
         household_ref: {type: string, format: uuid}
@@ -1168,6 +1277,8 @@ components:
         opened_by_label: {type: string, description: "Tên hiển thị của người mở vụ (nếu có danh bạ)"}
         expected_harvest_date: {type: [string, "null"], format: date}
         overdue: {type: boolean, description: "Vụ chờ khai báo đã quá ngày thu hoạch dự kiến"}
+        harvest_recorded: {type: boolean, description: "Vụ đã ghi việc Thu hoạch (AH-177)"}
+        current_event_id: {type: string, format: uuid, description: "Phiên bản vụ, gửi lại khi nhập hàng loạt (AH-177)"}
         expected_t: {type: [string, "null"], description: "Sản lượng dự kiến (tấn)"}
         expected_straw_t: {type: [string, "null"], description: "Rơm dự kiến (tấn, chỉ vụ lúa)"}
         expected_source: {type: [string, "null"], enum: [entered, computed, null]}
