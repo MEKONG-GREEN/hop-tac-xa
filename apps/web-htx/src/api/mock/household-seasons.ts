@@ -228,6 +228,46 @@ export const householdSeasonRoutes: Route[] = [{
     return json(paginate(rows, url));
   },
 }, {
+  // AH-153: sản lượng thực tế so với dự kiến của vụ nông hộ (chỉ đọc), hai nhóm, tổng hợp theo bộ lọc.
+  method: "GET", pattern: /^\/v1\/cooperatives\/([\w-]+)\/household-yields$/,
+  handler: ({ params, persona, url }) => {
+    if (!hasRole(persona, "platform_admin", "htx_member", "coop_manager") || (!hasRole(persona, "platform_admin") && persona.me.org?.ref !== params[0])) return problem(404, "cropcycle.household_not_found", "Không tìm thấy HTX");
+    const state = url.searchParams.get("state") ?? "";
+    if (state !== "pending" && state !== "declared") return validation([{ field: "state", reason: "pending hoặc declared" }]);
+    const openedBy = url.searchParams.get("opened_by") ?? "", code = url.searchParams.get("season_code") ?? "", year = Number(url.searchParams.get("season_year") ?? 0);
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(new Date(nowIso()));
+    const matching = seasons.filter((x) => x.cooperative_ref === params[0] && x.status !== "cancelled" && (!openedBy || x.opened_by === openedBy) && (!code || x.season_code === code) && (!year || x.season_year === year));
+    const two = (d: Decimal) => tonnes(d);
+    const row = (x: Season) => {
+      const expected = x.yield_estimate?.rice_t ?? null, actual = x.harvest?.mass_t ?? null;
+      let diff: string | null = null, pct: string | null = null;
+      if (expected != null && actual != null) {
+        const d = Decimal.parse(actual)!.sub(Decimal.parse(expected)!);
+        diff = two(d.abs()); if (d.sign() < 0) diff = `-${diff}`;
+        if (!Decimal.parse(expected)!.isZero()) { const p = d.mul(Decimal.fromInt(100)).divRound(Decimal.parse(expected)!, 1); pct = p.toString(); if (!pct.includes(".")) pct += ".0"; }
+      }
+      return { season_ref: x.season_ref, household_ref: x.household_ref, crop_code: x.crop_code, season_code: x.season_code, season_year: x.season_year, variety_code: x.variety_code,
+        area_ha: x.area_ha, status: x.status as "open" | "completed" | "closed", opened_by: x.opened_by, expected_harvest_date: x.expected_harvest_date ?? null,
+        overdue: x.status === "open" && !!x.expected_harvest_date && x.expected_harvest_date < today, expected_t: expected, expected_straw_t: x.yield_estimate?.straw_t ?? null,
+        expected_source: x.yield_estimate ? (x.yield_estimate.entered_rice_t != null ? "entered" as const : "computed" as const) : null,
+        actual_t: actual, harvest_date: x.harvest?.harvest_date ?? null, yield_t_per_ha: x.harvest?.yield_t_per_ha ?? null, zero_confirmed: x.harvest?.zero_confirmed ?? false, diff_t: diff, diff_pct: pct };
+    };
+    const pending = matching.filter((x) => x.status === "open"), declared = matching.filter((x) => x.status !== "open" && x.harvest);
+    const rows = (state === "pending"
+      ? pending.sort((a, b) => (a.expected_harvest_date ?? "9999-12-31").localeCompare(b.expected_harvest_date ?? "9999-12-31") || a.season_ref.localeCompare(b.season_ref))
+      : declared.sort((a, b) => b.harvest!.harvest_date.localeCompare(a.harvest!.harvest_date) || b.season_ref.localeCompare(a.season_ref))).map(row);
+    let pendingExpected = Decimal.ZERO, expectedSum = Decimal.ZERO, actualSum = Decimal.ZERO, missing = 0;
+    for (const x of pending) if (x.yield_estimate?.rice_t) pendingExpected = pendingExpected.add(Decimal.parse(x.yield_estimate.rice_t)!);
+    for (const x of declared) {
+      if (!x.yield_estimate?.rice_t) { missing++; continue; }
+      expectedSum = expectedSum.add(Decimal.parse(x.yield_estimate.rice_t)!); actualSum = actualSum.add(Decimal.parse(x.harvest!.mass_t)!);
+    }
+    const d = actualSum.sub(expectedSum);
+    const totalPct = expectedSum.isZero() ? null : d.mul(Decimal.fromInt(100)).divRound(expectedSum, 1).toString();
+    return json({ ...paginate(rows, url), totals: { pending: pending.length, declared: declared.length, declared_without_estimate: missing, pending_expected_t: two(pendingExpected),
+      expected_t: two(expectedSum), actual_t: two(actualSum), diff_t: d.sign() < 0 ? `-${two(d.abs())}` : two(d), diff_pct: totalPct } });
+  },
+}, {
   method: "POST", pattern: /^\/v1\/cooperatives\/([\w-]+)\/households\/([\w-]+)\/seasons\/([\w-]+)\/task-records\/([\w-]+)\/corrections$/,
   handler: mockTaskEdit(false),
 }, {
